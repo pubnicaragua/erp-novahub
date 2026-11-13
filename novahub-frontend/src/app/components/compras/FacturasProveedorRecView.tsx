@@ -14,6 +14,7 @@ import { ViewLayoutSelect } from '../ui/ViewLayoutSelect';
 import { useLocalStorageState } from '../../hooks/useLocalStorageState';
 import { toast } from '@/app/services/toast';
 import { ConfirmDialog } from '../ui/ConfirmDialog';
+import { RequiredReasonField } from '../ui/RequiredReasonField';
 import { cn } from '../ui/utils';
 import { useCurrency } from '../../contexts/CurrencyContext';
 import { useAuth } from '../../contexts/AuthContext';
@@ -140,6 +141,8 @@ export function FacturasProveedorRecView({ data, summaryData, summaryLoading, su
   const [statusFilter, setStatusFilter] = useState<'ALL' | 'ACTIVE' | 'PAUSED' | 'EXPIRED' | 'CANCELLED'>('ALL');
   const [pendingRecurringAction, setPendingRecurringAction] = useState<{ action: 'cancel' | 'delete'; ids: string[] } | null>(null);
   const [recurringActionLoading, setRecurringActionLoading] = useState(false);
+  const [cancelReason, setCancelReason] = useState('');
+  const [cancelReasonAttempted, setCancelReasonAttempted] = useState(false);
   const [suppliers, setSuppliers] = useState<Supplier[]>([]);
 
   const [editingId, setEditingId] = useState<string | null>(null);
@@ -332,7 +335,7 @@ export function FacturasProveedorRecView({ data, summaryData, summaryLoading, su
     }
   };
 
-  const executeRecurringAction = async (action: 'cancel' | 'delete', ids: (string | number)[]) => {
+  const executeRecurringAction = async (action: 'cancel' | 'delete', ids: (string | number)[], reason?: string) => {
     const permission = action === 'cancel' ? 'cancel' : 'delete';
     if (!canPerform('PURCHASES_INVOICES_REC', 'read') || !canPerform('PURCHASES_INVOICES_REC', permission)) {
       toast.error('No tienes permiso para realizar esta acción');
@@ -340,12 +343,13 @@ export function FacturasProveedorRecView({ data, summaryData, summaryLoading, su
     }
     const recurringIds = ids.map(String).filter((id) => id && !id.startsWith('new-'));
     if (recurringIds.length === 0) return;
+    if (action === 'cancel' && !reason?.trim()) return;
     const verb = action === 'cancel' ? 'Anulando' : 'Eliminando';
     const noun = recurringIds.length === 1 ? 'compra recurrente' : 'compras recurrentes';
     const actionToastId = toast.loading(`${verb} ${recurringIds.length} ${noun}...`);
     try {
       for (const id of recurringIds) {
-        if (action === 'cancel') await recurringSupplierInvoicesService.cancel(id);
+        if (action === 'cancel') await recurringSupplierInvoicesService.cancel(id, reason!.trim());
         else await recurringSupplierInvoicesService.delete(id);
       }
       toast.success(action === 'cancel' ? 'Compras recurrentes anuladas' : 'Compras recurrentes eliminadas', { id: actionToastId });
@@ -365,7 +369,7 @@ export function FacturasProveedorRecView({ data, summaryData, summaryLoading, su
     return (
       <ConfirmDialog
         open={Boolean(pendingRecurringAction)}
-        onOpenChange={(open) => !open && setPendingRecurringAction(null)}
+        onOpenChange={(open) => { if (!open && !recurringActionLoading) { setPendingRecurringAction(null); setCancelReason(''); setCancelReasonAttempted(false); } }}
         loading={recurringActionLoading}
         title={isCancel ? '¿Anular compra recurrente?' : '¿Eliminar compra recurrente?'}
         description={isCancel
@@ -373,11 +377,13 @@ export function FacturasProveedorRecView({ data, summaryData, summaryLoading, su
           : `${count === 1 ? 'Se eliminará físicamente la programación' : `Se eliminarán físicamente ${count} programaciones`} y sus ítems asociados. Esta acción no se puede deshacer.`}
         confirmLabel={isCancel ? 'Anular' : 'Eliminar'}
         variant="destructive"
+        children={isCancel ? <RequiredReasonField id="supplier-recurring-invoice-cancel-reason" label="Motivo de anulación" value={cancelReason} onChange={setCancelReason} attempted={cancelReasonAttempted} disabled={recurringActionLoading} /> : undefined}
         onConfirm={async () => {
           if (!pendingRecurringAction) return;
+          if (isCancel && !cancelReason.trim()) { setCancelReasonAttempted(true); return false; }
           setRecurringActionLoading(true);
           try {
-            await executeRecurringAction(pendingRecurringAction.action, pendingRecurringAction.ids);
+            await executeRecurringAction(pendingRecurringAction.action, pendingRecurringAction.ids, isCancel ? cancelReason.trim() : undefined);
           } finally {
             setRecurringActionLoading(false);
           }
@@ -802,7 +808,13 @@ export function FacturasProveedorRecView({ data, summaryData, summaryLoading, su
             : canPerform('PURCHASES_INVOICES_REC', 'delete')}
           onBulkDelete={canPerform('PURCHASES_INVOICES_REC', 'read') && (canPerform('PURCHASES_INVOICES_REC', 'cancel') || canPerform('PURCHASES_INVOICES_REC', 'delete')) ? async (ids) => {
             const action = canPerform('PURCHASES_INVOICES_REC', 'cancel') ? 'cancel' : 'delete';
-            await executeRecurringAction(action, ids);
+            if (action === 'cancel') {
+              const recurringIds = ids.map(String).filter((id) => id && !id.startsWith('new-'));
+              if (!recurringIds.length) return;
+              setCancelReason('');
+              setCancelReasonAttempted(false);
+              setPendingRecurringAction({ action, ids: recurringIds });
+            } else await executeRecurringAction(action, ids);
           } : undefined}
           actions={(row) => (
             <div className="flex items-center gap-1">

@@ -18,6 +18,7 @@ import { EditableDataTable, ColumnDef } from '../ui/EditableDataTable';
 import { ViewLayoutSelect } from '../ui/ViewLayoutSelect';
 import { useLocalStorageState } from '../../hooks/useLocalStorageState';
 import { ConfirmDialog } from '../ui/ConfirmDialog';
+import { RequiredReasonField } from '../ui/RequiredReasonField';
 import { toast } from '@/app/services/toast';
 import { useCurrency } from '../../contexts/CurrencyContext';
 import { useAuth } from '../../contexts/AuthContext';
@@ -158,8 +159,10 @@ export function PagosRealizadosView({ data, summaryData, summaryLoading, summary
   const [localDoc, setLocalDoc] = useState<Partial<PaymentMade> | null>(null);
   const [paymentApplicationTarget, setPaymentApplicationTarget] = useState<'ADVANCE' | 'INVOICE' | 'GENERAL_BALANCE'>('ADVANCE');
   const [pendingCancelId, setPendingCancelId] = useState<string | null>(null);
+  const [pendingBulkPaymentIds, setPendingBulkPaymentIds] = useState<string[] | null>(null);
   const [pendingCancelGroup, setPendingCancelGroup] = useState<PaymentMade | null>(null);
   const [cancelReason, setCancelReason] = useState('');
+  const [cancelReasonAttempted, setCancelReasonAttempted] = useState(false);
   const [cancelLoading, setCancelLoading] = useState(false);
   const [paymentLines, setPaymentLines] = useState<PurchasePaymentLine[]>([{ method: 'CASH', amount: 0, currency: displayCurrency, exchangeRate: displayCurrency === baseCurrency ? 1 : globalRate }]);
   const [partialPaymentEnabled, setPartialPaymentEnabled] = useState(false);
@@ -972,7 +975,7 @@ export function PagosRealizadosView({ data, summaryData, summaryLoading, summary
                             <Button type="button" variant="ghost" size="icon" disabled={paymentLines.length === 1} onClick={() => setPaymentLines((current) => current.filter((_, itemIndex) => itemIndex !== index))} aria-label="Eliminar forma de pago" className="size-10 shrink-0 text-muted-foreground hover:text-rose-500"><Trash2 className="size-4" /></Button>
                           </div>
                           {selectedInvoice && line.currency !== selectedInvoiceCurrency && <p className="mt-1 text-[10px] font-bold text-muted-foreground">Equivalente factura: {formatExplicitAmount(getPaymentLineDocumentAmount(line, selectedInvoiceCurrency, selectedInvoiceRate, baseCurrency, convertBetweenCurrencies), selectedInvoiceCurrency)}</p>}
-                          {isBankPaymentMethod(line.method, true) && (accountingConnectionEnabled || financeConnectionEnabled) && <BankAccountSelect currency={line.currency} className="mt-2" value={line.bankAccountId} onChange={(bankAccountId) => setPaymentLines((current) => current.map((item, itemIndex) => itemIndex === index ? { ...item, bankAccountId } : item))} label={accountingConnectionEnabled ? "Banco del pago" : "Banco opcional para el movimiento financiero"} />}
+                          {isBankPaymentMethod(line.method, true) && (accountingConnectionEnabled || financeConnectionEnabled) && <BankAccountSelect currency={line.currency} className="mt-2" value={line.bankAccountId} onChange={(bankAccountId) => setPaymentLines((current) => current.map((item, itemIndex) => itemIndex === index ? { ...item, bankAccountId } : item))} label={accountingConnectionEnabled ? "Banco del pago" : "Banco opcional para el movimiento financiero"} required={accountingConnectionEnabled} />}
                           {hasPaymentReferenceField(line.method) && <div className="mt-2">
                             <p className="mb-1 text-[9px] font-black uppercase tracking-widest text-muted-foreground">Referencia *</p>
                             <Input value={line.reference || ''} onChange={(event) => setPaymentLines((current) => current.map((item, itemIndex) => itemIndex === index ? { ...item, reference: event.target.value } : item))} placeholder="Transferencia, voucher, cheque..." required={requiresPaymentReference(line.method)} />
@@ -1138,24 +1141,18 @@ export function PagosRealizadosView({ data, summaryData, summaryLoading, summary
         </div>
         <EditableDataTable data={filteredData} columns={columns} onRowUpdate={handleUpdate} onRowClick={(row) => setDetailPayment(row)} isLoading={loading} pagination={pagination} showSelection={canPerform('PURCHASES_PAYMENTS', 'read') && canPerform('PURCHASES_PAYMENTS', 'cancel')} layoutMode={layoutMode === 'cards' ? 'cards' : 'responsive'} highlightedRowId={highlightedTargetId} bulkAction="cancel"
           onBulkDelete={canPerform('PURCHASES_PAYMENTS', 'read') && canPerform('PURCHASES_PAYMENTS', 'cancel') ? async (ids) => {
-            const cancelToastId = toast.loading(`Anulando ${ids.length} pago${ids.length === 1 ? '' : 's'}...`);
-            try {
-              const paymentIds = new Set<string>();
-              ids.forEach((id) => {
-                const grouped = filteredData.find((payment) => payment.id === String(id));
-                const details = grouped?.payments?.length ? grouped.payments : [{ id: String(id) } as PaymentMade];
-                details.forEach((payment) => {
-                  if (payment.id && !String(payment.id).startsWith('new-')) paymentIds.add(String(payment.id));
-                });
-              });
-              for (const paymentId of paymentIds) {
-                await paymentsService.cancel(paymentId, 'Anulación masiva');
-              }
-              toast.success(`${paymentIds.size} pago${paymentIds.size === 1 ? '' : 's'} anulado${paymentIds.size === 1 ? '' : 's'}`, { id: cancelToastId });
-              onRefresh();
-            } catch (e: any) {
-              toast.error(e?.response?.data?.message || e?.message || 'Error al anular', { id: cancelToastId });
-            }
+            const paymentIds = new Set<string>();
+            ids.forEach((id) => {
+              const grouped = filteredData.find((payment) => payment.id === String(id));
+              const details = grouped?.payments?.length ? grouped.payments : [{ id: String(id) } as PaymentMade];
+              details.forEach((payment) => { if (payment.id && !String(payment.id).startsWith('new-')) paymentIds.add(String(payment.id)); });
+            });
+            if (!paymentIds.size) return;
+            setCancelReason('');
+            setCancelReasonAttempted(false);
+            setPendingCancelGroup(null);
+            setPendingBulkPaymentIds([...paymentIds]);
+            setPendingCancelId('__bulk__');
           } : undefined}
            actions={(row) => (
               <div className="flex items-center gap-1">
@@ -1192,20 +1189,20 @@ export function PagosRealizadosView({ data, summaryData, summaryLoading, summary
       />
       <ConfirmDialog
         open={pendingCancelId !== null}
-        onOpenChange={(open) => { if (!open) { setPendingCancelId(null); setPendingCancelGroup(null); setCancelReason(''); } }}
-        title="¿Anular pago?"
+        onOpenChange={(open) => { if (!open && !cancelLoading) { setPendingCancelId(null); setPendingBulkPaymentIds(null); setPendingCancelGroup(null); setCancelReason(''); setCancelReasonAttempted(false); } }}
+        title={pendingBulkPaymentIds ? `¿Anular ${pendingBulkPaymentIds.length} pagos?` : '¿Anular pago?'}
         description="El pago quedará anulado y se revertirá el saldo del proveedor y la factura asociada. Esta acción no se puede deshacer."
-        confirmLabel="Anular Pago"
+        confirmLabel={pendingBulkPaymentIds ? 'Anular pagos' : 'Anular Pago'}
         variant="destructive"
         loading={cancelLoading}
-        disabled={!cancelReason.trim()}
         onConfirm={async () => {
-          if (!pendingCancelId || !cancelReason.trim() || !canPerform('PURCHASES_PAYMENTS', 'read') || !canPerform('PURCHASES_PAYMENTS', 'cancel')) return;
-          const cancelToastId = toast.loading('Anulando pago a proveedor...');
+          if (!pendingCancelId || !canPerform('PURCHASES_PAYMENTS', 'read') || !canPerform('PURCHASES_PAYMENTS', 'cancel')) return;
+          if (!cancelReason.trim()) { setCancelReasonAttempted(true); return false; }
+          const cancelToastId = toast.loading(pendingBulkPaymentIds ? `Anulando ${pendingBulkPaymentIds.length} pagos a proveedor...` : 'Anulando pago a proveedor...');
           try {
             setCancelLoading(true);
             const details = pendingCancelGroup?.payments?.length ? pendingCancelGroup.payments : [{ id: pendingCancelId } as PaymentMade];
-            const paymentIds = [...new Set(details.map((payment) => String(payment.id)).filter((id) => id && !id.startsWith('new-')))]
+            const paymentIds = pendingBulkPaymentIds || [...new Set(details.map((payment) => String(payment.id)).filter((id) => id && !id.startsWith('new-')))]
             for (const paymentId of paymentIds) {
               await paymentsService.cancel(paymentId, cancelReason.trim());
             }
@@ -1217,22 +1214,14 @@ export function PagosRealizadosView({ data, summaryData, summaryLoading, summary
           } finally {
             setCancelLoading(false);
             setPendingCancelId(null);
+            setPendingBulkPaymentIds(null);
             setPendingCancelGroup(null);
             setCancelReason('');
+            setCancelReasonAttempted(false);
           }
         }}
-      >
-        <div className="mt-4">
-          <label className="text-sm font-medium text-foreground mb-1 block">Motivo de anulación *</label>
-          <textarea
-            className="w-full rounded-xl border border-border bg-background px-3 py-2 text-sm resize-none focus:outline-none focus:ring-2 focus:ring-primary/20"
-            rows={3}
-            placeholder="Ej: Pago duplicado, error en monto..."
-            value={cancelReason}
-            onChange={(e) => setCancelReason(e.target.value)}
-          />
-        </div>
-      </ConfirmDialog>
+        children={<RequiredReasonField id="supplier-payment-cancel-reason" label="Motivo de anulación" value={cancelReason} onChange={setCancelReason} attempted={cancelReasonAttempted} disabled={cancelLoading} placeholder="Ej.: pago duplicado, error en monto…" />}
+      />
     </div>
   );
 }

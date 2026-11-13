@@ -121,9 +121,9 @@ function FundingForm({ onClose, onSaved, exchangeRate }: { onClose: () => void; 
           try {
             const uploaded = await storageService.uploadFile('purchase-evidence', evidence, { folder: 'financiamiento' });
             Object.assign(payload, { evidenceFileUrl: uploaded.uri, evidenceFileName: evidence.name, evidenceFileType: evidence.type, evidenceFileSize: evidence.size });
-          } catch {
+          } catch (error: unknown) {
             setSaving(false);
-            return toast.error('No se pudo procesar el archivo adjunto');
+            return toast.apiFailure(error, 'No se pudo cargar la evidencia del financiamiento');
           }
         }
         if (loan) {

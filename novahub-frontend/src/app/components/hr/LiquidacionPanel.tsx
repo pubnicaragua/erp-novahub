@@ -101,7 +101,7 @@ export function LiquidacionPanel({ employees }: { employees: EmployeeOption[] })
       '',
       ...result.assumptions.map((item) => `- ${item}`),
     ].join('\n');
-    try { await navigator.clipboard.writeText(text); toast.success('Resumen copiado.'); } catch { toast.error('No se pudo copiar el resumen.'); }
+    try { await navigator.clipboard.writeText(text); toast.success('Resumen copiado.'); } catch { toast.error('El navegador no permitió copiar el resumen. Selecciona el texto y cópialo manualmente.'); }
   };
 
   return (

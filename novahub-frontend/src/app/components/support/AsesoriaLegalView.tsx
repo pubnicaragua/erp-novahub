@@ -15,6 +15,8 @@ import { Tabs, TabsContent } from '../ui/tabs';
 import { ModuleSubnavigation } from '../ui/ModuleSubnavigation';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../ui/select';
 import { Dialog, DialogContent, DialogTitle } from '../ui/dialog';
+import { ConfirmDialog } from '../ui/ConfirmDialog';
+import { RequiredReasonField } from '../ui/RequiredReasonField';
 import { cn } from '../ui/utils';
 import { toast } from '@/app/services/toast';
 import { legalService, type LegalCase, type LegalReminder } from '../../services/legal.service';
@@ -335,6 +337,10 @@ function CaseDetail({ caseData, onBack, onRefresh }: { caseData: LegalCase; onBa
   const [isInternal, setIsInternal] = useState(false);
   const [addingNote, setAddingNote] = useState(false);
   const [showStatusDialog, setShowStatusDialog] = useState(false);
+  const [cancelOpen, setCancelOpen] = useState(false);
+  const [cancelReason, setCancelReason] = useState('');
+  const [cancelReasonAttempted, setCancelReasonAttempted] = useState(false);
+  const [statusSaving, setStatusSaving] = useState(false);
   const [showChat, setShowChat] = useState(false);
   const c = detailQuery.data || caseData;
   const statusOptions = LEGAL_CASE_STATUS_OPTIONS.filter((status) => status !== c.status
@@ -358,16 +364,23 @@ function CaseDetail({ caseData, onBack, onRefresh }: { caseData: LegalCase; onBa
     finally { setAddingNote(false); }
   };
 
-  const handleStatusChange = async (newStatus: string) => {
+  const handleStatusChange = async (newStatus: string, reason?: string): Promise<boolean> => {
     const action = getLegalCaseStatusPermissionAction(newStatus);
-    if (!action || !canPerform('LEGAL_CASES', action)) return;
+    if (!action || !canPerform('LEGAL_CASES', action)) return false;
+    if (newStatus === 'CANCELLED' && !reason?.trim()) { setCancelReasonAttempted(true); return false; }
     try {
-      await legalService.updateStatus(c.id, newStatus);
+      setStatusSaving(true);
+      await legalService.updateStatus(c.id, newStatus, undefined, newStatus === 'CANCELLED' ? reason?.trim() : undefined);
       toast.success('Estado actualizado');
       await detailQuery.refetch();
       setShowStatusDialog(false);
+      setCancelOpen(false);
+      setCancelReason('');
+      setCancelReasonAttempted(false);
       onRefresh();
-    } catch (e: any) { toast.error(e?.response?.data?.message || e?.message || 'Error al cambiar estado'); }
+      return true;
+    } catch (e: any) { toast.error(e?.response?.data?.message || e?.message || 'Error al cambiar estado'); return false; }
+    finally { setStatusSaving(false); }
   };
 
   if (showChat) {
@@ -464,7 +477,7 @@ function CaseDetail({ caseData, onBack, onRefresh }: { caseData: LegalCase; onBa
           <div className="p-4 sm:p-6 space-y-3">
             <DialogTitle className="text-lg font-black">Cambiar Estado</DialogTitle>
             {statusOptions.map((s) => (
-              <button key={s} onClick={() => handleStatusChange(s)}
+              <button key={s} onClick={() => s === 'CANCELLED' ? (setShowStatusDialog(false), setCancelReason(''), setCancelReasonAttempted(false), setCancelOpen(true)) : void handleStatusChange(s)}
                 className={cn('w-full text-left px-4 py-3 rounded-xl border text-sm font-bold transition-all hover:border-primary/50',
                   c.status === s ? 'border-primary bg-primary/10 text-primary' : 'border-border/50')}>
                 {legalService.getStatusLabel(s)}
@@ -473,6 +486,20 @@ function CaseDetail({ caseData, onBack, onRefresh }: { caseData: LegalCase; onBa
           </div>
         </DialogContent>
       </Dialog>
+      <ConfirmDialog
+        open={cancelOpen}
+        onOpenChange={(open) => { if (!open && !statusSaving) { setCancelOpen(false); setCancelReason(''); setCancelReasonAttempted(false); } }}
+        title={`¿Cancelar caso ${c.number}?`}
+        description="El caso quedará cancelado y se conservará en su historial."
+        confirmLabel="Cancelar caso"
+        variant="destructive"
+        loading={statusSaving}
+        children={<RequiredReasonField id="legal-case-cancel-reason" label="Motivo de cancelación" value={cancelReason} onChange={setCancelReason} attempted={cancelReasonAttempted} disabled={statusSaving} />}
+        onConfirm={async () => {
+          if (!cancelReason.trim()) { setCancelReasonAttempted(true); return false; }
+          return handleStatusChange('CANCELLED', cancelReason.trim());
+        }}
+      />
     </Card>
   );
 }

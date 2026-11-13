@@ -16,6 +16,8 @@ import { ColumnFilterMenu, useColumnFilters } from '../ui/ColumnFilterMenu';
 import { StatCard } from './StatCard';
 import { HRViewTutorial } from './HRViewTutorial';
 import { HRCreateViewShell } from './HRCreateViewShell';
+import { ConfirmDialog } from '../ui/ConfirmDialog';
+import { RequiredReasonField } from '../ui/RequiredReasonField';
 import { formatDateEs } from '../../utils/dateFormat';
 import { beginNotificationAction, completeNotificationAction, failNotificationAction } from '../../services/notification-action-coordinator';
 
@@ -68,6 +70,9 @@ export function CapacitacionesView({ trainings, employees, onRefresh }: any) {
   const [expandedId, setExpandedId] = useState<string | null>(null);
   const [completingEnrollment, setCompletingEnrollment] = useState<string | null>(null);
   const [changingStatus, setChangingStatus] = useState<string | null>(null);
+  const [cancelTarget, setCancelTarget] = useState<any | null>(null);
+  const [cancelReason, setCancelReason] = useState('');
+  const [cancelReasonAttempted, setCancelReasonAttempted] = useState(false);
   const [enrollingTraining, setEnrollingTraining] = useState<string | null>(null);
   const [enrollSelection, setEnrollSelection] = useState<string[]>([]);
   const [enrolling, setEnrolling] = useState(false);
@@ -133,7 +138,7 @@ export function CapacitacionesView({ trainings, employees, onRefresh }: any) {
     }
   };
 
-  const handleTrainingStatus = async (training: any, status: string) => {
+  const handleTrainingStatus = async (training: any, status: string, reason?: string) => {
     const permissionByStatus: Record<string, 'start' | 'complete' | 'cancel'> = {
       IN_PROGRESS: 'start',
       COMPLETED: 'complete',
@@ -144,7 +149,7 @@ export function CapacitacionesView({ trainings, employees, onRefresh }: any) {
     setChangingStatus(training.id);
     const actionToken = beginNotificationAction();
     try {
-      await hrService.updateTraining(training.id, { status });
+      await hrService.updateTraining(training.id, { status, ...(status === 'CANCELLED' ? { reason: reason?.trim() } : {}) });
       toast.success(
         status === 'IN_PROGRESS' ? 'Capacitación iniciada'
           : status === 'COMPLETED' ? 'Capacitación completada'
@@ -580,7 +585,7 @@ export function CapacitacionesView({ trainings, employees, onRefresh }: any) {
                       <CheckCircle2 className="size-3 mr-1" /> Completar
                     </Button>
                   )}
-                  {canPerform('HR_TRAINING', 'cancel') && <Button size="sm" variant="outline" aria-label="Cancelar capacitación" title="Cancelar capacitación" className="h-8 px-2 text-xs text-destructive hover:bg-destructive hover:text-destructive-foreground border-destructive" disabled={changingStatus === training.id} onClick={() => handleTrainingStatus(training, 'CANCELLED')}>
+                  {canPerform('HR_TRAINING', 'cancel') && <Button size="sm" variant="outline" aria-label="Cancelar capacitación" title="Cancelar capacitación" className="h-8 px-2 text-xs text-destructive hover:bg-destructive hover:text-destructive-foreground border-destructive" disabled={changingStatus === training.id} onClick={() => { setCancelTarget(training); setCancelReason(''); setCancelReasonAttempted(false); }}>
                     <XCircle className="size-3" />
                   </Button>}
                 </div>
@@ -733,6 +738,7 @@ export function CapacitacionesView({ trainings, employees, onRefresh }: any) {
           })()}
         </DialogContent>
       </Dialog>
+      <ConfirmDialog open={cancelTarget !== null} onOpenChange={(open) => { if (!open && !changingStatus) { setCancelTarget(null); setCancelReason(''); setCancelReasonAttempted(false); } }} title="¿Cancelar capacitación?" description="La capacitación quedará cancelada y se conservará en el historial." confirmLabel="Cancelar capacitación" variant="destructive" loading={Boolean(changingStatus)} children={<RequiredReasonField id="training-cancel-reason" label="Motivo de cancelación" value={cancelReason} onChange={setCancelReason} attempted={cancelReasonAttempted} disabled={Boolean(changingStatus)} />} onConfirm={async () => { if (!cancelTarget) return; if (!cancelReason.trim()) { setCancelReasonAttempted(true); return false; } await handleTrainingStatus(cancelTarget, 'CANCELLED', cancelReason.trim()); setCancelTarget(null); return true; }} />
     </div>
   );
 }

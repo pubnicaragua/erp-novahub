@@ -1,4 +1,3 @@
-import { useId } from 'react';
 import { Plus, Printer, Trash2 } from 'lucide-react';
 import { Button } from '../ui/button';
 import { Input } from '../ui/input';
@@ -49,7 +48,6 @@ export function CustomerCreditInstallmentSchedule({
   printDisabled = false,
   className,
 }: CustomerCreditInstallmentScheduleProps) {
-  const finalDateId = useId();
   if (installments.length === 0) return null;
 
   const principal = principalAmount ?? installments.reduce((sum, row) => sum + Number(row.principalAmount || 0), 0);
@@ -82,23 +80,13 @@ export function CustomerCreditInstallmentSchedule({
         </div>
       </div>
 
-      <div className="grid min-w-0 grid-cols-2 gap-2 lg:grid-cols-4">
+      <div className="grid min-w-0 grid-cols-2 gap-2 sm:grid-cols-3 xl:grid-cols-4">
         <SummaryValue label="Capital" value={formatAmount(principal)} />
         <SummaryValue label="Intereses" value={formatAmount(interest)} />
         <SummaryValue label="Total con intereses" value={formatAmount(total)} emphasis />
         <SummaryValue label="Cantidad de abonos" value={String(installments.length)} />
         <SummaryValue label="Último abono" value={formatAmount(Number(lastInstallment.totalAmount || 0))} />
-        <div className="col-span-2 min-w-0 lg:col-span-3">
-          <label className="mb-1 block text-[10px] font-bold text-muted-foreground" htmlFor={finalDateId}>Fecha de vencimiento final</label>
-          <Input
-            id={finalDateId}
-            type="text"
-            readOnly
-            aria-readonly="true"
-            value={endingDate ? formatDateEs(endingDate) : 'Sin fecha'}
-            className="h-9 bg-muted/30 text-xs font-semibold"
-          />
-        </div>
+        <SummaryValue label="Vencimiento final" value={endingDate ? formatDateEs(endingDate) : 'Sin fecha'} />
       </div>
 
       <div className="max-h-72 min-w-0 overflow-auto rounded-lg border border-border/50">
@@ -106,10 +94,10 @@ export function CustomerCreditInstallmentSchedule({
           <TableHeader className="sticky top-0 z-10 bg-muted/90 backdrop-blur">
             <TableRow>
               <TableHead className="w-16">Abono</TableHead>
-              <TableHead>Fecha</TableHead>
+              <TableHead>Fecha{manualEditor && <span className="ml-1 text-destructive" aria-hidden="true">*</span>}</TableHead>
               {manualEditor ? <>
-                <TableHead className="text-right">Monto del abono</TableHead>
-                <TableHead className="text-right">Interés</TableHead>
+                <TableHead className="text-right">Monto del abono <span className="text-destructive" aria-hidden="true">*</span></TableHead>
+                <TableHead className="text-right">Interés <span className="text-destructive" aria-hidden="true">*</span></TableHead>
                 <TableHead className="text-right">Capital calculado</TableHead>
                 <TableHead className="w-12" />
               </> : <>

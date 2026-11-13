@@ -19,6 +19,7 @@ import { toast } from '@/app/services/toast';
 import { cn } from '../ui/utils';
 import { DateField } from '../ui/DateField';
 import { ExportMenu } from '../ui/ExportMenu';
+import { RequiredReasonField } from '../ui/RequiredReasonField';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { generateConfiguredReportSectionsPDF } from '../../utils/pdfGenerator';
 import { createReportWorkbook } from '../../utils/reportWorkbook';
@@ -138,7 +139,7 @@ export function ProyectosListView({ loading, onSelect, onChanged, canCreate, can
       const hasMembers = entries.some(([key]) => key === 'memberUserIds');
       const financialFields = new Set(['plannedBudget', 'plannedIncome', 'currency', 'exchangeRate']);
       const hasFinancials = entries.some(([key]) => financialFields.has(key));
-      const hasProjectData = entries.some(([key]) => key !== 'status' && key !== 'memberUserIds' && !financialFields.has(key));
+      const hasProjectData = entries.some(([key]) => key !== 'status' && key !== 'reason' && key !== 'memberUserIds' && !financialFields.has(key));
       if (hasStatus && !canSetProjectStatus(payload.status)) throw new Error('No tienes permiso para cambiar al estado solicitado.');
       if (hasMembers && !canManageMembers) throw new Error('No tienes permiso para administrar los miembros del proyecto.');
       if (editing) {
@@ -524,6 +525,8 @@ function ProjectFormDialog({ open, onOpenChange, editing, users, customers, bran
     : canCreateCosts;
 
   const [form, setForm] = useState<any>(() => buildInitialState(editing));
+  const [cancelReason, setCancelReason] = useState('');
+  const [cancelReasonAttempted, setCancelReasonAttempted] = useState(false);
   const [syncedDetail, setSyncedDetail] = useState<ProjectDetail | null>(null);
 
   if (detailQuery.data && detailQuery.data !== syncedDetail) {
@@ -560,6 +563,8 @@ function ProjectFormDialog({ open, onOpenChange, editing, users, customers, bran
 
   const submit = () => {
     if (!valid || saving || !canSave) return;
+    const needsCancelReason = form.status === 'CANCELLED' && (!editing || form.status !== editing.status);
+    if (needsCancelReason && !cancelReason.trim()) { setCancelReasonAttempted(true); return; }
     const payload: any = {};
     if (!editing || canEdit) Object.assign(payload, {
       code: form.code?.trim() || undefined,
@@ -579,7 +584,10 @@ function ProjectFormDialog({ open, onOpenChange, editing, users, customers, bran
       currency: form.currency,
       exchangeRate: form.exchangeRate === '' ? undefined : Number(form.exchangeRate),
     });
-    if ((!editing && canChangeStatus && maySetStatus(form.status)) || (editing && statusChanged && maySetStatus(form.status))) payload.status = form.status;
+    if ((!editing && canChangeStatus && maySetStatus(form.status)) || (editing && statusChanged && maySetStatus(form.status))) {
+      payload.status = form.status;
+      if (form.status === 'CANCELLED') payload.reason = cancelReason.trim();
+    }
     if (canManageMembers && (!editing || membersChanged)) payload.memberUserIds = Array.isArray(form.memberUserIds) ? form.memberUserIds : [];
     onSubmit(payload);
   };
@@ -605,11 +613,12 @@ function ProjectFormDialog({ open, onOpenChange, editing, users, customers, bran
           </div>
           {(canChangeStatus || canComplete || canCancel) && <div>
             <Label>Estado</Label>
-            <Select value={form.status} onValueChange={(v) => setForm((f: any) => ({ ...f, status: v }))}>
+            <Select value={form.status} onValueChange={(v) => { setCancelReason(''); setCancelReasonAttempted(false); setForm((f: any) => ({ ...f, status: v })); }}>
               <SelectTrigger><SelectValue /></SelectTrigger>
               <SelectContent>{PROJECT_STATUS_OPTIONS.filter((o) => o.value === form.status || maySetStatus(o.value)).map((o) => <SelectItem key={o.value} value={o.value}>{o.label}</SelectItem>)}</SelectContent>
             </Select>
           </div>}
+          {form.status === 'CANCELLED' && (!editing || form.status !== editing.status) && <div className="sm:col-span-2"><RequiredReasonField id="project-cancel-reason" label="Motivo de cancelación" value={cancelReason} onChange={setCancelReason} attempted={cancelReasonAttempted} disabled={saving} /></div>}
           <div>
             <Label>Prioridad</Label>
             <Select value={form.priority} onValueChange={(v) => setForm((f: any) => ({ ...f, priority: v }))}>

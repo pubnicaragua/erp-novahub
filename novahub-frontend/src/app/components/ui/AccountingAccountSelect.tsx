@@ -52,7 +52,7 @@ export function AccountingAccountSelect({
   return (
     <div>
       <p className="mb-1 text-[10px] font-black uppercase tracking-widest text-muted-foreground">
-        {label}{required && ' *'}
+        {label}{required && <span className="text-destructive" aria-hidden="true"> *</span>}
       </p>
       <Select value={value || ''} onValueChange={onChange} disabled={disabled}>
         <SelectTrigger className="h-8 text-xs">

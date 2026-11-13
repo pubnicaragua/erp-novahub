@@ -18,6 +18,7 @@ import type { Product, PurchaseRequest, PurchaseManagement, Warehouse, Supplier 
 import type { SalesPaginationControls } from '../../types';
 import { cn } from '../ui/utils';
 import { ConfirmDialog } from '../ui/ConfirmDialog';
+import { RequiredReasonField } from '../ui/RequiredReasonField';
 import { PromptDialog } from '../ui/PromptDialog';
 import { PurchaseKpiCard } from './PurchaseKpiCard';
 import { KpiSummaryNotice } from '../ui/KpiSummaryNotice';
@@ -143,6 +144,8 @@ export function SolicitudCompraView({ data, summaryData, summaryLoading, summary
   const [pendingRejectManagement, setPendingRejectManagement] = useState<PurchaseManagement | null>(null);
   const [pendingConvertManagement, setPendingConvertManagement] = useState<PurchaseManagement | null>(null);
   const [pendingRequestAction, setPendingRequestAction] = useState<RequestActionState | null>(null);
+  const [cancelReason, setCancelReason] = useState('');
+  const [cancelReasonAttempted, setCancelReasonAttempted] = useState(false);
   // Radix mantiene el contenido montado durante el cierre animado. Conservamos
   // la intención visual para evitar que el título cambie a "Anular" un instante
   // antes de desmontar el diálogo de aprobación.
@@ -477,19 +480,22 @@ export function SolicitudCompraView({ data, summaryData, summaryLoading, summary
     if (normalizeRequestStatus(req.status) !== 'PENDING_APPROVAL') return;
     setApprovalSupplierId('');
     const action: RequestActionState = { request: req, action: 'cancel' };
+    setCancelReason('');
+    setCancelReasonAttempted(false);
     setRequestActionPresentation(action);
     setPendingRequestAction(action);
   };
 
-  const confirmRequestAction = async () => {
-    if (!pendingRequestAction) return;
+  const confirmRequestAction = async (): Promise<boolean> => {
+    if (!pendingRequestAction) return false;
     const { request: req, action } = pendingRequestAction;
-    if (action === 'approve' && !canApproveRequests) return;
-    if (action === 'cancel' && !canCancelRequests) return;
+    if (action === 'approve' && !canApproveRequests) return false;
+    if (action === 'cancel' && !canCancelRequests) return false;
     if (action === 'approve' && !approvalSupplierId) {
       toast.error('Seleccione un proveedor para aprobar la solicitud.');
-      return;
+      return false;
     }
+    if (action === 'cancel' && !cancelReason.trim()) { setCancelReasonAttempted(true); return false; }
     setActionLoading(req.id);
     const actionToken = beginNotificationAction();
     const requestToastId = toast.loading(action === 'approve' ? 'Aprobando solicitud y generando orden de compra...' : 'Anulando solicitud de compra...');
@@ -498,14 +504,18 @@ export function SolicitudCompraView({ data, summaryData, summaryLoading, summary
         await purchaseRequestsService.approve(req.id, approvalSupplierId);
         toast.success(`${req.number} aprobada y enviada a órdenes de compra`, { id: requestToastId });
       } else {
-        await purchaseRequestsService.changeStatus(req.id, 'CANCELLED');
+        await purchaseRequestsService.changeStatus(req.id, 'CANCELLED', cancelReason.trim());
         toast.success(`${req.number} → Anulada`, { id: requestToastId });
       }
       setPendingRequestAction(null);
       setApprovalSupplierId('');
+      setCancelReason('');
+      setCancelReasonAttempted(false);
       onRefresh();
+      return true;
     } catch (e: any) {
       toast.error(e?.response?.data?.message || e?.message || `Error al ${action === 'approve' ? 'aprobar y enviar' : 'anular'} la solicitud`, { id: requestToastId });
+      return false;
     }
     finally { completeNotificationAction(actionToken); setActionLoading(null); }
   };
@@ -779,7 +789,7 @@ export function SolicitudCompraView({ data, summaryData, summaryLoading, summary
       />
       <ConfirmDialog
         open={Boolean(pendingRequestAction)}
-        onOpenChange={open => { if (!open && !actionLoading) { setPendingRequestAction(null); setApprovalSupplierId(''); } }}
+        onOpenChange={open => { if (!open && !actionLoading) { setPendingRequestAction(null); setApprovalSupplierId(''); setCancelReason(''); setCancelReasonAttempted(false); } }}
         title={requestActionPresentation?.action === 'approve' ? '¿Aprobar y enviar a orden de compra?' : '¿Anular solicitud?'}
         description={requestActionPresentation?.action === 'approve'
           ? 'Selecciona el proveedor. La solicitud quedará aprobada y se creará una orden de compra sin cambiar de vista.'
@@ -791,6 +801,7 @@ export function SolicitudCompraView({ data, summaryData, summaryLoading, summary
         disabled={pendingRequestAction?.action === 'approve' && (!approvalSupplierId || supplierDependencyState !== 'ready')}
         loading={Boolean(pendingRequestAction && actionLoading === pendingRequestAction.request.id)}
       >
+        {pendingRequestAction?.action === 'cancel' && <div className="mt-4"><RequiredReasonField id="purchase-request-cancel-reason" label="Motivo de anulación" value={cancelReason} onChange={setCancelReason} attempted={cancelReasonAttempted} disabled={Boolean(actionLoading)} /></div>}
         {pendingRequestAction?.action === 'approve' && (
           <div className="mt-4 space-y-2 text-left">
             <Label htmlFor="purchase-request-approval-supplier" className="text-xs font-bold uppercase tracking-wider">

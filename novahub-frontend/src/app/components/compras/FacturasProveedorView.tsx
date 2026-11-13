@@ -19,6 +19,7 @@ import { ViewLayoutSelect } from '../ui/ViewLayoutSelect';
 import { useLocalStorageState } from '../../hooks/useLocalStorageState';
 import { toast } from '@/app/services/toast';
 import { ConfirmDialog } from '../ui/ConfirmDialog';
+import { RequiredReasonField } from '../ui/RequiredReasonField';
 import { cn } from '../ui/utils';
 import { useCurrency } from '../../contexts/CurrencyContext';
 import { useAuth } from '../../contexts/AuthContext';
@@ -112,8 +113,9 @@ export function FacturasProveedorView({ data, summaryData, summaryLoading, summa
     onClearTargetId?.();
   }, [targetId, data, onClearTargetId]);
   const [statusFilter, setStatusFilter] = useState<string>('ALL');
-  const [pendingCancelId, setPendingCancelId] = useState<string | null>(null);
+  const [pendingCancelIds, setPendingCancelIds] = useState<string[] | null>(null);
   const [cancelReason, setCancelReason] = useState('');
+  const [cancelReasonAttempted, setCancelReasonAttempted] = useState(false);
   const [cancelLoading, setCancelLoading] = useState(false);
   const [suppliers, setSuppliers] = useState<Supplier[]>([]);
   
@@ -251,15 +253,18 @@ export function FacturasProveedorView({ data, summaryData, summaryLoading, summa
   };
 
   const handleCancelConfirm = async () => {
-    if (!pendingCancelId || !cancelReason.trim() || !canPerform('PURCHASES_RECEIPTS', 'read') || !canPerform('PURCHASES_RECEIPTS', 'cancelInvoice')) return;
+    if (!pendingCancelIds?.length || !canPerform('PURCHASES_RECEIPTS', 'read') || !canPerform('PURCHASES_RECEIPTS', 'cancelInvoice')) return;
+    if (!cancelReason.trim()) { setCancelReasonAttempted(true); return false; }
+    const ids = pendingCancelIds;
     setCancelLoading(true);
-    const cancelToastId = toast.loading('Anulando factura de proveedor...');
+    const cancelToastId = toast.loading(ids.length === 1 ? 'Anulando factura de proveedor...' : `Anulando ${ids.length} facturas de proveedor...`);
     try {
-      await billsService.cancel(pendingCancelId, cancelReason.trim());
-      toast.success('Factura de proveedor anulada', { id: cancelToastId });
-      setPendingCancelId(null);
+      for (const id of ids) await billsService.cancel(id, cancelReason.trim());
+      toast.success(ids.length === 1 ? 'Factura de proveedor anulada' : 'Facturas de proveedor anuladas', { id: cancelToastId });
+      setPendingCancelIds(null);
       setCancelReason('');
-      if (editingId === pendingCancelId) {
+      setCancelReasonAttempted(false);
+      if (ids.includes(String(editingId))) {
         openEditor(null);
         setLocalDoc(null);
       }
@@ -519,7 +524,7 @@ export function FacturasProveedorView({ data, summaryData, summaryLoading, summa
              {!isNew && canPerform('PURCHASES_RECEIPTS', 'export') && <PdfDownloadButton label="Descargar" includePageSizes includeRoll size="sm" className="h-10 rounded-xl px-4 text-[10px] font-black uppercase tracking-widest" onDownload={(format) => void handleDownloadSupplierInvoicePdf(format)} />}
                 {!isNew && canPerform('PURCHASES_RECEIPTS', 'read') && canPerform('PURCHASES_RECEIPTS', 'cancelInvoice') && (
                   <Button variant="outline" className="rounded-xl border-rose-500/50 text-rose-500 hover:bg-rose-700 hover:text-white font-black uppercase text-[10px] tracking-widest px-4"
-                    onClick={() => { setPendingCancelId(editingId); setCancelReason(''); }}>
+                    onClick={() => { setPendingCancelIds([editingId]); setCancelReason(''); setCancelReasonAttempted(false); }}>
                     <Ban className="mr-2 size-3.5" /> Anular
                   </Button>
                 )}
@@ -858,17 +863,11 @@ export function FacturasProveedorView({ data, summaryData, summaryLoading, summa
         </div>
         <EditableDataTable data={filtered} columns={columns} onRowUpdate={handleUpdate} isLoading={loading} pagination={pagination} showSelection={canPerform('PURCHASES_RECEIPTS', 'read') && canPerform('PURCHASES_RECEIPTS', 'cancelInvoice')} layoutMode={layoutMode === 'cards' ? 'cards' : 'responsive'} highlightedRowId={highlightedAlertId} bulkAction="cancel"
           onBulkDelete={canPerform('PURCHASES_RECEIPTS', 'read') && canPerform('PURCHASES_RECEIPTS', 'cancelInvoice') ? async (ids) => {
-            const cancelToastId = toast.loading(`Anulando ${ids.length} factura${ids.length === 1 ? '' : 's'} de proveedor...`);
-            try {
-              for (const id of ids) {
-                if (String(id).startsWith('new-')) continue;
-                await billsService.cancel(id as string, 'Anulación masiva');
-              }
-              toast.success('Facturas anuladas', { id: cancelToastId });
-              onRefresh();
-            } catch (e: any) {
-              toast.error(e?.response?.data?.message || e?.message || 'Error al anular', { id: cancelToastId });
-            }
+            const validIds = ids.map(String).filter((id) => !id.startsWith('new-'));
+            if (!validIds.length) return;
+            setCancelReason('');
+            setCancelReasonAttempted(false);
+            setPendingCancelIds(validIds);
           } : undefined}
           actions={(row) => (
             <div className="flex gap-1">
@@ -896,33 +895,22 @@ export function FacturasProveedorView({ data, summaryData, summaryLoading, summa
               )}
               <PurchaseAuditButton entity="SUPPLIER_INVOICE" entityId={row.id} title="Auditoria de la Factura" />
               {canPerform('PURCHASES_RECEIPTS', 'read') && canPerform('PURCHASES_RECEIPTS', 'cancelInvoice') && (
-                <Button title="Anular factura" aria-label="Anular factura" variant="ghost" size="icon" className="size-8 rounded-lg hover:bg-rose-500/10 hover:text-rose-500" onClick={() => { setPendingCancelId(row.id); setCancelReason(''); }}><Ban className="size-4" /></Button>
+                <Button title="Anular factura" aria-label="Anular factura" variant="ghost" size="icon" className="size-8 rounded-lg hover:bg-rose-500/10 hover:text-rose-500" onClick={() => { setPendingCancelIds([row.id]); setCancelReason(''); setCancelReasonAttempted(false); }}><Ban className="size-4" /></Button>
               )}
             </div>
           )}
         />
         <ConfirmDialog
-          open={!!pendingCancelId}
-          onOpenChange={(open) => { if (!open) { setPendingCancelId(null); setCancelReason(''); } }}
-          title="Anular Factura de Proveedor"
+          open={pendingCancelIds !== null}
+          onOpenChange={(open) => { if (!open && !cancelLoading) { setPendingCancelIds(null); setCancelReason(''); setCancelReasonAttempted(false); } }}
+          title={pendingCancelIds?.length === 1 ? 'Anular Factura de Proveedor' : `Anular ${pendingCancelIds?.length ?? ''} Facturas de Proveedor`}
           description="La factura quedará cancelada y se revertirá su efecto en el saldo del proveedor. Esta acción no se puede deshacer."
-          confirmLabel="Anular Factura"
+          confirmLabel={pendingCancelIds?.length === 1 ? 'Anular Factura' : 'Anular Facturas'}
           variant="destructive"
           loading={cancelLoading}
-          disabled={!cancelReason.trim()}
           onConfirm={handleCancelConfirm}
-        >
-          <div className="mt-4">
-            <label className="text-sm font-medium text-foreground mb-1 block">Motivo de anulación *</label>
-            <textarea
-              className="w-full rounded-xl border border-border bg-background px-3 py-2 text-sm resize-none focus:outline-none focus:ring-2 focus:ring-primary/20"
-              rows={3}
-              placeholder="Ej: Factura duplicada, error del proveedor..."
-              value={cancelReason}
-              onChange={(e) => setCancelReason(e.target.value)}
-            />
-          </div>
-        </ConfirmDialog>
+          children={<RequiredReasonField id="supplier-invoice-cancel-reason" label="Motivo de anulación" value={cancelReason} onChange={setCancelReason} attempted={cancelReasonAttempted} disabled={cancelLoading} placeholder="Ej.: factura duplicada, error del proveedor…" />}
+        />
 
       </div>
     </div>

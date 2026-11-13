@@ -2772,7 +2772,7 @@ const configuredHistoryPaper = (settings: Record<string, any>, format: PdfDownlo
  * rasterizar un canvas completo por cada página como los documentos
  * individuales.
  */
-export async function generateFastGlobalReportPDF({ targetKey, title, tenantName, tenantLogo, settings: inputSettings, columns, rows, totals, tableSummary, fileName, save = true, subtitle, designOverride, format = 'configured' }: {
+export async function generateFastGlobalReportPDF({ targetKey, title, tenantName, tenantLogo, settings: inputSettings, columns, rows, totals, tableSummary, fileName, save = true, subtitle, designOverride, format = 'configured', reportMetrics: inputReportMetrics, forceVector = false }: {
   targetKey: string;
   title: string;
   tenantName: string;
@@ -2787,6 +2787,8 @@ export async function generateFastGlobalReportPDF({ targetKey, title, tenantName
   subtitle?: string;
   designOverride?: any;
   format?: PdfDownloadFormat;
+  reportMetrics?: Array<{ label: string; value: string | number; detail?: string }>;
+  forceVector?: boolean;
 }) {
   if (save) ensurePdfBrowserPreview(title);
   const normalizedFormat = format === 'novahub-format' ? 'configured' : format;
@@ -2825,7 +2827,7 @@ export async function generateFastGlobalReportPDF({ targetKey, title, tenantName
   // impracticable; para esos volúmenes usamos la salida vectorial de abajo,
   // conservando los ajustes de marca y papel. Los reportes pequeños siguen
   // usando la definición semántica editable.
-  if (rows.length <= 500) {
+  if (!forceVector && rows.length <= 500) {
     const configured = await renderConfiguredDefinition({
       targetKey,
       data: semanticData,
@@ -2873,8 +2875,16 @@ export async function generateFastGlobalReportPDF({ targetKey, title, tenantName
     { label: 'PARTICULARES', value: rows.filter(row => /particular|persona/i.test(String(columns[customerTypeIndex]?.value(row) || ''))).length },
     { label: 'EMPRESAS', value: rows.filter(row => /empresa|organizaci[oó]n/i.test(String(columns[customerTypeIndex]?.value(row) || ''))).length },
   ] : [];
-  const customerKpiHeight = customerListMetrics.length ? 13 : 0;
-  const tableStartY = customerListMetrics.length ? 66 : 49;
+  const customReportMetrics = (inputReportMetrics || []).map(metric => ({
+    label: String(metric.label || ''),
+    value: String(metric.value ?? ''),
+    detail: String(metric.detail || ''),
+  }));
+  const reportMetrics = customReportMetrics.length ? customReportMetrics : customerListMetrics.map(metric => ({ ...metric, detail: '' }));
+  const hasCustomReportMetrics = customReportMetrics.length > 0;
+  const customerKpiHeight = reportMetrics.length ? (hasCustomReportMetrics ? 16 : 13) : 0;
+  const reportMetricY = 48;
+  const tableStartY = hasCustomReportMetrics ? 68 : customerListMetrics.length ? 66 : 49;
   const drawReportHeader = (pageNumber: number) => {
     doc.setDrawColor(...primary);
     doc.setLineWidth(0.35);
@@ -2909,22 +2919,27 @@ export async function generateFastGlobalReportPDF({ targetKey, title, tenantName
       doc.setTextColor(...text);
       doc.setFont('helvetica', 'normal');
       doc.setFontSize(7.5);
-      if (subtitle) doc.text(doc.splitTextToSize(subtitle, contentWidth * 0.58).slice(0, 1), margin, 42);
+      if (subtitle) doc.text(doc.splitTextToSize(subtitle, contentWidth * 0.68).slice(0, 2), margin, 42, { lineHeightFactor: 1.05 });
       doc.text(`Generado: ${generatedAt}`, pageWidth - margin, 42, { align: 'right' });
 
-      if (customerListMetrics.length) {
+      if (reportMetrics.length) {
         const gap = 2;
-        const cardWidth = (contentWidth - gap * (customerListMetrics.length - 1)) / customerListMetrics.length;
-        customerListMetrics.forEach((metric, index) => {
+        const cardWidth = (contentWidth - gap * (reportMetrics.length - 1)) / reportMetrics.length;
+        reportMetrics.forEach((metric, index) => {
           const x = margin + index * (cardWidth + gap);
           doc.setFillColor(...(index % 2 ? secondary : primary));
-          doc.roundedRect(x, 48, cardWidth, customerKpiHeight, 1.5, 1.5, 'F');
+          doc.roundedRect(x, reportMetricY, cardWidth, customerKpiHeight, 1.5, 1.5, 'F');
           doc.setTextColor(255, 255, 255);
           doc.setFont('helvetica', 'bold');
           doc.setFontSize(6.2);
-          doc.text(metric.label, x + cardWidth / 2, 52, { align: 'center' });
+          doc.text(metric.label, x + cardWidth / 2, reportMetricY + 4, { align: 'center' });
           doc.setFontSize(9);
-          doc.text(String(metric.value), x + cardWidth / 2, 58, { align: 'center' });
+          doc.text(String(metric.value), x + cardWidth / 2, reportMetricY + 9, { align: 'center' });
+          if (hasCustomReportMetrics && metric.detail) {
+            doc.setFont('helvetica', 'normal');
+            doc.setFontSize(5.5);
+            doc.text(doc.splitTextToSize(metric.detail, cardWidth - 5).slice(0, 1), x + cardWidth / 2, reportMetricY + 13, { align: 'center' });
+          }
         });
       }
     }
@@ -2942,7 +2957,7 @@ export async function generateFastGlobalReportPDF({ targetKey, title, tenantName
   autoTable(doc, {
     startY,
     tableWidth: contentWidth,
-    margin: { left: margin, right: margin, bottom: 22, top: customerListMetrics.length ? 27 : startY },
+    margin: { left: margin, right: margin, bottom: 22, top: reportMetrics.length ? 27 : startY },
     head: [columns.map(columnHeader)],
     body: rows.length ? rows.map(row => columns.map(column => String(column.value(row) ?? '—'))) : [columns.map(() => '—')],
     foot: tableSummary ? [(() => {
@@ -3177,6 +3192,8 @@ export async function generateConfiguredReportTemplate({
   columns,
   totals,
   tableSummary,
+  subtitle,
+  reportMetrics,
   fileName,
   designOverride,
   format = 'configured',
@@ -3189,13 +3206,16 @@ export async function generateConfiguredReportTemplate({
   columns: Array<{ header: string; value: (row: any) => unknown; align?: 'left' | 'center' | 'right' }>;
   totals?: Record<string, unknown>;
   tableSummary?: { label: string; value: unknown; columnIndex?: number };
+  subtitle?: string;
+  reportMetrics?: Array<{ label: string; value: string | number; detail?: string }>;
   fileName: string;
   designOverride?: any;
   format?: PdfDownloadFormat;
 }) {
   ensurePdfBrowserPreview(title);
   const design = designOverride || await getPdfDesign(targetKey);
-  if (format === 'novahub-format' && !design?.settings?.curatedTemplateSelection && !['ventas.customer-history', 'compras.supplier-history'].includes(targetKey)) {
+  const isInstallmentPlanReport = targetKey === 'ventas.customer-installment-plan';
+  if (!isInstallmentPlanReport && format === 'novahub-format' && !design?.settings?.curatedTemplateSelection && !['ventas.customer-history', 'compras.supplier-history'].includes(targetKey)) {
     return generateNovaHubFormatReport({
       title,
       tenantName,
@@ -3231,7 +3251,7 @@ export async function generateConfiguredReportTemplate({
     ...(target.module === 'reportes' ? { reportSections: [{ id: target.key, title, columns: mappedColumns, rows: mappedRows }] } : {}),
     ...(target.structure === 'dashboard' ? { reportKpis: rows.map(row => ({ label: String(row.label ?? ''), value: String(row.value ?? ''), detail: String(row.detail ?? '') })) } : {}),
   };
-  const rendered = await renderConfiguredDefinition({ targetKey, data, tenantName, tenantLogo, format, fileName, designOverride: design });
+  const rendered = isInstallmentPlanReport ? null : await renderConfiguredDefinition({ targetKey, data, tenantName, tenantLogo, format, fileName, designOverride: design });
   if (rendered?.doc) return rendered.doc;
 
   const sourceSettings = (design?.settings && typeof design.settings === 'object' ? design.settings : {}) as Record<string, any>;
@@ -3247,6 +3267,9 @@ export async function generateConfiguredReportTemplate({
     rows,
     totals,
     tableSummary,
+    subtitle,
+    reportMetrics,
+    forceVector: isInstallmentPlanReport,
     fileName,
   });
   return fastReport?.doc || null;

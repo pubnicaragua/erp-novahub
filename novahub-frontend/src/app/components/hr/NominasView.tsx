@@ -453,8 +453,8 @@ export function NominasView({ payrolls, employees, onRefresh }: any) {
 
       showPdfInBrowserPreview(doc.output('blob'), buildHumanPdfFileName(`Reporte de nóminas ${new Date().toISOString().slice(0, 10)}`));
       toast.success('Reporte PDF listo para previsualizar');
-    } catch {
-      toast.error('Error generando PDF');
+    } catch (error) {
+      toast.apiFailure(error, 'No se pudo generar el reporte PDF de nóminas. Intenta de nuevo y comparte el aviso si continúa.');
     }
   };
 
@@ -471,8 +471,8 @@ export function NominasView({ payrolls, employees, onRefresh }: any) {
         },
       });
       toast.success('Reporte Excel descargado');
-    } catch {
-      toast.error('Error generando Excel');
+    } catch (error) {
+      toast.apiFailure(error, 'No se pudo generar el reporte Excel de nóminas. Intenta de nuevo y comparte el aviso si continúa.');
     }
   };
 

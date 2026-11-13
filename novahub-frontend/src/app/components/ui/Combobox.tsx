@@ -35,6 +35,10 @@ interface ComboboxProps {
   allowCustomValue?: boolean
   ariaLabel?: string
   id?: string
+  required?: boolean
+  "aria-required"?: boolean
+  "aria-invalid"?: boolean
+  "aria-describedby"?: string
 }
 
 export function Combobox({
@@ -52,6 +56,10 @@ export function Combobox({
   allowCustomValue = false,
   ariaLabel,
   id,
+  required,
+  "aria-required": ariaRequired,
+  "aria-invalid": ariaInvalid,
+  "aria-describedby": ariaDescribedBy,
 }: ComboboxProps) {
   const [open, setOpen] = React.useState(false)
   const [search, setSearch] = React.useState('')
@@ -139,6 +147,9 @@ export function Combobox({
           role="combobox"
           aria-expanded={open}
           aria-label={ariaLabel}
+          aria-required={ariaRequired ?? required}
+          aria-invalid={ariaInvalid || undefined}
+          aria-describedby={ariaDescribedBy}
           disabled={disabled}
           className={cn("w-full min-w-0 justify-between overflow-hidden h-8 text-xs font-medium", className, 
             disabled && "opacity-50 cursor-not-allowed bg-muted/50"

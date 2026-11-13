@@ -16,6 +16,7 @@ import {
   Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle
 } from '../ui/dialog';
 import { ConfirmDialog } from '../ui/ConfirmDialog';
+import { RequiredReasonField } from '../ui/RequiredReasonField';
 import { useCurrency } from '../../contexts/CurrencyContext';
 import { useAuth } from '../../contexts/AuthContext';
 import { useTheme } from '../../contexts/ThemeContext';
@@ -63,7 +64,7 @@ interface FinanceTableViewProps {
   deleteActionLabel?: string;
   canCancel?: boolean;
   canCancelItem?: (item: any) => boolean;
-  onCancel?: (id: string) => Promise<void>;
+  onCancel?: (id: string, reason: string) => Promise<void>;
   cancelActionLabel?: string;
   cancelDialogTitle?: string;
   cancelDialogDescription?: string;
@@ -134,6 +135,8 @@ export function FinanceTableView({
   const [deleteLoading, setDeleteLoading] = useState(false);
   const [pendingCancelId, setPendingCancelId] = useState<string | null>(null);
   const [cancelLoading, setCancelLoading] = useState(false);
+  const [cancelReason, setCancelReason] = useState('');
+  const [cancelReasonAttempted, setCancelReasonAttempted] = useState(false);
   const [scheduleActionLoadingId, setScheduleActionLoadingId] = useState<string | null>(null);
   const [isCategoryDialogOpen, setIsCategoryDialogOpen] = useState(false);
   const [newCategoryName, setNewCategoryName] = useState('');
@@ -212,9 +215,9 @@ export function FinanceTableView({
     finally { setDeleteLoading(false); setPendingDeleteId(null); }
   };
 
-  const handleCancel = async (id: string) => {
+  const handleCancel = async (id: string, reason: string) => {
     if (!onCancel) return;
-    try { setCancelLoading(true); await onCancel(id); }
+    try { setCancelLoading(true); await onCancel(id, reason); }
     catch (e: any) { toast.error(e?.response?.data?.message || e?.message || 'Error al anular registro'); }
     finally { setCancelLoading(false); setPendingCancelId(null); }
   };
@@ -678,7 +681,7 @@ export function FinanceTableView({
       </div>
 
         <ConfirmDialog open={pendingDeleteId !== null} onOpenChange={o => { if (!o) setPendingDeleteId(null); }} title="¿Eliminar registro?" description="¿Estás seguro de que deseas eliminar este registro financiero? Esta acción no se puede deshacer." confirmLabel="Eliminar" variant="destructive" loading={deleteLoading} onConfirm={() => pendingDeleteId ? handleDelete(pendingDeleteId) : Promise.resolve()} />
-        <ConfirmDialog open={pendingCancelId !== null} onOpenChange={o => { if (!o) setPendingCancelId(null); }} title={cancelDialogTitle} description={cancelDialogDescription} confirmLabel={cancelConfirmLabel} variant="destructive" loading={cancelLoading} onConfirm={() => pendingCancelId ? handleCancel(pendingCancelId) : Promise.resolve()} />
+        <ConfirmDialog open={pendingCancelId !== null} onOpenChange={o => { if (!o && !cancelLoading) { setPendingCancelId(null); setCancelReason(''); setCancelReasonAttempted(false); } }} title={cancelDialogTitle} description={cancelDialogDescription} confirmLabel={cancelConfirmLabel} variant="destructive" loading={cancelLoading} children={<RequiredReasonField id="finance-cancel-reason" label="Motivo de anulación" value={cancelReason} onChange={setCancelReason} attempted={cancelReasonAttempted} disabled={cancelLoading} />} onConfirm={() => { if (!pendingCancelId) return Promise.resolve(); if (!cancelReason.trim()) { setCancelReasonAttempted(true); return false; } return handleCancel(pendingCancelId, cancelReason.trim()); }} />
 
       <Dialog open={isCategoryDialogOpen} onOpenChange={setIsCategoryDialogOpen}>
         <DialogContent className="sm:max-w-[420px]">

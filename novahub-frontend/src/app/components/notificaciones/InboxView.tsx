@@ -38,8 +38,8 @@ export const InboxView: React.FC<InboxViewProps> = ({ data, loading, onRefresh }
     try {
       await inboxService.markAsRead(id);
       onRefresh();
-    } catch {
-      toast.error('Error al marcar como leída');
+    } catch (error) {
+      toast.apiFailure(error, 'No se pudo marcar la notificación como leída. Inténtalo de nuevo.');
     }
   };
 
@@ -48,8 +48,8 @@ export const InboxView: React.FC<InboxViewProps> = ({ data, loading, onRefresh }
       await inboxService.delete(id);
       toast.success('Notificación eliminada');
       onRefresh();
-    } catch {
-      toast.error('Error al eliminar');
+    } catch (error) {
+      toast.apiFailure(error, 'No se pudo eliminar la notificación. Inténtalo de nuevo.');
     }
   };
 
@@ -58,8 +58,8 @@ export const InboxView: React.FC<InboxViewProps> = ({ data, loading, onRefresh }
       await inboxService.markAllAsRead();
       toast.success('Todas marcadas como leídas');
       onRefresh();
-    } catch {
-      toast.error('Error');
+    } catch (error) {
+      toast.apiFailure(error, 'No se pudieron marcar las notificaciones como leídas. Inténtalo de nuevo.');
     }
   };
 

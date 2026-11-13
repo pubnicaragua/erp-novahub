@@ -141,7 +141,7 @@ export function SupplierImportPreview({
         <ImportReviewSummary total={rows.length} valid={validRows} skipped={errorRows} warnings={warningRows} entityLabel="proveedores" />
         {hasPendingOpeningBalance && <div className="flex flex-wrap items-end gap-3 rounded-2xl border border-primary/20 bg-primary/[0.04] p-4">
           <label className="min-w-48 space-y-1 text-xs font-bold text-foreground">
-            <span className="block">Fecha de corte de saldos pendientes *</span>
+            <span className="block">Fecha de corte de saldos pendientes <span className="text-destructive" aria-hidden="true">*</span></span>
             <Input type="date" value={openingBalanceDate} onChange={(event) => setOpeningBalanceDate(event.target.value)} disabled={importing} required className="h-9 w-full rounded-lg" />
           </label>
           <p className="max-w-2xl text-xs text-muted-foreground">Esta fecha se usará para los asientos de apertura de los proveedores con saldo pendiente. Los saldos a favor no se contabilizan en este proceso.</p>

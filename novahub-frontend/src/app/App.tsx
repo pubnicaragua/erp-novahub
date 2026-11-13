@@ -716,8 +716,19 @@ function AppContent() {
   const [trialExpired, setTrialExpired] = useState(false);
   const [sessionClosed, setSessionClosed] = useState<'closed' | 'expired' | 'invalid' | null>(null);
   const [showingSessionBranding, setShowingSessionBranding] = useState(false);
+  const [isBrowserOnline, setIsBrowserOnline] = useState(() => navigator.onLine);
   const lastSessionStartVersion = useRef(0);
   useResponsiveNativeTables();
+
+  useEffect(() => {
+    const updateOnlineState = () => setIsBrowserOnline(navigator.onLine);
+    window.addEventListener('online', updateOnlineState);
+    window.addEventListener('offline', updateOnlineState);
+    return () => {
+      window.removeEventListener('online', updateOnlineState);
+      window.removeEventListener('offline', updateOnlineState);
+    };
+  }, []);
 
   useEffect(() => {
     // La recuperación de caché solo debe durar hasta que la aplicación vuelva
@@ -811,11 +822,12 @@ function AppContent() {
   // Al cerrarse la sesión (contador llega a 0), redirigir solo al login.
   useEffect(() => {
     if (!sessionClosed || !isAuthenticated) return;
+    const logoutDelay = sessionClosed === 'closed' ? 4000 : 0;
     const timer = setTimeout(() => {
       safeRemoveItem('nh-auth-token');
       logout?.();
       setSessionClosed(null);
-    }, 4000);
+    }, logoutDelay);
     return () => clearTimeout(timer);
   }, [isAuthenticated, sessionClosed, logout]);
 
@@ -858,7 +870,7 @@ function AppContent() {
 
   if (!isAuthenticated) {
     const offlineRouteIdentity = getOfflineRouteEligibility();
-    if (offlineRouteIdentity) return <ForceSalesOfflineTrackingFallback identity={offlineRouteIdentity} />;
+    if (!isBrowserOnline && offlineRouteIdentity) return <ForceSalesOfflineTrackingFallback identity={offlineRouteIdentity} />;
     return <LoginPage onLogin={login} />;
   }
 

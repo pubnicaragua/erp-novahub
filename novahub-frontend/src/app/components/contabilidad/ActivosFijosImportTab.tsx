@@ -147,8 +147,8 @@ export function ActivosFijosImportTab() {
       setResult(null);
       toast.success(`${mapped.length} filas leídas del archivo`);
       setReadingProgress(100);
-    } catch (err) {
-      toast.error('Error al leer el archivo Excel');
+    } catch {
+      toast.error('No se pudo leer el archivo Excel. Comprueba que sea válido y que no esté dañado, y vuelve a seleccionarlo.');
     } finally {
       setReadingFile(false);
       setReadingProgress(0);

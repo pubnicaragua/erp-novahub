@@ -61,7 +61,7 @@ export const contabilidadService = {
   getJournal: (id: string, signal?: AbortSignal) => api.get<any>(`/accounting/journals/${id}`, { signal }),
   updateJournal: (id: string, data: any) => api.put<any>(`/accounting/journals/${id}`, data),
   postJournal: (id: string) => api.post<any>(`/accounting/journals/${id}/post`, {}),
-  voidJournal: (id: string) => api.post<any>(`/accounting/journals/${id}/void`, {}),
+  voidJournal: (id: string, reason: string) => api.post<any>(`/accounting/journals/${id}/void`, { reason }),
 
   // Auto-generación
   autoGenerateFromInvoice: (id: string) => api.post<any>(`/accounting/auto-generate/invoice/${id}`, {}),

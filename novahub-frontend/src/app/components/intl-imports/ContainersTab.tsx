@@ -16,6 +16,7 @@ import { Button } from '../ui/button';
 import { Card } from '../ui/card';
 import { Badge } from '../ui/badge';
 import { ConfirmDialog } from '../ui/ConfirmDialog';
+import { RequiredReasonField } from '../ui/RequiredReasonField';
 import {
   intlImportsService,
   INTL_CONTAINER_STATUS_LABELS,
@@ -83,6 +84,8 @@ export function ContainersTab({
   const [containerToDelete, setContainerToDelete] = useState<IntlImportContainer | null>(null);
   const [deleting, setDeleting] = useState(false);
   const [containerToCancel, setContainerToCancel] = useState<IntlImportContainer | null>(null);
+  const [cancelReason, setCancelReason] = useState('');
+  const [cancelReasonAttempted, setCancelReasonAttempted] = useState(false);
   const [statusUpdatingContainerId, setStatusUpdatingContainerId] = useState<string | null>(null);
 
   // Detail sheet
@@ -111,11 +114,12 @@ export function ContainersTab({
     container: IntlImportContainer,
     status: IntlImportContainerStatus,
     allowed: boolean,
+    reason?: string,
   ): Promise<boolean> => {
     if (!allowed || container.isClosed || statusUpdatingContainerId) return false;
     try {
       setStatusUpdatingContainerId(container.id);
-      await intlImportsService.updateContainer(container.id, { status });
+      await intlImportsService.updateContainer(container.id, { status, ...(status === 'CANCELLED' ? { reason: reason?.trim() } : {}) });
       toast.success(`Contenedor ${container.containerNumber}: ${INTL_CONTAINER_STATUS_LABELS[status]}`);
       await fetchContainers();
       return true;
@@ -129,8 +133,14 @@ export function ContainersTab({
 
   const handleCancelContainer = async () => {
     if (!canCancel || !containerToCancel) return;
-    const cancelled = await updateContainerStatus(containerToCancel, 'CANCELLED', canCancel);
-    if (cancelled) setContainerToCancel(null);
+    if (!cancelReason.trim()) { setCancelReasonAttempted(true); return false; }
+    const cancelled = await updateContainerStatus(containerToCancel, 'CANCELLED', canCancel, cancelReason.trim());
+    if (cancelled) {
+      setContainerToCancel(null);
+      setCancelReason('');
+      setCancelReasonAttempted(false);
+    }
+    return cancelled;
   };
 
   useEffect(() => {
@@ -473,12 +483,13 @@ export function ContainersTab({
 
       <ConfirmDialog
         open={canCancel && Boolean(containerToCancel)}
-        onOpenChange={(open) => !open && setContainerToCancel(null)}
+        onOpenChange={(open) => { if (!open && statusUpdatingContainerId !== containerToCancel?.id) { setContainerToCancel(null); setCancelReason(''); setCancelReasonAttempted(false); } }}
         title={`¿Cancelar contenedor ${containerToCancel?.containerNumber}?`}
         description="El contenedor pasará a estado cancelado y los paquetes asociados también quedarán cancelados, conservando su historial de trazabilidad."
         confirmLabel="Cancelar contenedor"
         variant="destructive"
         loading={statusUpdatingContainerId === containerToCancel?.id}
+        children={<RequiredReasonField id="intl-container-cancel-reason" label="Motivo de cancelación" value={cancelReason} onChange={setCancelReason} attempted={cancelReasonAttempted} disabled={statusUpdatingContainerId === containerToCancel?.id} />}
         onConfirm={handleCancelContainer}
       />
 

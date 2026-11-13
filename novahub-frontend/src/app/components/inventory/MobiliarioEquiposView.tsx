@@ -514,7 +514,7 @@ export function MobiliarioEquiposView({ externalBranchId }: { externalBranchId?:
       setImportOpen(true);
       setReadingProgress(100);
     } catch {
-      toast.error('No se pudo leer el archivo Excel');
+      toast.error('El archivo Excel no pudo leerse. Comprueba que sea válido y que no esté dañado, y vuelve a seleccionarlo.');
     } finally {
       setReadingFile(false);
       setReadingProgress(0);

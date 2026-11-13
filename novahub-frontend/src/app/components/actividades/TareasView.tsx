@@ -375,14 +375,14 @@ export const TareasView: React.FC<TareasViewProps> = ({ data, loading, summaryEr
     );
 
   const handleCreateTask = async () => {
-    if (!newTask.title) {
+    if (!newTask.title.trim()) {
       toast.error('El título es requerido');
       return;
     }
     try {
       setIsCreating(true);
       const created = await tasksService.create({
-        title: newTask.title,
+        title: newTask.title.trim(),
         description: newTask.description,
         dueDate: newTask.dueDate ? new Date(newTask.dueDate).toISOString() : new Date().toISOString(),
         priority: newTask.priority as any,
@@ -1318,13 +1318,15 @@ export const TareasView: React.FC<TareasViewProps> = ({ data, loading, summaryEr
           </DialogHeader>
           <div className="grid gap-5 px-6 py-6 sm:px-8">
             <div className="space-y-2">
-              <Label className="flex items-center gap-1 text-xs font-bold text-foreground">
+              <Label htmlFor="activities-task-title" required className="flex items-center gap-1 text-xs font-bold text-foreground">
                 Título de la tarea <span className="text-destructive">*</span>
               </Label>
               <Input
                 autoFocus
+                id="activities-task-title"
                 data-testid="activities-task-title"
                 placeholder="Ej. Revisar inventario"
+                required
                 value={newTask.title}
                 onChange={(e) => setNewTask({ ...newTask, title: e.target.value })}
                 className="h-11 rounded-xl bg-background"

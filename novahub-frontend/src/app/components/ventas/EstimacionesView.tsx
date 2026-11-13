@@ -14,6 +14,7 @@ import { useLocalStorageState } from '../../hooks/useLocalStorageState';
 import { customersService, estimatesService, type EstimateKpiSummary } from '../../services/ventas.service';
 import { toast } from '@/app/services/toast';
 import { ConfirmDialog } from '../ui/ConfirmDialog';
+import { RequiredReasonField } from '../ui/RequiredReasonField';
 import { cn } from '../ui/utils';
 import type { Estimate, EstimateItem, EstimateImage, Customer, Product, SalesPaginationControls, EstimateImagesPayload, EstimateCustomField } from '../../types';
 import { normalizeEstimateImages, isEstimateCustomFieldExpired } from '../../types';
@@ -51,6 +52,7 @@ import { SalesWarehouseStockHint } from './SalesWarehouseStockHint';
 import { getSingleSalesVariant } from '../../utils/sales-stock';
 import { SalesVariantSelect } from './SalesVariantSelect';
 import { SalesProductPicker, type SalesCatalogItem } from './SalesProductPicker';
+import { SalesCustomerActionButton } from './SalesCustomerActionButton';
 import { clearSalesEditorDraft, getSalesEditorDraftKey, readSalesEditorDraft, writeSalesEditorDraft } from '../../services/sales-draft-storage';
 import { getLoggedInSellerEmployeeId } from '../../utils/salesSeller';
 import { TripCostBlock } from '../flota/TripCostBlock';
@@ -116,6 +118,8 @@ export function EstimacionesView({ data, summaryData, summaryLoading, summaryErr
   const [statusFilter, setStatusFilter] = useState<'ALL' | EstimateWorkflowStatus>('ALL');
   const [pendingCancelId, setPendingCancelId] = useState<string | null>(null);
   const [cancelLoading, setCancelLoading] = useState(false);
+  const [cancelReason, setCancelReason] = useState('');
+  const [cancelReasonAttempted, setCancelReasonAttempted] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [localDoc, setLocalDoc] = useState<Estimate | null>(null);
   const [salesProductPickerItemId, setSalesProductPickerItemId] = useState<string | null>(null);
@@ -1107,18 +1111,18 @@ export function EstimacionesView({ data, summaryData, summaryLoading, summaryErr
             <div className="flex min-w-0 flex-col items-stretch justify-between gap-3 mb-4 sm:flex-row sm:items-center">
               <p className="text-xs font-black uppercase tracking-widest text-muted-foreground">Productos / Servicios</p>
               <div className="grid grid-cols-1 gap-2 sm:flex sm:flex-wrap sm:justify-end">
-                {(['PRODUCT', 'SERVICE'] as const).map((itemType) => <Button key={itemType} type="button" variant="outline" size="sm" disabled={!localDoc?.customerId} onClick={() => {
+                {(['PRODUCT', 'SERVICE'] as const).map((itemType) => <SalesCustomerActionButton key={itemType} type="button" variant="outline" size="sm" customerSelected={Boolean(localDoc?.customerId)} onClick={() => {
                   const itemId = `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
                   const newItems = [...(localDoc.items || []), { id: itemId, itemType, productId: '', description: '', quantity: 1, unitPrice: 0, total: 0 }] as any[];
                   commitLocalDoc({ ...localDoc, items: newItems } as Estimate);
                   setSalesProductPickerItemId(itemId);
-                }} className="h-8 w-full rounded-xl text-[10px] font-black uppercase tracking-widest sm:w-auto"><Plus className="size-3 mr-2" /> Agregar {itemType === 'PRODUCT' ? 'Producto' : 'Servicio'}</Button>)}
-                <Button type="button" variant="outline" size="sm" disabled={!localDoc?.customerId} onClick={() => updateExtraCharges([...normalizeSalesExtraCharges(localDoc), { id: `extra-${Date.now()}`, description: '', amount: 0 }])} className="h-8 w-full rounded-xl text-[10px] font-black uppercase tracking-widest sm:w-auto">
+                }} className="h-8 w-full rounded-xl text-[10px] font-black uppercase tracking-widest sm:w-auto"><Plus className="size-3 mr-2" /> Agregar {itemType === 'PRODUCT' ? 'Producto' : 'Servicio'}</SalesCustomerActionButton>)}
+                <SalesCustomerActionButton type="button" variant="outline" size="sm" customerSelected={Boolean(localDoc?.customerId)} onClick={() => updateExtraCharges([...normalizeSalesExtraCharges(localDoc), { id: `extra-${Date.now()}`, description: '', amount: 0 }])} className="h-8 w-full rounded-xl text-[10px] font-black uppercase tracking-widest sm:w-auto">
                   <Plus className="size-3 mr-2" /> Agregar coste extra
-                </Button>
-                <Button type="button" variant="outline" size="sm" disabled={!localDoc?.customerId || Boolean(localDoc?.deliveryDescription) || Number(localDoc?.deliveryAmount || 0) > 0} title={localDoc?.deliveryDescription || Number(localDoc?.deliveryAmount || 0) > 0 ? 'Solo se permite un delivery por cotización' : undefined} onClick={() => updateDelivery({ deliveryDescription: 'Delivery', deliveryAmount: 0 })} className="h-8 w-full rounded-xl text-[10px] font-black uppercase tracking-widest sm:w-auto">
+                </SalesCustomerActionButton>
+                <SalesCustomerActionButton type="button" variant="outline" size="sm" customerSelected={Boolean(localDoc?.customerId)} disabled={Boolean(localDoc?.customerId) && (Boolean(localDoc?.deliveryDescription) || Number(localDoc?.deliveryAmount || 0) > 0)} title={localDoc?.deliveryDescription || Number(localDoc?.deliveryAmount || 0) > 0 ? 'Solo se permite un delivery por cotización' : undefined} onClick={() => updateDelivery({ deliveryDescription: 'Delivery', deliveryAmount: 0 })} className="h-8 w-full rounded-xl text-[10px] font-black uppercase tracking-widest sm:w-auto">
                   <Plus className="size-3 mr-2" /> Agregar delivery
-                </Button>
+                </SalesCustomerActionButton>
               </div>
             </div>
             <div className="space-y-2">
@@ -1153,7 +1157,8 @@ export function EstimacionesView({ data, summaryData, summaryLoading, summaryErr
                       otherLocationsPermissionModule="SALES_QUOTES"
                       products={(resolveItemType(item) === 'SERVICE' ? serviceCatalog : productCatalog) as SalesCatalogItem[]}
                       value={item.productId || ''}
-                      disabled={!localDoc?.customerId || productsLoading}
+                      disabled={Boolean(localDoc?.customerId) && productsLoading}
+                      customerSelected={Boolean(localDoc?.customerId)}
                       itemType={resolveItemType(item) === 'SERVICE' ? 'SERVICE' : 'PRODUCT'}
                       warehouseId={localDoc?.warehouseId}
                       allowOutOfStockSelection
@@ -1651,19 +1656,21 @@ export function EstimacionesView({ data, summaryData, summaryLoading, summaryErr
 
       <ConfirmDialog
         open={pendingCancelId !== null}
-        onOpenChange={(open) => { if (!open) setPendingCancelId(null); }}
+        onOpenChange={(open) => { if (!open) { setPendingCancelId(null); setCancelReason(''); setCancelReasonAttempted(false); } }}
         title={"¿Cancelar cotización?"}
         description="La cotización quedará cancelada y ya no podrá enviarse a una orden de venta. El registro se conservará en el historial."
         confirmLabel="Cancelar cotización"
         variant="destructive"
         loading={cancelLoading}
+        children={<RequiredReasonField id="estimate-cancel-reason" label="Motivo de cancelación" value={cancelReason} onChange={setCancelReason} attempted={cancelReasonAttempted} disabled={cancelLoading} />}
         onConfirm={async () => {
           if (!canPerform('SALES_QUOTES', 'cancel')) return;
           if (!pendingCancelId) return;
+          if (!cancelReason.trim()) { setCancelReasonAttempted(true); return false; }
           const cancelToastId = toast.loading('Cancelando cotización...');
           try {
             setCancelLoading(true);
-            await estimatesService.cancel(pendingCancelId);
+            await estimatesService.cancel(pendingCancelId, cancelReason.trim());
             toast.success('Cotización cancelada', { id: cancelToastId });
             clearSalesEditorDraft(salesDraftStorageKey);
             localDraftRef.current = null;

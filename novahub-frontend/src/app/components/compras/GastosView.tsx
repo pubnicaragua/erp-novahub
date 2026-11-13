@@ -5,6 +5,7 @@ import {
 import { Card, CardContent } from '../ui/card';
 import { Button } from '../ui/button';
 import { Input } from '../ui/input';
+import { Label } from '../ui/label';
 import { DateField } from '../ui/DateField';
 import { Badge } from '../ui/badge';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../ui/select';
@@ -20,6 +21,7 @@ import { ViewLayoutSelect } from '../ui/ViewLayoutSelect';
 import { useLocalStorageState } from '../../hooks/useLocalStorageState';
 import { toast } from '@/app/services/toast';
 import { ConfirmDialog } from '../ui/ConfirmDialog';
+import { RequiredReasonField } from '../ui/RequiredReasonField';
 import { cn } from '../ui/utils';
 import { useCurrency } from '../../contexts/CurrencyContext';
 import { useAuth, type PermissionAction } from '../../contexts/AuthContext';
@@ -112,6 +114,8 @@ export function GastosView({ data, summaryData, summaryLoading, summaryError, lo
   const [deleteLoading, setDeleteLoading] = useState(false);
   const [pendingCancelId, setPendingCancelId] = useState<string | null>(null);
   const [cancelLoading, setCancelLoading] = useState(false);
+  const [cancelReason, setCancelReason] = useState('');
+  const [cancelReasonAttempted, setCancelReasonAttempted] = useState(false);
   const [suppliers, setSuppliers] = useState<Supplier[]>([]);
   const [activeKpiFilter, setActiveKpiFilter] = useState<KpiFilter>({ type: 'none' });
   const [selectedCategory, setSelectedCategory] = useState<string>('');
@@ -149,13 +153,25 @@ export function GastosView({ data, summaryData, summaryLoading, summaryError, lo
   
   const [editingId, setEditingId] = useState<string | null>(null);
   const [localDoc, setLocalDoc] = useState<Partial<Expense> | null>(null);
+  const [expenseValidationAttempted, setExpenseValidationAttempted] = useState(false);
   const [highlightedAlertId, setHighlightedAlertId] = useState<string | null>(null);
   const [paymentExpense, setPaymentExpense] = useState<Expense | null>(null);
   const [paymentMethod, setPaymentMethod] = useState<(typeof paymentMethodOptions)[number]['value']>('CASH');
   const [paymentBankAccountId, setPaymentBankAccountId] = useState('');
   const [paymentReference, setPaymentReference] = useState('');
+  const [paymentValidationAttempted, setPaymentValidationAttempted] = useState(false);
   const [paymentLoading, setPaymentLoading] = useState(false);
   const [selectedExpenseDetail, setSelectedExpenseDetail] = useState<Expense | null>(null);
+
+  const openExpenseEditor = (id: string) => {
+    setExpenseValidationAttempted(false);
+    setEditingId(id);
+  };
+
+  const closeExpenseEditor = () => {
+    setExpenseValidationAttempted(false);
+    setEditingId(null);
+  };
 
   useEffect(() => {
     if (!highlightedAlertId) return;
@@ -429,7 +445,7 @@ export function GastosView({ data, summaryData, summaryLoading, summaryError, lo
     if (!value) return value;
     const iso = value.match(/^(\d{4})[-/.](\d{1,2})[-/.](\d{1,2})/);
     if (iso) return asIsoDate(Number(iso[1]), Number(iso[2]), Number(iso[3])) || value;
-    const local = value.match(/^(\d{1,2})[/.\-](\d{1,2})[/.\-](\d{4})$/);
+    const local = value.match(/^(\d{1,2})[-/.](\d{1,2})[-/.](\d{4})$/);
     if (local) return asIsoDate(Number(local[3]), Number(local[2]), Number(local[1])) || value;
     const serial = Number(value);
     if (Number.isFinite(serial) && serial > 0) {
@@ -586,7 +602,7 @@ export function GastosView({ data, summaryData, summaryLoading, summaryError, lo
       }
     } catch (error: any) {
       if (validationRevision === expenseImportValidationRevisionRef.current) {
-        toast.error(`No se pudo validar el archivo: ${error?.message || 'revisa el formato y vuelve a intentar'}`);
+        toast.apiFailure(error, 'No se pudo validar el archivo. Revisa el formato y vuelve a intentarlo.');
       } else {
         expenseImportValidationQueuedRef.current = true;
       }
@@ -674,7 +690,7 @@ export function GastosView({ data, summaryData, summaryLoading, summaryError, lo
       }
       importCompleted = true;
     } catch (error: any) {
-      toast.error(`No se pudo confirmar el bloque: ${error?.message || 'revisa la conexión e inténtalo de nuevo'}`);
+      toast.apiFailure(error, 'No se pudo confirmar la importación. Revisa el resultado e inténtalo de nuevo.');
     } finally {
       setImporting(false);
       setImportProgress(0);
@@ -792,11 +808,13 @@ export function GastosView({ data, summaryData, summaryLoading, summaryError, lo
     setPaymentMethod('CASH');
     setPaymentBankAccountId('');
     setPaymentReference('');
+    setPaymentValidationAttempted(false);
   };
 
   const handlePayment = async () => {
     if (!paymentExpense) return;
     if (!canExpensePerform(paymentExpense, 'pay')) return;
+    setPaymentValidationAttempted(true);
     if (requiresPaymentReference(paymentMethod) && !paymentReference.trim()) {
       toast.error('La referencia es obligatoria para tarjeta, transferencia o cheque');
       return;
@@ -816,6 +834,7 @@ export function GastosView({ data, summaryData, summaryLoading, summaryError, lo
       } as any);
       toast.success(`Gasto pagado${financeConnectionEnabled ? ' y enviado a Finanzas' : ''}${accountingConnectionEnabled ? ' y contabilizado' : ''}.`, { id: paymentToastId });
       setPaymentExpense(null);
+      setPaymentValidationAttempted(false);
       onRefresh();
     } catch (e: any) {
       toast.error(e?.response?.data?.message || e?.message || 'No se pudo registrar el pago del gasto', { id: paymentToastId });
@@ -836,7 +855,7 @@ export function GastosView({ data, summaryData, summaryLoading, summaryError, lo
       await expensesService.delete(pendingDeleteId);
       toast.success('Gasto eliminado correctamente', { id: deleteToastId });
       setPendingDeleteId(null);
-      if (editingId === pendingDeleteId) setEditingId(null);
+      if (editingId === pendingDeleteId) closeExpenseEditor();
       if (selectedExpenseDetail?.id === pendingDeleteId) setSelectedExpenseDetail(null);
       onRefresh();
     } catch (e: any) {
@@ -852,13 +871,14 @@ export function GastosView({ data, summaryData, summaryLoading, summaryError, lo
       || (selectedExpenseDetail?.id === pendingCancelId ? selectedExpenseDetail : null);
     const status = String(pendingExpense?.status || '').toUpperCase();
     if (!pendingExpense || !canExpensePerform(pendingExpense, 'cancel') || !['DRAFT', 'PENDING', 'APPROVED', 'REJECTED'].includes(status)) return;
+    if (!cancelReason.trim()) { setCancelReasonAttempted(true); return false; }
     setCancelLoading(true);
     const cancelToastId = toast.loading('Anulando gasto...');
     try {
-      await expensesService.cancel(pendingCancelId);
+      await expensesService.cancel(pendingCancelId, cancelReason.trim());
       toast.success('Gasto anulado; se conservó su historial', { id: cancelToastId });
       setPendingCancelId(null);
-      if (editingId === pendingCancelId) setEditingId(null);
+      if (editingId === pendingCancelId) closeExpenseEditor();
       if (selectedExpenseDetail?.id === pendingCancelId) setSelectedExpenseDetail(null);
       onRefresh();
     } catch (e: any) {
@@ -872,7 +892,8 @@ export function GastosView({ data, summaryData, summaryLoading, summaryError, lo
     const currentStatus = String(localDoc?.status || 'DRAFT').toUpperCase();
     if (isNew ? !canPerform('PURCHASES_EXPENSES', 'create') : !canExpensePerform(localDoc, 'edit')) return;
     if (!isNew && statusToSave === 'PENDING' && currentStatus !== 'PENDING' && !canExpensePerform(localDoc, 'submit')) return;
-    if (!localDoc?.description) return toast.error('La descripción es obligatoria');
+    setExpenseValidationAttempted(true);
+    if (!String(localDoc?.description || '').trim()) return toast.error('Escribe la descripción del gasto.');
     if (!localDoc?.amount || localDoc.amount <= 0) return toast.error('El monto debe ser mayor a 0');
     // Clean data (ensure numbers and remove nested objects)
     const cleanedDoc = {
@@ -887,7 +908,7 @@ export function GastosView({ data, summaryData, summaryLoading, summaryError, lo
     delete (cleanedDoc as any).originModule;
 
     if (localDoc.category === 'OTRO' && !String(localDoc.categoryCustom || '').trim()) {
-      return toast.error('Debes especificar la categoría cuando eliges OTRO');
+      return toast.error('Escribe la categoría personalizada para guardar el gasto.');
     }
 
     if (evidenceFile) {
@@ -904,8 +925,8 @@ export function GastosView({ data, summaryData, summaryLoading, summaryError, lo
         (cleanedDoc as any).evidenceFileName = evidenceFile.name;
         (cleanedDoc as any).evidenceFileType = evidenceFile.type;
         (cleanedDoc as any).evidenceFileSize = evidenceFile.size;
-      } catch {
-        return toast.error('No se pudo procesar el archivo adjunto');
+      } catch (error: unknown) {
+        return toast.apiFailure(error, 'No se pudo cargar la evidencia del gasto');
       }
     }
 
@@ -919,6 +940,7 @@ export function GastosView({ data, summaryData, summaryLoading, summaryError, lo
         toast.success(statusToSave === 'DRAFT' ? 'Gasto guardado como borrador' : 'Gasto guardado como pendiente', { id: saveToastId });
       }
       setEditingId(null);
+      setExpenseValidationAttempted(false);
       setEvidenceFile(null);
       onRefresh();
     } catch (e: any) {
@@ -993,7 +1015,7 @@ export function GastosView({ data, summaryData, summaryLoading, summaryError, lo
       <div className="space-y-6 animate-in slide-in-from-right duration-300" data-tour="purchases-form-title">
         <div className="flex items-center justify-between flex-wrap gap-4">
           <div className="flex items-center gap-4">
-            <Button variant="ghost" size="icon" onClick={() => setEditingId(null)} className="rounded-full">
+            <Button variant="ghost" size="icon" onClick={closeExpenseEditor} className="rounded-full">
               <ChevronLeft className="size-5" />
             </Button>
             <div>
@@ -1043,14 +1065,19 @@ export function GastosView({ data, summaryData, summaryLoading, summaryError, lo
               <div className="space-y-3">
                 <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
                   <div className="col-span-2">
-                    <p className="text-[10px] text-muted-foreground mb-1">Descripción / Concepto</p>
+                    <Label htmlFor="expense-description" required className="text-[10px] text-muted-foreground mb-1">Descripción / Concepto</Label>
                     <Input 
+                      id="expense-description"
                       disabled={!canMutate}
+                      required
+                      aria-invalid={expenseValidationAttempted && !String(localDoc.description || '').trim()}
+                      aria-describedby={expenseValidationAttempted && !String(localDoc.description || '').trim() ? 'expense-description-error' : undefined}
                       value={localDoc.description || ''} 
                       onChange={(e) => setLocalDoc({ ...localDoc, description: e.target.value })} 
                       className="h-8 text-xs font-bold" 
                       placeholder="Ej. Pago de internet mensual" 
                     />
+                    {expenseValidationAttempted && !String(localDoc.description || '').trim() && <p id="expense-description-error" role="alert" className="mt-1 text-[10px] text-destructive">Escribe la descripción del gasto.</p>}
                   </div>
                   <div>
                     <p className="text-[10px] text-muted-foreground mb-1">Categoría</p>
@@ -1117,14 +1144,19 @@ export function GastosView({ data, summaryData, summaryLoading, summaryError, lo
                   </div>
                   {String(localDoc.category || '').toUpperCase() === 'OTRO' && (
                     <div className="col-span-2">
-                      <p className="text-[10px] text-muted-foreground mb-1">Categoría personalizada</p>
+                      <Label htmlFor="expense-category-custom" required className="text-[10px] text-muted-foreground mb-1">Categoría personalizada</Label>
                       <Input
+                        id="expense-category-custom"
                         disabled={!canMutate}
+                        required
+                        aria-invalid={expenseValidationAttempted && !String(localDoc.categoryCustom || '').trim()}
+                        aria-describedby={expenseValidationAttempted && !String(localDoc.categoryCustom || '').trim() ? 'expense-category-custom-error' : undefined}
                         value={localDoc.categoryCustom || ''}
                         onChange={(e) => setLocalDoc({ ...localDoc, categoryCustom: e.target.value })}
                         className="h-8 text-xs"
                         placeholder="Ej. Mantenimiento externo"
                       />
+                      {expenseValidationAttempted && !String(localDoc.categoryCustom || '').trim() && <p id="expense-category-custom-error" role="alert" className="mt-1 text-[10px] text-destructive">Escribe la categoría personalizada para guardar el gasto.</p>}
                     </div>
                   )}
                   <div>
@@ -1176,9 +1208,13 @@ export function GastosView({ data, summaryData, summaryLoading, summaryError, lo
                       />
                    </div>
                    <div className="w-1/2 flex flex-col items-end">
-                      <p className="text-[10px] text-muted-foreground mb-1">Monto Total</p>
+                      <Label htmlFor="expense-amount" required className="text-[10px] text-muted-foreground mb-1">Monto Total</Label>
                       <Input 
+                        id="expense-amount"
                         disabled={!canMutate}
+                        required
+                        aria-invalid={expenseValidationAttempted && !(Number(localDoc.amount) > 0)}
+                        aria-describedby={expenseValidationAttempted && !(Number(localDoc.amount) > 0) ? 'expense-amount-error' : undefined}
                         type="text"
                         inputMode="decimal"
                         min="0" 
@@ -1186,6 +1222,7 @@ export function GastosView({ data, summaryData, summaryLoading, summaryError, lo
                         onChange={(e) => setLocalDoc({ ...localDoc, amount: normalizeDecimalInput(e.target.value) as any })}
                         className="h-10 text-xl font-black text-rose-500 text-right w-full max-w-[150px]" 
                         placeholder="0.00" currencyPrecision />
+                      {expenseValidationAttempted && !(Number(localDoc.amount) > 0) && <p id="expense-amount-error" role="alert" className="mt-1 self-end text-[10px] text-destructive">Ingresa un monto mayor que cero.</p>}
                    </div>
                 </div>
 
@@ -1401,7 +1438,7 @@ export function GastosView({ data, summaryData, summaryLoading, summaryError, lo
             )}
             <div className="relative min-w-0"><Search className="absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground/40" /><Input placeholder="Buscar..." className="h-10 w-full min-w-0 rounded-xl border-border/50 bg-background/50 pl-9 text-xs sm:w-80" value={searchTerm} onChange={e => { setSearchTerm(e.target.value); onSearchChange?.(e.target.value); }} /></div>
             {canPerform('PURCHASES_EXPENSES', 'create') && (
-              <Button onClick={() => setEditingId('NEW')} className="col-span-1 h-10 min-w-0 w-full gap-2 rounded-xl bg-primary px-3 text-[10px] font-black uppercase tracking-widest text-primary-foreground hover:bg-primary/90 sm:col-span-1 sm:w-auto"><Plus className="size-4" /> Registrar Gasto</Button>
+              <Button onClick={() => openExpenseEditor('NEW')} className="col-span-1 h-10 min-w-0 w-full gap-2 rounded-xl bg-primary px-3 text-[10px] font-black uppercase tracking-widest text-primary-foreground hover:bg-primary/90 sm:col-span-1 sm:w-auto"><Plus className="size-4" /> Registrar Gasto</Button>
             )}
           </div>
         </div>
@@ -1427,9 +1464,9 @@ export function GastosView({ data, summaryData, summaryLoading, summaryError, lo
           } : undefined}
           actions={(row) => (
             <div className="flex items-center gap-1">
-              <Button title="Ver detalle completo" aria-label="Ver detalle completo del gasto" variant="ghost" size="icon" className="size-8 rounded-lg hover:bg-primary/10 hover:text-primary" onClick={(event) => { event.stopPropagation(); setSelectedExpenseDetail(null); setEditingId(row.id); }}><Eye className="size-4" /></Button>
+              <Button title="Ver detalle completo" aria-label="Ver detalle completo del gasto" variant="ghost" size="icon" className="size-8 rounded-lg hover:bg-primary/10 hover:text-primary" onClick={(event) => { event.stopPropagation(); setSelectedExpenseDetail(null); openExpenseEditor(row.id); }}><Eye className="size-4" /></Button>
               {canExpensePerform(row, 'edit') && ['DRAFT', 'PENDING', 'APPROVED', 'REJECTED'].includes(String(row.status || '').toUpperCase()) && (
-                <Button title="Editar gasto" aria-label="Editar gasto" variant="ghost" size="icon" className="size-8 rounded-lg hover:bg-primary/10 hover:text-primary" onClick={(event) => { event.stopPropagation(); setEditingId(row.id); }}><Pencil className="size-4" /></Button>
+                <Button title="Editar gasto" aria-label="Editar gasto" variant="ghost" size="icon" className="size-8 rounded-lg hover:bg-primary/10 hover:text-primary" onClick={(event) => { event.stopPropagation(); openExpenseEditor(row.id); }}><Pencil className="size-4" /></Button>
               )}
               {canExpensePerform(row, 'submit') && String(row.status || '').toUpperCase() === 'DRAFT' && (
                 <Button type="button" title="Cambiar a pendiente" aria-label="Cambiar gasto a pendiente" variant="ghost" size="icon" className="size-8 rounded-lg text-amber-600 hover:bg-amber-500/10 hover:text-amber-700" onClick={() => { void handleStatusAction(row, 'PENDING'); }}><Send className="size-4" /></Button>
@@ -1455,7 +1492,7 @@ export function GastosView({ data, summaryData, summaryLoading, summaryError, lo
           extraActions={detailExpense && (() => {
             const status = String(detailExpense.status || '').toUpperCase();
             return <>
-              {canExpensePerform(detailExpense, 'edit') && ['DRAFT', 'PENDING', 'APPROVED', 'REJECTED'].includes(status) && <Button type="button" variant="outline" className="gap-2 rounded-xl text-xs" onClick={() => { setSelectedExpenseDetail(null); setEditingId(detailExpense.id); }}><Pencil className="size-4" /> Editar</Button>}
+              {canExpensePerform(detailExpense, 'edit') && ['DRAFT', 'PENDING', 'APPROVED', 'REJECTED'].includes(status) && <Button type="button" variant="outline" className="gap-2 rounded-xl text-xs" onClick={() => { setSelectedExpenseDetail(null); openExpenseEditor(detailExpense.id); }}><Pencil className="size-4" /> Editar</Button>}
               {canExpensePerform(detailExpense, 'submit') && status === 'DRAFT' && <Button type="button" variant="outline" className="gap-2 rounded-xl text-xs text-amber-600" onClick={() => void handleStatusAction(detailExpense, 'PENDING')}><Send className="size-4" /> Enviar a pendientes</Button>}
               {canExpensePerform(detailExpense, 'pay') && status === 'PENDING' && <Button type="button" variant="outline" className="gap-2 rounded-xl text-xs text-emerald-600" onClick={() => { setSelectedExpenseDetail(null); openPaymentDialog(detailExpense); }}><CircleDollarSign className="size-4" /> Registrar pago</Button>}
               {canExpensePerform(detailExpense, 'cancel') && ['DRAFT', 'PENDING', 'APPROVED', 'REJECTED'].includes(status) && <Button type="button" variant="outline" className="gap-2 rounded-xl text-xs text-rose-500" onClick={() => setPendingCancelId(detailExpense.id)}><Ban className="size-4" /> Anular</Button>}
@@ -1477,15 +1514,16 @@ export function GastosView({ data, summaryData, summaryLoading, summaryError, lo
 
         <ConfirmDialog
           open={!!pendingCancelId}
-          onOpenChange={(open) => !open && setPendingCancelId(null)}
+          onOpenChange={(open) => { if (!open && !cancelLoading) { setPendingCancelId(null); setCancelReason(''); setCancelReasonAttempted(false); } }}
           title="Anular gasto"
           description="El registro y su historial se conservarán. El sistema revertirá los efectos que correspondan al estado actual del gasto."
           confirmLabel="Anular gasto"
           onConfirm={handleCancelConfirm}
           loading={cancelLoading}
+          children={<RequiredReasonField id="purchase-expense-cancel-reason" label="Motivo de anulación" value={cancelReason} onChange={setCancelReason} attempted={cancelReasonAttempted} disabled={cancelLoading} />}
         />
 
-        <Dialog open={Boolean(paymentExpense && canExpensePerform(paymentExpense, 'pay'))} onOpenChange={(open) => !open && !paymentLoading && setPaymentExpense(null)}>
+        <Dialog open={Boolean(paymentExpense && canExpensePerform(paymentExpense, 'pay'))} onOpenChange={(open) => { if (!open && !paymentLoading) { setPaymentExpense(null); setPaymentValidationAttempted(false); } }}>
           <DialogContent className="w-[calc(100%-2rem)] !max-w-xl rounded-3xl">
             <DialogHeader>
               <DialogTitle className="flex items-center gap-2 nh-module-title">
@@ -1510,10 +1548,11 @@ export function GastosView({ data, summaryData, summaryLoading, summaryError, lo
                       <SelectContent>{paymentMethodOptions.map((method) => <SelectItem key={method.value} value={method.value}>{method.label}</SelectItem>)}</SelectContent>
                     </Select>
                   </div>
-                  {isBankPaymentMethod(paymentMethod) && (accountingConnectionEnabled || financeConnectionEnabled) && <BankAccountSelect currency={paymentExpense.currency} value={paymentBankAccountId} onChange={setPaymentBankAccountId} label={accountingConnectionEnabled ? "Cuenta bancaria que realiza el pago" : "Banco opcional para el movimiento financiero"} className="sm:col-span-2" />}
+                  {isBankPaymentMethod(paymentMethod) && (accountingConnectionEnabled || financeConnectionEnabled) && <BankAccountSelect currency={paymentExpense.currency} value={paymentBankAccountId} onChange={setPaymentBankAccountId} label={accountingConnectionEnabled ? "Cuenta bancaria que realiza el pago" : "Banco opcional para el movimiento financiero"} required={accountingConnectionEnabled} invalid={paymentValidationAttempted && accountingConnectionEnabled && !paymentBankAccountId} errorMessage="Selecciona la cuenta bancaria que realizará el pago." className="sm:col-span-2" />}
                   {hasPaymentReferenceField(paymentMethod) && <div>
-                    <p className="mb-1 text-[10px] font-black uppercase tracking-widest text-muted-foreground">Referencia *</p>
-                    <Input value={paymentReference} onChange={(event) => setPaymentReference(event.target.value)} placeholder="Recibo, transferencia..." required={requiresPaymentReference(paymentMethod)} className="h-10 text-xs" />
+                    <Label htmlFor="expense-payment-reference" required={requiresPaymentReference(paymentMethod)} className="mb-1 text-[10px] font-black uppercase tracking-widest text-muted-foreground">Referencia</Label>
+                    <Input id="expense-payment-reference" value={paymentReference} onChange={(event) => setPaymentReference(event.target.value)} placeholder="Recibo, transferencia..." required={requiresPaymentReference(paymentMethod)} aria-invalid={paymentValidationAttempted && requiresPaymentReference(paymentMethod) && !paymentReference.trim()} aria-describedby={paymentValidationAttempted && requiresPaymentReference(paymentMethod) && !paymentReference.trim() ? 'expense-payment-reference-error' : undefined} className="h-10 text-xs" />
+                    {paymentValidationAttempted && requiresPaymentReference(paymentMethod) && !paymentReference.trim() && <p id="expense-payment-reference-error" role="alert" className="mt-1 text-[10px] text-destructive">Ingresa la referencia del pago.</p>}
                   </div>}
                 </div>
               </div>

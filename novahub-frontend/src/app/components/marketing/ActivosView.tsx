@@ -46,8 +46,8 @@ export function ActivosView() {
         const uploaded = await storageService.uploadFile('marketing-assets', file, { folder: 'marketing' });
         await mktResources.assets.create({ name: file.name, fileUri: uploaded.uri, mimeType: file.type || null, sizeBytes: file.size, folder: 'General' });
         ok += 1;
-      } catch (e) {
-        toast.error(`${file.name}: ${errorMessage(e, 'No se pudo subir')}`);
+      } catch (error: unknown) {
+        toast.apiFailure(error, `No se pudo subir el archivo «${file.name}».`);
       }
     }
     setUploading(false);

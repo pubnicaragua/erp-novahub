@@ -252,7 +252,7 @@ export const estimatesService = {
   getById: (id: string, signal?: AbortSignal) => api.get<Estimate>(`/sales/estimates/${id}`, signal ? { signal } : undefined),
   create: (data: Partial<Estimate>, idempotencyKey?: string) => api.idempotentPost<Estimate>('/sales/estimates', data, idempotencyKey),
   update: (id: string, data: Partial<Estimate>) => api.patch<Estimate>(`/sales/estimates/${id}`, data),
-  cancel: (id: string) => api.idempotentPatch<Estimate>(`/sales/estimates/${id}/cancel`, {}),
+  cancel: (id: string, reason: string) => api.idempotentPatch<Estimate>(`/sales/estimates/${id}/cancel`, { reason }),
   delete: (id: string) => api.delete<void>(`/sales/estimates/${id}`),
   convertToOrder: (id: string, data?: { sellerEmployeeId?: string | null }) => api.post<SalesOrder>(`/sales/estimates/${id}/convert-to-order`, data || {}),
 };
@@ -265,7 +265,7 @@ export const salesOrdersService = {
   create: (data: Partial<SalesOrder>, idempotencyKey?: string) => api.idempotentPost<SalesOrder>('/sales/orders', data, idempotencyKey),
   update: (id: string, data: Partial<SalesOrder>) => api.patch<SalesOrder>(`/sales/orders/${id}`, data),
   delete: (id: string) => api.delete<void>(`/sales/orders/${id}`),
-  cancel: (id: string) => api.idempotentPatch<SalesOrder>(`/sales/orders/${id}/cancel`, {}),
+  cancel: (id: string, reason: string) => api.idempotentPatch<SalesOrder>(`/sales/orders/${id}/cancel`, { reason }),
   confirm: (id: string) => api.patch<SalesOrder>(`/sales/orders/${id}/confirm`, {}),
   convertToInvoice: (id: string, data?: Pick<SalesOrder, 'accountId' | 'sellerEmployeeId'>, idempotencyKey?: string) =>
     api.idempotentPost<Invoice>(`/sales/orders/${id}/convert-to-invoice`, data || {}, idempotencyKey),
@@ -337,7 +337,7 @@ export const recurringInvoicesService = {
   update: (id: string, data: Partial<RecurringInvoice>) => api.patch<RecurringInvoice>(`/sales/recurring-invoices/${id}`, data),
   pause: (id: string) => api.patch<RecurringInvoice>(`/sales/recurring-invoices/${id}/pause`, {}),
   resume: (id: string) => api.patch<RecurringInvoice>(`/sales/recurring-invoices/${id}/resume`, {}),
-  cancel: (id: string) => api.idempotentPatch<RecurringInvoice>(`/sales/recurring-invoices/${id}/cancel`, {}),
+  cancel: (id: string, reason: string) => api.idempotentPatch<RecurringInvoice>(`/sales/recurring-invoices/${id}/cancel`, { reason }),
   delete: (id: string) => api.delete<void>(`/sales/recurring-invoices/${id}`),
 };
 
@@ -379,7 +379,7 @@ export const creditNotesService = {
   issue: (id: string, idempotencyKey?: string) => api.idempotentPatch<CreditNote>(`/sales/credit-notes/${id}/issue`, {}, idempotencyKey),
   sendToCash: (id: string, data?: { notes?: string }) => api.post<any>(`/sales/credit-notes/${id}/send-to-cash`, data || {}),
   apply: (id: string, data: any, idempotencyKey?: string) => api.idempotentPatch<CreditNote>(`/sales/credit-notes/${id}/apply`, data, idempotencyKey),
-  cancel: (id: string) => api.idempotentPatch<CreditNote>(`/sales/credit-notes/${id}/cancel`, {}),
+  cancel: (id: string, reason: string) => api.idempotentPatch<CreditNote>(`/sales/credit-notes/${id}/cancel`, { reason }),
   delete: (id: string) => api.delete<void>(`/sales/credit-notes/${id}`),
 };
 

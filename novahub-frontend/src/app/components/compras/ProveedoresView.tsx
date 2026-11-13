@@ -463,9 +463,9 @@ export function ProveedoresView({ data, loading, onRefresh, pagination, onSearch
   };
 
   const columns: ColumnDef<Supplier>[] = [
-    { key: 'code',        header: 'Código',    width: '110px', editable: canPerform('PURCHASES_PROVIDERS', 'edit'),
+    { key: 'code',        header: 'ID / Código', width: '110px',
       headerExtra: <ColumnFilterMenu label="Código" sort={colFilters.state.code?.sort || null} onSort={(sort) => colFilters.setSort('code', sort)} sortType="number" />,
-      render: (val, row) => <span className="text-[11px] font-black font-mono text-muted-foreground/60">{val || row.id.slice(0, 8)}</span> },
+      render: (val, row) => <span className="text-[13px] font-medium tabular-nums text-muted-foreground">{val || row.id.slice(0, 8)}</span> },
     { key: 'name',        header: 'Nombre',    editable: canPerform('PURCHASES_PROVIDERS', 'edit'),
       headerExtra: <ColumnFilterMenu label="Nombre" sort={colFilters.state.name?.sort || null} onSort={(sort) => colFilters.setSort('name', sort)} sortOptions={[{ value: 'asc', label: 'A → Z (alfabético)' }, { value: 'desc', label: 'Z → A (alfabético inverso)' }]} />,
       render: (val, row) => <div className="min-w-0"><span className="block truncate text-sm font-bold">{String(val || '')}</span>{row.companyName && <span className="block truncate text-[10px] text-muted-foreground">{row.companyName}</span>}</div> },
@@ -510,19 +510,26 @@ export function ProveedoresView({ data, loading, onRefresh, pagination, onSearch
 
   const handleUpdate = async (id: string | number, updates: Partial<Supplier>) => {
     try { 
-      const rawStatus = (updates as any).status;
-      const isStatusMutation = (rawStatus !== undefined || typeof (updates as any).isActive === 'boolean')
-        && Object.keys(updates).every((key) => key === 'status' || key === 'isActive');
+      const sanitized: any = { ...updates };
+      if (Object.prototype.hasOwnProperty.call(sanitized, 'code')) {
+        delete sanitized.code;
+        if (Object.keys(sanitized).length === 0) {
+          toast.info('El código del proveedor se asigna automáticamente y no se puede modificar.');
+          return;
+        }
+      }
+      const rawStatus = sanitized.status;
+      const isStatusMutation = (rawStatus !== undefined || typeof sanitized.isActive === 'boolean')
+        && Object.keys(sanitized).every((key) => key === 'status' || key === 'isActive');
       if (isStatusMutation) {
         if (!canPerform('PURCHASES_PROVIDERS', 'read') || !canPerform('PURCHASES_PROVIDERS', 'deactivate')) return;
-        const status = rawStatus !== undefined ? String(rawStatus).toUpperCase() : (updates as any).isActive ? 'ACTIVE' : 'INACTIVE';
+        const status = rawStatus !== undefined ? String(rawStatus).toUpperCase() : sanitized.isActive ? 'ACTIVE' : 'INACTIVE';
         await suppliersService.setStatus(String(id), status);
         toast.success(status === 'ACTIVE' ? 'Proveedor activado' : 'Proveedor desactivado');
         onRefresh();
         return;
       }
       if (!canPerform('PURCHASES_PROVIDERS', 'read') || !canPerform('PURCHASES_PROVIDERS', 'edit')) return;
-      const sanitized: any = { ...updates };
       if (sanitized.status) sanitized.isActive = String(sanitized.status).toUpperCase() === 'ACTIVE';
       if (sanitized.email === '') sanitized.email = undefined;
       if (sanitized.email && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(sanitized.email)) {
@@ -758,7 +765,7 @@ export function ProveedoresView({ data, loading, onRefresh, pagination, onSearch
             toast.success(activating ? 'Proveedor activado correctamente' : 'Proveedor desactivado correctamente');
             onRefresh();
           } catch (error: any) {
-            toast.error(`Error al ${activating ? 'activar' : 'desactivar'} proveedor: ${error?.response?.data?.message || error?.message || ''}`);
+            toast.apiFailure(error, activating ? 'No se pudo activar el proveedor.' : 'No se pudo desactivar el proveedor.');
           } finally {
             setDeleteLoading(false);
             setPendingToggle(null);

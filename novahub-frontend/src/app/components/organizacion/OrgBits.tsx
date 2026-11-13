@@ -13,7 +13,7 @@ export function Field({ label, htmlFor, required, hint, children, className }: {
   return (
     <div className={cn('min-w-0 space-y-1.5', className)}>
       <label htmlFor={htmlFor} className="block text-[12px] font-semibold text-foreground">
-        {label}{required && <span aria-hidden="true"> *</span>}
+        {label}{required && <span className="text-destructive" aria-hidden="true"> *</span>}
       </label>
       {children}
       {hint && <p className="text-[11px] text-muted-foreground">{hint}</p>}

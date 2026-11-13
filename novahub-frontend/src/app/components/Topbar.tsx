@@ -53,6 +53,8 @@ import { useCurrency } from '../contexts/CurrencyContext';
 import { persistThemeMode, readPersistedDarkMode } from '../utils/theme-mode';
 import { Avatar, AvatarFallback, AvatarImage } from './ui/avatar';
 import { toast } from '@/app/services/toast';
+import { classifyApiError } from '@/app/services/api-error';
+import { getApiErrorMessage } from '@/app/services/api';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogDescription } from './ui/dialog';
 import { Label } from './ui/label';
 import { usersService } from '../services/users.service';
@@ -446,6 +448,7 @@ export function Topbar({ onMenuClick, onNavigate, isCollapsed, onToggleCollapse 
     const queue = [...unreadThreads];
     const completed: Message[] = [];
     const failed: Message[] = [];
+    const failureErrors: unknown[] = [];
     const workers = Array.from({ length: Math.min(5, queue.length) }, async () => {
       while (queue.length) {
         const thread = queue.shift();
@@ -454,8 +457,9 @@ export function Topbar({ onMenuClick, onNavigate, isCollapsed, onToggleCollapse 
           if (thread.kind === 'SUPPORT') await supportConversationsService.markRead(thread.id);
           else await messagesService.markRead(thread.id);
           completed.push(thread);
-        } catch {
+        } catch (error: unknown) {
           failed.push(thread);
+          failureErrors.push(error);
         }
       }
     });
@@ -477,8 +481,21 @@ export function Topbar({ onMenuClick, onNavigate, isCollapsed, onToggleCollapse 
       : current);
     setMarkingAllMessagesRead(false);
 
-    if (failed.length) toast.error(`No se pudieron marcar ${failed.length} conversación${failed.length === 1 ? '' : 'es'} como leída${failed.length === 1 ? '' : 's'}.`);
-    else toast.success('Todos los mensajes quedaron marcados como leídos.');
+    if (failed.length) {
+      const summary = `${completed.length} conversación${completed.length === 1 ? '' : 'es'} marcada${completed.length === 1 ? '' : 's'} como leída${completed.length === 1 ? '' : 's'}; ${failed.length} no se pudieron marcar.`;
+      const technicalFailure = failureErrors.find((error) => classifyApiError(error) === 'TECHNICAL');
+      if (technicalFailure) {
+        toast.apiFailure(technicalFailure, 'No se pudieron marcar algunas conversaciones como leídas.', {
+          description: summary,
+        });
+      } else {
+        const firstFailure = failureErrors[0];
+        const reason = firstFailure
+          ? getApiErrorMessage(firstFailure, 'Comprueba que la conversación siga disponible y que tengas permiso para verla.')
+          : 'Comprueba que la conversación siga disponible y que tengas permiso para verla.';
+        toast.warning(`${summary} Motivo: ${reason}`);
+      }
+    } else toast.success('Todos los mensajes quedaron marcados como leídos.');
   };
 
   const [isDark, setIsDark] = useState(getSavedDarkMode);

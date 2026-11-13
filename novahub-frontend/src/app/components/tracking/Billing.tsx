@@ -4,6 +4,7 @@ import { toast } from '@/app/services/toast';
 import { format } from 'date-fns';
 import { es } from 'date-fns/locale';
 import { Button } from '../ui/button';
+import { RequiredReasonField } from '../ui/RequiredReasonField';
 import { Badge } from '../ui/badge';
 import { Input } from '../ui/input';
 import { Card } from '../ui/card';
@@ -86,6 +87,7 @@ export function Billing() {
   const [reversalOpen, setReversalOpen] = useState(false);
   const [reversalPreview, setReversalPreview] = useState<BillingReversalPreview | null>(null);
   const [reversalReason, setReversalReason] = useState('');
+  const [reversalReasonAttempted, setReversalReasonAttempted] = useState(false);
   const [reversalBusy, setReversalBusy] = useState(false);
   const [reversalResult, setReversalResult] = useState<BillingCancelResult | null>(null);
   const [replacementCtx, setReplacementCtx] = useState<{ invoiceId: string; customerName: string; packageIds: string[]; rates: Record<string, number> } | null>(null);
@@ -299,6 +301,7 @@ export function Billing() {
     setReversalPreview(null);
     setReversalResult(null);
     setReversalReason('');
+    setReversalReasonAttempted(false);
     try {
       setReversalPreview(await logisticsService.billingReversalPreview(invoiceId));
     } catch (error) {
@@ -309,7 +312,7 @@ export function Billing() {
 
   const confirmCancel = useCallback(async () => {
     if (!canCancelBilling || !reversalPreview) return;
-    if (reversalReason.trim().length < 3) { toast.error('Indica una razón de al menos 3 caracteres'); return; }
+    if (!reversalReason.trim()) { setReversalReasonAttempted(true); return; }
     setReversalBusy(true);
     const actionToken = beginNotificationAction();
     try {
@@ -747,16 +750,7 @@ export function Billing() {
                       ))}
                     </div>
                   </div>
-                  <div>
-                    <label className="mb-1 block text-[10px] font-black uppercase tracking-widest text-muted-foreground">Razón de la anulación *</label>
-                    <textarea
-                      value={reversalReason}
-                      onChange={(e) => setReversalReason(e.target.value)}
-                      rows={3}
-                      placeholder="Ej. Tarifa incorrecta en la factura"
-                      className="w-full rounded-xl border border-input bg-background px-3 py-2 text-sm outline-none focus-visible:ring-2 focus-visible:ring-primary"
-                    />
-                  </div>
+                  <RequiredReasonField id="tracking-billing-cancel-reason" label="Razón de la anulación" value={reversalReason} onChange={setReversalReason} attempted={reversalReasonAttempted} placeholder="Ej.: tarifa incorrecta en la factura" />
                 </>
               ) : (
                 <p className="py-6 text-center text-xs text-muted-foreground">Cargando…</p>

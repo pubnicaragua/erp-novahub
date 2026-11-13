@@ -2,6 +2,8 @@ import { useMemo, useState } from 'react';
 import { MARKETING_GUIDES } from './guides';
 import { Loader2, Pencil, Plus, ShieldCheck } from 'lucide-react';
 import { Button } from '../ui/button';
+import { ConfirmDialog } from '../ui/ConfirmDialog';
+import { RequiredReasonField } from '../ui/RequiredReasonField';
 import { Input } from '../ui/input';
 import { Sheet, SheetContent, SheetDescription, SheetHeader, SheetTitle } from '../ui/sheet';
 import { Skeleton } from '../ui/skeleton';
@@ -96,16 +98,19 @@ function DetailBody({ id, currency, canEdit, onEdit }: { id: string; currency: s
   const users = useMktUsers();
   const q = useTenantQuery(['marketing', 'campaign', id], (s) => marketingApi.campaign(id, s), { staleTime: 5_000 });
   const [busy, setBusy] = useState<string | null>(null);
+  const [cancelOpen, setCancelOpen] = useState(false);
+  const [cancelReason, setCancelReason] = useState('');
+  const [cancelReasonAttempted, setCancelReasonAttempted] = useState(false);
   const [taskTitle, setTaskTitle] = useState('');
   const [taskDue, setTaskDue] = useState('');
   const [taskUser, setTaskUser] = useState('');
   const canSubmit = canPerform('MARKETING_CAMPAIGNS', 'submit');
   const canTasks = canEdit && canPerform('ACTIVITIES_TASKS', 'create');
 
-  const run = async (key: string, fn: () => Promise<unknown>, ok: string) => {
+  const run = async (key: string, fn: () => Promise<unknown>, ok: string): Promise<boolean> => {
     setBusy(key);
-    try { await fn(); toast.success(ok); refresh(); await q.refetch(); }
-    catch (e) { toast.error(errorMessage(e)); } finally { setBusy(null); }
+    try { await fn(); toast.success(ok); refresh(); await q.refetch(); return true; }
+    catch (e) { toast.error(errorMessage(e)); return false; } finally { setBusy(null); }
   };
 
   const c = q.data;
@@ -136,7 +141,7 @@ function DetailBody({ id, currency, canEdit, onEdit }: { id: string; currency: s
               <div className="flex flex-wrap gap-2" aria-label="Cambiar estado">
                 {CAMPAIGN_NEXT[c.status].map((next) => (
                   <Button key={next} type="button" size="sm" variant={next === 'CANCELLED' ? 'outline' : 'secondary'} disabled={busy !== null}
-                    onClick={() => void run(next, () => marketingApi.setCampaignStatus(c.id, next), `Estado: ${CAMPAIGN_STATUS_LABEL[next]}`)}>
+                    onClick={() => next === 'CANCELLED' ? (setCancelReason(''), setCancelReasonAttempted(false), setCancelOpen(true)) : void run(next, () => marketingApi.setCampaignStatus(c.id, next), `Estado: ${CAMPAIGN_STATUS_LABEL[next]}`)}>
                     {busy === next && <Loader2 className="size-3.5 animate-spin" />}→ {CAMPAIGN_STATUS_LABEL[next]}
                   </Button>
                 ))}
@@ -203,6 +208,23 @@ function DetailBody({ id, currency, canEdit, onEdit }: { id: string; currency: s
           </>
         )}
       </div>
+      <ConfirmDialog
+        open={cancelOpen}
+        onOpenChange={(open) => { if (!open && !busy) { setCancelOpen(false); setCancelReason(''); setCancelReasonAttempted(false); } }}
+        title="¿Cancelar campaña?"
+        description="La campaña quedará cancelada y se conservará en el historial."
+        confirmLabel="Cancelar campaña"
+        variant="destructive"
+        loading={busy === 'CANCELLED'}
+        children={<RequiredReasonField id="campaign-cancel-reason" label="Motivo de cancelación" value={cancelReason} onChange={setCancelReason} attempted={cancelReasonAttempted} disabled={busy !== null} />}
+        onConfirm={async () => {
+          if (!c) return false;
+          if (!cancelReason.trim()) { setCancelReasonAttempted(true); return false; }
+          const cancelled = await run('CANCELLED', () => marketingApi.setCampaignStatus(c.id, 'CANCELLED', cancelReason.trim()), `Estado: ${CAMPAIGN_STATUS_LABEL.CANCELLED}`);
+          if (cancelled) { setCancelOpen(false); setCancelReason(''); setCancelReasonAttempted(false); }
+          return cancelled;
+        }}
+      />
     </>
   );
 }

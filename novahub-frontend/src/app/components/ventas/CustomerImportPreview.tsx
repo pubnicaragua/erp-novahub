@@ -281,7 +281,7 @@ export function CustomerImportPreview({
         {importNotice && <div role="status" className="flex min-w-0 items-start gap-2 rounded-xl border border-amber-500/25 bg-amber-500/[0.06] px-3 py-2 text-xs text-amber-800 dark:text-amber-200"><AlertTriangle className="mt-0.5 size-4 shrink-0" /><p className="min-w-0 break-words">{importNotice}</p></div>}
         {hasPendingOpeningBalance && <div className="flex flex-wrap items-end gap-3 rounded-2xl border border-primary/20 bg-primary/[0.04] p-4">
           <label className="min-w-48 space-y-1 text-xs font-bold text-foreground">
-            <span className="block">Fecha de corte de saldos pendientes *</span>
+            <span className="block">Fecha de corte de saldos pendientes <span className="text-destructive" aria-hidden="true">*</span></span>
             <Input type="date" value={openingBalanceDate} onChange={(event) => setOpeningBalanceDate(event.target.value)} disabled={importing} required className="h-9 w-full rounded-lg" />
           </label>
           <p className="max-w-2xl text-xs text-muted-foreground">Esta fecha se usará para los asientos de apertura de los clientes con saldo pendiente. Los saldos a favor no se contabilizan en este proceso.</p>

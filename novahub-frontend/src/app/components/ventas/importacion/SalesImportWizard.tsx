@@ -928,13 +928,13 @@ export function SalesImportWizard({
         (document) => document.status === "CONFIRMED",
       );
       if (failed.length)
-        toast.error(
+        toast.warning(
           `${failed.length} documento(s) fallaron. Revisa el motivo en el bloque.`,
         );
       else toast.success(`${succeeded.length} documento(s) confirmados.`);
       if (succeeded.length) onFinished?.();
     } catch (error) {
-      toast.error(getApiErrorMessage(error, "No se pudo confirmar el bloque."));
+      toast.apiFailure(error, 'No se pudo confirmar el bloque de ventas. Revisa los datos e inténtalo de nuevo.');
     } finally {
       setWorkingBlock(null);
     }
@@ -1028,7 +1028,7 @@ export function SalesImportWizard({
       onFinished?.();
     }
     if (succeeded < readyDocuments.length)
-      toast.error(
+      toast.warning(
         `${readyDocuments.length - succeeded} factura(s) fallaron. Revisa cada resultado y vuelve a intentar si corresponde.`,
       );
   };

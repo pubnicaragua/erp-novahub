@@ -12,7 +12,7 @@ import { failure } from './leadUtils';
 const LEAD_SUGGESTIONS = ['¿Qué le ofrezco?', 'Redáctame un mensaje de WhatsApp para este cliente', '¿Qué pregunta le hago para saber su presupuesto?', 'Dijo que no: ¿cómo le vuelvo a escribir?'];
 const GENERAL_SUGGESTIONS = ['¿Por dónde empiezo hoy?', 'Dame 5 ideas de a quién escribirle esta semana', 'Redáctame un primer mensaje para un negocio sin página web', '¿Cómo le hablo a un cliente que ya tiene sistema?'];
 
-const copy = async (text: string) => { try { await navigator.clipboard.writeText(text); toast.success('Copiado'); } catch { toast.error('No se pudo copiar'); } };
+const copy = async (text: string) => { try { await navigator.clipboard.writeText(text); toast.success('Copiado'); } catch { toast.error('El navegador no permitió copiar el texto. Selecciónalo y cópialo manualmente.'); } };
 
 /** Chat con el asistente de prospección. Con `leadId` conoce el lead (presupuesto, ofertas, bitácora); sin él, ayuda a planear el día. Recuerda lo conversado. */
 export function AssistantChat({ leadId, className }: { leadId?: string | null; className?: string }) {

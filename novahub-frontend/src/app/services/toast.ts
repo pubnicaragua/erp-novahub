@@ -2,6 +2,18 @@ import { createElement, isValidElement, type ReactNode } from 'react';
 import { LoaderCircle } from 'lucide-react';
 import { toast as sonnerToast } from 'sonner';
 import type { ExternalToast } from 'sonner';
+import { getApiErrorMessage } from './api';
+import {
+  ApiRequestError,
+  apiErrorToastVariant,
+  classifyApiError,
+  classifyLocalNotice,
+  getRegisteredApiErrorCategory,
+  getRegisteredApiErrorRequestId,
+  normalizeApiErrorBody,
+  normalizeLocalNoticeMessage,
+  type ApiErrorToastVariant,
+} from './api-error';
 
 export const TOAST_DURATION_MS = {
   success: 3_000,
@@ -18,6 +30,86 @@ function withDuration<T extends ToastCallable>(method: T, duration: number): T {
     const [message, options] = args;
     return method(message, { ...(options as ExternalToast | undefined), duration });
   }) as T;
+}
+
+function showApiErrorToast(
+  variant: ApiErrorToastVariant,
+  message: Parameters<typeof sonnerToast.error>[0],
+  options?: ExternalToast,
+): ReturnType<typeof sonnerToast.error> {
+  if (variant === 'warning') return withDuration(sonnerToast.warning, TOAST_DURATION_MS.warning)(message, options);
+  if (variant === 'info') return withDuration(sonnerToast.info, TOAST_DURATION_MS.info)(message, options);
+  return withDuration(sonnerToast.error, TOAST_DURATION_MS.error)(message, options);
+}
+
+function requestIdFromError(error: unknown): string | undefined {
+  if (typeof error === 'string') return getRegisteredApiErrorRequestId(error);
+  if (error instanceof ApiRequestError && error.requestId) return error.requestId;
+  if (!error || typeof error !== 'object') return undefined;
+  const outer = error as Record<string, unknown>;
+  const direct = typeof outer.requestId === 'string' ? outer.requestId : undefined;
+  if (direct) return direct;
+  const payload = outer.data && typeof outer.data === 'object' ? outer.data : outer;
+  const normalized = normalizeApiErrorBody(payload);
+  return typeof normalized?.requestId === 'string' ? normalized.requestId : undefined;
+}
+
+function technicalNextStep(error: unknown, message: string): string | undefined {
+  if (/(?:reintenta|int[eé]ntalo (?:de nuevo|nuevamente)|intenta (?:de nuevo|nuevamente)|actualiza (?:el|la) (?:inventario|vista|p[aá]gina)|recarga (?:el|la) (?:vista|p[aá]gina)|comprueba si se guard[oó]|revisa tu conexi[oó]n|contacta a soporte|comparte (?:el|este) (?:c[oó]digo|aviso|mensaje))/i.test(message)) {
+    return undefined;
+  }
+  const requestId = requestIdFromError(error);
+  return requestId
+    ? `Comparte el código de seguimiento ${requestId} con soporte para localizar el problema.`
+    : 'Intenta de nuevo. Si vuelve a ocurrir, comparte este aviso con soporte.';
+}
+
+function withTechnicalNextStep(
+  options: ExternalToast | undefined,
+  error: unknown,
+  message: string,
+): ExternalToast | undefined {
+  const nextStep = technicalNextStep(error, message);
+  if (!nextStep) return options;
+  if (typeof options?.description === 'string' && options.description.trim()) {
+    if (options.description.includes(nextStep)) return options;
+    return { ...options, description: `${options.description.trim()} ${nextStep}` };
+  }
+  if (options?.description) return options;
+  return { ...options, description: nextStep };
+}
+
+const classifiedError = ((...args: Parameters<typeof sonnerToast.error>) => {
+  const [message, options] = args;
+  const category = typeof message === 'string'
+    ? getRegisteredApiErrorCategory(message) ?? classifyLocalNotice(message)
+    : undefined;
+  const userFacingMessage = typeof message === 'string' ? normalizeLocalNoticeMessage(message) : message;
+  if (!category) {
+    const nextStepOptions = typeof message === 'string' ? withTechnicalNextStep(options, message, message) : options;
+    return withDuration(sonnerToast.error, TOAST_DURATION_MS.error)(message, nextStepOptions);
+  }
+  const nextStepOptions = category === 'TECHNICAL' && typeof message === 'string'
+    ? withTechnicalNextStep(options, message, message)
+    : options;
+  return showApiErrorToast(apiErrorToastVariant(category, 'info'), userFacingMessage, nextStepOptions);
+}) as typeof sonnerToast.error;
+
+function apiFailure(
+  error: unknown,
+  fallback: string,
+  options?: ExternalToast,
+): ReturnType<typeof sonnerToast.error> {
+  const category = classifyApiError(error);
+  const variant = apiErrorToastVariant(category, 'info');
+  const message = getApiErrorMessage(error, fallback);
+  const userFacingMessage = category === 'TECHNICAL'
+    ? message
+    : normalizeLocalNoticeMessage(message);
+  const nextStepOptions = category === 'TECHNICAL'
+    ? withTechnicalNextStep(options, error, message)
+    : options;
+  return showApiErrorToast(variant, userFacingMessage, nextStepOptions);
 }
 
 type PromiseOptions<T> = NonNullable<Parameters<typeof sonnerToast.promise<T>>[1]>;
@@ -100,7 +192,7 @@ const promise = <T,>(
         options.description,
         TOAST_DURATION_MS.error,
       );
-      sonnerToast.error(result.message, { ...result.options, ...(id !== undefined ? { id } : {}) });
+      classifiedError(result.message, { ...result.options, ...(id !== undefined ? { id } : {}) });
     } else if (!failedResponse && options.success !== undefined) {
       shouldDismiss = false;
       const result = await resolvePromiseToastValue(
@@ -121,7 +213,7 @@ const promise = <T,>(
         options.description,
         TOAST_DURATION_MS.error,
       );
-      sonnerToast.error(result.message, { ...result.options, ...(id !== undefined ? { id } : {}) });
+      classifiedError(result.message, { ...result.options, ...(id !== undefined ? { id } : {}) });
     }
   }).finally(async () => {
     if (shouldDismiss && id !== undefined) sonnerToast.dismiss(id);
@@ -143,7 +235,7 @@ export const toast = Object.assign(withDuration(sonnerToast, TOAST_DURATION_MS.m
   success: withDuration(sonnerToast.success, TOAST_DURATION_MS.success),
   info: withDuration(sonnerToast.info, TOAST_DURATION_MS.info),
   warning: withDuration(sonnerToast.warning, TOAST_DURATION_MS.warning),
-  error: withDuration(sonnerToast.error, TOAST_DURATION_MS.error),
+  error: classifiedError,
   message: withDuration(sonnerToast.message, TOAST_DURATION_MS.message),
   custom: withDuration(sonnerToast.custom, TOAST_DURATION_MS.message),
   loading,
@@ -151,4 +243,7 @@ export const toast = Object.assign(withDuration(sonnerToast, TOAST_DURATION_MS.m
   dismiss: sonnerToast.dismiss,
   getHistory: sonnerToast.getHistory,
   getToasts: sonnerToast.getToasts,
-}) as typeof sonnerToast;
+  apiFailure,
+}) as typeof sonnerToast & {
+  apiFailure: typeof apiFailure;
+};

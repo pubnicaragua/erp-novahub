@@ -446,8 +446,8 @@ export function RegisterTenantPage() {
       }
       setStep1Data({ ...data, email: normalizeEmail(data.email), whatsappNumber: data.whatsappNumber.replace(/[\s-]/g, '') });
       setStep(1);
-    } catch (e: any) {
-      setFormError('email', { type: 'manual', message: 'Error al verificar el correo' });
+    } catch (error) {
+      toast.apiFailure(error, 'No fue posible verificar la disponibilidad del correo. Revisa tu conexión e inténtalo de nuevo.');
     }
   };
 
@@ -625,50 +625,50 @@ export function RegisterTenantPage() {
   const renderStep1 = () => (
     <form onSubmit={handleSubmit(onStep1Submit)} className="space-y-4" noValidate>
       <div className="space-y-1.5">
-        <Label htmlFor="companyName" className="text-[10px] uppercase font-black tracking-widest text-muted-foreground ml-1">Nombre de empresa</Label>
+        <Label htmlFor="companyName" required className="text-[10px] uppercase font-black tracking-widest text-muted-foreground ml-1">Nombre de empresa</Label>
         <div className="relative">
           <Building2 className="absolute left-4 top-1/2 -translate-y-1/2 size-4 text-muted-foreground" />
-          <Input id="companyName" {...register('companyName')} placeholder="Ej: Mi Empresa S.A." autoComplete="organization"
+          <Input id="companyName" {...register('companyName')} required aria-required="true" aria-invalid={Boolean(errors.companyName)} aria-describedby={errors.companyName ? 'companyName-error' : undefined} placeholder="Ej: Mi Empresa S.A." autoComplete="organization"
             className={cn('h-11 pl-11 rounded-xl bg-white/5 border-white/10', errors.companyName && 'border-destructive')} />
         </div>
-        {errors.companyName && <p className="text-xs text-destructive ml-1">{errors.companyName.message}</p>}
+        {errors.companyName && <p id="companyName-error" role="alert" className="text-xs text-destructive ml-1">{errors.companyName.message}</p>}
       </div>
       <div className="space-y-1.5">
-        <Label htmlFor="userName" className="text-[10px] uppercase font-black tracking-widest text-muted-foreground ml-1">Nombre del contacto</Label>
+        <Label htmlFor="userName" required className="text-[10px] uppercase font-black tracking-widest text-muted-foreground ml-1">Nombre del contacto</Label>
         <div className="relative">
           <User className="absolute left-4 top-1/2 -translate-y-1/2 size-4 text-muted-foreground" />
-          <Input id="userName" {...register('userName')} placeholder="Juan Pérez" autoComplete="name"
+          <Input id="userName" {...register('userName')} required aria-required="true" aria-invalid={Boolean(errors.userName)} aria-describedby={errors.userName ? 'userName-error' : undefined} placeholder="Juan Pérez" autoComplete="name"
             className={cn('h-11 pl-11 rounded-xl bg-white/5 border-white/10', errors.userName && 'border-destructive')} />
         </div>
-        {errors.userName && <p className="text-xs text-destructive ml-1">{errors.userName.message}</p>}
+        {errors.userName && <p id="userName-error" role="alert" className="text-xs text-destructive ml-1">{errors.userName.message}</p>}
       </div>
       <div className="space-y-1.5">
-        <Label htmlFor="cargo" className="text-[10px] uppercase font-black tracking-widest text-muted-foreground ml-1">Cargo</Label>
+        <Label htmlFor="cargo" required className="text-[10px] uppercase font-black tracking-widest text-muted-foreground ml-1">Cargo</Label>
         <div className="relative">
           <Briefcase className="absolute left-4 top-1/2 -translate-y-1/2 size-4 text-muted-foreground" />
-          <Input id="cargo" {...register('cargo')} placeholder="Ej: Gerente General, Administrador..." autoComplete="organization-title"
+          <Input id="cargo" {...register('cargo')} required aria-required="true" aria-invalid={Boolean(errors.cargo)} aria-describedby={errors.cargo ? 'cargo-error' : undefined} placeholder="Ej: Gerente General, Administrador..." autoComplete="organization-title"
             className={cn('h-11 pl-11 rounded-xl bg-white/5 border-white/10', errors.cargo && 'border-destructive')} />
         </div>
-        {errors.cargo && <p className="text-xs text-destructive ml-1">{errors.cargo.message}</p>}
+        {errors.cargo && <p id="cargo-error" role="alert" className="text-xs text-destructive ml-1">{errors.cargo.message}</p>}
       </div>
       <div className="space-y-1.5">
-        <Label htmlFor="whatsappNumber" className="text-[10px] uppercase font-black tracking-widest text-muted-foreground ml-1">Número de WhatsApp</Label>
+        <Label htmlFor="whatsappNumber" required className="text-[10px] uppercase font-black tracking-widest text-muted-foreground ml-1">Número de WhatsApp</Label>
         <div className="relative">
           <Phone className="absolute left-4 top-1/2 -translate-y-1/2 size-4 text-muted-foreground" />
-          <Input id="whatsappNumber" {...register('whatsappNumber')} type="tel" placeholder="+505 8123 4567" autoComplete="tel"
+          <Input id="whatsappNumber" {...register('whatsappNumber')} required aria-required="true" aria-invalid={Boolean(errors.whatsappNumber)} aria-describedby={errors.whatsappNumber ? 'whatsappNumber-error' : undefined} type="tel" placeholder="+505 8123 4567" autoComplete="tel"
             className={cn('h-11 pl-11 rounded-xl bg-white/5 border-white/10', errors.whatsappNumber && 'border-destructive')} />
         </div>
         {errors.whatsappNumber ? (
-          <p className="text-xs text-destructive ml-1">{errors.whatsappNumber.message}</p>
+          <p id="whatsappNumber-error" role="alert" className="text-xs text-destructive ml-1">{errors.whatsappNumber.message}</p>
         ) : (
           <p className="text-[10px] text-muted-foreground ml-1">Lo usaremos para que un asesor de Nova te contacte durante tu prueba.</p>
         )}
       </div>
       <div className="space-y-1.5">
-        <Label htmlFor="email" className="text-[10px] uppercase font-black tracking-widest text-muted-foreground ml-1">Email</Label>
+        <Label htmlFor="email" required className="text-[10px] uppercase font-black tracking-widest text-muted-foreground ml-1">Email</Label>
         <div className="relative">
           <Mail className="absolute left-4 top-1/2 -translate-y-1/2 size-4 text-muted-foreground" />
-          <Input id="email" {...register('email')} type="email" placeholder="tu@empresa.com" autoComplete="email"
+          <Input id="email" {...register('email')} required aria-required="true" aria-invalid={Boolean(errors.email)} aria-describedby={errors.email ? 'email-error' : undefined} type="email" placeholder="tu@empresa.com" autoComplete="email"
             onChange={(e) => { register('email').onChange(e); if (errors.email?.type === 'manual') clearErrors('email'); }}
             onBlur={async (e) => {
               register('email').onBlur(e);
@@ -678,36 +678,39 @@ export function RegisterTenantPage() {
                   if (res?.data?.exists ?? res?.exists) {
                     setFormError('email', { type: 'manual', message: 'Email ya registrado en el sistema' });
                   }
-                } catch (err) {}
+                } catch (error) {
+                  toast.apiFailure(error, 'No fue posible verificar la disponibilidad del correo. Revisa tu conexión e inténtalo de nuevo.');
+                }
               }
             }}
             className={cn('h-11 pl-11 rounded-xl bg-white/5 border-white/10', errors.email && 'border-destructive')} />
         </div>
-        {errors.email && <p className="text-xs text-destructive ml-1">{errors.email.message}</p>}
+        {errors.email && <p id="email-error" role="alert" className="text-xs text-destructive ml-1">{errors.email.message}</p>}
       </div>
       <div className="space-y-1.5">
-        <Label htmlFor="password" className="text-[10px] uppercase font-black tracking-widest text-muted-foreground ml-1">Contraseña</Label>
+        <Label htmlFor="password" required className="text-[10px] uppercase font-black tracking-widest text-muted-foreground ml-1">Contraseña</Label>
         <div className="relative">
           <Lock className="absolute left-4 top-1/2 -translate-y-1/2 size-4 text-muted-foreground" />
-          <Input id="password" {...register('password')} type={showPassword ? 'text' : 'password'} placeholder="8 caracteres, mayúscula, número y símbolo" autoComplete="new-password"
+          <Input id="password" {...register('password')} required aria-required="true" aria-invalid={Boolean(errors.password)} aria-describedby={errors.password ? 'password-error' : undefined} type={showPassword ? 'text' : 'password'} placeholder="8 caracteres, mayúscula, número y símbolo" autoComplete="new-password"
             className={cn('h-11 pl-11 pr-11 rounded-xl bg-white/5 border-white/10', errors.password && 'border-destructive')} />
           <button type="button" onClick={() => setShowPassword(!showPassword)} className="absolute right-4 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground transition-colors">
             {showPassword ? <EyeOff className="size-4" /> : <Eye className="size-4" />}
           </button>
         </div>
-        {errors.password && <p className="text-xs text-destructive ml-1">{errors.password.message}</p>}
+        {errors.password && <p id="password-error" role="alert" className="text-xs text-destructive ml-1">{errors.password.message}</p>}
         <PasswordRequirements value={passwordValue} className="ml-1" />
       </div>
       <div className="space-y-1.5 pt-1">
-        <label className="flex items-start gap-2.5 cursor-pointer">
-          <input type="checkbox" id="acceptTerms" {...register('acceptTerms')}
+        <div className="flex items-start gap-2.5">
+          <input type="checkbox" id="acceptTerms" {...register('acceptTerms')} required aria-required="true" aria-invalid={Boolean(errors.acceptTerms)} aria-describedby={errors.acceptTerms ? 'acceptTerms-error' : undefined}
             className="mt-1 size-4 rounded border-white/20 bg-white/5 text-primary focus:ring-primary/30" />
           <span className="text-xs text-muted-foreground">
-            Acepto los{' '}<a href="#" className="text-primary hover:underline">términos de servicio</a>{' '}y la{' '}
+            <Label htmlFor="acceptTerms" required className="inline-flex text-xs text-muted-foreground">Acepto los</Label>{' '}
+            <a href="#" className="text-primary hover:underline">términos de servicio</a>{' '}y la{' '}
             <a href="#" className="text-primary hover:underline">política de privacidad</a>.
           </span>
-        </label>
-        {errors.acceptTerms && <p className="text-xs text-destructive ml-1">{errors.acceptTerms.message}</p>}
+        </div>
+        {errors.acceptTerms && <p id="acceptTerms-error" role="alert" className="text-xs text-destructive ml-1">{errors.acceptTerms.message}</p>}
       </div>
       {waConfirmed ? (
         <div className="flex items-center gap-2.5 rounded-xl border border-emerald-500/40 bg-emerald-500/10 px-4 py-3">

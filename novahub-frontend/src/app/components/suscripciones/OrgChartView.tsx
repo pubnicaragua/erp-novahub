@@ -297,7 +297,7 @@ export function OrgChartView({ tenantId, tenantName, employees, users, onBack, o
           await hrService.updateEmployee(employeeId, { managerId: managerId || null });
           ok += 1;
         } catch (err: any) {
-          toast.error(`No se pudo guardar a ${getEmployeeName(byId.get(employeeId))}: ${err?.response?.data?.message || 'error'}`);
+          toast.apiFailure(err, `No se pudo guardar la relación de supervisión de ${getEmployeeName(byId.get(employeeId))}.`);
         }
       }
       if (ok > 0) {

@@ -16,6 +16,7 @@ import { invoicesService, paymentsService, type InvoiceKpiSummary } from '../../
 import { useSalesIntegrationPolicy } from '../../hooks/useSalesIntegrationPolicy';
 import { toast } from '@/app/services/toast';
 import { ConfirmDialog } from '../ui/ConfirmDialog';
+import { RequiredReasonField } from '../ui/RequiredReasonField';
 import { cn } from '../ui/utils';
 import type { Invoice, Customer, Product, PaymentReceived, SalesPaginationControls } from '../../types';
 import { Badge } from '../ui/badge';
@@ -62,6 +63,7 @@ import { PoketAppToAppDialog } from './PoketAppToAppDialog';
 import { getAvailableSalesStock, getSingleSalesVariant } from '../../utils/sales-stock';
 import { SalesVariantSelect } from './SalesVariantSelect';
 import { SalesProductPicker, type SalesCatalogItem } from './SalesProductPicker';
+import { SalesCustomerActionButton } from './SalesCustomerActionButton';
 import { getCustomerDebtAmount, getCustomerFavorAmount, getMaximumCustomerFavorToApply } from '../../utils/customerBalance';
 import { summarizeAmountsByCurrency } from '../../utils/currency';
 import { allocatePaymentLinesToBalance, cashCoversPaymentChange, getPaymentCashBase, getPaymentChangeBase } from '../../utils/paymentSettlement';
@@ -197,8 +199,9 @@ export function FacturasView({ data, summaryData, summaryLoading, summaryError, 
   const [layoutMode, setLayoutMode] = useLocalStorageState<'table' | 'cards'>('sales-invoices-layout', 'table', 24 * 365);
   const [statusFilter, setStatusFilter] = useState<'ALL' | 'RECEIVABLE' | 'OVERDUE' | 'PAID'>('ALL');
   useEffect(() => { try { sessionStorage.removeItem('global-search-term') } catch {} }, [])
-  const [pendingCancelId, setPendingCancelId] = useState<string | null>(null);
+  const [pendingCancelIds, setPendingCancelIds] = useState<string[] | null>(null);
   const [cancelReason, setCancelReason] = useState('');
+  const [cancelReasonAttempted, setCancelReasonAttempted] = useState(false);
   const [cancelLoading, setCancelLoading] = useState(false);
   const [pendingDeleteInvoiceId, setPendingDeleteInvoiceId] = useState<string | null>(null);
   const [invoiceDeleteLoading, setInvoiceDeleteLoading] = useState(false);
@@ -1365,8 +1368,7 @@ export function FacturasView({ data, summaryData, summaryLoading, summaryError, 
       onRefresh();
       return action === 'PAYMENT' && isCreating ? createdInvoiceResult : undefined;
     } catch (e: any) {
-      const msg = e.response?.data?.message;
-      toast.error(`No se pudo guardar: ${Array.isArray(msg) ? msg.join(', ') : (msg || e.message)}`, { id: saveToastId });
+      toast.apiFailure(e, 'No se pudo guardar la factura.', { id: saveToastId });
       return undefined;
     }
   };
@@ -2257,18 +2259,18 @@ export function FacturasView({ data, summaryData, summaryLoading, summaryError, 
             <div className="flex min-w-0 flex-col items-stretch justify-between gap-3 mb-4 sm:flex-row sm:items-center">
                <p className="text-xs font-black uppercase tracking-widest text-muted-foreground">Productos / Servicios</p>
                <div className="grid grid-cols-1 gap-2 sm:flex sm:flex-wrap sm:justify-end">
-                 {(['PRODUCT', 'SERVICE'] as const).map((itemType) => <Button key={itemType} type="button" variant="outline" size="sm" disabled={isInvoiceLocked} onClick={() => {
+                 {(['PRODUCT', 'SERVICE'] as const).map((itemType) => <SalesCustomerActionButton key={itemType} type="button" variant="outline" size="sm" customerSelected={Boolean(localDoc?.customerId)} disabled={isInvoiceLocked} onClick={() => {
                     const itemId = `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
                     const newItems = [...(localDoc.items || []), { id: itemId, itemType, description: '', quantity: 1, unitPrice: 0, total: 0, productId: null, warehouseId: itemType === 'SERVICE' ? undefined : localDoc?.warehouseId || getDefaultWarehouseId(), taxRate: 0, priceListId: localDoc?.priceListId || undefined, serialNumbers: [] }];
                     setLocalDoc({ ...localDoc, items: newItems });
                     setSalesProductPickerItemId(itemId);
-                 }} className="h-8 w-full rounded-xl text-[10px] font-black uppercase tracking-widest sm:w-auto"><Plus className="size-3 mr-2" /> Agregar {itemType === 'PRODUCT' ? 'Producto' : 'Servicio'}</Button>)}
-                 <Button type="button" variant="outline" size="sm" disabled={isInvoiceLocked} onClick={() => updateExtraCharges([...normalizeExtraCharges(localDoc), { id: `extra-${Date.now()}`, description: '', amount: 0 }])} className="h-8 w-full rounded-xl text-[10px] font-black uppercase tracking-widest sm:w-auto">
+                 }} className="h-8 w-full rounded-xl text-[10px] font-black uppercase tracking-widest sm:w-auto"><Plus className="size-3 mr-2" /> Agregar {itemType === 'PRODUCT' ? 'Producto' : 'Servicio'}</SalesCustomerActionButton>)}
+                 <SalesCustomerActionButton type="button" variant="outline" size="sm" customerSelected={Boolean(localDoc?.customerId)} disabled={isInvoiceLocked} onClick={() => updateExtraCharges([...normalizeExtraCharges(localDoc), { id: `extra-${Date.now()}`, description: '', amount: 0 }])} className="h-8 w-full rounded-xl text-[10px] font-black uppercase tracking-widest sm:w-auto">
                    <Plus className="size-3 mr-2" /> Agregar coste extra
-                 </Button>
-                 <Button type="button" variant="outline" size="sm" disabled={isInvoiceLocked || Boolean(localDoc?.deliveryDescription) || Number(localDoc?.deliveryAmount || 0) > 0} title={localDoc?.deliveryDescription || Number(localDoc?.deliveryAmount || 0) > 0 ? 'Solo se permite un delivery por factura' : undefined} onClick={() => updateDelivery({ deliveryDescription: 'Delivery', deliveryAmount: 0 })} className="h-8 w-full rounded-xl text-[10px] font-black uppercase tracking-widest sm:w-auto">
+                 </SalesCustomerActionButton>
+                 <SalesCustomerActionButton type="button" variant="outline" size="sm" customerSelected={Boolean(localDoc?.customerId)} disabled={isInvoiceLocked || (Boolean(localDoc?.customerId) && (Boolean(localDoc?.deliveryDescription) || Number(localDoc?.deliveryAmount || 0) > 0))} title={localDoc?.deliveryDescription || Number(localDoc?.deliveryAmount || 0) > 0 ? 'Solo se permite un delivery por factura' : undefined} onClick={() => updateDelivery({ deliveryDescription: 'Delivery', deliveryAmount: 0 })} className="h-8 w-full rounded-xl text-[10px] font-black uppercase tracking-widest sm:w-auto">
                    <Plus className="size-3 mr-2" /> Agregar delivery
-                 </Button>
+                 </SalesCustomerActionButton>
                </div>
             </div>
             <div className="space-y-2">
@@ -2295,7 +2297,8 @@ export function FacturasView({ data, summaryData, summaryLoading, summaryError, 
                           otherLocationsPermissionModule="SALES_INVOICES"
                           products={getItemCatalog(item) as SalesCatalogItem[]}
                           value={item.productId || ''}
-                          disabled={isInvoiceLocked || productsLoading}
+                          disabled={isInvoiceLocked || (Boolean(localDoc?.customerId) && productsLoading)}
+                          customerSelected={Boolean(localDoc?.customerId)}
                           itemType={resolveItemType(item).toUpperCase() === 'SERVICE' ? 'SERVICE' : 'PRODUCT'}
                           warehouseId={getItemWarehouseId(item)}
                           variantId={item.variantId}
@@ -2715,14 +2718,9 @@ export function FacturasView({ data, summaryData, summaryLoading, summaryError, 
             if (skippedCount > 0) {
               toast.info(`${skippedCount} factura${skippedCount === 1 ? '' : 's'} pagada${skippedCount === 1 ? '' : 's'} o parcial${skippedCount === 1 ? '' : 'es'} se omitió${skippedCount === 1 ? '' : 'eron'}`);
             }
-            const bulkCancelToastId = toast.loading(`Enviando ${rowsToCancel.length} solicitud${rowsToCancel.length === 1 ? '' : 'es'} a Contabilidad...`);
-            try {
-              await Promise.all(rowsToCancel.map((invoice) => invoicesService.requestCancellation(invoice.id, 'Solicitud de anulación masiva')));
-              toast.success(`${rowsToCancel.length} solicitud${rowsToCancel.length === 1 ? '' : 'es'} enviada${rowsToCancel.length === 1 ? '' : 's'} a Contabilidad`, { id: bulkCancelToastId });
-              onRefresh();
-            } catch (e: any) {
-              toast.error(e?.response?.data?.message || e?.message || 'No se pudieron anular las facturas', { id: bulkCancelToastId });
-            }
+            setCancelReason('');
+            setCancelReasonAttempted(false);
+            setPendingCancelIds(rowsToCancel.map((invoice) => invoice.id));
           } : undefined}
           bulkAction="cancel"
           isLoading={loading}
@@ -2792,7 +2790,7 @@ export function FacturasView({ data, summaryData, summaryLoading, summaryError, 
                 </Button>
               )}
               {canPerform('SALES_INVOICES', 'cancel') && isInvoiceCancellableFromList(row) && (
-                <Button type="button" title="Solicitar anulación a Contabilidad" aria-label={`Solicitar anulación de ${row.number}`} variant="ghost" size="icon" className="size-8 shrink-0 rounded-lg text-rose-500 hover:bg-rose-500/10 transition-colors" onClick={() => { setPendingCancelId(row.id); setCancelReason(''); }}>
+                <Button type="button" title="Solicitar anulación a Contabilidad" aria-label={`Solicitar anulación de ${row.number}`} variant="ghost" size="icon" className="size-8 shrink-0 rounded-lg text-rose-500 hover:bg-rose-500/10 transition-colors" onClick={() => { setPendingCancelIds([row.id]); setCancelReason(''); setCancelReasonAttempted(false); }}>
                   <Ban className="size-4" />
                 </Button>
               )}
@@ -2844,7 +2842,7 @@ export function FacturasView({ data, summaryData, summaryLoading, summaryError, 
           {canPerform('SALES_INVOICES', 'pay') && (String(detailInvoice.status).toUpperCase() !== 'DRAFT' || canPerform('SALES_INVOICES', 'submit')) && !['PAID', 'CANCELLED'].includes(String(detailInvoice.status).toUpperCase()) && getInvoicePaymentBalance(detailInvoice, getInvoiceBalance(detailInvoice)) > 0 && <Button type="button" variant="outline" className="rounded-xl border-primary/30 text-primary hover:bg-primary/10" disabled={paymentLoading && paymentInvoice?.id === detailInvoice.id} onClick={() => openInvoicePayment(detailInvoice)}><CreditCard className="mr-2 size-4" />Registrar pago</Button>}
           {(canPerform('SALES_INVOICES', 'createPaymentLink') || canPerform('SALES_INVOICES', 'reconcilePaymentLink') || canPerform('SALES_INVOICES', 'cancelPaymentLink')) && !['PAID', 'CANCELLED'].includes(String(detailInvoice.status).toUpperCase()) && getInvoiceBalance(detailInvoice) > 0.01 && <Button type="button" variant="outline" className="rounded-xl border-primary/30 text-primary hover:bg-primary/10" onClick={() => setPaylinkInvoice(detailInvoice)}><Link2 className="mr-2 size-4" />{canPerform('SALES_INVOICES', 'createPaymentLink') ? 'Links de pago' : 'Ver links de pago'}</Button>}
           {(canPerform('SALES_INVOICES', 'createAppToAppPayment') || canPerform('SALES_INVOICES', 'reconcileAppToAppPayment')) && !['PAID', 'CANCELLED'].includes(String(detailInvoice.status).toUpperCase()) && getInvoiceBalance(detailInvoice) > 0.01 && <Button type="button" variant="outline" className="rounded-xl border-primary/30 text-primary hover:bg-primary/10" onClick={() => setPoketAppInvoice(detailInvoice)}><Smartphone className="mr-2 size-4" />{canPerform('SALES_INVOICES', 'createAppToAppPayment') ? 'Cobrar con Poket' : 'Ver cobros Poket'}</Button>}
-          {canPerform('SALES_INVOICES', 'cancel') && isInvoiceCancellableFromList(detailInvoice) && <Button type="button" variant="outline" className="rounded-xl border-rose-500/30 text-rose-600 hover:bg-rose-500/10 dark:text-rose-400" onClick={() => { setDetailInvoice(null); setPendingCancelId(detailInvoice.id); setCancelReason(''); }}><Ban className="mr-2 size-4" />Solicitar anulación</Button>}
+              {canPerform('SALES_INVOICES', 'cancel') && isInvoiceCancellableFromList(detailInvoice) && <Button type="button" variant="outline" className="rounded-xl border-rose-500/30 text-rose-600 hover:bg-rose-500/10 dark:text-rose-400" onClick={() => { setDetailInvoice(null); setPendingCancelIds([detailInvoice.id]); setCancelReason(''); setCancelReasonAttempted(false); }}><Ban className="mr-2 size-4" />Solicitar anulación</Button>}
           {canPerform('SALES_INVOICES', 'read') && canPerform('SALES_INVOICES', 'delete') && String(detailInvoice.status).toUpperCase() === 'DRAFT' && <Button type="button" variant="outline" className="rounded-xl border-destructive/30 text-destructive hover:bg-destructive/10" onClick={() => setPendingDeleteInvoiceId(detailInvoice.id)}><Trash2 className="mr-2 size-4" />Eliminar borrador</Button>}
         </> : undefined}
       />
@@ -2864,44 +2862,38 @@ export function FacturasView({ data, summaryData, summaryLoading, summaryError, 
       />
 
       <ConfirmDialog
-        open={pendingCancelId !== null}
-        onOpenChange={(open) => { if (!open) { setPendingCancelId(null); setCancelReason(''); } }}
-        title={"¿Solicitar anulación?"}
+        open={pendingCancelIds !== null}
+        onOpenChange={(open) => { if (!open && !cancelLoading) { setPendingCancelIds(null); setCancelReason(''); setCancelReasonAttempted(false); } }}
+        title={pendingCancelIds?.length === 1 ? '¿Solicitar anulación?' : `¿Solicitar anulación de ${pendingCancelIds?.length ?? ''} facturas?`}
         description="La factura no se anulará ahora. Se enviará una solicitud a Contabilidad para revisión y aprobación."
-        confirmLabel="Enviar solicitud"
+        confirmLabel={pendingCancelIds?.length === 1 ? 'Enviar solicitud' : 'Enviar solicitudes'}
         variant="destructive"
         loading={cancelLoading}
-        disabled={!cancelReason.trim()}
         onConfirm={async () => {
-          if (!canPerform('SALES_INVOICES', 'cancel')) return;
-          if (!pendingCancelId || !cancelReason.trim()) return;
-          const cancelToastId = toast.loading('Enviando solicitud a Contabilidad...');
+          if (!canPerform('SALES_INVOICES', 'cancel') || !pendingCancelIds?.length) return false;
+          if (!cancelReason.trim()) { setCancelReasonAttempted(true); return false; }
+          const ids = pendingCancelIds;
+          const cancelToastId = toast.loading(ids.length === 1 ? 'Enviando solicitud a Contabilidad...' : `Enviando ${ids.length} solicitudes a Contabilidad...`);
           try {
             setCancelLoading(true);
-            await invoicesService.requestCancellation(pendingCancelId, cancelReason.trim());
-            toast.success('Solicitud enviada a Contabilidad', { id: cancelToastId });
+            await Promise.all(ids.map((id) => invoicesService.requestCancellation(id, cancelReason.trim())));
+            toast.success(ids.length === 1 ? 'Solicitud enviada a Contabilidad' : 'Solicitudes enviadas a Contabilidad', { id: cancelToastId });
             setEditingId(null);
             setIsCreating(false);
             onRefresh();
+            return true;
           } catch (error: any) {
             toast.error(error?.response?.data?.message || error?.message || 'No se pudo enviar la solicitud de anulación', { id: cancelToastId });
+            return false;
           } finally {
             setCancelLoading(false);
-            setPendingCancelId(null);
+            setPendingCancelIds(null);
             setCancelReason('');
+            setCancelReasonAttempted(false);
           }
         }}
       >
-        <div className="mt-4">
-          <label className="text-sm font-medium text-foreground mb-1 block">Motivo de cancelación *</label>
-          <textarea
-            className="w-full rounded-xl border border-border bg-background px-3 py-2 text-sm resize-none focus:outline-none focus:ring-2 focus:ring-primary/20"
-            rows={3}
-            placeholder="Ej: Cliente solicitó cancelación, error en datos fiscales..."
-            value={cancelReason}
-            onChange={(e) => setCancelReason(e.target.value)}
-          />
-        </div>
+        <RequiredReasonField id="invoice-cancellation-request-reason" label="Motivo de anulación" value={cancelReason} onChange={setCancelReason} attempted={cancelReasonAttempted} disabled={cancelLoading} placeholder="Ej.: cliente solicitó la anulación, error en datos fiscales…" />
       </ConfirmDialog>
 
       <ConfirmDialog
@@ -2992,9 +2984,21 @@ export function FacturasView({ data, summaryData, summaryLoading, summaryError, 
                   </div>}
                 </div>
                 <p className="text-[10px] text-muted-foreground">El interés se calcula una sola vez sobre el saldo trasladado. El saldo original de la factura no cambia.</p>
-                <div className="flex items-start gap-2 border-t border-border/40 pt-3">
-                  <input id="invoice-credit-plan" type="checkbox" className="mt-0.5 size-4 accent-primary" checked={creditPlanEnabled} onChange={(event) => { setCreditPlanEnabled(event.target.checked); setCreditTermOverrideConfirmed(false); if (event.target.checked && !creditFirstInstallmentDate) setCreditFirstInstallmentDate(new Date().toISOString().split('T')[0]); }} />
-                  <Label htmlFor="invoice-credit-plan" className="cursor-pointer text-xs">Definir un plan de abonos</Label>
+                <div className={`grid min-w-0 gap-3 border-t border-border/40 pt-3 ${creditPlanEnabled ? 'sm:grid-cols-[minmax(0,1fr)_minmax(210px,260px)] sm:items-center' : ''}`}>
+                  <div className="flex min-w-0 items-start gap-2">
+                    <input id="invoice-credit-plan" type="checkbox" className="mt-0.5 size-4 shrink-0 accent-primary" checked={creditPlanEnabled} onChange={(event) => { setCreditPlanEnabled(event.target.checked); setCreditTermOverrideConfirmed(false); if (event.target.checked && !creditFirstInstallmentDate) setCreditFirstInstallmentDate(new Date().toISOString().split('T')[0]); }} />
+                    <div className="min-w-0">
+                      <Label htmlFor="invoice-credit-plan" className="cursor-pointer text-xs font-semibold">Definir un plan de abonos</Label>
+                      {creditPlanEnabled && <p className="mt-1 text-[10px] leading-relaxed text-muted-foreground">{creditPlanCalculationMode === 'MANUAL' ? 'Define la fecha, el monto y el interés de cada abono.' : 'Elige cómo calcular las cuotas del crédito.'}</p>}
+                    </div>
+                  </div>
+                  {creditPlanEnabled && <div className="min-w-0 space-y-1.5">
+                    <Label className="text-xs font-semibold">Método de cálculo</Label>
+                    <Select value={creditPlanCalculationMode} onValueChange={(value) => { const mode = value as typeof creditPlanCalculationMode; if (mode === 'DEADLINE' && creditPlanEstimate) setCreditDueDate(creditPlanEstimate.finalDueDate); if (mode === 'MANUAL') setCreditManualInstallments((rows) => rows.map((row, index) => index === 0 && !row.dueDate ? { ...row, dueDate: creditFirstInstallmentDate || new Date().toISOString().split('T')[0] } : row)); setCreditPlanCalculationMode(mode); setCreditTermOverrideConfirmed(false); }}>
+                      <SelectTrigger className="h-9 w-full"><SelectValue /></SelectTrigger>
+                      <SelectContent><SelectItem value="AMOUNT">Monto por abono</SelectItem><SelectItem value="DEADLINE">Fecha de vencimiento</SelectItem><SelectItem value="MANUAL">Manual</SelectItem></SelectContent>
+                    </Select>
+                  </div>}
                 </div>
                 {creditPlanEnabled && <div className="grid gap-3 sm:grid-cols-2">
                   {creditPlanCalculationMode !== 'MANUAL' && <div className="space-y-1.5">
@@ -3004,7 +3008,6 @@ export function FacturasView({ data, summaryData, summaryLoading, summaryError, 
                       <SelectContent><SelectItem value="DAILY">Diaria</SelectItem><SelectItem value="WEEKLY">Semanal</SelectItem><SelectItem value="BIWEEKLY">Cada 15 días</SelectItem><SelectItem value="MONTHLY">Mensual</SelectItem></SelectContent>
                     </Select>
                   </div>}
-                  <div className="space-y-1.5"><Label className="flex items-end leading-tight sm:min-h-10">Método de cálculo</Label><Select value={creditPlanCalculationMode} onValueChange={(value) => { const mode = value as typeof creditPlanCalculationMode; if (mode === 'DEADLINE' && creditPlanEstimate) setCreditDueDate(creditPlanEstimate.finalDueDate); if (mode === 'MANUAL') setCreditManualInstallments((rows) => rows.map((row, index) => index === 0 && !row.dueDate ? { ...row, dueDate: creditFirstInstallmentDate || new Date().toISOString().split('T')[0] } : row)); setCreditPlanCalculationMode(mode); setCreditTermOverrideConfirmed(false); }}><SelectTrigger className="h-9"><SelectValue /></SelectTrigger><SelectContent><SelectItem value="AMOUNT">Monto por abono</SelectItem><SelectItem value="DEADLINE">Fecha de vencimiento</SelectItem><SelectItem value="MANUAL">Manual</SelectItem></SelectContent></Select></div>
                   {creditPlanCalculationMode !== 'MANUAL' && <div className="space-y-1.5"><Label htmlFor="invoice-credit-first-installment" className="flex items-end leading-tight sm:min-h-10">Fecha del primer abono</Label><Input id="invoice-credit-first-installment" type="date" min={new Date().toISOString().split('T')[0]} value={creditFirstInstallmentDate} onChange={(event) => { setCreditFirstInstallmentDate(event.target.value); setCreditTermOverrideConfirmed(false); }} /></div>}
                   {creditPlanCalculationMode === 'AMOUNT' && <div className="space-y-1.5"><Label htmlFor="invoice-credit-installment" className="flex items-end leading-tight sm:min-h-10">Monto por abono</Label><Input id="invoice-credit-installment" type="number" min="0.01" step="0.01" value={creditInstallmentAmount} onChange={(event) => { setCreditInstallmentAmount(event.target.value); setCreditTermOverrideConfirmed(false); }} currencyPrecision /></div>}
                   {creditPlanEstimate && <div className="sm:col-span-2"><CustomerCreditInstallmentSchedule
@@ -3179,8 +3182,8 @@ export function FacturasView({ data, summaryData, summaryLoading, summaryError, 
                       </div>
                     )}
                     {hasPaymentReferenceField(line.method) && <div className="mt-2">
-                      <p className="mb-1 text-[9px] font-black uppercase tracking-widest text-muted-foreground">Referencia *</p>
-                      <Input value={line.reference || ''} onChange={(event) => setPaymentLines((current) => current.map((item, itemIndex) => itemIndex === index ? { ...item, reference: event.target.value } : item))} placeholder="Transferencia, voucher, cheque..." required={requiresPaymentReference(line.method)} className="h-9 text-xs" />
+                      <Label htmlFor={`invoice-payment-reference-${index}`} required={requiresPaymentReference(line.method)} className="mb-1 text-[9px] font-black uppercase tracking-widest text-muted-foreground">Referencia</Label>
+                      <Input id={`invoice-payment-reference-${index}`} value={line.reference || ''} onChange={(event) => setPaymentLines((current) => current.map((item, itemIndex) => itemIndex === index ? { ...item, reference: event.target.value } : item))} placeholder="Transferencia, voucher, cheque..." required={requiresPaymentReference(line.method)} className="h-9 text-xs" />
                     </div>}
                     {line.method === 'CUSTOMER_BALANCE' && <p className="mt-2 text-[10px] font-bold text-emerald-600 dark:text-emerald-400">Disponible a favor: {formatConvertedAmount(paymentCustomerFavorBase, baseCurrency)}. Puedes aplicar solo una parte.</p>}
                   </div>

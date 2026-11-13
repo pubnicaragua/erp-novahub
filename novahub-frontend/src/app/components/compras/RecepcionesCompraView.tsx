@@ -10,6 +10,7 @@ import { Input } from '../ui/input';
 import { Badge } from '../ui/badge';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../ui/select';
 import { Combobox } from '../ui/Combobox';
+import { Label } from '../ui/label';
 import { paymentsService, purchaseOrdersService, purchaseReceiptsService, supplierInvoicesService, type PurchaseReceiptSummary } from '../../services/compras.service';
 import { storageService } from '../../services/storage.service';
 import { useCurrency } from '../../contexts/CurrencyContext';
@@ -19,8 +20,11 @@ import { EditableDataTable, ColumnDef } from '../ui/EditableDataTable';
 import { ViewLayoutSelect } from '../ui/ViewLayoutSelect';
 import { useLocalStorageState } from '../../hooks/useLocalStorageState';
 import { toast } from '@/app/services/toast';
+import { classifyApiError } from '@/app/services/api-error';
+import { getApiErrorMessage } from '../../services/api';
 import { TaxTypeSelect } from '../ui/TaxSelector';
 import { ConfirmDialog } from '../ui/ConfirmDialog';
+import { RequiredReasonField } from '../ui/RequiredReasonField';
 import { cn } from '../ui/utils';
 import { useAuth } from '../../contexts/AuthContext';
 import { PurchaseKpiCard } from './PurchaseKpiCard';
@@ -316,7 +320,9 @@ function ReceiptPaymentDialog({ draft, onClose, onSaved, onRegisterInvoice, acco
   const [invoiceDueDate, setInvoiceDueDate] = useState('');
   const [invoiceFiles, setInvoiceFiles] = useState<File[]>([]);
   const [invoiceSaving, setInvoiceSaving] = useState(false);
+  const [invoiceValidationAttempted, setInvoiceValidationAttempted] = useState(false);
   const [saving, setSaving] = useState(false);
+  const [paymentValidationAttempted, setPaymentValidationAttempted] = useState(false);
 
   const paymentLineRate = (currency: 'NIO' | 'USD') => currency === baseCurrency ? 1 : Number(globalRate || 1);
 
@@ -341,11 +347,20 @@ function ReceiptPaymentDialog({ draft, onClose, onSaved, onRegisterInvoice, acco
     setInvoiceDate(draft.invoiceDate || new Date().toISOString().slice(0, 10));
     setInvoiceDueDate(draft.invoiceDueDate || new Date(Date.now() + 30 * 86400000).toISOString().slice(0, 10));
     setInvoiceFiles([]);
+    setInvoiceValidationAttempted(false);
+    setPaymentValidationAttempted(false);
   }, [draft, displayCurrency, globalRate]);
+
+  const closePaymentDialog = () => {
+    setInvoiceValidationAttempted(false);
+    setPaymentValidationAttempted(false);
+    onClose();
+  };
 
   const handleRegisterInvoice = async () => {
     if (!draft) return;
     if (!canRegisterInvoice) return toast.error('Tu rol no permite registrar facturas de proveedor.');
+    setInvoiceValidationAttempted(true);
     if (!invoiceNumber.trim()) return toast.error('Ingresa el número de factura del proveedor.');
     if (invoiceFiles.length === 0) return toast.error('Selecciona al menos una imagen o PDF de la factura.');
     setInvoiceSaving(true);
@@ -355,13 +370,14 @@ function ReceiptPaymentDialog({ draft, onClose, onSaved, onRegisterInvoice, acco
       const savedInvoice = invoice?.data ?? invoice;
       if (draft.invoiceOnly) {
       toast.success('Compra a crédito registrada. Ya puedes verla en Créditos del proveedor y registrar el pago desde ahí, Pagos realizados o la recepción.', { id: invoiceToastId });
-        onClose();
+        closePaymentDialog();
         return;
       }
       setInvoiceId(String(savedInvoice?.id || ''));
       setInvoiceNumber(String(savedInvoice?.number || invoiceNumber.trim()));
       setPaymentLines((current) => current.map((line, index) => index === 0 ? { ...line, amount: Number(savedInvoice?.balance ?? savedInvoice?.total ?? draft.amount) } : line));
       setInvoiceFiles([]);
+      setInvoiceValidationAttempted(false);
       toast.success('Factura y evidencia registradas. Ya puedes confirmar el pago.', { id: invoiceToastId });
     } catch (error: any) {
       toast.error(error?.response?.data?.message || error?.message || 'No se pudo registrar la factura.', { id: invoiceToastId });
@@ -373,6 +389,7 @@ function ReceiptPaymentDialog({ draft, onClose, onSaved, onRegisterInvoice, acco
   const handleSubmit = async () => {
     if (!draft) return;
     if (!canPay) return toast.error('Tu rol no permite registrar pagos a proveedores.');
+    setPaymentValidationAttempted(true);
     const resolvedInvoiceId = invoiceId || draft.supplierInvoiceId;
     if (!resolvedInvoiceId) return toast.error('Registra primero la factura y su evidencia.');
     const effectiveLines = paymentLines
@@ -435,7 +452,7 @@ function ReceiptPaymentDialog({ draft, onClose, onSaved, onRegisterInvoice, acco
       toast.success(`Pago registrado${financeConnectionEnabled ? ' en Finanzas' : ''}${accountingConnectionEnabled ? ' y Contabilidad' : ''}.`, { id: saveToastId });
       if (evidenceError) toast.error(`El pago quedó registrado, pero ${evidenceError.toLowerCase()}`);
       onSaved();
-      onClose();
+      closePaymentDialog();
     } catch (error: any) {
       toast.error(error?.response?.data?.message || error?.message || 'No se pudo registrar el pago.', { id: saveToastId });
     } finally {
@@ -462,7 +479,7 @@ function ReceiptPaymentDialog({ draft, onClose, onSaved, onRegisterInvoice, acco
     : 0;
 
   return (
-    <Dialog open={Boolean(draft)} onOpenChange={(open) => { if (!open && !saving && !invoiceSaving) onClose(); }}>
+    <Dialog open={Boolean(draft)} onOpenChange={(open) => { if (!open && !saving && !invoiceSaving) closePaymentDialog(); }}>
       <DialogContent className="flex max-h-[92vh] w-[calc(100vw-1rem)] !max-w-3xl flex-col overflow-hidden rounded-3xl border-primary/20 bg-background p-0 shadow-2xl">
         <DialogHeader className="border-b border-border/60 bg-gradient-to-br from-primary/[0.12] via-background to-primary/[0.05] px-6 py-6 pr-12" data-tour="purchases-payment-title">
           <DialogTitle className="flex items-center gap-3 nh-module-title">
@@ -492,13 +509,23 @@ function ReceiptPaymentDialog({ draft, onClose, onSaved, onRegisterInvoice, acco
                   <p className="mt-1 text-[11px] text-muted-foreground">{draft.invoiceOnly ? 'Registra el número, las fechas y la evidencia. El saldo quedará pendiente de pago.' : 'Registra la factura del proveedor y su evidencia aquí.'}</p>
                 </div>
                 <div className="grid gap-3 sm:grid-cols-2">
-                  <div><p className="mb-1 text-[10px] font-black uppercase tracking-widest">Número de factura *</p><Input value={invoiceNumber} onChange={(event) => setInvoiceNumber(event.target.value)} disabled={invoiceSaving} placeholder="Ej. A-001-000123" className="h-10 font-mono" /></div>
+                  <div>
+                    <Label htmlFor="receipt-invoice-number" required className="mb-1 text-[10px] font-black uppercase tracking-widest">Número de factura</Label>
+                    <Input id="receipt-invoice-number" value={invoiceNumber} onChange={(event) => setInvoiceNumber(event.target.value)} disabled={invoiceSaving} required aria-invalid={invoiceValidationAttempted && !invoiceNumber.trim()} aria-describedby={invoiceValidationAttempted && !invoiceNumber.trim() ? 'receipt-invoice-number-error' : undefined} placeholder="Ej. A-001-000123" className="h-10 font-mono" />
+                    {invoiceValidationAttempted && !invoiceNumber.trim() && <p id="receipt-invoice-number-error" role="alert" className="mt-1 text-[10px] text-destructive">Ingresa el número de factura del proveedor.</p>}
+                  </div>
                   <div><p className="mb-1 text-[10px] font-black uppercase tracking-widest">Fecha factura</p><Input type="date" value={invoiceDate} onChange={(event) => setInvoiceDate(event.target.value)} disabled={invoiceSaving} className="h-10" /></div>
                   <div><p className="mb-1 text-[10px] font-black uppercase tracking-widest">Vencimiento</p><Input type="date" value={invoiceDueDate} onChange={(event) => setInvoiceDueDate(event.target.value)} disabled={invoiceSaving} className="h-10" /></div>
                   <div><p className="mb-1 text-[10px] font-black uppercase tracking-widest">Total factura · calculado ({getReceiptCurrencyMeta(draft.currency).code})</p><Input value={formatReceiptAmount(draft.amount, draft.currency)} readOnly aria-readonly="true" disabled={invoiceSaving} className="h-10 border-primary/30 bg-primary/5 font-black text-primary" /></div>
                 </div>
-                <div><p className="mb-1 text-[10px] font-black uppercase tracking-widest">Evidencia de factura *</p><Input type="file" multiple accept="application/pdf,image/*,.pdf" onChange={(event) => setInvoiceFiles(Array.from(event.target.files || []))} disabled={invoiceSaving} className="h-10 bg-background text-xs" /><p className="mt-1 text-[10px] text-muted-foreground">Imagen original hasta 10 MB; se optimiza. PDF hasta 10 MB.</p>{invoiceFiles.length > 0 && <p className="mt-1 flex items-center gap-1 truncate text-[10px] font-bold text-primary"><Paperclip className="size-3 shrink-0" />{invoiceFiles.map((file) => file.name).join(', ')}</p>}</div>
-                <Button onClick={handleRegisterInvoice} disabled={!canRegisterInvoice || invoiceSaving || invoiceFiles.length === 0} className="h-10 w-full rounded-xl font-black uppercase tracking-widest">{invoiceSaving ? 'Registrando factura...' : (draft.invoiceOnly ? 'Registrar compra a crédito' : 'Registrar evidencia y continuar')}</Button>
+                <div>
+                  <Label htmlFor="receipt-invoice-evidence" required className="mb-1 text-[10px] font-black uppercase tracking-widest">Evidencia de factura</Label>
+                  <Input id="receipt-invoice-evidence" type="file" multiple accept="application/pdf,image/*,.pdf" onChange={(event) => setInvoiceFiles(Array.from(event.target.files || []))} disabled={invoiceSaving} required aria-invalid={invoiceValidationAttempted && invoiceFiles.length === 0} aria-describedby={invoiceValidationAttempted && invoiceFiles.length === 0 ? 'receipt-invoice-evidence-error' : undefined} className="h-10 bg-background text-xs" />
+                  {invoiceValidationAttempted && invoiceFiles.length === 0 && <p id="receipt-invoice-evidence-error" role="alert" className="mt-1 text-[10px] text-destructive">Adjunta al menos una imagen o PDF de la factura.</p>}
+                  <p className="mt-1 text-[10px] text-muted-foreground">Imagen original hasta 10 MB; se optimiza. PDF hasta 10 MB.</p>
+                  {invoiceFiles.length > 0 && <p className="mt-1 flex items-center gap-1 truncate text-[10px] font-bold text-primary"><Paperclip className="size-3 shrink-0" />{invoiceFiles.map((file) => file.name).join(', ')}</p>}
+                </div>
+                <Button onClick={handleRegisterInvoice} disabled={!canRegisterInvoice || invoiceSaving} className="h-10 w-full rounded-xl font-black uppercase tracking-widest">{invoiceSaving ? 'Registrando factura...' : (draft.invoiceOnly ? 'Registrar compra a crédito' : 'Registrar evidencia y continuar')}</Button>
               </div>
             ) : (
               <div className="grid gap-4 sm:grid-cols-2">
@@ -533,12 +560,20 @@ function ReceiptPaymentDialog({ draft, onClose, onSaved, onRegisterInvoice, acco
                             const nextRate = paymentLineRate(nextCurrency);
                             return { ...item, amount: Number(convertBetweenCurrencies(Number(item.amount || 0), item.currency, nextCurrency, previousRate, nextRate).toFixed(getCurrencyDecimalPlaces())), currency: nextCurrency, exchangeRate: nextRate, bankAccountId: undefined };
                           }))} />
-                          <div><p className="mb-1 text-[9px] font-black uppercase tracking-widest text-muted-foreground">Monto ({line.currency})</p><Input type="text" inputMode="decimal" min="0" value={formatDecimalInput(line.amount) || ''} onChange={(event) => setPaymentLines((current) => current.map((item, itemIndex) => itemIndex === index ? { ...item, amount: normalizeDecimalInput(event.target.value) } : item))} disabled={saving} className="h-10 font-black tabular-nums" currencyPrecision /></div>
+                          <div>
+                            <Label htmlFor={`receipt-payment-amount-${index}`} required className="mb-1 text-[9px] font-black uppercase tracking-widest text-muted-foreground">Monto ({line.currency})</Label>
+                            <Input id={`receipt-payment-amount-${index}`} type="text" inputMode="decimal" min="0" required aria-invalid={paymentValidationAttempted && !(Number(line.amount) > 0)} aria-describedby={paymentValidationAttempted && !(Number(line.amount) > 0) ? `receipt-payment-amount-${index}-error` : undefined} value={formatDecimalInput(line.amount) || ''} onChange={(event) => setPaymentLines((current) => current.map((item, itemIndex) => itemIndex === index ? { ...item, amount: normalizeDecimalInput(event.target.value) } : item))} disabled={saving} className="h-10 font-black tabular-nums" currencyPrecision />
+                            {paymentValidationAttempted && !(Number(line.amount) > 0) && <p id={`receipt-payment-amount-${index}-error`} role="alert" className="mt-1 text-[10px] text-destructive">Ingresa un monto mayor que cero para esta forma de pago.</p>}
+                          </div>
                           <Button type="button" variant="ghost" size="icon" disabled={paymentLines.length === 1 || saving} onClick={() => setPaymentLines((current) => current.filter((_, itemIndex) => itemIndex !== index))} aria-label="Eliminar forma de pago" className="size-10 shrink-0 text-muted-foreground hover:text-rose-500"><Trash2 className="size-4" /></Button>
                           </div>
                         {draft && line.currency !== draftCurrency && <p className="mt-1 text-[10px] font-bold text-muted-foreground">Equivalente factura: {formatExplicitAmount(getPaymentLineDocumentAmount(line, draftCurrency, draftRate, baseCurrency, convertBetweenCurrencies), draftCurrency)}</p>}
-                        {isBankPaymentMethod(line.method, true) && (accountingConnectionEnabled || financeConnectionEnabled) && <BankAccountSelect currency={line.currency} className="mt-2" value={line.bankAccountId} onChange={(bankAccountId) => setPaymentLines((current) => current.map((item, itemIndex) => itemIndex === index ? { ...item, bankAccountId } : item))} label={accountingConnectionEnabled ? "Banco del pago" : "Banco opcional para el movimiento financiero"} />}
-                        {hasPaymentReferenceField(line.method) && <div className="mt-2"><p className="mb-1 text-[9px] font-black uppercase tracking-widest text-muted-foreground">Referencia *</p><Input value={line.reference || ''} onChange={(event) => setPaymentLines((current) => current.map((item, itemIndex) => itemIndex === index ? { ...item, reference: event.target.value } : item))} disabled={saving} placeholder="Transferencia, voucher, cheque..." required={requiresPaymentReference(line.method)} className="h-10 font-mono" /></div>}
+                        {isBankPaymentMethod(line.method, true) && (accountingConnectionEnabled || financeConnectionEnabled) && <BankAccountSelect currency={line.currency} className="mt-2" value={line.bankAccountId} onChange={(bankAccountId) => setPaymentLines((current) => current.map((item, itemIndex) => itemIndex === index ? { ...item, bankAccountId } : item))} label={accountingConnectionEnabled ? "Banco del pago" : "Banco opcional para el movimiento financiero"} required={accountingConnectionEnabled} invalid={paymentValidationAttempted && accountingConnectionEnabled && !line.bankAccountId} errorMessage="Selecciona el banco de este pago." />}
+                        {hasPaymentReferenceField(line.method) && <div className="mt-2">
+                          <Label htmlFor={`receipt-payment-reference-${index}`} required={requiresPaymentReference(line.method)} className="mb-1 text-[9px] font-black uppercase tracking-widest text-muted-foreground">Referencia</Label>
+                          <Input id={`receipt-payment-reference-${index}`} value={line.reference || ''} onChange={(event) => setPaymentLines((current) => current.map((item, itemIndex) => itemIndex === index ? { ...item, reference: event.target.value } : item))} disabled={saving} placeholder="Transferencia, voucher, cheque..." required={requiresPaymentReference(line.method)} aria-invalid={paymentValidationAttempted && requiresPaymentReference(line.method) && !String(line.reference || '').trim()} aria-describedby={paymentValidationAttempted && requiresPaymentReference(line.method) && !String(line.reference || '').trim() ? `receipt-payment-reference-${index}-error` : undefined} className="h-10 font-mono" />
+                          {paymentValidationAttempted && requiresPaymentReference(line.method) && !String(line.reference || '').trim() && <p id={`receipt-payment-reference-${index}-error`} role="alert" className="mt-1 text-[10px] text-destructive">Ingresa la referencia para este pago.</p>}
+                        </div>}
                       </div>
                     ))}
                     <Button type="button" variant="outline" className="w-full border-dashed text-[10px] font-black uppercase tracking-widest" onClick={() => setPaymentLines((current) => [...current, { method: 'CARD', amount: 0, currency: displayCurrency === 'USD' ? 'USD' : 'NIO', exchangeRate: paymentLineRate(displayCurrency === 'USD' ? 'USD' : 'NIO') }])} disabled={saving}><Plus className="mr-2 size-4" /> Agregar pago mixto</Button>
@@ -548,15 +583,22 @@ function ReceiptPaymentDialog({ draft, onClose, onSaved, onRegisterInvoice, acco
                     {draft && <>
                       <div className="flex items-center justify-between"><span>Equivalente factura aplicado</span><span className="text-primary">{formatExplicitAmount(convertBetweenCurrencies(paymentBaseAmount, baseCurrency, draftCurrency, 1, draftRate), draftCurrency)}</span></div>
                       <div className="flex items-center justify-between text-xs">
-                        <span className={paymentExceedsDraftBalance ? 'text-destructive' : paymentRemainingBase > 0.01 ? 'text-amber-600' : 'text-muted-foreground'}>{paymentExceedsDraftBalance ? 'Exceso sobre el saldo' : paymentRemainingBase > 0.01 ? 'Saldo pendiente después del pago' : 'Saldo cubierto'}</span>
-                        <span className={cn('font-black tabular-nums', paymentExceedsDraftBalance ? 'text-destructive' : paymentRemainingBase > 0.01 ? 'text-amber-600' : 'text-emerald-600 dark:text-emerald-400')}>{formatConvertedAmount(paymentExceedsDraftBalance ? paymentBaseAmount - draftBaseAmount : paymentRemainingBase, baseCurrency)}</span>
+                        <span className={paymentExceedsDraftBalance ? 'text-amber-700 dark:text-amber-300' : paymentRemainingBase > 0.01 ? 'text-amber-600' : 'text-muted-foreground'}>{paymentExceedsDraftBalance ? 'Exceso sobre el saldo pendiente' : paymentRemainingBase > 0.01 ? 'Saldo pendiente después del pago' : 'Saldo cubierto'}</span>
+                        <span className={cn('font-black tabular-nums', paymentExceedsDraftBalance ? 'text-amber-700 dark:text-amber-300' : paymentRemainingBase > 0.01 ? 'text-amber-600' : 'text-emerald-600 dark:text-emerald-400')}>{formatConvertedAmount(paymentExceedsDraftBalance ? paymentBaseAmount - draftBaseAmount : paymentRemainingBase, baseCurrency)}</span>
                       </div>
+                      {paymentExceedsDraftBalance && <p role="status" aria-live="polite" className="text-[10px] font-medium text-amber-700 dark:text-amber-300">Reduce el pago al saldo pendiente de {formatReceiptAmount(Number(draft.amount), draft.currency)} para poder confirmarlo.</p>}
                       <div className="flex items-center justify-between"><span>Equivalente restante en factura</span><span className="text-foreground">{formatExplicitAmount(paymentRemainingInDraftCurrency, draftCurrency)}</span></div>
                     </>}
                   </div>
                   <p className="mt-1 text-[10px] text-muted-foreground">Máximo: {formatReceiptAmount(Number(draft.amount), draft.currency)} · Efectivo no requiere referencia.</p>
                 </div>
-                <div className="sm:col-span-2"><p className="mb-1 text-[10px] font-black uppercase tracking-widest">Evidencias del pago *</p><Input type="file" multiple accept="application/pdf,image/*,.pdf,.doc,.docx,.xls,.xlsx" onChange={(event) => setFiles(Array.from(event.target.files || []))} disabled={saving} className="h-10 bg-background text-xs" /><p className="mt-1 text-[10px] text-muted-foreground">Imágenes originales hasta 10 MB; se optimizan. Documentos hasta 10 MB.</p>{files.length > 0 && <p className="mt-1 flex items-center gap-1 truncate text-[10px] font-bold text-primary"><Paperclip className="size-3 shrink-0" />{files.map((file) => file.name).join(', ')}</p>}</div>
+                <div className="sm:col-span-2">
+                  <Label htmlFor="receipt-payment-evidence" required className="mb-1 text-[10px] font-black uppercase tracking-widest">Evidencias del pago</Label>
+                  <Input id="receipt-payment-evidence" type="file" multiple required aria-invalid={paymentValidationAttempted && files.length === 0} aria-describedby={paymentValidationAttempted && files.length === 0 ? 'receipt-payment-evidence-error' : undefined} accept="application/pdf,image/*,.pdf,.doc,.docx,.xls,.xlsx" onChange={(event) => setFiles(Array.from(event.target.files || []))} disabled={saving} className="h-10 bg-background text-xs" />
+                  {paymentValidationAttempted && files.length === 0 && <p id="receipt-payment-evidence-error" role="alert" className="mt-1 text-[10px] text-destructive">Adjunta al menos una evidencia antes de registrar el pago.</p>}
+                  <p className="mt-1 text-[10px] text-muted-foreground">Imágenes originales hasta 10 MB; se optimizan. Documentos hasta 10 MB.</p>
+                  {files.length > 0 && <p className="mt-1 flex items-center gap-1 truncate text-[10px] font-bold text-primary"><Paperclip className="size-3 shrink-0" />{files.map((file) => file.name).join(', ')}</p>}
+                </div>
                 <div className="sm:col-span-2"><p className="mb-1 text-[10px] font-black uppercase tracking-widest">Notas</p><Input value={notes} onChange={(event) => setNotes(event.target.value)} disabled={saving} placeholder="Observación del pago (opcional)" className="h-10" /></div>
               </div>
             )}
@@ -565,7 +607,7 @@ function ReceiptPaymentDialog({ draft, onClose, onSaved, onRegisterInvoice, acco
         </div>
         <DialogFooter className="border-t border-border/60 bg-muted/[0.12] px-6 py-4" data-tour="purchases-payment-actions">
           <Button variant="outline" onClick={onClose} disabled={saving || invoiceSaving} className="rounded-xl font-black uppercase tracking-widest">Cancelar</Button>
-          {invoiceId && !draft?.invoiceOnly && <Button onClick={handleSubmit} disabled={!canPay || saving || !draft || !paymentLines.some((line) => Number(line.amount || 0) > 0) || paymentLines.some((line) => requiresPaymentReference(line.method) && !line.reference?.trim()) || (accountingConnectionEnabled && paymentLines.some((line) => isBankPaymentMethod(line.method, true) && !line.bankAccountId)) || paymentLines.reduce((sum, line) => sum + toBaseAmount(Number(line.amount || 0), line.currency, line.currency === baseCurrency ? 1 : Number(line.exchangeRate || globalRate)), 0) > toBaseAmount(Number(draft?.amount || 0), draft?.currency, Number(draft?.exchangeRate || globalRate || 1)) + 0.01} className="rounded-xl bg-primary font-black uppercase tracking-widest text-primary-foreground">{saving ? 'Registrando...' : 'Confirmar pago'}</Button>}
+          {invoiceId && !draft?.invoiceOnly && <Button onClick={handleSubmit} disabled={!canPay || saving || !draft} className="rounded-xl bg-primary font-black uppercase tracking-widest text-primary-foreground">{saving ? 'Registrando...' : 'Confirmar pago'}</Button>}
         </DialogFooter>
       </DialogContent>
     </Dialog>
@@ -590,15 +632,10 @@ export function RecepcionesCompraView({ data, summaryData, summaryLoading, summa
     return () => window.clearTimeout(timeout);
   }, [highlightedAlertId]);
 
-  useEffect(() => {
-    if (!targetId || !data.some((receipt) => receipt.id === targetId)) return;
-    setHighlightedAlertId(targetId);
-    setEditingId(targetId);
-    onClearTargetId?.();
-  }, [targetId, data, onClearTargetId]);
   const [statusFilter, setStatusFilter] = useState<'ALL' | 'PENDING' | 'RECEIVED' | 'WITH_INCIDENTS' | 'PAID' | 'CANCELLED'>('ALL');
-  const [pendingCancelId, setPendingCancelId] = useState<string | null>(null);
+  const [pendingCancelIds, setPendingCancelIds] = useState<string[] | null>(null);
   const [cancelReason, setCancelReason] = useState('');
+  const [cancelReasonAttempted, setCancelReasonAttempted] = useState(false);
   const [cancelLoading, setCancelLoading] = useState(false);
   const [suppliers, setSuppliers] = useState<Supplier[]>([]);
   const [orders, setOrders] = useState<PurchaseOrder[]>([]);
@@ -609,12 +646,36 @@ export function RecepcionesCompraView({ data, summaryData, summaryLoading, summa
   const [editingId, setEditingId] = useState<string | null>(null);
   const [detailReceipt, setDetailReceipt] = useState<PurchaseReceipt | null>(null);
   const [localDoc, setLocalDoc] = useState<Partial<PurchaseReceipt> | null>(null);
+  const [receiptValidationAttempted, setReceiptValidationAttempted] = useState(false);
+  const [warehouseValidationAttempted, setWarehouseValidationAttempted] = useState(false);
   const [inventoryCostOperations, setInventoryCostOperations] = useState<InventoryCostOperation[] | null>(null);
   const [paymentDraft, setPaymentDraft] = useState<ReceiptPaymentDraft | null>(null);
   const [creditDraft, setCreditDraft] = useState<{ receipt: PurchaseReceipt; invoice: any } | null>(null);
   const [creditReason, setCreditReason] = useState('');
+  const [creditCreationAttempted, setCreditCreationAttempted] = useState(false);
   const [creditQuantities, setCreditQuantities] = useState<Record<string, number>>({});
   const [creditLoading, setCreditLoading] = useState(false);
+
+  const openReceiptEditor = (id: string) => {
+    setReceiptValidationAttempted(false);
+    setWarehouseValidationAttempted(false);
+    setEditingId(id);
+  };
+
+  const closeReceiptEditor = () => {
+    setReceiptValidationAttempted(false);
+    setWarehouseValidationAttempted(false);
+    setEditingId(null);
+  };
+
+  useEffect(() => {
+    if (!targetId || !data.some((receipt) => receipt.id === targetId)) return;
+    setHighlightedAlertId(targetId);
+    setReceiptValidationAttempted(false);
+    setWarehouseValidationAttempted(false);
+    setEditingId(targetId);
+    onClearTargetId?.();
+  }, [targetId, data, onClearTargetId]);
 
   useEffect(() => {
     setSuppliers(supplierCatalog);
@@ -1046,7 +1107,7 @@ export function RecepcionesCompraView({ data, summaryData, summaryLoading, summa
       const operations = getInventoryCostOperations(response);
       if (operations.length > 0) setInventoryCostOperations(operations);
       toast.success('Recepción procesada', { id: receiveToastId });
-      setEditingId(null);
+      closeReceiptEditor();
       setDetailReceipt(null);
       onRefresh();
       void queryClient.invalidateQueries({ queryKey: ['inventory'] });
@@ -1056,18 +1117,39 @@ export function RecepcionesCompraView({ data, summaryData, summaryLoading, summa
   };
 
   const handleCancelConfirm = async () => {
-    if (!pendingCancelId || !cancelReason.trim() || !canPerform('PURCHASES_RECEIPTS', 'read') || !canPerform('PURCHASES_RECEIPTS', 'cancel')) return;
+    if (!pendingCancelIds?.length || !canPerform('PURCHASES_RECEIPTS', 'read') || !canPerform('PURCHASES_RECEIPTS', 'cancel')) return;
+    if (!cancelReason.trim()) { setCancelReasonAttempted(true); return false; }
+    const ids = pendingCancelIds;
     setCancelLoading(true);
-    const cancelToastId = toast.loading('Cancelando recepción...');
+    const cancelToastId = toast.loading(ids.length === 1 ? 'Cancelando recepción...' : `Cancelando ${ids.length} recepciones...`);
     try {
-      await purchaseReceiptsService.cancel(pendingCancelId, cancelReason.trim());
-      toast.success('Recepción cancelada', { id: cancelToastId });
-      if (editingId === pendingCancelId) setEditingId(null);
-      setPendingCancelId(null);
+      let cancelled = 0;
+      let failed = 0;
+      let firstFailure: unknown;
+      for (const id of ids) {
+        try { await purchaseReceiptsService.cancel(id, cancelReason.trim()); cancelled += 1; }
+        catch (error: unknown) { failed += 1; firstFailure ??= error; }
+      }
+      if (failed > 0) {
+        const summary = `${cancelled} recepción${cancelled === 1 ? '' : 'es'} cancelada${cancelled === 1 ? '' : 's'}; ${failed} no se pudieron cancelar.`;
+        if (classifyApiError(firstFailure) === 'TECHNICAL') {
+          toast.apiFailure(firstFailure, 'No se pudieron cancelar algunas recepciones.', {
+            id: cancelToastId,
+            description: summary,
+          });
+        } else {
+          const reason = firstFailure
+            ? getApiErrorMessage(firstFailure, 'Revisa el estado y los permisos de las recepciones pendientes.')
+            : 'Revisa el estado y los permisos de las recepciones pendientes.';
+          toast.warning(`${summary} Motivo: ${reason}`, { id: cancelToastId });
+        }
+      }
+      else toast.success(`${cancelled} recepción${cancelled === 1 ? '' : 'es'} cancelada${cancelled === 1 ? '' : 's'}.`, { id: cancelToastId });
+      if (ids.some((id) => id === editingId)) closeReceiptEditor();
+      setPendingCancelIds(null);
       setCancelReason('');
+      setCancelReasonAttempted(false);
       onRefresh();
-    } catch (error: any) {
-      toast.error(error?.response?.data?.message || error?.message || 'Error al cancelar la recepción', { id: cancelToastId });
     } finally {
       setCancelLoading(false);
     }
@@ -1126,11 +1208,13 @@ export function RecepcionesCompraView({ data, summaryData, summaryLoading, summa
     }
     setCreditDraft({ receipt, invoice });
     setCreditReason('');
+    setCreditCreationAttempted(false);
     setCreditQuantities(Object.fromEntries((receipt.items || []).map((item: any) => [item.id, 0])));
   };
 
   const handleCreateCreditFromReceipt = async () => {
     if (!creditDraft || !canPerform('PURCHASES_RECEIPTS', 'read') || !canPerform('PURCHASES_RETURNS', 'create')) return;
+    setCreditCreationAttempted(true);
     const items = Object.entries(creditQuantities)
       .map(([receiptItemId, quantity]) => ({ receiptItemId, quantity: Math.trunc(Number(quantity || 0)) }))
       .filter((item) => Number.isInteger(item.quantity) && item.quantity > 0);
@@ -1153,6 +1237,7 @@ export function RecepcionesCompraView({ data, summaryData, summaryLoading, summa
       toast.success('Nota de crédito creada como borrador', { id: createToastId });
       setCreditDraft(null);
       setCreditReason('');
+      setCreditCreationAttempted(false);
       setCreditQuantities({});
       onRefresh();
       void queryClient.invalidateQueries({ queryKey: ['purchases'] });
@@ -1169,6 +1254,7 @@ export function RecepcionesCompraView({ data, summaryData, summaryLoading, summa
       : canPerform('PURCHASES_RECEIPTS', 'read') && canPerform('PURCHASES_RECEIPTS', 'edit');
     const canReceive = canPerform('PURCHASES_RECEIPTS', 'read') && canPerform('PURCHASES_RECEIPTS', 'receive');
     if (!canEdit && !canReceive) return;
+    setReceiptValidationAttempted(true);
     if (!localDoc?.supplierId) return toast.error('Debe seleccionar un proveedor');
     if (!localDoc?.purchaseOrderId) return toast.error('Debe seleccionar una orden de compra');
     const linkedOrderForSave = orders.find((order) => String(order.id) === String(localDoc.purchaseOrderId));
@@ -1206,10 +1292,13 @@ export function RecepcionesCompraView({ data, summaryData, summaryLoading, summa
       || (existingReceived && quantitiesChanged);
     if (isReceiving) {
       const missingWarehouseItems = getItemsMissingWarehouse(itemsToSave, true);
+      setWarehouseValidationAttempted(missingWarehouseItems.length > 0);
       if (missingWarehouseItems.length > 0) {
         const labels = getWarehouseWarningLabels(itemsToSave);
         return toast.error(`Selecciona una bodega para cada producto recibido: ${labels.join(', ')}`);
       }
+    } else {
+      setWarehouseValidationAttempted(false);
     }
     const saveToastId = toast.loading(editingId === 'NEW' ? 'Registrando recepción de compra...' : 'Guardando recepción de compra...');
     try {
@@ -1232,6 +1321,8 @@ export function RecepcionesCompraView({ data, summaryData, summaryLoading, summa
       if (operations.length > 0) setInventoryCostOperations(operations);
       else if (initialOperations.length > 0) setInventoryCostOperations(initialOperations);
       setEditingId(null);
+      setReceiptValidationAttempted(false);
+      setWarehouseValidationAttempted(false);
       onRefresh();
       void queryClient.invalidateQueries({ queryKey: ['inventory'] });
     } catch (e: any) {
@@ -1428,7 +1519,7 @@ export function RecepcionesCompraView({ data, summaryData, summaryLoading, summa
 
   const paymentDialog = <ReceiptPaymentDialog draft={paymentDraft} onClose={() => setPaymentDraft(null)} onSaved={() => { onRefresh(); void queryClient.invalidateQueries({ queryKey: ['purchases'] }); }} onRegisterInvoice={registerInvoiceFromPaymentModal} accountingConnectionEnabled={accountingConnectionEnabled} financeConnectionEnabled={financeConnectionEnabled} canPay={canPerform('PURCHASES_PAYMENTS', 'read') && canPerform('PURCHASES_PAYMENTS', 'pay')} canRegisterInvoice={canPerform('PURCHASES_RECEIPTS', 'read') && canPerform('PURCHASES_RECEIPTS', 'registerInvoice')} />;
   const creditDialog = (
-    <Dialog open={Boolean(creditDraft)} onOpenChange={(open) => { if (!open && !creditLoading) { setCreditDraft(null); setCreditReason(''); setCreditQuantities({}); } }}>
+    <Dialog open={Boolean(creditDraft)} onOpenChange={(open) => { if (!open && !creditLoading) { setCreditDraft(null); setCreditReason(''); setCreditCreationAttempted(false); setCreditQuantities({}); } }}>
       <DialogContent className="w-[calc(100%-2rem)] !max-w-2xl rounded-3xl">
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2 nh-module-title">
@@ -1449,7 +1540,7 @@ export function RecepcionesCompraView({ data, summaryData, summaryLoading, summa
                 Factura origen: {creditDraft.invoice.number || 'Sin número'} · Las existencias ya recibidas no se modificarán al crear el borrador.
               </p>
             </div>
-            <div className="rounded-2xl border border-border/60 bg-muted/10 p-3">
+            <div role="group" aria-label="Artículos y cantidades a devolver" aria-required="true" aria-invalid={creditCreationAttempted && !Object.values(creditQuantities).some((quantity) => Number(quantity) > 0)} className={cn('rounded-2xl border bg-muted/10 p-3', creditCreationAttempted && !Object.values(creditQuantities).some((quantity) => Number(quantity) > 0) ? 'border-destructive' : 'border-border/60')}>
               <div className="mb-2 grid grid-cols-[minmax(0,1fr)_7rem_7rem] gap-3 px-2 text-[9px] font-black uppercase tracking-widest text-muted-foreground">
                 <span>Artículo recibido</span><span className="text-right">Recibido</span><span className="text-right">Acreditar</span>
               </div>
@@ -1485,15 +1576,13 @@ export function RecepcionesCompraView({ data, summaryData, summaryLoading, summa
                   );
                 })}
               </div>
+              {creditCreationAttempted && !Object.values(creditQuantities).some((quantity) => Number(quantity) > 0) && <p role="alert" className="mt-2 text-[10px] text-destructive">Selecciona al menos un artículo y una cantidad para devolver o ajustar.</p>}
             </div>
-            <div>
-              <p className="mb-1 text-[10px] font-black uppercase tracking-widest text-muted-foreground">Motivo de la devolución o ajuste *</p>
-              <Input value={creditReason} onChange={(event) => setCreditReason(event.target.value)} maxLength={500} placeholder="Ej. Devolución por producto dañado o faltante" disabled={creditLoading} />
-            </div>
+            <RequiredReasonField id="purchase-receipt-credit-reason" label="Motivo de la devolución o ajuste" value={creditReason} onChange={setCreditReason} attempted={creditCreationAttempted} disabled={creditLoading} placeholder="Ej. Devolución por producto dañado o faltante" errorMessage="Explica por qué se solicita la devolución o el ajuste." />
           </div>
         )}
         <DialogFooter>
-          <Button type="button" variant="outline" onClick={() => { setCreditDraft(null); setCreditReason(''); setCreditQuantities({}); }} disabled={creditLoading}>Cancelar</Button>
+          <Button type="button" variant="outline" onClick={() => { setCreditDraft(null); setCreditReason(''); setCreditCreationAttempted(false); setCreditQuantities({}); }} disabled={creditLoading}>Cancelar</Button>
           <Button type="button" onClick={() => void handleCreateCreditFromReceipt()} disabled={creditLoading} className="bg-primary font-black text-primary-foreground hover:bg-primary/90">
             {creditLoading ? 'Creando...' : 'Crear nota de crédito'}
           </Button>
@@ -1534,7 +1623,7 @@ export function RecepcionesCompraView({ data, summaryData, summaryLoading, summa
       <div className="min-w-0 max-w-full space-y-6 animate-in slide-in-from-right duration-300" data-tour="purchases-form-title">
         <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between flex-wrap gap-4">
           <div className="flex items-center gap-4">
-            <Button variant="ghost" size="icon" onClick={() => setEditingId(null)} className="rounded-full">
+            <Button variant="ghost" size="icon" onClick={closeReceiptEditor} className="rounded-full">
               <ChevronLeft className="size-5" />
             </Button>
             <div>
@@ -1582,8 +1671,12 @@ export function RecepcionesCompraView({ data, summaryData, summaryLoading, summa
               <p className="text-xs font-black uppercase tracking-widest text-foreground">Información General</p>
               <div className="grid grid-cols-1 gap-3 text-sm sm:grid-cols-2 xl:grid-cols-4">
                 <div>
-                  <p className="text-[10px] text-foreground mb-1">Proveedor</p>
+                  <Label htmlFor="receipt-supplier" required className="text-[10px] text-foreground mb-1">Proveedor</Label>
                   <Combobox 
+                    id="receipt-supplier"
+                    required
+                    aria-invalid={receiptValidationAttempted && !localDoc.supplierId}
+                    aria-describedby={receiptValidationAttempted && !localDoc.supplierId ? 'receipt-supplier-error' : undefined}
                     disabled={!canEditCurrent}
                     options={suppliers
                       .filter(s => (s.status || '').toUpperCase() === 'ACTIVE' || s.id === localDoc.supplierId)
@@ -1592,10 +1685,15 @@ export function RecepcionesCompraView({ data, summaryData, summaryLoading, summa
                     onChange={(val) => setLocalDoc({ ...localDoc, supplierId: val, purchaseOrderId: '' })}
                     placeholder="Seleccionar Proveedor"
                   />
+                  {receiptValidationAttempted && !localDoc.supplierId && <p id="receipt-supplier-error" role="alert" className="mt-1 text-[10px] text-destructive">Selecciona el proveedor de esta recepción.</p>}
                 </div>
                 <div>
-                  <p className="text-[10px] text-foreground mb-1">Orden de Compra</p>
+                  <Label htmlFor="receipt-purchase-order" required className="text-[10px] text-foreground mb-1">Orden de Compra</Label>
                   <Combobox 
+                    id="receipt-purchase-order"
+                    required
+                    aria-invalid={receiptValidationAttempted && !localDoc.purchaseOrderId}
+                    aria-describedby={receiptValidationAttempted && !localDoc.purchaseOrderId ? 'receipt-purchase-order-error' : undefined}
                     disabled={!canEditCurrent}
                     options={orderOptions.map(c => {
                       const orderCurrencyMeta = getReceiptCurrencyMeta(c.currency);
@@ -1658,6 +1756,7 @@ export function RecepcionesCompraView({ data, summaryData, summaryLoading, summa
                      }}
                     placeholder={localDoc.supplierId ? "Seleccionar Orden" : "Seleccione un proveedor primero"}
                   />
+                  {receiptValidationAttempted && !localDoc.purchaseOrderId && <p id="receipt-purchase-order-error" role="alert" className="mt-1 text-[10px] text-destructive">Selecciona la orden de compra asociada.</p>}
                   {!isNew && (
                     <div className="mt-2 flex min-w-0 items-center gap-2 rounded-lg border border-primary/20 bg-primary/5 px-2.5 py-1.5 text-[10px] text-muted-foreground">
                       <FileText className="size-3.5 shrink-0 text-primary" />
@@ -1733,16 +1832,16 @@ export function RecepcionesCompraView({ data, summaryData, summaryLoading, summa
             </div>
 
             {itemsMissingWarehouse.length > 0 && (
-              <div role="alert" aria-live="polite" className="mb-4 flex flex-col gap-3 rounded-2xl border-2 border-rose-500/55 bg-rose-500/[0.07] p-4 shadow-sm shadow-rose-500/10 sm:flex-row sm:items-start">
-                <div className="flex size-10 shrink-0 items-center justify-center rounded-xl bg-rose-700 text-white shadow-sm shadow-rose-700/30">
+              <div role="status" aria-live="polite" className="mb-4 flex flex-col gap-3 rounded-2xl border border-amber-500/35 bg-amber-500/[0.06] p-4 sm:flex-row sm:items-start">
+                <div className="flex size-10 shrink-0 items-center justify-center rounded-xl bg-amber-500/15 text-amber-700 dark:text-amber-300">
                   <AlertTriangle className="size-5" />
                 </div>
                 <div className="min-w-0">
-                  <p className="text-[11px] font-black uppercase tracking-[0.12em] text-rose-600 dark:text-rose-400">Bodega obligatoria por producto</p>
+                  <p className="text-[11px] font-black uppercase tracking-[0.12em] text-amber-700 dark:text-amber-300">Selecciona la bodega de destino</p>
                   <p className="mt-1 text-xs font-semibold text-foreground">Selecciona una bodega para cada producto antes de registrar cantidades recibidas.</p>
                   <p className="mt-1 text-[10px] text-muted-foreground">El sistema necesita saber en qué bodega ingresará la existencia y actualizará el costo promedio.</p>
                   <div className="mt-2 flex flex-wrap gap-1.5">
-                    {itemsMissingWarehouse.map((item: any, index: number) => <Badge key={`${item.id || index}-warehouse-warning`} variant="outline" className="border-rose-500/30 bg-background/70 text-[9px] font-bold text-rose-600 dark:text-rose-400">{item.description || item.name || item.code || `Producto ${index + 1}`}</Badge>)}
+                    {itemsMissingWarehouse.map((item: any, index: number) => <Badge key={`${item.id || index}-warehouse-warning`} variant="outline" className="border-amber-500/30 bg-background/70 text-[9px] font-bold text-amber-700 dark:text-amber-300">{item.description || item.name || item.code || `Producto ${index + 1}`}</Badge>)}
                   </div>
                 </div>
               </div>
@@ -1758,7 +1857,7 @@ export function RecepcionesCompraView({ data, summaryData, summaryLoading, summa
                 const missingWarehouse = item.stockApplies !== false && !String(item.warehouseId || '').trim();
                 const lineAmounts = calculateReceiptLineAmounts(item);
                 return (
-                <div key={item.id || idx} className={cn('group relative min-w-0 rounded-2xl border-2 border-border/80 bg-card p-4 shadow-sm ring-1 ring-border/20 backdrop-blur-sm transition-all duration-200', missingWarehouse ? 'border-rose-500/70 bg-rose-500/[0.045] hover:border-rose-500' : rechazado ? 'border-amber-500/25 bg-amber-500/[0.03] hover:border-amber-500/45' : faltante ? 'border-orange-500/30 bg-orange-500/5 hover:border-orange-500/50' : 'hover:border-primary/50 hover:shadow-md')}>
+                <div key={item.id || idx} className={cn('group relative min-w-0 rounded-2xl border-2 border-border/80 bg-card p-4 shadow-sm ring-1 ring-border/20 backdrop-blur-sm transition-all duration-200', receiptValidationAttempted && missingWarehouse ? 'border-destructive bg-destructive/[0.035]' : rechazado ? 'border-amber-500/25 bg-amber-500/[0.03] hover:border-amber-500/45' : faltante ? 'border-orange-500/30 bg-orange-500/5 hover:border-orange-500/50' : 'hover:border-primary/50 hover:shadow-md')}>
                   {((faltante || rechazado) && !isNew) && (
                     <div className="flex items-center gap-1.5 mb-2">
                       {faltante && <Badge variant="outline" className="text-[8px] font-black uppercase px-1.5 py-0 border-none bg-amber-500/10 text-amber-500"><ArrowDown className="size-2.5 mr-1" /> Faltante: {qOrdered - qReceived} uds.</Badge>}
@@ -1974,10 +2073,13 @@ export function RecepcionesCompraView({ data, summaryData, summaryLoading, summa
                     </div>
                     <div className="col-span-1 min-w-0 sm:col-span-2 xl:col-span-5">
                       <div className="mb-1 flex items-center gap-2">
-                        <p className={cn('text-[9px] font-black uppercase tracking-widest', missingWarehouse ? 'text-rose-600 dark:text-rose-400' : 'text-foreground')}>Bodega destino *</p>
-                        {missingWarehouse && <span className="rounded-full bg-rose-700 px-1.5 py-0.5 text-[8px] font-black uppercase tracking-wider text-white">Requerido</span>}
+                        <Label htmlFor={`receipt-item-warehouse-${idx}`} required className="text-[9px] font-black uppercase tracking-widest">Bodega destino</Label>
                       </div>
                       <Combobox
+                        id={`receipt-item-warehouse-${idx}`}
+                        required
+                        aria-invalid={warehouseValidationAttempted && missingWarehouse}
+                        aria-describedby={warehouseValidationAttempted && missingWarehouse ? `receipt-item-warehouse-${idx}-error` : undefined}
                         disabled={!canEditCurrent && !canChangeReceivingDetails}
                         options={warehouses
                           .filter((w) => (w as any)?.isActive !== false)
@@ -1988,9 +2090,10 @@ export function RecepcionesCompraView({ data, summaryData, summaryLoading, summa
                           }))}
                         value={item.warehouseId || ''}
                         onChange={(val) => handleItemChange(idx, 'warehouseId', val)}
-                        className={missingWarehouse ? 'border-2 border-rose-500 bg-rose-500/5 text-rose-700 shadow-sm dark:text-rose-300' : ''}
+                        className={warehouseValidationAttempted && missingWarehouse ? 'border-2 border-destructive bg-destructive/5 text-destructive shadow-sm' : ''}
                         placeholder="Seleccionar bodega destino"
                       />
+                      {warehouseValidationAttempted && missingWarehouse && <p id={`receipt-item-warehouse-${idx}-error`} role="alert" className="mt-1 text-[10px] text-destructive">Selecciona la bodega donde ingresará este producto.</p>}
                     </div>
                   </div>
                   <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-end">
@@ -2084,7 +2187,7 @@ export function RecepcionesCompraView({ data, summaryData, summaryLoading, summa
             <div className="relative flex-1 min-w-0"><Search className="absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground/40" /><Input placeholder="Buscar..." className="pl-9 h-10 w-full bg-background/50 border-border/50 rounded-xl text-xs sm:w-80" value={searchTerm} onChange={e => { setSearchTerm(e.target.value); onSearchChange?.(e.target.value); }} /></div>
             {purchaseAlert && <PurchaseAlertsButton alert={purchaseAlert} onItemSelect={setHighlightedAlertId} />}
             {canPerform('PURCHASES_RECEIPTS', 'create') && (
-              <Button onClick={() => setEditingId('NEW')} className="w-full sm:w-auto bg-primary hover:bg-primary/90 text-primary-foreground font-black uppercase text-[10px] tracking-widest px-4 h-10 rounded-xl gap-2"><Plus className="size-4" /> Nueva Recepción</Button>
+              <Button onClick={() => openReceiptEditor('NEW')} className="w-full sm:w-auto bg-primary hover:bg-primary/90 text-primary-foreground font-black uppercase text-[10px] tracking-widest px-4 h-10 rounded-xl gap-2"><Plus className="size-4" /> Nueva Recepción</Button>
             )}
           </div>
         </div>
@@ -2095,23 +2198,9 @@ export function RecepcionesCompraView({ data, summaryData, summaryLoading, summa
               return !id.startsWith('new-') && Boolean(receipt) && getReceiptDisplayStatus(receipt as PurchaseReceipt) === 'PENDING';
             });
             if (validIds.length === 0) return;
-            const cancelToastId = toast.loading(`Cancelando ${validIds.length} recepción${validIds.length === 1 ? '' : 'es'}...`);
-            let cancelled = 0;
-            let failed = 0;
-            for (const id of validIds) {
-              try {
-                await purchaseReceiptsService.cancel(id, 'Cancelación masiva');
-                cancelled += 1;
-              } catch {
-                failed += 1;
-              }
-            }
-            if (failed > 0) {
-              toast.error(`${cancelled} recepción${cancelled === 1 ? '' : 'es'} cancelada${cancelled === 1 ? '' : 's'}; ${failed} no se pudieron cancelar.`, { id: cancelToastId });
-            } else {
-              toast.success(`${cancelled} recepción${cancelled === 1 ? '' : 'es'} cancelada${cancelled === 1 ? '' : 's'}.`, { id: cancelToastId });
-            }
-            if (cancelled > 0) onRefresh();
+            setCancelReason('');
+            setCancelReasonAttempted(false);
+            setPendingCancelIds(validIds);
           } : undefined}
           actions={(row) => {
             const receiptStatus = getReceiptDisplayStatus(row);
@@ -2144,7 +2233,7 @@ export function RecepcionesCompraView({ data, summaryData, summaryLoading, summa
               && canPerform('PURCHASES_RECEIPTS', 'registerInvoice');
             return (
               <div className="flex min-w-max items-center justify-end gap-1" onPointerDown={(event) => event.stopPropagation()} onClick={(event) => event.stopPropagation()}>
-                <Button title="Ver detalle completo" aria-label={`Ver detalle completo de ${row.number || 'recepción'}`} variant="ghost" size="icon" className="size-8 shrink-0 rounded-lg text-muted-foreground hover:bg-muted hover:text-foreground" onClick={() => { setDetailReceipt(null); setEditingId(String(row.id)); }}>
+                <Button title="Ver detalle completo" aria-label={`Ver detalle completo de ${row.number || 'recepción'}`} variant="ghost" size="icon" className="size-8 shrink-0 rounded-lg text-muted-foreground hover:bg-muted hover:text-foreground" onClick={() => { setDetailReceipt(null); openReceiptEditor(String(row.id)); }}>
                   <Eye className="size-4" />
                 </Button>
                 {canReceiveRow && (
@@ -2154,7 +2243,7 @@ export function RecepcionesCompraView({ data, summaryData, summaryLoading, summa
                     variant="ghost"
                     size="icon"
                     className="size-8 shrink-0 rounded-lg text-muted-foreground hover:bg-muted hover:text-foreground"
-                    onClick={() => setEditingId(String(row.id))}
+                    onClick={() => openReceiptEditor(String(row.id))}
                   >
                     <PackageCheck className="size-4" />
                   </Button>
@@ -2215,7 +2304,7 @@ export function RecepcionesCompraView({ data, summaryData, summaryLoading, summa
                     variant="ghost"
                     size="icon"
                     className="size-8 shrink-0 rounded-lg text-muted-foreground hover:bg-muted hover:text-foreground"
-                    onClick={() => { setPendingCancelId(row.id); setCancelReason(''); }}
+                    onClick={() => { setPendingCancelIds([row.id]); setCancelReason(''); setCancelReasonAttempted(false); }}
                   >
                     <Ban className="size-4" />
                   </Button>
@@ -2264,12 +2353,12 @@ export function RecepcionesCompraView({ data, summaryData, summaryLoading, summa
             && canPerform('PURCHASES_RECEIPTS', 'read')
             && canPerform('PURCHASES_RECEIPTS', 'registerInvoice');
           return <>
-            {canReceiveRow && <Button type="button" className="rounded-xl bg-primary text-primary-foreground" onClick={() => { setDetailReceipt(null); setEditingId(detailReceipt.id); }}><PackageCheck className="mr-2 size-4" />Recepcionar</Button>}
+            {canReceiveRow && <Button type="button" className="rounded-xl bg-primary text-primary-foreground" onClick={() => { setDetailReceipt(null); openReceiptEditor(detailReceipt.id); }}><PackageCheck className="mr-2 size-4" />Recepcionar</Button>}
             {canAccessInvoiceAction && <Button type="button" variant="outline" className="rounded-xl" onClick={() => { setDetailReceipt(null); openPaymentModal(detailReceipt, undefined, true); }}><FileText className="mr-2 size-4" />Registrar compra a crédito</Button>}
             {canAccessPaymentAction && <Button type="button" variant="outline" className="rounded-xl" onClick={() => { setDetailReceipt(null); openPaymentModal(detailReceipt, payableInvoice); }}><Banknote className="mr-2 size-4" />Registrar pago</Button>}
             {canAccessCreditAction && <Button type="button" variant="outline" className={cn('rounded-xl', creditBlockedReason && 'cursor-not-allowed opacity-50')} disabled={Boolean(creditBlockedReason)} onClick={() => openReceiptCredit(detailReceipt, activeInvoice)}><Send className="mr-2 size-4" />Crear nota de crédito</Button>}
             {needsInventorySync && canPerform('PURCHASES_RECEIPTS', 'read') && canPerform('PURCHASES_RECEIPTS', 'retryInventory') && <Button type="button" variant="outline" className="rounded-xl" onClick={() => { setDetailReceipt(null); void handleRepairInventory(detailReceipt); }}><RefreshCw className="mr-2 size-4" />Reintentar inventario</Button>}
-            {canPerform('PURCHASES_RECEIPTS', 'read') && canPerform('PURCHASES_RECEIPTS', 'cancel') && receiptStatus === 'PENDING' && <Button type="button" variant="outline" className="rounded-xl border-rose-500/30 text-rose-600 hover:bg-rose-500/10 dark:text-rose-400" onClick={() => { setDetailReceipt(null); setPendingCancelId(detailReceipt.id); setCancelReason(''); }}><Ban className="mr-2 size-4" />Cancelar</Button>}
+            {canPerform('PURCHASES_RECEIPTS', 'read') && canPerform('PURCHASES_RECEIPTS', 'cancel') && receiptStatus === 'PENDING' && <Button type="button" variant="outline" className="rounded-xl border-rose-500/30 text-rose-600 hover:bg-rose-500/10 dark:text-rose-400" onClick={() => { setDetailReceipt(null); setPendingCancelIds([detailReceipt.id]); setCancelReason(''); setCancelReasonAttempted(false); }}><Ban className="mr-2 size-4" />Cancelar</Button>}
           </>;
         })() : undefined}
         onDownloadPdf={canPerform('PURCHASES_RECEIPTS', 'export') ? (format) => detailReceipt ? void handleDownloadReceiptPdf(detailReceipt, format) : undefined : undefined}
@@ -2412,27 +2501,16 @@ export function RecepcionesCompraView({ data, summaryData, summaryLoading, summa
       </Dialog>
 
       <ConfirmDialog
-        open={pendingCancelId !== null}
-        onOpenChange={(open) => { if (!open) { setPendingCancelId(null); setCancelReason(''); } }}
-        title="¿Cancelar recepción?"
+        open={pendingCancelIds !== null}
+        onOpenChange={(open) => { if (!open && !cancelLoading) { setPendingCancelIds(null); setCancelReason(''); setCancelReasonAttempted(false); } }}
+        title={pendingCancelIds?.length === 1 ? '¿Cancelar recepción?' : `¿Cancelar ${pendingCancelIds?.length ?? ''} recepciones?`}
         description="La recepción se conservará para auditoría, pero quedará cancelada y ya no podrá continuar al inventario. Esta acción no se puede deshacer."
-        confirmLabel="Cancelar recepción"
+        confirmLabel={pendingCancelIds?.length === 1 ? 'Cancelar recepción' : 'Cancelar recepciones'}
         variant="destructive"
         loading={cancelLoading}
-        disabled={!cancelReason.trim()}
         onConfirm={handleCancelConfirm}
-      >
-        <div className="mt-4">
-          <label className="mb-1 block text-sm font-medium text-foreground">Motivo de cancelación *</label>
-          <textarea
-            className="w-full resize-none rounded-xl border border-border bg-background px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary/20"
-            rows={3}
-            placeholder="Ej.: recepción duplicada, orden cancelada, error del proveedor..."
-            value={cancelReason}
-            onChange={(event) => setCancelReason(event.target.value)}
-          />
-        </div>
-      </ConfirmDialog>
+        children={<RequiredReasonField id="purchase-receipt-cancel-reason" label="Motivo de cancelación" value={cancelReason} onChange={setCancelReason} attempted={cancelReasonAttempted} disabled={cancelLoading} placeholder="Ej.: recepción duplicada, orden cancelada, error del proveedor…" />}
+      />
     </div>
   );
 }

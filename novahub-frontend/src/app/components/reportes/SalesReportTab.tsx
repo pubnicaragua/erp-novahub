@@ -844,7 +844,7 @@ export const SalesReportTab = forwardRef<ReportExportRef, ReportProps>(({ dateRa
 
         showPdfInBrowserPreview(doc.output('blob'), buildReportDownloadFileName(['reporte_ventas'], 'pdf', dateRange));
         toast.success("PDF generado exitosamente");
-      } catch (e: any) { console.error(e); toast.error(e?.response?.data?.message || e?.message || "Error al generar PDF"); }
+      } catch (e: any) { console.error(e); toast.apiFailure(e, 'No se pudo generar el PDF del reporte de ventas.'); }
     },
     exportExcel: async () => {
       try {
@@ -944,7 +944,7 @@ export const SalesReportTab = forwardRef<ReportExportRef, ReportProps>(({ dateRa
 
         await downloadExcelWorkbook(wb, buildReportDownloadFileName(['reporte_ventas'], 'xlsx', dateRange));
         toast.success("Excel generado exitosamente");
-      } catch (e: any) { console.error(e); toast.error(e?.response?.data?.message || e?.message || "Error al generar Excel"); }
+      } catch (e: any) { console.error(e); toast.apiFailure(e, 'No se pudo generar el Excel del reporte de ventas.'); }
     }
   }));
 

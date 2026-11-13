@@ -112,7 +112,7 @@ export function CustomerDetailsModal({ customer, open, onOpenChange }: CustomerD
       setTransactions(all);
     } catch (error) {
       console.error('Error fetching customer history:', error);
-      toast.error('Error al sincronizar transacciones');
+      toast.apiFailure(error, 'No se pudo cargar el historial de transacciones del cliente.');
     } finally {
       setLoading(false);
     }
@@ -141,7 +141,7 @@ export function CustomerDetailsModal({ customer, open, onOpenChange }: CustomerD
       });
       toast.success('Estado de cuenta exportado');
     } catch (error) {
-      toast.error('Error al generar PDF');
+      toast.apiFailure(error, 'No se pudo generar el PDF del estado de cuenta del cliente.');
     }
   };
 

@@ -90,7 +90,7 @@ export const DocEditor = forwardRef<DocEditorHandle, Props>(function DocEditor({
   const updateMeta = (patch: Partial<DocMeta>) => { setMeta((current) => ({ ...current, ...patch })); changeRef.current(); };
   const exportPdf = () => {
     if (!editor) return;
-    if (!printDocument(editor.getHTML(), title, meta)) toast.error('El navegador no permitió abrir la impresión.');
+    if (!printDocument(editor.getHTML(), title, meta)) toast.error('El navegador bloqueó la ventana de impresión. Permite las ventanas emergentes para este sitio y vuelve a intentarlo.');
     else toast.info('Elige «Guardar como PDF» como destino de impresión.');
   };
 
@@ -160,7 +160,7 @@ function Toolbar({ editor, readOnly, panel, onPanel, onPdf }: { editor: Editor; 
     if (!file) return;
     if (!/^image\/(png|jpe?g|gif|webp)$/i.test(file.type)) { toast.error('Usa una imagen PNG, JPG, GIF o WebP.'); return; }
     if (file.size > 8 * 1024 * 1024) { toast.error('La imagen pesa más de 8 MB.'); return; }
-    try { chain().setImage({ src: await imageToDataUri(file), alt: file.name.replace(/\.[^.]+$/, '') }).run(); } catch { toast.error('No se pudo leer la imagen.'); }
+    try { chain().setImage({ src: await imageToDataUri(file), alt: file.name.replace(/\.[^.]+$/, '') }).run(); } catch { toast.error('El archivo de imagen no pudo leerse. Comprueba que sea válido y vuelve a seleccionarlo.'); }
   };
   const textStyle = editor.getAttributes('textStyle') as { fontSize?: string | null; fontFamily?: string | null; color?: string };
   const lineHeight = (editor.getAttributes('heading').lineHeight ?? editor.getAttributes('paragraph').lineHeight ?? '') as string;

@@ -12,6 +12,7 @@ import { useLocalStorageState } from '../../hooks/useLocalStorageState';
 import { recurringInvoicesService, type RecurringInvoiceKpiSummary } from '../../services/ventas.service';
 import { toast } from '@/app/services/toast';
 import { ConfirmDialog } from '../ui/ConfirmDialog';
+import { RequiredReasonField } from '../ui/RequiredReasonField';
 import { cn } from '../ui/utils';
 import type { RecurringInvoice, Customer, Product, SalesPaginationControls } from '../../types';
 import { Badge } from '../ui/badge';
@@ -38,6 +39,7 @@ import { SalesWarehouseStockHint } from './SalesWarehouseStockHint';
 import { getSingleSalesVariant } from '../../utils/sales-stock';
 import { SalesVariantSelect } from './SalesVariantSelect';
 import { SalesProductPicker, type SalesCatalogItem } from './SalesProductPicker';
+import { SalesCustomerActionButton } from './SalesCustomerActionButton';
 import { normalizeCurrency, type SupportedCurrency } from '../../utils/currency';
 import { normalizeSalesExtraCharges, getSalesExtraChargesPayload, getSalesExtraChargesAmount, getLegacySalesExtraCostFields, type SalesExtraChargeLine } from '../../utils/salesCharges';
 
@@ -116,8 +118,10 @@ export function FacturasRecurrentesView({ data, summaryData, summaryLoading, sum
   const [searchTerm, setSearchTerm] = useState('');
   const [layoutMode, setLayoutMode] = useLocalStorageState<'table' | 'cards'>('sales-recurring-invoices-layout', 'table', 24 * 365);
   const [statusFilter, setStatusFilter] = useState<'ALL' | 'ACTIVE'>('ALL');
-  const [pendingDeleteId, setPendingDeleteId] = useState<string | null>(null);
+  const [pendingDeleteIds, setPendingDeleteIds] = useState<string[] | null>(null);
   const [deleteLoading, setDeleteLoading] = useState(false);
+  const [cancelReason, setCancelReason] = useState('');
+  const [cancelReasonAttempted, setCancelReasonAttempted] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [localDoc, setLocalDoc] = useState<any>(null);
   const [salesProductPickerItemId, setSalesProductPickerItemId] = useState<string | null>(null);
@@ -608,7 +612,7 @@ export function FacturasRecurrentesView({ data, summaryData, summaryLoading, sum
             {canEditDocument && canPerform('SALES_RECURRING', 'edit') && (
               <>
                 {!isCreating && ['ACTIVE', 'PAUSED'].includes(String(localDoc?.status || '').toUpperCase()) && canPerform('SALES_RECURRING', 'cancel') && <Button variant="outline" className="rounded-xl border-rose-500/50 text-rose-500 hover:bg-rose-700 hover:text-white font-black uppercase text-[10px] tracking-widest px-4"
-                  onClick={async () => { if (!window.confirm('¿Cancelar esta factura recurrente? Se conservarán el contrato y las facturas ya generadas.')) return; try { await recurringInvoicesService.cancel(localDoc.id); clearSalesEditorDraft(salesDraftStorageKey); localDocRef.current = null; setEditingId(null); commitLocalDoc(null); onRefresh(); } catch (e: any) { toast.error(e?.response?.data?.message || e?.message || 'No se pudo cancelar'); } }}><Ban className="size-3 mr-2" /> Cancelar</Button>}
+                  onClick={() => { setCancelReason(''); setCancelReasonAttempted(false); setPendingDeleteIds([String(localDoc.id)]); }}><Ban className="size-3 mr-2" /> Cancelar</Button>}
                 <Button className="rounded-xl bg-primary shadow-xl shadow-primary/20 text-primary-foreground font-black uppercase text-[10px] tracking-widest px-6" onClick={handleSave}>
                   Guardar Factura Recurrente
                 </Button>
@@ -728,14 +732,14 @@ export function FacturasRecurrentesView({ data, summaryData, summaryLoading, sum
             <div className="flex items-center justify-between mb-4">
               <p className="text-xs font-black uppercase tracking-widest text-muted-foreground">Productos / Servicios</p>
               <div className="flex flex-wrap gap-2">
-              {(['PRODUCT', 'SERVICE'] as const).map((itemType) => <Button key={itemType} type="button" variant="outline" size="sm" onClick={() => {
+              {(['PRODUCT', 'SERVICE'] as const).map((itemType) => <SalesCustomerActionButton key={itemType} type="button" variant="outline" size="sm" customerSelected={Boolean(localDoc?.customerId)} onClick={() => {
                 const itemId = `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
                 const newItems = [...(localDoc.items || []), { id: itemId, itemType, productId: '', serviceName: '', description: '', quantity: 1, unitPrice: 0, taxRate: 0, discount: 0, total: 0 }];
                 setLocalDoc({ ...localDoc, items: newItems });
                 setSalesProductPickerItemId(itemId);
-              }} className="h-8 text-[10px] font-black uppercase tracking-widest rounded-xl bg-primary text-primary-foreground hover:bg-primary/90 border border-primary/20"><Plus className="size-3 mr-2" /> Agregar {itemType === 'PRODUCT' ? 'Producto' : 'Servicio'}</Button>)}
-                <Button type="button" variant="outline" size="sm" onClick={() => updateRecurringExtraCharges([...normalizeSalesExtraCharges(localDoc), { id: `extra-${Date.now()}`, description: '', amount: 0 }])} className="h-8 rounded-xl text-[10px] font-black uppercase tracking-widest"><Plus className="size-3 mr-2" /> Coste extra</Button>
-                <Button type="button" variant="outline" size="sm" disabled={Number(localDoc?.deliveryAmount || 0) > 0 || Boolean(String(localDoc?.deliveryDescription || '').trim())} onClick={() => updateRecurringDelivery({ deliveryDescription: 'Delivery', deliveryAmount: 0 })} className="h-8 rounded-xl text-[10px] font-black uppercase tracking-widest"><Plus className="size-3 mr-2" /> Delivery</Button>
+              }} className="h-8 rounded-xl text-[10px] font-black uppercase tracking-widest"><Plus className="size-3 mr-2" /> Agregar {itemType === 'PRODUCT' ? 'Producto' : 'Servicio'}</SalesCustomerActionButton>)}
+                <SalesCustomerActionButton type="button" variant="outline" size="sm" customerSelected={Boolean(localDoc?.customerId)} onClick={() => updateRecurringExtraCharges([...normalizeSalesExtraCharges(localDoc), { id: `extra-${Date.now()}`, description: '', amount: 0 }])} className="h-8 rounded-xl text-[10px] font-black uppercase tracking-widest"><Plus className="size-3 mr-2" /> Coste extra</SalesCustomerActionButton>
+                <SalesCustomerActionButton type="button" variant="outline" size="sm" customerSelected={Boolean(localDoc?.customerId)} disabled={Boolean(localDoc?.customerId) && (Number(localDoc?.deliveryAmount || 0) > 0 || Boolean(String(localDoc?.deliveryDescription || '').trim()))} title={Number(localDoc?.deliveryAmount || 0) > 0 || Boolean(String(localDoc?.deliveryDescription || '').trim()) ? 'Solo se permite un delivery por factura recurrente' : undefined} onClick={() => updateRecurringDelivery({ deliveryDescription: 'Delivery', deliveryAmount: 0 })} className="h-8 rounded-xl text-[10px] font-black uppercase tracking-widest"><Plus className="size-3 mr-2" /> Delivery</SalesCustomerActionButton>
               </div>
             </div>
             <div className="space-y-2">
@@ -757,7 +761,8 @@ export function FacturasRecurrentesView({ data, summaryData, summaryLoading, sum
                           otherLocationsPermissionModule="SALES_RECURRING"
                           products={getItemCatalog(item) as SalesCatalogItem[]}
                           value={item.productId || ''}
-                          disabled={productsLoading}
+                          disabled={Boolean(localDoc?.customerId) && productsLoading}
+                          customerSelected={Boolean(localDoc?.customerId)}
                           itemType={itemType === 'SERVICE' ? 'SERVICE' : 'PRODUCT'}
                           warehouseId={localDoc?.warehouseId}
                           variantId={item.variantId}
@@ -910,7 +915,7 @@ export function FacturasRecurrentesView({ data, summaryData, summaryLoading, sum
           bulkAction="cancel"
           showSelection={canPerform('SALES_RECURRING', 'cancel')}
           isRowSelectable={(row) => canPerform('SALES_RECURRING', 'cancel') && ['ACTIVE', 'PAUSED'].includes(String(row.status || '').toUpperCase())}
-          onBulkDelete={canPerform('SALES_RECURRING', 'cancel') ? async (ids) => { if (!canPerform('SALES_RECURRING', 'cancel')) return; const cancelToastId = toast.loading(`Cancelando ${ids.length} factura${ids.length === 1 ? '' : 's'} recurrentes...`); try { for (const id of ids) { if (String(id).startsWith('new-')) continue; await recurringInvoicesService.cancel(id as string); } toast.success('Facturas recurrentes canceladas', { id: cancelToastId }); onRefresh(); } catch (e: any) { toast.error(e?.response?.data?.message || e?.message || 'No se pudieron cancelar', { id: cancelToastId }); } } : undefined}
+          onBulkDelete={canPerform('SALES_RECURRING', 'cancel') ? async (ids) => { if (!canPerform('SALES_RECURRING', 'cancel')) return; const validIds = ids.map(String).filter((id) => !id.startsWith('new-')); if (!validIds.length) return; setCancelReason(''); setCancelReasonAttempted(false); setPendingDeleteIds(validIds); } : undefined}
           columns={columns} onRowUpdate={handleUpdate} onRowClick={(row) => setDetailRecurring(row)} isLoading={loading} actionsWidth="w-28" fitContent showHorizontalControls
           layoutMode={layoutMode}
           verticalScroll
@@ -926,7 +931,7 @@ export function FacturasRecurrentesView({ data, summaryData, summaryLoading, sum
                )}
                <Button title="Ver factura recurrente completa" aria-label="Ver factura recurrente completa" variant="ghost" size="icon" className="size-8 rounded-lg text-muted-foreground hover:bg-primary/10 hover:text-primary transition-colors" onClick={() => { setDetailRecurring(null); setEditingId(row.id); }}><Eye className="size-4" /></Button>
                {canPerform('SALES_RECURRING', 'cancel') && ['ACTIVE', 'PAUSED'].includes((row.status||'').toUpperCase()) && (
-                 <Button title="Cancelar factura recurrente" aria-label="Cancelar factura recurrente" variant="ghost" size="icon" className="size-8 rounded-lg text-muted-foreground hover:bg-rose-500/10 hover:text-rose-500 transition-colors" onClick={() => setPendingDeleteId(row.id)}><Ban className="size-4" /></Button>
+                 <Button title="Cancelar factura recurrente" aria-label="Cancelar factura recurrente" variant="ghost" size="icon" className="size-8 rounded-lg text-muted-foreground hover:bg-rose-500/10 hover:text-rose-500 transition-colors" onClick={() => { setCancelReason(''); setCancelReasonAttempted(false); setPendingDeleteIds([row.id]); }}><Ban className="size-4" /></Button>
                )}
             </div>
           )}
@@ -945,26 +950,29 @@ export function FacturasRecurrentesView({ data, summaryData, summaryLoading, sum
         }}
         extraActions={detailRecurring ? <>
           {canPerform('SALES_RECURRING', String(detailRecurring.status || '').toUpperCase() === 'ACTIVE' ? 'pause' : 'resume') && ['ACTIVE', 'PAUSED'].includes(String(detailRecurring.status || '').toUpperCase()) && <Button type="button" className="rounded-xl bg-primary text-primary-foreground" onClick={() => toggleStatus(detailRecurring)}>{String(detailRecurring.status || '').toUpperCase() === 'ACTIVE' ? <Pause className="mr-2 size-4" /> : <Play className="mr-2 size-4" />}{String(detailRecurring.status || '').toUpperCase() === 'ACTIVE' ? 'Pausar' : 'Reanudar'}</Button>}
-          {canPerform('SALES_RECURRING', 'cancel') && ['ACTIVE', 'PAUSED'].includes(String(detailRecurring.status || '').toUpperCase()) && <Button type="button" variant="outline" className="rounded-xl border-rose-500/30 text-rose-600 hover:bg-rose-500/10 dark:text-rose-400" onClick={() => { setDetailRecurring(null); setPendingDeleteId(detailRecurring.id); }}><Ban className="mr-2 size-4" />Cancelar</Button>}
+          {canPerform('SALES_RECURRING', 'cancel') && ['ACTIVE', 'PAUSED'].includes(String(detailRecurring.status || '').toUpperCase()) && <Button type="button" variant="outline" className="rounded-xl border-rose-500/30 text-rose-600 hover:bg-rose-500/10 dark:text-rose-400" onClick={() => { setDetailRecurring(null); setCancelReason(''); setCancelReasonAttempted(false); setPendingDeleteIds([detailRecurring.id]); }}><Ban className="mr-2 size-4" />Cancelar</Button>}
         </> : undefined}
         onDownloadPdf={canPerform('SALES_RECURRING', 'export') ? (format) => { if (detailRecurring) void handleExportPDF(detailRecurring, format); } : undefined}
       />
       <ConfirmDialog
-              open={pendingDeleteId !== null}
-              onOpenChange={(open) => { if (!open) setPendingDeleteId(null); }}
-              title={"¿Cancelar factura recurrente?"}
+              open={pendingDeleteIds !== null}
+              onOpenChange={(open) => { if (!open && !deleteLoading) { setPendingDeleteIds(null); setCancelReason(''); setCancelReasonAttempted(false); } }}
+              title={pendingDeleteIds?.length === 1 ? '¿Cancelar factura recurrente?' : `¿Cancelar ${pendingDeleteIds?.length ?? ''} facturas recurrentes?`}
               description="La programación quedará cancelada y se conservarán tanto el contrato como las facturas ya generadas."
-              confirmLabel="Cancelar factura"
+              confirmLabel={pendingDeleteIds?.length === 1 ? 'Cancelar factura' : 'Cancelar facturas'}
               variant="destructive"
               loading={deleteLoading}
+              children={<RequiredReasonField id="sales-recurring-cancel-reason" label="Motivo de cancelación" value={cancelReason} onChange={setCancelReason} attempted={cancelReasonAttempted} disabled={deleteLoading} />}
               onConfirm={async () => {
                 if (!canPerform('SALES_RECURRING', 'cancel')) return;
-                if (!pendingDeleteId) return;
-                const deleteToastId = toast.loading('Cancelando factura recurrente...');
+                if (!pendingDeleteIds?.length) return;
+                if (!cancelReason.trim()) { setCancelReasonAttempted(true); return false; }
+                const ids = pendingDeleteIds;
+                const deleteToastId = toast.loading(ids.length === 1 ? 'Cancelando factura recurrente...' : `Cancelando ${ids.length} facturas recurrentes...`);
                 try {
                   setDeleteLoading(true);
-                   await recurringInvoicesService.cancel(pendingDeleteId);
-                   toast.success('Factura recurrente cancelada', { id: deleteToastId });
+                   for (const id of ids) await recurringInvoicesService.cancel(id, cancelReason.trim());
+                   toast.success(ids.length === 1 ? 'Factura recurrente cancelada' : 'Facturas recurrentes canceladas', { id: deleteToastId });
                    clearSalesEditorDraft(salesDraftStorageKey);
                    localDocRef.current = null;
                    setEditingId(null);
@@ -972,13 +980,13 @@ export function FacturasRecurrentesView({ data, summaryData, summaryLoading, sum
                 } catch (error: any) {
                    const msg = error?.response?.data?.message || error?.message || '';
                   if (msg.includes('foreign') || msg.includes('constraint') || msg.includes('reference') || error?.status === 409) {
-                    toast.error('No se puede cancelar esta programación.', { id: deleteToastId });
+                    toast.warning('La cancelación está bloqueada por un registro relacionado. Revisa los documentos y movimientos asociados antes de intentarlo de nuevo.', { id: deleteToastId });
                   } else {
-                    toast.error(`Error al cancelar: ${msg || 'Error desconocido'}`, { id: deleteToastId });
+                    toast.apiFailure(error, 'No se pudo cancelar la factura recurrente.', { id: deleteToastId });
                   }
                 } finally {
                   setDeleteLoading(false);
-                  setPendingDeleteId(null);
+                  setPendingDeleteIds(null);
                 }
               }}
             />

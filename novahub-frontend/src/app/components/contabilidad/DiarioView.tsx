@@ -31,6 +31,7 @@ import { buildDateFilteredDownloadFileName } from '../../utils/exportFileNames';
 import { DateField } from '../ui/DateField';
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from '../ui/dialog';
 import { ConfirmDialog } from '../ui/ConfirmDialog';
+import { RequiredReasonField } from '../ui/RequiredReasonField';
 import { RadioGroup, RadioGroupItem } from '../ui/radio-group';
 import { Tooltip, TooltipContent, TooltipTrigger } from '../ui/tooltip';
 import { ImportReviewSummary } from '../ui/ImportReviewSummary';
@@ -154,6 +155,10 @@ export function DiarioView() {
   const [viewJournalId, setViewJournalId] = useState<string | null>(null);
   const [pendingDeleteJournal, setPendingDeleteJournal] = useState<JournalEntry | null>(null);
   const [deleteJournalLoading, setDeleteJournalLoading] = useState(false);
+  const [pendingVoidJournal, setPendingVoidJournal] = useState<JournalEntry | null>(null);
+  const [voidReason, setVoidReason] = useState('');
+  const [voidReasonAttempted, setVoidReasonAttempted] = useState(false);
+  const [voidLoading, setVoidLoading] = useState(false);
 
   const [exportingPdf, setExportingPdf] = useState(false);
   const [exportingExcel, setExportingExcel] = useState(false);
@@ -496,7 +501,7 @@ export function DiarioView() {
       setReadingProgress(100);
       toast.success(`${mapped.length} filas leídas del archivo`);
     } catch {
-      toast.error('Error al leer el archivo Excel');
+      toast.error('No se pudo leer el archivo Excel. Comprueba que sea válido y que no esté dañado, y vuelve a seleccionarlo.');
     } finally {
       setReadingFile(false);
       setReadingProgress(0);
@@ -568,17 +573,31 @@ export function DiarioView() {
     }
   }
 
-  async function handleVoid(journal: JournalEntry) {
-    if (!canVoidJournal) return;
+  async function handleVoid(journal: JournalEntry, reason?: string): Promise<boolean> {
+    if (!canVoidJournal) return false;
+    if (!reason?.trim()) {
+      setPendingVoidJournal(journal);
+      setVoidReason('');
+      setVoidReasonAttempted(false);
+      return false;
+    }
     const actionToken = beginNotificationAction();
     try {
-      await contabilidadService.voidJournal(journal.id);
+      setVoidLoading(true);
+      await contabilidadService.voidJournal(journal.id, reason.trim());
       toast.success(`Asiento #${journal.number} anulado`);
       completeNotificationAction(actionToken);
       loadJournals();
+      setPendingVoidJournal(null);
+      setVoidReason('');
+      setVoidReasonAttempted(false);
+      return true;
     } catch (e: any) {
       toast.error(e?.response?.data?.message || e?.message || 'Error al anular');
       failNotificationAction(actionToken);
+      return false;
+    } finally {
+      setVoidLoading(false);
     }
   }
 
@@ -1127,6 +1146,22 @@ export function DiarioView() {
         confirmLabel="Eliminar borrador"
         variant="destructive"
         onConfirm={handleDeleteJournal}
+      />
+
+      <ConfirmDialog
+        open={pendingVoidJournal !== null}
+        onOpenChange={(open) => { if (!open && !voidLoading) { setPendingVoidJournal(null); setVoidReason(''); setVoidReasonAttempted(false); } }}
+        loading={voidLoading}
+        title={`¿Anular asiento #${pendingVoidJournal?.number || ''}?`}
+        description="El asiento contabilizado quedará anulado y se conservará en el historial."
+        confirmLabel="Anular asiento"
+        variant="destructive"
+        children={<RequiredReasonField id="journal-void-reason" label="Motivo de anulación" value={voidReason} onChange={setVoidReason} attempted={voidReasonAttempted} disabled={voidLoading} />}
+        onConfirm={async () => {
+          if (!pendingVoidJournal) return false;
+          if (!voidReason.trim()) { setVoidReasonAttempted(true); return false; }
+          return handleVoid(pendingVoidJournal, voidReason.trim());
+        }}
       />
 
       <Dialog open={importOpen} onOpenChange={handleImportOpenChange}>

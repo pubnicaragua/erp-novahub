@@ -12,6 +12,7 @@ import { cn } from '../ui/utils';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '../ui/table';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../ui/select';
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '../ui/dialog';
+import { RequiredReasonField } from '../ui/RequiredReasonField';
 import { toast } from '@/app/services/toast';
 import { useQueryClient, useQuery } from '@tanstack/react-query';
 import { contabilidadService } from '../../services/contabilidad.service';
@@ -75,6 +76,7 @@ export function InvoiceAuditView() {
   const [auditModal, setAuditModal] = useState<{ invoiceIds: string[]; observations: string; results: AuditResult[] | null; saving: boolean } | null>(null);
   const [busyId, setBusyId] = useState<string | null>(null);
   const [cancelTarget, setCancelTarget] = useState<{ invoiceId: string; number: string; reason: string; saving: boolean } | null>(null);
+  const [cancelReasonAttempted, setCancelReasonAttempted] = useState(false);
   const [reviewTarget, setReviewTarget] = useState<{ id: string; number: string; decision: 'APPROVE' | 'REJECT'; reason: string; saving: boolean } | null>(null);
   const [reissueTarget, setReissueTarget] = useState<{ invoiceId: string; number: string; kind: AuditKind; replacementSearch: string; newInvoiceId: string; observations: string; saving: boolean } | null>(null);
 
@@ -216,17 +218,19 @@ export function InvoiceAuditView() {
     const invoiceId = item.invoiceId || item.id;
     if (!invoiceId) return;
     setCancelTarget({ invoiceId, number: item.number || 'Factura', reason: '', saving: false });
+    setCancelReasonAttempted(false);
   };
 
   const cancelAuditedInvoice = async () => {
     if (!cancelTarget || !canCancelAuditedInvoice) return;
+    if (!cancelTarget.reason.trim()) { setCancelReasonAttempted(true); return; }
     const actionToken = beginNotificationAction();
     try {
       setCancelTarget((target) => (target ? { ...target, saving: true } : target));
       const result = await contabilidadService.cancelAuditedInvoice({
         kind,
         invoiceId: cancelTarget.invoiceId,
-        reason: cancelTarget.reason.trim() || undefined,
+        reason: cancelTarget.reason.trim(),
       });
       const journalReversed = Boolean((result as any)?.journalReversed);
       toast.success(journalReversed
@@ -234,6 +238,7 @@ export function InvoiceAuditView() {
         : 'Factura anulada y saldo actualizado');
       completeNotificationAction(actionToken);
       setCancelTarget(null);
+      setCancelReasonAttempted(false);
       setAuditModal(null);
       setSelected(new Set());
       refreshAll();
@@ -693,7 +698,7 @@ export function InvoiceAuditView() {
         </DialogContent>
       </Dialog>
 
-      <Dialog open={!!cancelTarget} onOpenChange={(open) => { if (!open && !cancelTarget?.saving) setCancelTarget(null); }}>
+      <Dialog open={!!cancelTarget} onOpenChange={(open) => { if (!open && !cancelTarget?.saving) { setCancelTarget(null); setCancelReasonAttempted(false); } }}>
         <DialogContent className="sm:max-w-md">
           <DialogHeader>
             <DialogTitle className="text-lg font-black uppercase tracking-tight">¿Anular factura {cancelTarget?.number}?</DialogTitle>
@@ -701,16 +706,7 @@ export function InvoiceAuditView() {
               La factura se marcará como anulada desde el flujo contable. También se actualizará el saldo, se revertirá inventario/caja cuando corresponda y se intentará revertir su asiento contable.
             </DialogDescription>
           </DialogHeader>
-          <div className="space-y-1.5">
-            <Label className="text-[9px] font-black uppercase tracking-widest text-muted-foreground">Motivo de anulación (opcional)</Label>
-            <textarea
-              value={cancelTarget?.reason || ''}
-              onChange={(e) => setCancelTarget((target) => (target ? { ...target, reason: e.target.value } : target))}
-              rows={3}
-              className="w-full rounded-xl border border-border bg-background px-3 py-2 text-xs outline-none focus:border-primary/50"
-              placeholder="Ej: Diferencia en IVA detectada durante auditoría…"
-            />
-          </div>
+          <RequiredReasonField id="audited-invoice-cancel-reason" label="Motivo de anulación" value={cancelTarget?.reason || ''} onChange={(reason) => setCancelTarget((target) => (target ? { ...target, reason } : target))} attempted={cancelReasonAttempted} disabled={cancelTarget?.saving} placeholder="Ej.: diferencia en IVA detectada durante auditoría…" />
           <DialogFooter>
             <Button variant="outline" className="rounded-xl" disabled={cancelTarget?.saving} onClick={() => setCancelTarget(null)}>Cancelar</Button>
             <Button className="gap-2 rounded-xl bg-destructive text-destructive-foreground hover:bg-destructive/90" disabled={!canCancelAuditedInvoice || cancelTarget?.saving} onClick={cancelAuditedInvoice}>

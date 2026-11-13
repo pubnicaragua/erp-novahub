@@ -263,7 +263,7 @@ export function FloatingChat({ initiallyOpen = false, initialRequest }: Floating
       if (controller.signal.aborted || error?.name === 'AbortError') return;
       const fallback = error?.message || 'No pude consultar Nova AI en este momento. Inténtalo de nuevo.';
       setMessages((current) => [...current, { id: makeId(), role: 'bot', content: fallback }]);
-      toast.error('No se pudo completar la consulta');
+      toast.apiFailure(error, 'No se pudo completar la consulta a Nova AI. Inténtalo de nuevo.');
     } finally {
       if (abortRef.current === controller) abortRef.current = null;
       if (!controller.signal.aborted) setTyping(false);

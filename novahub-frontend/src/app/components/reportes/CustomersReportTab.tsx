@@ -310,7 +310,7 @@ export const CustomersReportTab = forwardRef<ReportExportRef, ReportProps>(({ da
 
         showPdfInBrowserPreview(doc.output('blob'), buildReportDownloadFileName(['reporte_clientes'], 'pdf', dateRange));
         toast.success("PDF generado exitosamente");
-      } catch (e: any) { console.error(e); toast.error(e?.response?.data?.message || e?.message || "Error al generar PDF"); }
+      } catch (e: any) { console.error(e); toast.apiFailure(e, 'No se pudo generar el PDF del reporte de clientes.'); }
     },
     exportExcel: async () => {
       if (acquisitionRangeInvalid) { toast.error('Corrige el rango de altas de clientes: Desde debe ser anterior o igual a Hasta.'); return; }
@@ -412,7 +412,7 @@ export const CustomersReportTab = forwardRef<ReportExportRef, ReportProps>(({ da
 
         await downloadExcelWorkbook(wb, buildReportDownloadFileName(['reporte_clientes'], 'xlsx', dateRange));
         toast.success("Excel generado exitosamente");
-      } catch (e: any) { console.error(e); toast.error(e?.response?.data?.message || e?.message || "Error al generar Excel"); }
+      } catch (e: any) { console.error(e); toast.apiFailure(e, 'No se pudo generar el Excel del reporte de clientes.'); }
     }
   }));
 

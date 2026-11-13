@@ -15,6 +15,7 @@ import { createIdempotencyKey } from '../../services/api';
 import { useSalesIntegrationPolicy } from '../../hooks/useSalesIntegrationPolicy';
 import { toast } from '@/app/services/toast';
 import { ConfirmDialog } from '../ui/ConfirmDialog';
+import { RequiredReasonField } from '../ui/RequiredReasonField';
 import { cn } from '../ui/utils';
 import type { CreditDocument, CreditNote, Customer, Employee, PaymentReceived, Product, SalesPaginationControls } from '../../types';
 import { Badge } from '../ui/badge';
@@ -53,6 +54,7 @@ import { SalesWarehouseStockHint } from './SalesWarehouseStockHint';
 import { getSingleSalesVariant } from '../../utils/sales-stock';
 import { SalesVariantSelect } from './SalesVariantSelect';
 import { SalesProductPicker, type SalesCatalogItem } from './SalesProductPicker';
+import { SalesCustomerActionButton } from './SalesCustomerActionButton';
 import { getCustomerDebtAmount, getCustomerFavorAmount, getMaximumCustomerFavorToApply } from '../../utils/customerBalance';
 import { allocatePaymentLinesToBalance, cashCoversPaymentChange, getPaymentChangeBase } from '../../utils/paymentSettlement';
 import { getLegacySalesExtraCostFields, getSalesExtraChargesAmount, getSalesExtraChargesPayload, normalizeSalesExtraCharges, type SalesExtraChargeLine } from '../../utils/salesCharges';
@@ -289,8 +291,11 @@ export function NotasCreditoView({ data, summaryData, summaryLoading, summaryErr
   const [searchTerm, setSearchTerm] = useState('');
   const [layoutMode, setLayoutMode] = useLocalStorageState<'table' | 'cards'>('sales-credits-layout', 'table', 24 * 365);
   const [statusFilter, setStatusFilter] = useState<'ALL' | 'DRAFT' | 'ISSUED' | 'PARTIAL' | 'APPLIED' | 'PAID'>('ALL');
-  const [pendingDeleteId, setPendingDeleteId] = useState<string | null>(null);
+  const [pendingDeleteIds, setPendingDeleteIds] = useState<string[] | null>(null);
   const [deleteLoading, setDeleteLoading] = useState(false);
+  const [cancelReason, setCancelReason] = useState('');
+  const [cancelReasonAttempted, setCancelReasonAttempted] = useState(false);
+  const [creditReasonAttempted, setCreditReasonAttempted] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [localDoc, setLocalDoc] = useState<any>(null);
   const [salesProductPickerItemId, setSalesProductPickerItemId] = useState<string | null>(null);
@@ -342,6 +347,7 @@ export function NotasCreditoView({ data, summaryData, summaryLoading, summaryErr
 
   const resumePendingDraft = () => {
     if (!pendingDraft) return;
+    setCreditReasonAttempted(false);
     commitLocalDoc(pendingDraft.document);
     if (pendingDraft.editingId) setEditingId(pendingDraft.editingId);
     setIsCreating(Boolean(pendingDraft.isCreating));
@@ -582,6 +588,7 @@ export function NotasCreditoView({ data, summaryData, summaryLoading, summaryErr
 
   const closeEditor = () => {
     clearSalesEditorDraft(salesDraftStorageKey);
+    setCreditReasonAttempted(false);
     localDocRef.current = null;
     setEditingId(null);
     setIsCreating(false);
@@ -592,6 +599,7 @@ export function NotasCreditoView({ data, summaryData, summaryLoading, summaryErr
     const record = data.find((credit) => credit.id === id);
     if (!record || record.kind === 'CUSTOMER_LOAN') return;
     clearSalesEditorDraft(salesDraftStorageKey);
+    setCreditReasonAttempted(false);
     setEditingId(id);
     setIsCreating(false);
     const draft = JSON.parse(JSON.stringify(record));
@@ -601,6 +609,7 @@ export function NotasCreditoView({ data, summaryData, summaryLoading, summaryErr
 
   const startNew = () => {
     clearSalesEditorDraft(salesDraftStorageKey);
+    setCreditReasonAttempted(false);
     setIsCreating(true);
     setEditingId(null);
     commitLocalDoc({
@@ -633,9 +642,11 @@ export function NotasCreditoView({ data, summaryData, summaryLoading, summaryErr
 
   const handleSave = async (closeAfterSave = true) => {
     if (!localDoc) return;
+    setCreditReasonAttempted(true);
     if (!localDoc.customerId) return void toast.error('Selecciona un cliente');
+    if (!localDoc.date) return void toast.error('Selecciona la fecha del crédito.');
     if (!localDoc.dueDate && !(localDoc.planEnabled && localDoc.planCalculationMode === 'MANUAL')) return void toast.error('Selecciona la fecha límite de pago');
-    if (!String(localDoc.reason || '').trim()) return void toast.error('Describe el motivo del crédito');
+    if (!String(localDoc.reason || '').trim()) return void toast.error('Describe por qué se emite este crédito.');
     if (!localDoc.items?.length) return void toast.error('Agrega al menos un producto o servicio');
     if (localDoc.items.some((item: any) => !item.productId)) return void toast.error('Selecciona el producto o servicio de cada línea');
     if (localDoc.items.some((item: any) => item.priceMissing)) return void toast.error('Algunos productos no tienen precio en la lista seleccionada. Elige otra lista de precios.');
@@ -1171,9 +1182,9 @@ export function NotasCreditoView({ data, summaryData, summaryLoading, summaryErr
         {customersError && <div role="alert" className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-rose-500/30 bg-rose-500/10 px-4 py-3 text-xs text-rose-700 dark:text-rose-300"><span>No se pudieron cargar los clientes ni sus límites de crédito.</span><Button type="button" variant="outline" size="sm" onClick={onRefresh}>Reintentar</Button></div>}
         <fieldset disabled={!canEditDocument} className="contents">
         <div className="grid gap-4 lg:grid-cols-[1.3fr_0.7fr]" data-tour="sales-form-data">
-           <Card className="rounded-2xl border-border/50"><CardContent className="space-y-4 p-6"><p className="text-xs font-black uppercase tracking-widest text-muted-foreground">Condiciones del crédito</p><SalesAccountingLegend flow="creditNote" /><div className="grid gap-3 sm:grid-cols-2"><div><p className="mb-1 text-[10px] text-muted-foreground">Cliente</p><Combobox options={customers.filter((customer) => String(customer.status || '').toUpperCase() === 'ACTIVE' || customer.id === localDoc.customerId).map((customer) => ({ label: customer.name, value: customer.id, description: `${customer.code ? `[${customer.code}] ` : ''}Límite: ${formatConvertedAmount(Number(customer.creditLimit || 0), normalizeCurrency(customer.creditLimitCurrency, baseCurrency), globalRate)}` }))} value={localDoc.customerId || ''} onChange={(value) => { const priceListId = getCustomerPriceListId(value); const items = (localDoc.items || []).map((item: any) => item.productId ? { ...item, priceListId, unitPrice: 0, total: 0, priceMissing: false } : { ...item, priceListId }); if (hasSalesProductPriceListConflicts(items, priceListId)) { toast.error('No se puede aplicar esta lista: hay productos repetidos con la misma lista de precios.'); return; } setLocalDoc({ ...localDoc, customerId: value, priceListId, ...recalculateItems(items) }); }} placeholder="Seleccionar cliente" /></div><SalesWarehouseSelect warehouses={warehouses} value={localDoc.warehouseId} onChange={(warehouseId) => setLocalDoc({ ...localDoc, warehouseId })} required helpText="Se usará al emitir el crédito y devolver productos al inventario." /><div><p className="mb-1 text-[10px] text-muted-foreground">Fecha del crédito</p><Input type="date" value={isoDate(localDoc.date)} onChange={(event) => setLocalDoc({ ...localDoc, date: event.target.value })} className="h-8 text-xs" /></div><div><p className="mb-1 text-[10px] text-muted-foreground">{localDoc.planEnabled ? (planCalculationMode === 'AMOUNT' ? 'Fecha estimada de cancelación' : 'Fecha final de vencimiento') : 'Fecha límite de pago'}</p>{localDoc.planEnabled && planCalculationMode !== 'DEADLINE'
+           <Card className="rounded-2xl border-border/50"><CardContent className="space-y-4 p-6"><p className="text-xs font-black uppercase tracking-widest text-muted-foreground">Condiciones del crédito</p><SalesAccountingLegend flow="creditNote" /><div className="grid gap-3 sm:grid-cols-2"><div><Label htmlFor="credit-customer" required className="mb-1 text-[10px] text-muted-foreground">Cliente</Label><Combobox id="credit-customer" required aria-invalid={creditReasonAttempted && !localDoc.customerId} aria-describedby={creditReasonAttempted && !localDoc.customerId ? 'credit-customer-error' : undefined} options={customers.filter((customer) => String(customer.status || '').toUpperCase() === 'ACTIVE' || customer.id === localDoc.customerId).map((customer) => ({ label: customer.name, value: customer.id, description: `${customer.code ? `[${customer.code}] ` : ''}Límite: ${formatConvertedAmount(Number(customer.creditLimit || 0), normalizeCurrency(customer.creditLimitCurrency, baseCurrency), globalRate)}` }))} value={localDoc.customerId || ''} onChange={(value) => { const priceListId = getCustomerPriceListId(value); const items = (localDoc.items || []).map((item: any) => item.productId ? { ...item, priceListId, unitPrice: 0, total: 0, priceMissing: false } : { ...item, priceListId }); if (hasSalesProductPriceListConflicts(items, priceListId)) { toast.error('No se puede aplicar esta lista: hay productos repetidos con la misma lista de precios.'); return; } setLocalDoc({ ...localDoc, customerId: value, priceListId, ...recalculateItems(items) }); }} placeholder="Seleccionar cliente" />{creditReasonAttempted && !localDoc.customerId && <p id="credit-customer-error" role="alert" className="mt-1 text-[10px] text-destructive">Selecciona un cliente para continuar.</p>}</div><SalesWarehouseSelect warehouses={warehouses} value={localDoc.warehouseId} onChange={(warehouseId) => setLocalDoc({ ...localDoc, warehouseId })} required helpText="Se usará al emitir el crédito y devolver productos al inventario." /><div><Label htmlFor="credit-issue-date" required className="mb-1 text-[10px] text-muted-foreground">Fecha del crédito</Label><Input id="credit-issue-date" type="date" required aria-invalid={creditReasonAttempted && !localDoc.date} aria-describedby={creditReasonAttempted && !localDoc.date ? 'credit-issue-date-error' : undefined} value={isoDate(localDoc.date)} onChange={(event) => setLocalDoc({ ...localDoc, date: event.target.value })} className="h-8 text-xs" />{creditReasonAttempted && !localDoc.date && <p id="credit-issue-date-error" role="alert" className="mt-1 text-[10px] text-destructive">Selecciona la fecha del crédito.</p>}</div><div><Label htmlFor="credit-due-date" required={!localDoc.planEnabled || planCalculationMode === 'DEADLINE'} className="mb-1 text-[10px] text-muted-foreground">{localDoc.planEnabled ? (planCalculationMode === 'AMOUNT' ? 'Fecha estimada de cancelación' : 'Fecha final de vencimiento') : 'Fecha límite de pago'}</Label>{localDoc.planEnabled && planCalculationMode !== 'DEADLINE'
   ? <Input type="text" readOnly aria-readonly="true" value={installmentPlanEstimate?.finalDueDate ? formatDateEs(installmentPlanEstimate.finalDueDate) : ''} className="h-8 bg-muted/30 text-xs" />
-  : <Input type="date" value={isoDate(localDoc.dueDate)} onChange={(event) => setLocalDoc({ ...localDoc, dueDate: event.target.value, ...(localDoc.planEnabled ? { planCalculationMode: 'DEADLINE' } : {}) })} className="h-8 text-xs" />}</div><div><p className="mb-1 text-[10px] text-muted-foreground">Moneda de la transacción</p><Select value={localDoc.currency || 'NIO'} onValueChange={(value) => handleCurrencyChange(value as 'NIO' | 'USD')}><SelectTrigger className="h-8 text-xs"><SelectValue placeholder="Seleccionar moneda" /></SelectTrigger><SelectContent><SelectItem value="NIO">Córdobas (C$)</SelectItem><SelectItem value="USD">Dólares (US$)</SelectItem></SelectContent></Select><p className="mt-1 text-[10px] text-muted-foreground/70">Tasa configurada: <span className="font-bold">{localDoc.currency === 'NIO' ? '1.00' : Number(localDoc.exchangeRate || globalRate || 1).toFixed(2)}</span></p></div>{!isCreating && <div><p className="mb-1 text-[10px] text-muted-foreground">Estado</p><span className={cn('inline-flex rounded-lg px-2 py-1 text-xs font-black', statusOption?.color)}>{statusOption?.label || localDoc.status}</span></div>}</div><div><p className="mb-1 text-[10px] text-muted-foreground">Descripción / motivo</p><textarea value={localDoc.reason || ''} onChange={(event) => setLocalDoc({ ...localDoc, reason: event.target.value })} className="h-20 w-full resize-none rounded-md border border-input bg-background px-3 py-2 text-sm" placeholder="Ej. Venta de productos con pago a 30 días..." /></div></CardContent></Card>
+  : <Input id="credit-due-date" type="date" required={!localDoc.planEnabled || planCalculationMode === 'DEADLINE'} aria-invalid={creditReasonAttempted && (!localDoc.planEnabled || planCalculationMode === 'DEADLINE') && !localDoc.dueDate} aria-describedby={creditReasonAttempted && (!localDoc.planEnabled || planCalculationMode === 'DEADLINE') && !localDoc.dueDate ? 'credit-due-date-error' : undefined} value={isoDate(localDoc.dueDate)} onChange={(event) => setLocalDoc({ ...localDoc, dueDate: event.target.value, ...(localDoc.planEnabled ? { planCalculationMode: 'DEADLINE' } : {}) })} className="h-8 text-xs" />}{creditReasonAttempted && (!localDoc.planEnabled || planCalculationMode === 'DEADLINE') && !localDoc.dueDate && <p id="credit-due-date-error" role="alert" className="mt-1 text-[10px] text-destructive">Selecciona la fecha límite de pago.</p>}</div><div><p className="mb-1 text-[10px] text-muted-foreground">Moneda de la transacción</p><Select value={localDoc.currency || 'NIO'} onValueChange={(value) => handleCurrencyChange(value as 'NIO' | 'USD')}><SelectTrigger className="h-8 text-xs"><SelectValue placeholder="Seleccionar moneda" /></SelectTrigger><SelectContent><SelectItem value="NIO">Córdobas (C$)</SelectItem><SelectItem value="USD">Dólares (US$)</SelectItem></SelectContent></Select><p className="mt-1 text-[10px] text-muted-foreground/70">Tasa configurada: <span className="font-bold">{localDoc.currency === 'NIO' ? '1.00' : Number(localDoc.exchangeRate || globalRate || 1).toFixed(2)}</span></p></div>{!isCreating && <div><p className="mb-1 text-[10px] text-muted-foreground">Estado</p><span className={cn('inline-flex rounded-lg px-2 py-1 text-xs font-black', statusOption?.color)}>{statusOption?.label || localDoc.status}</span></div>}</div><RequiredReasonField id="credit-note-reason" label="Descripción / motivo del crédito" value={String(localDoc.reason || '')} onChange={(reason) => setLocalDoc({ ...localDoc, reason })} attempted={creditReasonAttempted} placeholder="Ej. Venta de productos con pago a 30 días..." errorMessage="Describe por qué se emite este crédito." /></CardContent></Card>
           <Card className="rounded-2xl border-border/50"><CardContent className="space-y-4 p-6"><p className="text-xs font-black uppercase tracking-widest text-muted-foreground">Capacidad de pago</p><div className="grid min-w-0 grid-cols-[minmax(0,1fr)_minmax(0,1fr)] gap-3"><div className="min-w-0 rounded-xl border border-border/50 bg-muted/10 p-3"><p className="break-words text-[9px] font-black uppercase leading-tight text-muted-foreground">Límite de crédito <span className="whitespace-nowrap">({normalizeCurrency(selectedCustomer?.creditLimitCurrency, baseCurrency)})</span></p><p className="mt-1 break-words text-lg font-black leading-tight tabular-nums">{formatCurrencyAmount(Number(selectedCustomer?.creditLimit || 0), normalizeCurrency(selectedCustomer?.creditLimitCurrency, baseCurrency))}</p>{normalizeCurrency(selectedCustomer?.creditLimitCurrency, baseCurrency) !== baseCurrency && <p className="break-words text-[10px] text-muted-foreground">Equivale a {formatConvertedAmount(Number(selectedCustomer?.creditLimit || 0), normalizeCurrency(selectedCustomer?.creditLimitCurrency, baseCurrency), globalRate)}</p>}</div><div className="min-w-0 rounded-xl border border-border/50 bg-muted/10 p-3"><p className="break-words text-[9px] font-black uppercase leading-tight text-muted-foreground">Disponible</p><p className={cn('mt-1 break-words text-lg font-black leading-tight tabular-nums', availableCredit > 0 ? 'text-emerald-500' : 'text-rose-500')}>{formatConvertedAmount(availableCredit, baseCurrency)}</p></div></div><div className="grid gap-3 sm:grid-cols-2"><div className="rounded-xl border border-rose-500/20 bg-rose-500/5 p-4"><p className="text-[10px] font-black uppercase tracking-widest text-rose-600 dark:text-rose-400">Saldo pendiente</p><p className="mt-1 text-2xl font-black text-rose-600 dark:text-rose-400">{formatConvertedAmount(getCustomerDebtAmount(selectedCustomer), baseCurrency)}</p></div><div className="rounded-xl border border-emerald-500/20 bg-emerald-500/5 p-4"><p className="text-[10px] font-black uppercase tracking-widest text-emerald-600 dark:text-emerald-400">Saldo a favor</p><p className="mt-1 text-2xl font-black text-emerald-600 dark:text-emerald-400">{formatConvertedAmount(getCustomerFavorAmount(selectedCustomer), baseCurrency)}</p></div></div>{selectedCustomer && Number(selectedCustomer.creditLimit || 0) <= 0 && <div className="flex items-start gap-2 rounded-xl border border-amber-500/30 bg-amber-500/10 p-3 text-[10px] text-amber-700 dark:text-amber-300"><AlertTriangle className="mt-0.5 size-3.5 shrink-0" /><span>Este cliente no tiene límite de crédito. {customerCreditLimitInstruction()}</span></div>}<div className="flex items-start gap-2 text-[10px] text-muted-foreground"><AlertTriangle className="mt-0.5 size-3.5 shrink-0 text-amber-500" />La emisión valida que el total no supere el límite disponible.</div></CardContent></Card>
         </div>
         <Card className="rounded-2xl border-border/50">
@@ -1232,27 +1243,33 @@ export function NotasCreditoView({ data, summaryData, summaryLoading, summaryErr
               </div>
             </div>
             <div className="min-w-0 rounded-xl border border-border/60 bg-muted/10 p-3 sm:p-4">
-              <div className="flex min-w-0 items-start gap-3">
-                <input id="credit-plan-enabled" type="checkbox" className="mt-0.5 size-4 shrink-0 accent-primary" checked={Boolean(localDoc.planEnabled)} onChange={(event) => setLocalDoc({ ...localDoc, planEnabled: event.target.checked, planCalculationMode: localDoc.planCalculationMode || 'AMOUNT', firstInstallmentDate: event.target.checked ? (localDoc.firstInstallmentDate || localDoc.date) : localDoc.firstInstallmentDate, frequency: localDoc.frequency || 'WEEKLY' })} />
-                <div className="min-w-0 flex-1">
-                  <Label htmlFor="credit-plan-enabled" className="cursor-pointer text-xs font-semibold">Definir un plan de abonos</Label>
-                  <p className="mt-1 text-[10px] leading-relaxed text-muted-foreground">Puedes usar el cálculo automático o definir manualmente la fecha, el monto y el interés de cada abono. Se permiten pagos parciales y anticipos; un pago mayor al saldo no se acepta.</p>
+              <div className={`grid min-w-0 gap-3 ${localDoc.planEnabled ? 'sm:grid-cols-[minmax(0,1fr)_minmax(210px,260px)] sm:items-center' : ''}`}>
+                <div className="flex min-w-0 items-start gap-3">
+                  <input id="credit-plan-enabled" type="checkbox" className="mt-0.5 size-4 shrink-0 accent-primary" checked={Boolean(localDoc.planEnabled)} onChange={(event) => setLocalDoc({ ...localDoc, planEnabled: event.target.checked, planCalculationMode: localDoc.planCalculationMode || 'AMOUNT', firstInstallmentDate: event.target.checked ? (localDoc.firstInstallmentDate || localDoc.date) : localDoc.firstInstallmentDate, frequency: localDoc.frequency || 'WEEKLY' })} />
+                  <div className="min-w-0 flex-1">
+                    <Label htmlFor="credit-plan-enabled" className="cursor-pointer text-xs font-semibold">Definir un plan de abonos</Label>
+                    <p className="mt-1 text-[10px] leading-relaxed text-muted-foreground">{localDoc.planEnabled ? (planCalculationMode === 'MANUAL' ? 'Indica la fecha, el monto y el interés de cada abono.' : 'Elige cómo distribuir los abonos del crédito.') : 'Puedes programar cuotas automáticas o definir cada abono manualmente.'}</p>
+                  </div>
                 </div>
+                {localDoc.planEnabled && <div className="min-w-0 space-y-1.5">
+                  <Label className="text-xs font-semibold">Método de cálculo</Label>
+                  <Select value={planCalculationMode} onValueChange={(value) => { const mode = value as typeof planCalculationMode; const rows = manualInstallmentDrafts.length ? manualInstallmentDrafts : [{ dueDate: isoDate(localDoc.date), totalAmount: '', interestAmount: '' }]; setLocalDoc({ ...localDoc, planCalculationMode: mode, ...(mode === 'DEADLINE' && installmentPlanEstimate ? { dueDate: installmentPlanEstimate.finalDueDate } : {}), ...(mode === 'MANUAL' ? { manualInstallments: rows.map((row, index) => index === 0 && !row.dueDate ? { ...row, dueDate: isoDate(localDoc.date) } : row) } : {}) }); }}>
+                    <SelectTrigger className="h-10 w-full"><SelectValue /></SelectTrigger>
+                    <SelectContent><SelectItem value="AMOUNT">Monto por abono</SelectItem><SelectItem value="DEADLINE">Fecha de vencimiento</SelectItem><SelectItem value="MANUAL">Manual</SelectItem></SelectContent>
+                  </Select>
+                </div>}
               </div>
-              {localDoc.planEnabled && <div className="mt-4 grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
-                <div className="min-w-0 space-y-1.5">
-                  {planCalculationMode !== 'MANUAL' && <Label className="text-xs font-semibold">Frecuencia</Label>}
-                  {planCalculationMode !== 'MANUAL' && <>
+              {localDoc.planEnabled && <div className="mt-3 grid min-w-0 gap-3 sm:grid-cols-2 xl:grid-cols-3">
+                {planCalculationMode !== 'MANUAL' && <div className="min-w-0 space-y-1.5">
+                  <Label className="text-xs font-semibold">Frecuencia</Label>
                   <Select value={localDoc.frequency || 'WEEKLY'} onValueChange={(value) => setLocalDoc({ ...localDoc, frequency: value })}>
                     <SelectTrigger className="h-10"><SelectValue /></SelectTrigger>
                     <SelectContent><SelectItem value="DAILY">Diaria</SelectItem><SelectItem value="WEEKLY">Semanal</SelectItem><SelectItem value="BIWEEKLY">Cada 15 días</SelectItem><SelectItem value="MONTHLY">Mensual</SelectItem></SelectContent>
                   </Select>
-                  </>}
-                </div>
-                <div className="min-w-0 space-y-1.5"><Label className="text-xs font-semibold">Método de cálculo</Label><Select value={planCalculationMode} onValueChange={(value) => { const mode = value as typeof planCalculationMode; const rows = manualInstallmentDrafts.length ? manualInstallmentDrafts : [{ dueDate: isoDate(localDoc.date), totalAmount: '', interestAmount: '' }]; setLocalDoc({ ...localDoc, planCalculationMode: mode, ...(mode === 'DEADLINE' && installmentPlanEstimate ? { dueDate: installmentPlanEstimate.finalDueDate } : {}), ...(mode === 'MANUAL' ? { manualInstallments: rows.map((row, index) => index === 0 && !row.dueDate ? { ...row, dueDate: isoDate(localDoc.date) } : row) } : {}) }); }}><SelectTrigger className="h-10"><SelectValue /></SelectTrigger><SelectContent><SelectItem value="AMOUNT">Monto por abono</SelectItem><SelectItem value="DEADLINE">Fecha de vencimiento</SelectItem><SelectItem value="MANUAL">Manual</SelectItem></SelectContent></Select></div>
+                </div>}
                 {planCalculationMode !== 'MANUAL' && <div className="min-w-0 space-y-1.5"><Label htmlFor="credit-first-installment" className="text-xs font-semibold">Fecha del primer abono</Label><Input id="credit-first-installment" type="date" required value={localDoc.firstInstallmentDate || isoDate(localDoc.dueDate)} onChange={(event) => setLocalDoc({ ...localDoc, firstInstallmentDate: event.target.value })} className="h-10" /></div>}
                 {planCalculationMode === 'AMOUNT' && <div className="min-w-0 space-y-1.5"><Label htmlFor="credit-installment-amount" className="text-xs font-semibold">Monto por abono</Label><Input id="credit-installment-amount" type="number" min="0.01" step="0.01" value={localDoc.installmentAmount ?? ''} onChange={(event) => setLocalDoc({ ...localDoc, planCalculationMode: 'AMOUNT', installmentAmount: event.target.value })} currencyPrecision className="h-10" /></div>}
-                {installmentPlanEstimate && <div className="sm:col-span-2 xl:col-span-4"><CustomerCreditInstallmentSchedule
+                {installmentPlanEstimate && <div className="sm:col-span-2 xl:col-span-3"><CustomerCreditInstallmentSchedule
                 installments={installmentSchedule}
                 currency={localDoc.currency || displayCurrency}
                 formatAmount={(amount) => formatExplicitAmount(amount, localDoc.currency || displayCurrency)}
@@ -1287,12 +1304,12 @@ export function NotasCreditoView({ data, summaryData, summaryLoading, summaryErr
         <Card className="rounded-2xl border-border/50" data-tour="sales-form-items">
           <CardContent className="p-6">
             <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
-              <p className="text-xs font-black uppercase tracking-widest text-muted-foreground">Productos y servicios</p>
+              <p className={cn('text-xs font-black uppercase tracking-widest', creditReasonAttempted && !localDoc.items?.length ? 'text-destructive' : 'text-muted-foreground')}>Productos y servicios <span className="text-destructive" aria-hidden="true">*</span></p>
               <div className="flex flex-wrap gap-2">
-                <Button type="button" variant="outline" size="sm" onClick={() => addItem('PRODUCT')} disabled={!localDoc.customerId} className="h-8 rounded-xl text-[10px] font-black uppercase tracking-widest"><Plus className="mr-2 size-3" /> Producto</Button>
-                <Button type="button" variant="outline" size="sm" onClick={() => addItem('SERVICE')} disabled={!localDoc.customerId} className="h-8 rounded-xl text-[10px] font-black uppercase tracking-widest"><Plus className="mr-2 size-3" /> Servicio</Button>
-                <Button type="button" variant="outline" size="sm" onClick={() => updateCreditExtraCharges([...normalizeSalesExtraCharges(localDoc), { id: `extra-${Date.now()}`, description: '', amount: 0 }])} className="h-8 rounded-xl text-[10px] font-black uppercase tracking-widest"><Plus className="mr-2 size-3" /> Coste extra</Button>
-                <Button type="button" variant="outline" size="sm" disabled={Number(localDoc?.deliveryAmount || 0) > 0 || Boolean(String(localDoc?.deliveryDescription || '').trim())} onClick={() => updateCreditDelivery({ deliveryDescription: 'Delivery', deliveryAmount: 0 })} className="h-8 rounded-xl text-[10px] font-black uppercase tracking-widest"><Plus className="mr-2 size-3" /> Delivery</Button>
+                <SalesCustomerActionButton type="button" variant="outline" size="sm" onClick={() => addItem('PRODUCT')} customerSelected={Boolean(localDoc.customerId)} className="h-8 rounded-xl text-[10px] font-black uppercase tracking-widest"><Plus className="mr-2 size-3" /> Producto</SalesCustomerActionButton>
+                <SalesCustomerActionButton type="button" variant="outline" size="sm" onClick={() => addItem('SERVICE')} customerSelected={Boolean(localDoc.customerId)} className="h-8 rounded-xl text-[10px] font-black uppercase tracking-widest"><Plus className="mr-2 size-3" /> Servicio</SalesCustomerActionButton>
+                <SalesCustomerActionButton type="button" variant="outline" size="sm" onClick={() => updateCreditExtraCharges([...normalizeSalesExtraCharges(localDoc), { id: `extra-${Date.now()}`, description: '', amount: 0 }])} customerSelected={Boolean(localDoc.customerId)} className="h-8 rounded-xl text-[10px] font-black uppercase tracking-widest"><Plus className="mr-2 size-3" /> Coste extra</SalesCustomerActionButton>
+                <SalesCustomerActionButton type="button" variant="outline" size="sm" customerSelected={Boolean(localDoc.customerId)} disabled={Boolean(localDoc.customerId) && (Number(localDoc?.deliveryAmount || 0) > 0 || Boolean(String(localDoc?.deliveryDescription || '').trim()))} title={Number(localDoc?.deliveryAmount || 0) > 0 || Boolean(String(localDoc?.deliveryDescription || '').trim()) ? 'Solo se permite un delivery por crédito' : undefined} onClick={() => updateCreditDelivery({ deliveryDescription: 'Delivery', deliveryAmount: 0 })} className="h-8 rounded-xl text-[10px] font-black uppercase tracking-widest"><Plus className="mr-2 size-3" /> Delivery</SalesCustomerActionButton>
               </div>
             </div>
             <div className="space-y-2">
@@ -1320,7 +1337,11 @@ export function NotasCreditoView({ data, summaryData, summaryLoading, summaryErr
                             otherLocationsPermissionModule="SALES_CREDIT_NOTES"
                             products={catalog as SalesCatalogItem[]}
                             value={item.productId || ''}
-                            disabled={!localDoc.customerId || productsLoading}
+                            disabled={Boolean(localDoc.customerId) && productsLoading}
+                            customerSelected={Boolean(localDoc.customerId)}
+                            required
+                            invalid={creditReasonAttempted && !item.productId}
+                            errorMessageId={creditReasonAttempted && !item.productId ? `credit-product-${index}-error` : undefined}
                             itemType={itemType === 'SERVICE' ? 'SERVICE' : 'PRODUCT'}
                             warehouseId={localDoc?.warehouseId}
                             variantId={item.variantId}
@@ -1349,6 +1370,7 @@ export function NotasCreditoView({ data, summaryData, summaryLoading, summaryErr
                             }}
                             placeholder={itemType === 'SERVICE' ? 'Seleccionar servicio...' : 'Seleccionar producto...'}
                           />
+                          {creditReasonAttempted && !item.productId && <p id={`credit-product-${index}-error`} role="alert" className="mt-1 text-[10px] text-destructive">Selecciona un producto o servicio para esta línea.</p>}
                         </div>
                         {itemType !== 'SERVICE' && <SalesVariantSelect
                           className="sales-line-variant sales-quote-line-variant-column"
@@ -1427,7 +1449,7 @@ export function NotasCreditoView({ data, summaryData, summaryLoading, summaryErr
                       </label>
                     </div>
                     <div className="min-w-0 xl:col-span-1">
-                      <Input type="number" inputMode="numeric" min="1" step="1" value={Number(item.quantity) || ''} onChange={(event) => updateItem(index, { quantity: toWholeQuantity(event.target.value) })} placeholder="1" />
+                      <Input aria-label={`Cantidad de la línea ${index + 1}`} type="number" inputMode="numeric" min="1" step="1" required aria-invalid={creditReasonAttempted && (!Number.isInteger(Number(item.quantity)) || Number(item.quantity) < 1)} aria-describedby={creditReasonAttempted && (!Number.isInteger(Number(item.quantity)) || Number(item.quantity) < 1) ? `credit-quantity-${index}-error` : undefined} value={Number(item.quantity) || ''} onChange={(event) => updateItem(index, { quantity: toWholeQuantity(event.target.value) })} placeholder="1" />{creditReasonAttempted && (!Number.isInteger(Number(item.quantity)) || Number(item.quantity) < 1) && <p id={`credit-quantity-${index}-error`} role="alert" className="mt-1 text-[10px] text-destructive">Ingresa una cantidad entera mayor que cero.</p>}
                     </div>
                     <div className="min-w-0 xl:col-span-1">
                       <Input type="text" inputMode="decimal" min="0" value={item.unitPrice === undefined || item.unitPrice === null ? '' : item.unitPrice} readOnly={Boolean(item.productId)} title={item.productId ? 'Precio definido por la lista de precios' : 'Precio personalizado'} onChange={(event) => updateItem(index, { unitPrice: Number(String(event.target.value).replace(/,/g, '')) || 0 })} placeholder="0" currencyPrecision />
@@ -1442,7 +1464,7 @@ export function NotasCreditoView({ data, summaryData, summaryLoading, summaryErr
                   </div>
                 );
               })}
-              {!localDoc.items?.length && <div className="rounded-xl border border-dashed border-border/50 py-8 text-center text-xs text-muted-foreground">Agrega los productos o servicios que se entregarán a crédito.</div>}
+              {!localDoc.items?.length && <div role="group" aria-label="Productos y servicios" aria-required="true" aria-invalid={creditReasonAttempted && !localDoc.items?.length} className={cn('rounded-xl border border-dashed py-8 text-center text-xs', creditReasonAttempted && !localDoc.items?.length ? 'border-destructive text-destructive' : 'border-border/50 text-muted-foreground')}>{creditReasonAttempted && !localDoc.items?.length ? 'Agrega al menos un producto o servicio para continuar.' : 'Agrega los productos o servicios que se entregarán a crédito.'}</div>}
             </div>
             {(normalizeSalesExtraCharges(localDoc).length > 0 || String(localDoc?.deliveryDescription || '').trim() || Number(localDoc?.deliveryAmount || 0) > 0) && <div className="mt-5 grid gap-3 border-t border-border/50 pt-5 md:grid-cols-2">
               {normalizeSalesExtraCharges(localDoc).map((charge, index) => <div key={charge.id} className="rounded-xl border border-border/50 bg-muted/10 p-3"><div className="mb-2 flex items-center justify-between gap-2"><span className="text-[10px] font-black uppercase tracking-widest text-muted-foreground">Coste extra {index + 1}</span><Button type="button" variant="ghost" size="icon" className="size-7 text-muted-foreground hover:text-rose-500" aria-label={`Eliminar coste extra ${index + 1}`} onClick={() => updateCreditExtraCharges(normalizeSalesExtraCharges(localDoc).filter((entry) => entry.id !== charge.id))}><Trash2 className="size-3.5" /></Button></div><div className="grid gap-2 sm:grid-cols-[1fr_130px]"><Input value={charge.description} placeholder="Descripción" onChange={(event) => updateCreditExtraCharges(normalizeSalesExtraCharges(localDoc).map((entry) => entry.id === charge.id ? { ...entry, description: event.target.value } : entry))} /><Input type="number" min="0" step="0.01" value={charge.amount || ''} placeholder="Monto" onChange={(event) => updateCreditExtraCharges(normalizeSalesExtraCharges(localDoc).map((entry) => entry.id === charge.id ? { ...entry, amount: Math.max(0, Number(event.target.value) || 0) } : entry))} currencyPrecision /></div></div>)}
@@ -1542,14 +1564,9 @@ export function NotasCreditoView({ data, summaryData, summaryLoading, summaryErr
           isRowSelectable={(row) => canPerform('SALES_CREDIT_NOTES', 'cancel') && normalizeStatus(row.status) === 'DRAFT'}
           onBulkDelete={canPerform('SALES_CREDIT_NOTES', 'cancel') ? async (ids) => {
             if (!canPerform('SALES_CREDIT_NOTES', 'cancel')) return;
-            const id = toast.loading(`Cancelando ${ids.length} crédito${ids.length === 1 ? '' : 's'}...`);
-            try {
-              for (const recordId of ids) await creditNotesService.cancel(recordId as string);
-              toast.success('Créditos cancelados', { id });
-              onRefresh();
-            } catch (error: any) {
-              toast.error(error?.response?.data?.message || error?.message || 'No se pudieron cancelar', { id });
-            }
+            setCancelReason('');
+            setCancelReasonAttempted(false);
+            setPendingDeleteIds(ids.map(String));
           } : undefined}
           columns={columns}
           onRowUpdate={async () => {}}
@@ -1570,7 +1587,7 @@ export function NotasCreditoView({ data, summaryData, summaryLoading, summaryErr
               {row.kind === 'CUSTOMER_LOAN'
                 ? <Button title="Ver préstamo" aria-label="Ver préstamo" variant="ghost" size="icon" className="size-8 rounded-lg text-muted-foreground hover:text-primary" onClick={() => setDetailCredit(row)}><Eye className="size-4" /></Button>
                 : <Button title="Ver crédito completo" aria-label="Ver crédito completo" variant="ghost" size="icon" className="size-8 rounded-lg text-muted-foreground hover:text-primary" onClick={() => { setDetailCredit(null); startEdit(row.id); }}><Eye className="size-4" /></Button>}
-              {row.kind === 'CREDIT_NOTE' && canPerform('SALES_CREDIT_NOTES', 'cancel') && status === 'DRAFT' && <Button title="Cancelar crédito" aria-label="Cancelar crédito" variant="ghost" size="icon" className="size-8 rounded-lg text-muted-foreground hover:text-rose-500" onClick={() => setPendingDeleteId(row.id)}><Ban className="size-4" /></Button>}
+              {row.kind === 'CREDIT_NOTE' && canPerform('SALES_CREDIT_NOTES', 'cancel') && status === 'DRAFT' && <Button title="Cancelar crédito" aria-label="Cancelar crédito" variant="ghost" size="icon" className="size-8 rounded-lg text-muted-foreground hover:text-rose-500" onClick={() => { setCancelReason(''); setCancelReasonAttempted(false); setPendingDeleteIds([row.id]); }}><Ban className="size-4" /></Button>}
             </div>;
           }}
         />
@@ -1591,12 +1608,38 @@ export function NotasCreditoView({ data, summaryData, summaryLoading, summaryErr
           {detailCredit.kind === 'CREDIT_NOTE' && canPerform('SALES_CREDIT_NOTES', 'issue') && normalizeStatus(detailCredit.status) === 'DRAFT' && <Button type="button" className="rounded-xl bg-emerald-600 text-white hover:bg-emerald-700" onClick={() => handleIssue(detailCredit.id)}><CheckCircle2 className="mr-2 size-4" />Emitir crédito</Button>}
           {detailCredit.kind === 'CREDIT_NOTE' && canPerform('SALES_CREDIT_NOTES', 'send') && ['ISSUED', 'PARTIAL', 'APPLIED'].includes(normalizeStatus(detailCredit.status)) && Number(detailCredit.balance ?? detailCredit.total) > 0.01 && <Button type="button" className="rounded-xl bg-emerald-600 text-white hover:bg-emerald-700" disabled={['PENDING', 'CLAIMED'].includes(normalizeStatus(detailCredit.cashQueue?.status))} onClick={() => void handleSendToCash(detailCredit)}><Send className="mr-2 size-4" />Enviar a Caja</Button>}
           {canPerform('SALES_CREDIT_NOTES', 'pay') && isPayableStatus(detailCredit.status) && Number(detailCredit.balance ?? detailCredit.total) > 0.01 && <Button type="button" variant="outline" className="rounded-xl border-primary/30 text-primary hover:bg-primary/10" onClick={() => openPayment(detailCredit)}><CreditCard className="mr-2 size-4" />{detailCredit.kind === 'CUSTOMER_LOAN' ? 'Registrar abono' : 'Registrar pago'}</Button>}
-          {detailCredit.kind === 'CREDIT_NOTE' && canPerform('SALES_CREDIT_NOTES', 'cancel') && normalizeStatus(detailCredit.status) === 'DRAFT' && <Button type="button" variant="outline" className="rounded-xl border-rose-500/30 text-rose-600 hover:bg-rose-500/10 dark:text-rose-400" onClick={() => { setDetailCredit(null); setPendingDeleteId(detailCredit.id); }}><Ban className="mr-2 size-4" />Cancelar</Button>}
+          {detailCredit.kind === 'CREDIT_NOTE' && canPerform('SALES_CREDIT_NOTES', 'cancel') && normalizeStatus(detailCredit.status) === 'DRAFT' && <Button type="button" variant="outline" className="rounded-xl border-rose-500/30 text-rose-600 hover:bg-rose-500/10 dark:text-rose-400" onClick={() => { setDetailCredit(null); setCancelReason(''); setCancelReasonAttempted(false); setPendingDeleteIds([detailCredit.id]); }}><Ban className="mr-2 size-4" />Cancelar</Button>}
         </> : undefined}
         onDownloadPdf={detailCredit && canPerform('SALES_CREDIT_NOTES', 'export') ? (format) => { if (detailCredit) void handleExportPDF(detailCredit, format); } : undefined}
       />
 
-      <ConfirmDialog open={pendingDeleteId !== null} onOpenChange={(open) => !open && setPendingDeleteId(null)} title="¿Cancelar crédito?" description="El crédito quedará cancelado y se conservará el registro. Solo pueden cancelarse créditos pendientes de aprobación; los emitidos, aplicados o pagados no se modifican." confirmLabel="Cancelar crédito" variant="destructive" loading={deleteLoading} onConfirm={async () => { if (!canPerform('SALES_CREDIT_NOTES', 'cancel') || !pendingDeleteId) return; const id = toast.loading('Cancelando crédito...'); try { setDeleteLoading(true); await creditNotesService.cancel(pendingDeleteId); toast.success('Crédito cancelado', { id }); onRefresh(); } catch (error: any) { toast.error(error?.response?.data?.message || error?.message || 'No se pudo cancelar', { id }); } finally { setDeleteLoading(false); setPendingDeleteId(null); } }} />
+      <ConfirmDialog
+        open={pendingDeleteIds !== null}
+        onOpenChange={(open) => { if (!open && !deleteLoading) { setPendingDeleteIds(null); setCancelReason(''); setCancelReasonAttempted(false); } }}
+        title={pendingDeleteIds?.length === 1 ? '¿Cancelar crédito?' : `¿Cancelar ${pendingDeleteIds?.length ?? ''} créditos?`}
+        description="El crédito quedará cancelado y se conservará el registro. Solo pueden cancelarse créditos pendientes de aprobación; los emitidos, aplicados o pagados no se modifican."
+        confirmLabel={pendingDeleteIds?.length === 1 ? 'Cancelar crédito' : 'Cancelar créditos'}
+        variant="destructive"
+        loading={deleteLoading}
+        children={<RequiredReasonField id="credit-note-cancel-reason" label="Motivo de cancelación" value={cancelReason} onChange={setCancelReason} attempted={cancelReasonAttempted} disabled={deleteLoading} />}
+        onConfirm={async () => {
+          if (!canPerform('SALES_CREDIT_NOTES', 'cancel') || !pendingDeleteIds?.length) return;
+          if (!cancelReason.trim()) { setCancelReasonAttempted(true); return false; }
+          const ids = pendingDeleteIds;
+          const id = toast.loading(ids.length === 1 ? 'Cancelando crédito...' : `Cancelando ${ids.length} créditos...`);
+          try {
+            setDeleteLoading(true);
+            for (const recordId of ids) await creditNotesService.cancel(recordId, cancelReason.trim());
+            toast.success(ids.length === 1 ? 'Crédito cancelado' : 'Créditos cancelados', { id });
+            onRefresh();
+          } catch (error: any) {
+            toast.error(error?.response?.data?.message || error?.message || 'No se pudieron cancelar los créditos', { id });
+          } finally {
+            setDeleteLoading(false);
+            setPendingDeleteIds(null);
+          }
+        }}
+      />
 
       <Dialog open={Boolean(paymentCredit)} onOpenChange={(open) => !open && !paymentLoading && setPaymentCredit(null)}>
         <DialogContent className="w-[calc(100%-2rem)] !max-w-2xl rounded-3xl">
@@ -1667,7 +1710,7 @@ export function NotasCreditoView({ data, summaryData, summaryLoading, summaryErr
                           <span className="font-mono font-bold text-purple-600">{formatExplicitAmount(Number(line.cardCommissionAmount || calculateCardCommission(Number(String(line.amount || '').replace(/,/g, '') || 0), Number(line.cardCommissionPercent || 0))), line.currency)}</span>
                         </div>
                       )}
-                      {hasPaymentReferenceField(line.method) && <div className="mt-2"><p className="mb-1 text-[9px] font-black uppercase tracking-widest text-muted-foreground">Referencia *</p><Input value={line.reference || ''} onChange={(event) => setPaymentLines((current) => current.map((item, itemIndex) => itemIndex === index ? { ...item, reference: event.target.value } : item))} placeholder="Transferencia, voucher o cheque..." disabled={paymentLoading} required={requiresPaymentReference(line.method)} className="h-9 text-xs" /></div>}
+                      {hasPaymentReferenceField(line.method) && <div className="mt-2"><Label htmlFor={`credit-note-payment-reference-${index}`} required={requiresPaymentReference(line.method)} className="mb-1 text-[9px] font-black uppercase tracking-widest text-muted-foreground">Referencia</Label><Input id={`credit-note-payment-reference-${index}`} value={line.reference || ''} onChange={(event) => setPaymentLines((current) => current.map((item, itemIndex) => itemIndex === index ? { ...item, reference: event.target.value } : item))} placeholder="Transferencia, voucher o cheque..." disabled={paymentLoading} required={requiresPaymentReference(line.method)} className="h-9 text-xs" /></div>}
                     </div>
                   ))}
                   {mixedPaymentEnabled && <Button type="button" variant="outline" className="w-full rounded-xl border-dashed text-[10px] font-black uppercase tracking-widest" onClick={() => setPaymentLines((current) => [...current, paymentLine('CASH', '', displayCurrency === 'USD' ? 'USD' : 'NIO')])} disabled={paymentLoading}><Plus className="mr-2 size-4" /> Agregar pago mixto</Button>}

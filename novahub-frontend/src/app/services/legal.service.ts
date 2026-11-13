@@ -109,8 +109,8 @@ export const legalService = {
   }) =>
     api.post<LegalCase>('/legal/cases', dto),
 
-  updateStatus: (id: string, status: string, assignedTo?: string) =>
-    api.patch<LegalCase>(`/legal/cases/${id}/status`, { status, assignedTo }),
+  updateStatus: (id: string, status: string, assignedTo?: string, reason?: string) =>
+    api.patch<LegalCase>(`/legal/cases/${id}/status`, { status, assignedTo, ...(status === 'CANCELLED' ? { reason } : {}) }),
 
   addNote: (caseId: string, content: string, isInternal = false) =>
     api.post<LegalNote>(`/legal/cases/${caseId}/notes`, { content, isInternal }),

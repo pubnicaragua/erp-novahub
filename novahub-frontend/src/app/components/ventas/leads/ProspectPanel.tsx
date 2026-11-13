@@ -13,7 +13,7 @@ import { MapsSearch } from './MapsSearch';
 const KIND_LABEL: Record<PlanTask['kind'], string> = { REVIEW: 'Revisar', SEARCH: 'Buscar', SOCIAL: 'Redes sociales', FOLLOWUP: 'Seguimiento' };
 const KIND_TONE: Record<PlanTask['kind'], string> = { REVIEW: 'bg-amber-100 text-amber-900', SEARCH: 'bg-sky-100 text-sky-900', SOCIAL: 'bg-indigo-100 text-indigo-900', FOLLOWUP: 'bg-emerald-100 text-emerald-900' };
 const copy = async (text: string) => {
-  try { await navigator.clipboard.writeText(text); toast.success('Copiado. Pégalo en ChatGPT o Claude.'); } catch { toast.error('No se pudo copiar. Selecciona el texto y cópialo a mano.'); }
+  try { await navigator.clipboard.writeText(text); toast.success('Copiado. Pégalo en ChatGPT o Claude.'); } catch { toast.error('El navegador no permitió copiar el texto. Selecciónalo y cópialo manualmente.'); }
 };
 
 function TaskCard({ task, onNavigate }: { task: PlanTask; onNavigate: (view: 'review' | 'table') => void }) {

@@ -4,7 +4,15 @@
 // ============================================================
 
 import { isSafeAuthToken } from './auth-token';
-import { normalizeApiErrorBody, type ApiErrorBody } from './api-error';
+import {
+  ApiRequestError,
+  addApiErrorContext,
+  classifyApiError,
+  normalizeApiErrorBody,
+  type ApiErrorBody,
+  type ApiErrorClassification,
+} from './api-error';
+export { ApiRequestError } from './api-error';
 import { notifyErpMutation } from '../utils/action-lock';
 import { beginNotificationAction, completeNotificationAction } from './notification-action-coordinator';
 
@@ -45,20 +53,6 @@ function stableRequestKey(value: unknown): string {
   if (value === null || typeof value !== 'object') return JSON.stringify(value);
   if (Array.isArray(value)) return `[${value.map(stableRequestKey).join(',')}]`;
   return `{${Object.keys(value as Record<string, unknown>).sort().map((key) => `${JSON.stringify(key)}:${stableRequestKey((value as any)[key])}`).join(',')}}`;
-}
-
-export class ApiRequestError extends Error {
-  constructor(
-    message: string,
-    public readonly status?: number,
-    public readonly path?: string,
-    public readonly code?: string,
-    public readonly details?: string[],
-    public readonly data?: unknown,
-  ) {
-    super(message);
-    this.name = 'ApiRequestError';
-  }
 }
 
 function buildUrl(path: string, params?: Record<string, string | number | boolean | undefined>): string {
@@ -243,7 +237,13 @@ function humanizeValidationMessage(raw: string): string {
   return raw;
 }
 
-function normalizeErrorMessage(message?: string, status?: number, context?: string, requestId?: string): string {
+function normalizeErrorMessage(
+  message?: string,
+  status?: number,
+  context?: string,
+  requestId?: string,
+  category?: ApiErrorClassification,
+): string {
   const raw = (message || '').trim();
   const lower = raw.toLowerCase();
   const prefix = context ? `No se pudo ${context}. ` : '';
@@ -251,7 +251,7 @@ function normalizeErrorMessage(message?: string, status?: number, context?: stri
   // A duplicate hotel code is a direct notice to the user; do not frame it
   // as a failed save or expose the HTTP 409 wording around it.
   if (status === 409 && /^ya existe (?:una habitación|un tipo de habitación) con ese código\.?$/i.test(raw)) {
-    return raw;
+    return addApiErrorContext(raw, status, context, category);
   }
 
   const normalizedHttpLabel = lower.replace(/[.!?]+$/, '');
@@ -302,7 +302,12 @@ function normalizeErrorMessage(message?: string, status?: number, context?: stri
       return `${prefix}La base de datos no tiene una tabla que esta operación necesita. Contacta al administrador para revisar la actualización del sistema.`;
     }
     if (lower.includes('unique constraint failed') || lower.includes('already exists')) {
-      return `${prefix}Ya existe un registro con esos datos. Revisa el código o nombre e inténtalo nuevamente.`;
+      return addApiErrorContext(
+        'Ya existe un registro con esos datos. Revisa el código o nombre e inténtalo nuevamente.',
+        status,
+        context,
+        category,
+      );
     }
     if (lower.startsWith('http error') && status) {
       return normalizeErrorMessage('', status, context, requestId);
@@ -310,7 +315,7 @@ function normalizeErrorMessage(message?: string, status?: number, context?: stri
     // Para errores 403, traducir terminos tecnicos a mensajes amigables
     if (status === 403 && raw) return humanize403Message(raw, context);
     // Return the backend message as-is (with prefix for context)
-    return prefix && !lower.startsWith('no se pudo') ? `${prefix}${raw}` : raw;
+    return addApiErrorContext(raw, status, context, category);
   }
 
   // Generic fallbacks when no backend message
@@ -377,11 +382,53 @@ function extractServerMessages(errorBody: ApiErrorBody | null) {
   const nestedMessage = errorBody.message && typeof errorBody.message === 'object' && !Array.isArray(errorBody.message)
     ? (errorBody.message as any)
     : null;
-  return [
+  return [...new Set([
     ...asTextList(Array.isArray(errorBody.message) ? errorBody.message : nestedMessage?.message || nestedMessage?.error || errorBody.message),
     ...asTextList(errorBody.details),
     ...asTextList(errorBody.error).filter((label) => !GENERIC_HTTP_ERROR_LABELS.has(label.trim().toLowerCase().replace(/[.!?]+$/, ''))),
-  ];
+  ])];
+}
+
+interface ApiRequestErrorOverrides {
+  message?: string;
+  code?: string;
+  category?: ApiErrorClassification;
+  name?: string;
+}
+
+function createApiRequestError(
+  response: Response,
+  path: string,
+  context: string,
+  errorBody: ApiErrorBody | null,
+  overrides: ApiRequestErrorOverrides = {},
+): ApiRequestError {
+  const requestId = typeof errorBody?.requestId === 'string'
+    ? errorBody.requestId
+    : response.headers.get('X-Request-Id') || undefined;
+  const details = extractServerMessages(errorBody);
+  const category = overrides.category ?? classifyApiError({ status: response.status, data: errorBody });
+  const message = overrides.message === undefined
+    ? normalizeErrorMessage(
+      details.map(humanizeValidationMessage).join('. '),
+      response.status,
+      context,
+      requestId,
+      category,
+    )
+    : overrides.message;
+  const error = new ApiRequestError(
+    message,
+    response.status,
+    path,
+    overrides.code ?? errorBody?.code,
+    details,
+    errorBody,
+    category,
+    requestId,
+  );
+  if (overrides.name) error.name = overrides.name;
+  return error;
 }
 
 async function apiRequestInternal<T>(path: string, options: RequestOptions = {}): Promise<T> {
@@ -426,10 +473,26 @@ async function apiRequestInternal<T>(path: string, options: RequestOptions = {})
       try {
         response = await fetch(buildUrl(resolvedPath, params), requestInit);
       } catch {
-        throw new ApiRequestError(normalizeErrorMessage(error?.message, undefined, context), undefined, path);
+        throw new ApiRequestError(
+          normalizeErrorMessage(error?.message, undefined, context, undefined, 'TECHNICAL'),
+          undefined,
+          path,
+          undefined,
+          undefined,
+          undefined,
+          'TECHNICAL',
+        );
       }
     } else {
-      throw new ApiRequestError(normalizeErrorMessage(error?.message, undefined, context), undefined, path);
+      throw new ApiRequestError(
+        normalizeErrorMessage(error?.message, undefined, context, undefined, 'TECHNICAL'),
+        undefined,
+        path,
+        undefined,
+        undefined,
+        undefined,
+        'TECHNICAL',
+      );
     }
   }
 
@@ -438,14 +501,20 @@ async function apiRequestInternal<T>(path: string, options: RequestOptions = {})
     try {
       errorBody = normalizeApiErrorBody(await response.json());
     } catch { /* keep the initialized null body */ }
+    const requestId = typeof errorBody?.requestId === 'string'
+      ? errorBody.requestId
+      : response.headers.get('X-Request-Id') || undefined;
 
     if (errorBody?.code === 'TRIAL_EXPIRED' || (errorBody?.message && typeof errorBody.message === 'object' && (errorBody.message as any)?.code === 'TRIAL_EXPIRED')) {
       const innerMsg = typeof errorBody.message === 'object' ? (errorBody.message as any)?.message : errorBody.message;
       // Dispatch with code at the top level for App.tsx listener
       const detail = { ...errorBody, code: 'TRIAL_EXPIRED', message: innerMsg };
       window.dispatchEvent(new CustomEvent('trial-expired', { detail }));
-      const err = new Error(innerMsg || 'Tu período de prueba ha terminado. Actualiza tu plan para continuar.');
-      err.name = 'TrialExpiredError';
+      const err = createApiRequestError(response, path, context, errorBody, {
+        message: innerMsg || 'Tu período de prueba ha terminado. Actualiza tu plan para continuar.',
+        code: 'TRIAL_EXPIRED',
+        name: 'TrialExpiredError',
+      });
       throw err;
     }
 
@@ -458,9 +527,12 @@ async function apiRequestInternal<T>(path: string, options: RequestOptions = {})
         (errorBody.message as any)?.error === 'SESSION_CLOSED');
     if (response.status === 401 && sessionClosed) {
       localStorage.removeItem('nh-auth-token');
-      const err = new Error('Tu sesión se cerró porque se inició sesión en otro dispositivo.');
-      err.name = 'SessionClosedError';
-      window.dispatchEvent(new CustomEvent('session-closed', { detail: { code: 'SESSION_CLOSED' } }));
+      const err = createApiRequestError(response, path, context, errorBody, {
+        message: 'Tu sesión se cerró porque se inició sesión en otro dispositivo.',
+        code: 'SESSION_CLOSED',
+        name: 'SessionClosedError',
+      });
+      window.dispatchEvent(new CustomEvent('session-closed', { detail: { code: 'SESSION_CLOSED', requestId } }));
       throw err;
     }
 
@@ -483,30 +555,16 @@ async function apiRequestInternal<T>(path: string, options: RequestOptions = {})
         (errorBody?.message && typeof errorBody.message === 'object' && (errorBody.message as any)?.error === 'SESSION_EXPIRED')
         ? 'SESSION_EXPIRED'
         : 'SESSION_INVALID';
-      const err = new Error(message);
-      err.name = 'SessionClosedError';
-      window.dispatchEvent(new CustomEvent('session-closed', { detail: { code: sessionCode, message } }));
+      const err = createApiRequestError(response, path, context, errorBody, {
+        message,
+        code: sessionCode,
+        name: 'SessionClosedError',
+      });
+      window.dispatchEvent(new CustomEvent('session-closed', { detail: { code: sessionCode, message, requestId } }));
       throw err;
     }
 
-    // Handle nested message objects (e.g., ForbiddenException wrapping)
-    const rawMessage = typeof errorBody?.message === 'object' && errorBody.message !== null
-      ? (errorBody.message as any)?.message || (errorBody.message as any)?.error || ''
-      : errorBody?.message || '';
-    const messages = extractServerMessages(rawMessage ? { ...errorBody, message: rawMessage } : errorBody);
-    throw new ApiRequestError(
-      normalizeErrorMessage(
-        messages.map(humanizeValidationMessage).join('. '),
-        response.status,
-        context,
-        typeof errorBody?.requestId === 'string' ? errorBody.requestId : response.headers.get('X-Request-Id') || undefined,
-      ),
-      response.status,
-      path,
-      errorBody?.code,
-      messages,
-      errorBody
-    );
+    throw createApiRequestError(response, path, context, errorBody);
   }
 
   const text = await response.text();

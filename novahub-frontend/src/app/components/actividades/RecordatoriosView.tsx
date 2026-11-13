@@ -91,7 +91,7 @@ export const RecordatoriosView: React.FC<RecordatoriosViewProps> = ({ data, load
 
   const handleAdd = async () => {
     try {
-      if (!formData.title) {
+      if (!formData.title.trim()) {
         toast.error('El título es requerido');
         return;
       }
@@ -114,7 +114,7 @@ export const RecordatoriosView: React.FC<RecordatoriosViewProps> = ({ data, load
       }
 
       await remindersService.create({ 
-        title: formData.title, 
+        title: formData.title.trim(),
         description: formData.description,
         reminderDate: finalReminderDate.toISOString(), 
         status: 'PENDING', 
@@ -197,8 +197,8 @@ export const RecordatoriosView: React.FC<RecordatoriosViewProps> = ({ data, load
           </DialogHeader>
           <div className="grid gap-5 px-6 py-6 sm:px-8">
             <div className="space-y-2">
-              <Label className="text-xs font-bold">Título o asunto</Label>
-              <Input placeholder="Ej. Reunión de equipo" value={formData.title} onChange={e => setFormData({...formData, title: e.target.value})} className="h-11 rounded-xl bg-background" />
+              <Label htmlFor="activity-reminder-title" required className="text-xs font-bold">Título o asunto</Label>
+              <Input id="activity-reminder-title" required placeholder="Ej. Reunión de equipo" value={formData.title} onChange={e => setFormData({...formData, title: e.target.value})} className="h-11 rounded-xl bg-background" />
             </div>
             <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
               <div className="space-y-2">

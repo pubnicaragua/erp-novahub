@@ -581,7 +581,7 @@ export const intlImportsService = {
     return api.delete<{ success: boolean; id: string }>(`/intl-imports/packages/${id}`);
   },
 
-  async addPackageEvent(id: string, event: { status: IntlImportPackageStatus; label: string; location?: string; description?: string }): Promise<IntlImportPackageEvent> {
+  async addPackageEvent(id: string, event: { status: IntlImportPackageStatus; label: string; location?: string; description?: string; reason?: string }): Promise<IntlImportPackageEvent> {
     return api.post<IntlImportPackageEvent>(`/intl-imports/packages/${id}/events`, event);
   },
 
@@ -626,7 +626,7 @@ export const intlImportsService = {
     return normalizeContainer(created);
   },
 
-  async updateContainer(id: string, payload: Partial<IntlImportContainer>): Promise<IntlImportContainer> {
+  async updateContainer(id: string, payload: Partial<IntlImportContainer> & { reason?: string }): Promise<IntlImportContainer> {
     const updated = await api.patch<RawContainer>(`/intl-imports/containers/${id}`, payload);
     return normalizeContainer(updated);
   },

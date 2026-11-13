@@ -133,7 +133,7 @@ export const recurringSupplierInvoicesService = {
   update: (id: string, data: Partial<RecurringSupplierInvoice>) => api.patch<RecurringSupplierInvoice>(`/purchases/recurring-invoices/${id}`, data),
   pause: (id: string) => api.patch<RecurringSupplierInvoice>(`/purchases/recurring-invoices/${id}/pause`, {}),
   resume: (id: string) => api.patch<RecurringSupplierInvoice>(`/purchases/recurring-invoices/${id}/resume`, {}),
-  cancel: (id: string) => api.post<RecurringSupplierInvoice>(`/purchases/recurring-invoices/${id}/cancel`, {}),
+  cancel: (id: string, reason: string) => api.post<RecurringSupplierInvoice>(`/purchases/recurring-invoices/${id}/cancel`, { reason }),
   delete: (id: string) => api.delete<void>(`/purchases/recurring-invoices/${id}`),
 };
 
@@ -185,7 +185,7 @@ export const supplierCreditsService = {
   update: (id: string, data: Partial<SupplierCredit>) => api.patch<SupplierCredit>(`/purchases/credits/${id}`, data),
   issue: (id: string) => api.post<SupplierCredit>(`/purchases/credits/${id}/issue`, {}),
   apply: (id: string, data: { paymentMethod?: string; bankAccountId?: string } = {}) => api.post<SupplierCredit>(`/purchases/credits/${id}/apply`, data),
-  void: (id: string) => api.post<SupplierCredit>(`/purchases/credits/${id}/void`, {}),
+  void: (id: string, reason: string) => api.post<SupplierCredit>(`/purchases/credits/${id}/void`, { reason }),
   delete: (id: string) => api.delete<void>(`/purchases/credits/${id}`),
 };
 
@@ -198,7 +198,7 @@ export const expensesService = {
   bulkImport: (data: Partial<Expense>[]) => api.post<{ success: number; count: number; failed: number }>('/purchases/expenses/bulk-import', data),
   update: (id: string, data: Partial<Expense>) => api.patch<Expense>(`/purchases/expenses/${id}`, data),
   updateStatus: (id: string, data: Partial<Expense>) => api.patch<Expense>(`/purchases/expenses/${id}/status`, data),
-  cancel: (id: string) => api.post<Expense>(`/purchases/expenses/${id}/cancel`, {}),
+  cancel: (id: string, reason: string) => api.post<Expense>(`/purchases/expenses/${id}/cancel`, { reason }),
   delete: (id: string) => api.delete<void>(`/purchases/expenses/${id}`),
 };
 
@@ -274,7 +274,7 @@ export const recurringExpensesService = {
   update: (id: string, data: Partial<RecurringExpense>) => api.patch<RecurringExpense>(`/purchases/recurring-expenses/${id}`, data),
   pause: (id: string) => api.patch<RecurringExpense>(`/purchases/recurring-expenses/${id}/pause`, {}),
   resume: (id: string) => api.patch<RecurringExpense>(`/purchases/recurring-expenses/${id}/resume`, {}),
-  cancel: (id: string) => api.patch<RecurringExpense>(`/purchases/recurring-expenses/${id}/cancel`, {}),
+  cancel: (id: string, reason: string) => api.patch<RecurringExpense>(`/purchases/recurring-expenses/${id}/cancel`, { reason }),
   delete: (id: string) => api.delete<void>(`/purchases/recurring-expenses/${id}`),
 };
 

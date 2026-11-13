@@ -13,6 +13,7 @@ import { useAuth } from '../../contexts/AuthContext';
 import type { SalesOtherLocationsViewModule } from '../../services/inventario.service';
 import { SalesOtherLocationsDialog } from './SalesOtherLocationsDialog';
 import { formatCurrencyAmount } from '../../utils/currency';
+import { SalesCustomerActionButton, SALES_CUSTOMER_REQUIRED_MESSAGE } from './SalesCustomerActionButton';
 import {
   formatSalesStock,
   getAvailableSalesStock,
@@ -65,7 +66,11 @@ type SalesProductPickerProps = {
   otherLocationsPermissionModule: SalesOtherLocationsViewModule;
   showSelectedVariant?: boolean;
   showSelectedStock?: boolean;
+  customerSelected: boolean;
   className?: string;
+  required?: boolean;
+  invalid?: boolean;
+  errorMessageId?: string;
 };
 
 const normalizeSearch = (value: unknown) => String(value || '')
@@ -132,7 +137,11 @@ export function SalesProductPicker({
   otherLocationsPermissionModule,
   showSelectedVariant = true,
   showSelectedStock = true,
+  customerSelected,
   className,
+  required,
+  invalid,
+  errorMessageId,
 }: SalesProductPickerProps) {
   const { canPerform } = useAuth();
   const queryClient = useQueryClient();
@@ -387,12 +396,16 @@ export function SalesProductPicker({
 
   return (
     <>
-      <Button
+      <SalesCustomerActionButton
         type="button"
         variant="outline"
         disabled={disabled}
+        customerSelected={customerSelected}
         onClick={() => onOpenChange(true)}
         className={cn('h-9 w-full min-w-0 justify-between rounded-md text-left font-normal', className)}
+        aria-required={required || undefined}
+        aria-invalid={invalid || undefined}
+        aria-describedby={errorMessageId}
         aria-haspopup="dialog"
         aria-expanded={open}
         aria-label={selectedProduct ? `Cambiar ${itemType === 'SERVICE' ? 'servicio' : 'producto'}: ${selectedProduct.name}${showSelectedVariant && selectedVariant ? `, variante ${getVariantName(selectedVariant)}` : ''}` : placeholder || `Seleccionar ${itemType === 'SERVICE' ? 'servicio' : 'producto'}`}
@@ -401,9 +414,18 @@ export function SalesProductPicker({
           {selectedProduct ? `${selectedProduct.code ? `${selectedProduct.code} - ` : ''}${selectedProduct.name || 'Artículo'}${showSelectedVariant && selectedVariant ? ` · ${getVariantName(selectedVariant)}` : ''}` : placeholder || `Seleccionar ${itemType === 'SERVICE' ? 'servicio...' : 'producto...'}`}
         </span>
         {selectedStockLabel && <span className="ml-2 max-w-32 shrink-0 truncate text-[10px] text-muted-foreground" title={selectedStockLabel}>{selectedStockLabel}</span>}
-      </Button>
+      </SalesCustomerActionButton>
 
-      <Dialog open={open} onOpenChange={closeAndReset}>
+      <Dialog
+        open={open && customerSelected}
+        onOpenChange={(nextOpen) => {
+          if (nextOpen && !customerSelected) {
+            toast.info(SALES_CUSTOMER_REQUIRED_MESSAGE);
+            return;
+          }
+          closeAndReset(nextOpen);
+        }}
+      >
         <DialogContent className="w-[calc(100%-1rem)] max-w-6xl gap-3 p-4 sm:p-6">
           <DialogHeader className="pr-8 text-left">
             {variantProductSelection && (

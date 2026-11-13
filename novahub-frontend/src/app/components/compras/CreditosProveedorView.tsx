@@ -18,6 +18,7 @@ import { cn } from '../ui/utils';
 import { useCurrency } from '../../contexts/CurrencyContext';
 import { useAuth } from '../../contexts/AuthContext';
 import { ConfirmDialog } from '../ui/ConfirmDialog';
+import { RequiredReasonField } from '../ui/RequiredReasonField';
 import { PurchaseKpiCard } from './PurchaseKpiCard';
 import { PurchaseViewTutorial } from './PurchaseViewTutorial';
 import { ColumnFilterMenu, useColumnFilters } from '../ui/ColumnFilterMenu';
@@ -167,6 +168,8 @@ export function CreditosProveedorView({ data, loading, onRefresh, supplierCatalo
   const [localDoc, setLocalDoc] = useState<Partial<SupplierCredit> | null>(null);
   const [pendingVoidId, setPendingVoidId] = useState<string | null>(null);
   const [voidLoading, setVoidLoading] = useState(false);
+  const [voidReason, setVoidReason] = useState('');
+  const [voidReasonAttempted, setVoidReasonAttempted] = useState(false);
   const [pendingDeleteCreditId, setPendingDeleteCreditId] = useState<string | null>(null);
   const [deleteCreditLoading, setDeleteCreditLoading] = useState(false);
   const [pendingIssueId, setPendingIssueId] = useState<string | null>(null);
@@ -588,10 +591,11 @@ export function CreditosProveedorView({ data, loading, onRefresh, supplierCatalo
 
   const handleVoidConfirm = async () => {
     if (!pendingVoidId || !canPerform('PURCHASES_RETURNS', 'read') || !canPerform('PURCHASES_RETURNS', 'void')) return;
+    if (!voidReason.trim()) { setVoidReasonAttempted(true); return false; }
     setVoidLoading(true);
     const voidToastId = toast.loading('Anulando crédito de proveedor...');
     try {
-      await vendorCreditsService.void(pendingVoidId);
+      await vendorCreditsService.void(pendingVoidId, voidReason.trim());
       toast.success('Crédito anulado correctamente', { id: voidToastId });
       setPendingVoidId(null);
       openEditor(null);
@@ -1336,11 +1340,12 @@ export function CreditosProveedorView({ data, loading, onRefresh, supplierCatalo
 
       <ConfirmDialog
         open={pendingVoidId !== null}
-        onOpenChange={(open) => !open && setPendingVoidId(null)}
+        onOpenChange={(open) => { if (!open && !voidLoading) { setPendingVoidId(null); setVoidReason(''); setVoidReasonAttempted(false); } }}
         loading={voidLoading}
         title="Anular Crédito de Proveedor"
         description="El crédito quedará marcado como ANULADO y se devolverá el saldo a la factura vinculada (si la tiene). Esta acción no se puede deshacer."
         confirmLabel="Anular crédito"
+        children={<RequiredReasonField id="supplier-credit-void-reason" label="Motivo de anulación" value={voidReason} onChange={setVoidReason} attempted={voidReasonAttempted} disabled={voidLoading} />}
         onConfirm={handleVoidConfirm}
       />
 

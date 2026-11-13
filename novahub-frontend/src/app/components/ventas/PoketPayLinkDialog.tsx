@@ -7,6 +7,8 @@ import { Button } from '../ui/button';
 import { Input } from '../ui/input';
 import { Label } from '../ui/label';
 import { Badge } from '../ui/badge';
+import { ConfirmDialog } from '../ui/ConfirmDialog';
+import { RequiredReasonField } from '../ui/RequiredReasonField';
 import { toast } from '@/app/services/toast';
 import { getApiErrorMessage } from '../../services/api';
 import { poketPayLinkService, type PoketPayLink } from '../../services/poket-paylink.service';
@@ -36,6 +38,9 @@ export function PoketPayLinkDialog({ invoice, open, onOpenChange, onRefresh }: {
   const [expirationDate, setExpirationDate] = useState(localDateTimeAfter24Hours);
   const [loading, setLoading] = useState(false);
   const [workingId, setWorkingId] = useState<string | null>(null);
+  const [pendingCancelLink, setPendingCancelLink] = useState<PoketPayLink | null>(null);
+  const [cancelReason, setCancelReason] = useState('');
+  const [cancelReasonAttempted, setCancelReasonAttempted] = useState(false);
 
   const activeLink = useMemo(() => links.find((link) => ['CREATED', 'IN_PROGRESS'].includes(link.status)), [links]);
 
@@ -100,14 +105,26 @@ export function PoketPayLinkDialog({ invoice, open, onOpenChange, onRefresh }: {
 
   const cancel = async (link: PoketPayLink) => {
     if (!canCancel) return;
-    if (!window.confirm('¿Cancelar este PayLink? La factura no se anulará.')) return;
+    setCancelReason('');
+    setCancelReasonAttempted(false);
+    setPendingCancelLink(link);
+  };
+
+  const confirmCancel = async () => {
+    if (!pendingCancelLink || !canCancel) return false;
+    if (!cancelReason.trim()) { setCancelReasonAttempted(true); return false; }
     try {
-      setWorkingId(link.id);
-      const cancelled = await poketPayLinkService.cancel(link.id);
+      setWorkingId(pendingCancelLink.id);
+      const cancelled = await poketPayLinkService.cancel(pendingCancelLink.id, cancelReason.trim());
       setLinks((current) => current.map((item) => item.id === cancelled.id ? cancelled : item));
       toast.success('PayLink cancelado.');
+      setPendingCancelLink(null);
+      setCancelReason('');
+      setCancelReasonAttempted(false);
+      return true;
     } catch (error) {
       toast.error(getApiErrorMessage(error, 'No se pudo cancelar el PayLink.'));
+      return false;
     } finally {
       setWorkingId(null);
     }
@@ -119,5 +136,17 @@ export function PoketPayLinkDialog({ invoice, open, onOpenChange, onRefresh }: {
       {activeLink && <div className="rounded-2xl border border-primary/20 bg-primary/5 p-4 text-sm"><p className="font-bold">Ya existe un PayLink activo para este monto.</p><p className="text-muted-foreground">Verifica el estado o cancélalo antes de crear otro.</p></div>}
       {!activeLink && canCreate && <Button type="button" onClick={() => void create()} disabled={loading || !invoice} className="w-full gap-2"><Link2 className="size-4" />{loading ? 'Creando...' : 'Generar link de pago'}</Button>}
       <div className="space-y-3"><div className="flex items-center justify-between"><h3 className="text-sm font-black uppercase tracking-widest">Historial</h3>{loading && <Loader2 className="size-4 animate-spin text-muted-foreground" />}</div>{links.length === 0 && !loading && <p className="rounded-xl border border-dashed p-4 text-sm text-muted-foreground">Esta factura todavía no tiene links de pago.</p>}{links.map((link) => <div key={link.id} className="space-y-3 rounded-2xl border border-border/60 p-4"><div className="flex flex-wrap items-start justify-between gap-2"><div><p className="font-bold">{money(link.amount, link.currency)}</p><p className="text-xs text-muted-foreground">Creado {displayDate(link.createdAt)} · vence {displayDate(link.expirationDate)}</p></div><Badge variant="outline" className={statusClasses[link.status] || ''}>{link.status === 'RESOLVED' && <CheckCircle2 className="mr-1 size-3" />}{statusLabels[link.status] || link.status}</Badge></div>{link.permanentLink && <div className="flex items-center gap-2 rounded-xl bg-muted/50 p-2"><span className="min-w-0 flex-1 truncate text-xs text-muted-foreground">{link.permanentLink}</span><Button type="button" size="icon" variant="ghost" onClick={() => void copy(link)} aria-label="Copiar enlace"><Clipboard className="size-4" /></Button><Button type="button" size="icon" variant="ghost" onClick={() => window.open(link.permanentLink, '_blank', 'noopener,noreferrer')} aria-label="Abrir enlace"><ExternalLink className="size-4" /></Button></div>}{link.errorReason && <p className="text-xs text-rose-600">{link.errorReason}</p>}<div className="flex flex-wrap gap-2">{canReconcile && <Button type="button" size="sm" variant="outline" onClick={() => void reconcile(link)} disabled={workingId === link.id || link.status === 'RESOLVED'} className="gap-1"><RefreshCw className="size-3.5" />{workingId === link.id ? 'Verificando...' : 'Verificar estado'}</Button>}{canCancel && ['CREATED', 'IN_PROGRESS'].includes(link.status) && <Button type="button" size="sm" variant="outline" onClick={() => void cancel(link)} disabled={workingId === link.id} className="gap-1 text-rose-600"><Ban className="size-3.5" />Cancelar</Button>}</div></div>)}</div>
-    </div><DialogFooter><Button type="button" variant="outline" onClick={() => onOpenChange(false)}>Cerrar</Button></DialogFooter></DialogContent></Dialog>;
+    </div><DialogFooter><Button type="button" variant="outline" onClick={() => onOpenChange(false)}>Cerrar</Button></DialogFooter></DialogContent>
+    <ConfirmDialog
+      open={Boolean(pendingCancelLink)}
+      onOpenChange={(isOpen) => { if (!isOpen && !workingId) { setPendingCancelLink(null); setCancelReason(''); setCancelReasonAttempted(false); } }}
+      title="¿Cancelar este PayLink?"
+      description="El PayLink quedará cancelado. La factura conservará su estado actual."
+      confirmLabel="Cancelar PayLink"
+      variant="destructive"
+      loading={workingId === pendingCancelLink?.id}
+      children={<RequiredReasonField id="paylink-cancel-reason" label="Motivo de cancelación" value={cancelReason} onChange={setCancelReason} attempted={cancelReasonAttempted} disabled={workingId !== null} />}
+      onConfirm={confirmCancel}
+    />
+  </Dialog>;
 }

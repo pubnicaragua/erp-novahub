@@ -12,6 +12,8 @@ import { cn } from '../ui/utils';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '../ui/table';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../ui/select';
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from '../ui/dialog';
+import { ConfirmDialog } from '../ui/ConfirmDialog';
+import { RequiredReasonField } from '../ui/RequiredReasonField';
 import { toast } from '@/app/services/toast';
 import { inventoryService } from '../../services/inventario.service';
 import { storageService } from '../../services/storage.service';
@@ -380,6 +382,9 @@ export function InventoryAuditsView({ audits, warehouses, products, onRefresh, o
   const [deletingId, setDeletingId] = useState<string | null>(null);
   const [workflowLoading, setWorkflowLoading] = useState<string | null>(null);
   const [comparisonAudit, setComparisonAudit] = useState<any | null>(null);
+  const [pendingCancelAudit, setPendingCancelAudit] = useState<any | null>(null);
+  const [cancelReason, setCancelReason] = useState('');
+  const [cancelReasonAttempted, setCancelReasonAttempted] = useState(false);
   const [comparisonTargetStatus, setComparisonTargetStatus] = useState<'CLOSED' | 'APPROVED'>('CLOSED');
   const [comparisonReasons, setComparisonReasons] = useState<Record<string, string>>({});
   const [theoreticalItems, setTheoreticalItems] = useState<any[]>([]);
@@ -777,7 +782,7 @@ export function InventoryAuditsView({ audits, warehouses, products, onRefresh, o
     return classes[s] || 'bg-muted text-muted-foreground border-border';
   };
 
-  const handleWorkflow = async (audit: any, targetStatus: string) => {
+  const handleWorkflow = async (audit: any, targetStatus: string, reason?: string): Promise<boolean | void> => {
     const canRunAction: Record<string, boolean> = {
       IN_PROGRESS: canStartAudits,
       CLOSED: canCloseAudits,
@@ -786,6 +791,12 @@ export function InventoryAuditsView({ audits, warehouses, products, onRefresh, o
       CANCELLED: canCancelAudits,
     };
     if (!canRunAction[targetStatus]) return;
+    if (targetStatus === 'CANCELLED' && !reason?.trim()) {
+      setPendingCancelAudit(audit);
+      setCancelReason('');
+      setCancelReasonAttempted(false);
+      return false;
+    }
     const labels: Record<string, string> = {
       IN_PROGRESS: 'iniciar el conteo',
       CLOSED: 'cerrar el conteo',
@@ -794,7 +805,7 @@ export function InventoryAuditsView({ audits, warehouses, products, onRefresh, o
       CANCELLED: 'cancelar',
     };
     const label = labels[targetStatus] || targetStatus;
-    if (!window.confirm(`¿${label.charAt(0).toUpperCase() + label.slice(1)} del acta ${audit.number}?`)) return;
+    if (targetStatus !== 'CANCELLED' && !window.confirm(`¿${label.charAt(0).toUpperCase() + label.slice(1)} del acta ${audit.number}?`)) return;
 
     // Before closing or approving, show the physical-vs-theoretical
     // comparison so the user can see exactly what will be adjusted.
@@ -825,14 +836,16 @@ export function InventoryAuditsView({ audits, warehouses, products, onRefresh, o
       if (targetStatus === 'APPROVED') {
         await inventoryService.approveAudit(audit.id);
       } else {
-        await inventoryService.changeAuditStatus(audit.id, targetStatus);
+        await inventoryService.changeAuditStatus(audit.id, targetStatus, undefined, reason?.trim());
       }
       toast.success(`Acta ${audit.number}: ${label} exitoso`);
       completeNotificationAction(actionToken);
       onRefresh();
+      return true;
     } catch (e: any) {
       toast.error(e?.message || `No se pudo ${label}`);
       failNotificationAction(actionToken);
+      return false;
     } finally {
       setWorkflowLoading(null);
     }
@@ -1790,6 +1803,24 @@ export function InventoryAuditsView({ audits, warehouses, products, onRefresh, o
           </div>
         </DialogContent>
       </Dialog>
+
+      <ConfirmDialog
+        open={Boolean(pendingCancelAudit)}
+        onOpenChange={(open) => { if (!open && !workflowLoading) { setPendingCancelAudit(null); setCancelReason(''); setCancelReasonAttempted(false); } }}
+        title={`¿Cancelar acta ${pendingCancelAudit?.number || ''}?`}
+        description="El acta quedará cancelada y se conservará en el historial."
+        confirmLabel="Cancelar auditoría"
+        variant="destructive"
+        loading={workflowLoading === pendingCancelAudit?.id}
+        children={<RequiredReasonField id="inventory-audit-cancel-reason" label="Motivo de cancelación" value={cancelReason} onChange={setCancelReason} attempted={cancelReasonAttempted} disabled={workflowLoading === pendingCancelAudit?.id} />}
+        onConfirm={async () => {
+          if (!pendingCancelAudit) return false;
+          if (!cancelReason.trim()) { setCancelReasonAttempted(true); return false; }
+          const cancelled = await handleWorkflow(pendingCancelAudit, 'CANCELLED', cancelReason.trim());
+          if (cancelled) { setPendingCancelAudit(null); setCancelReason(''); setCancelReasonAttempted(false); }
+          return cancelled === true;
+        }}
+      />
     </div>
   );
 }

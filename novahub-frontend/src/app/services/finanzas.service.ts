@@ -84,7 +84,7 @@ export const expensesService = {
   getById: (id: string) => api.get<Expense>(`/financials/expenses/${id}`),
   create: (data: Partial<Expense>) => api.post<Expense>('/financials/expenses', data),
   update: (id: string, data: Partial<Expense>) => api.patch<Expense>(`/financials/expenses/${id}`, data),
-  cancel: (id: string) => api.post<Expense>(`/financials/expenses/${id}/cancel`, {}),
+  cancel: (id: string, reason: string) => api.post<Expense>(`/financials/expenses/${id}/cancel`, { reason }),
   delete: (id: string) => api.delete<void>(`/financials/expenses/${id}`),
   bulkImport: (data: Partial<Expense>[]) => api.post<{ success: number; count: number; failed: number }>('/financials/expenses/bulk-import', data),
 };
@@ -95,7 +95,7 @@ export const recurringExpensesService = {
   update: (id: string, data: Partial<RecurringExpense>) => api.patch<RecurringExpense>(`/financials/recurring-expenses/${id}`, data),
   pause: (id: string) => api.post<RecurringExpense>(`/financials/recurring-expenses/${id}/pause`, {}),
   resume: (id: string) => api.post<RecurringExpense>(`/financials/recurring-expenses/${id}/resume`, {}),
-  cancel: (id: string) => api.post<RecurringExpense>(`/financials/recurring-expenses/${id}/cancel`, {}),
+  cancel: (id: string, reason: string) => api.post<RecurringExpense>(`/financials/recurring-expenses/${id}/cancel`, { reason }),
 };
 
 export const loanInstallmentsService = {
@@ -109,7 +109,7 @@ export const recurringIncomesService = {
   update: (id: string, data: any) => api.patch<any>(`/financials/recurring-incomes/${id}`, data),
   pause: (id: string) => api.post<any>(`/financials/recurring-incomes/${id}/pause`, {}),
   resume: (id: string) => api.post<any>(`/financials/recurring-incomes/${id}/resume`, {}),
-  cancel: (id: string) => api.post<any>(`/financials/recurring-incomes/${id}/cancel`, {}),
+  cancel: (id: string, reason: string) => api.post<any>(`/financials/recurring-incomes/${id}/cancel`, { reason }),
 };
 
 export const journalEntriesService = {

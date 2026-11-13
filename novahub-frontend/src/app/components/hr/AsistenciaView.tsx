@@ -242,7 +242,7 @@ export function AsistenciaView({ attendance, employees, onRefresh }: any) {
       toast.success(`Importación finalizada: ${created} registros, ${skipped} omitidos`);
       completeNotificationAction(actionToken);
     } catch (error: any) {
-      toast.error(`No se pudo importar: ${error?.message || 'archivo inválido'}`);
+      toast.apiFailure(error, 'No se pudo importar el archivo seleccionado. Corrige las incidencias indicadas o inténtalo de nuevo.');
       failNotificationAction(actionToken);
     } finally {
       setImporting(false);

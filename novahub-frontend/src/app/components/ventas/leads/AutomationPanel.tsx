@@ -13,7 +13,7 @@ import { failure } from './leadUtils';
 
 const when = (iso: string | null) => (iso ? new Date(iso).toLocaleString('es-NI', { dateStyle: 'medium', timeStyle: 'short' }) : 'Nunca');
 const copy = async (text: string, done: string) => {
-  try { await navigator.clipboard.writeText(text); toast.success(done); } catch { toast.error('No se pudo copiar. Selecciónalo y cópialo a mano.'); }
+  try { await navigator.clipboard.writeText(text); toast.success(done); } catch { toast.error('El navegador no permitió copiar el texto. Selecciónalo y cópialo manualmente.'); }
 };
 
 /** Llaves para que la extensión de Chrome, Zapier, n8n o un formulario envíen leads: lo que llega queda «por revisar». */

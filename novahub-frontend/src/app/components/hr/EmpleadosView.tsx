@@ -264,8 +264,8 @@ export function EmpleadosView({ employees, departments, positions, onRefresh, is
     try {
       const full: any = await hrService.getEmployee(listRow.id);
       emp = full?.data?.data ?? full?.data ?? full ?? listRow;
-    } catch {
-      toast.error('No se pudo cargar el expediente completo del empleado. Intenta de nuevo para no perder datos.');
+    } catch (error) {
+      toast.apiFailure(error, 'No se pudo cargar el expediente completo del empleado. Intenta de nuevo para no perder datos.');
       return;
     }
     setEditingId(emp.id);

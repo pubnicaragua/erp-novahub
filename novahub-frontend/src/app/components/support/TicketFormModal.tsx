@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from '../ui/dialog';
 import { Button } from '../ui/button';
+import { Label } from '../ui/label';
 import { Input } from '../ui/input';
 import { Textarea } from '../ui/textarea';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../ui/select';
@@ -295,9 +296,11 @@ export function TicketFormModal({ open, onOpenChange, ticket, onRefresh, custome
           </div>
 
           <div className="space-y-1.5">
-            <label className="text-[10px] uppercase font-bold text-muted-foreground">Asunto *</label>
+            <Label htmlFor="tickets-form-subject" required className="text-[10px] uppercase font-bold text-muted-foreground">Asunto</Label>
             <Input
+              id="tickets-form-subject"
               data-testid="tickets-form-subject"
+              required
               value={subject}
               onChange={(e) => setSubject(e.target.value)}
               className="h-9 text-xs"
@@ -306,9 +309,11 @@ export function TicketFormModal({ open, onOpenChange, ticket, onRefresh, custome
           </div>
 
           <div className="space-y-1.5">
-            <label className="text-[10px] uppercase font-bold text-muted-foreground">Descripción *</label>
+            <Label htmlFor="tickets-form-description" required className="text-[10px] uppercase font-bold text-muted-foreground">Descripción</Label>
             <Textarea
+              id="tickets-form-description"
               data-testid="tickets-form-description"
+              required
               value={description}
               onChange={(e) => setDescription(e.target.value)}
               className="text-xs min-h-[80px]"

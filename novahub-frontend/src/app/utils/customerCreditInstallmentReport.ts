@@ -47,6 +47,11 @@ export async function generateCustomerCreditInstallmentReport(input: CustomerCre
     title: input.title,
     tenantName: input.tenantName,
     tenantLogo: input.tenantLogo,
+    subtitle: [
+      input.customerName ? `Cliente: ${input.customerName}` : '',
+      input.contractNumber ? `Contrato: ${input.contractNumber}` : '',
+      input.frequencyLabel ? `Frecuencia: ${input.frequencyLabel}` : 'Plan manual',
+    ].filter(Boolean).join(' · '),
     rows,
     columns: [
       { header: 'Abono', value: row => `#${row.installmentNumber}`, align: 'center' },
@@ -66,6 +71,12 @@ export async function generateCustomerCreditInstallmentReport(input: CustomerCre
       Intereses: reportMoney(input.interestAmount, currency),
       'Total con intereses': reportMoney(totalAmount, currency),
     },
+    reportMetrics: [
+      { label: 'Capital', value: reportMoney(input.principalAmount, currency), detail: 'Monto financiado' },
+      { label: 'Intereses', value: reportMoney(input.interestAmount, currency), detail: 'Costo total' },
+      { label: 'Total del plan', value: reportMoney(totalAmount, currency), detail: 'Capital + intereses' },
+      { label: 'Abonos', value: input.installments.length, detail: 'Programados' },
+    ],
     fileName: reportFileName(input.contractNumber || input.customerName || 'credito'),
     format: 'configured',
   });

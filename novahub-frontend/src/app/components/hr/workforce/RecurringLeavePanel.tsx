@@ -2,6 +2,8 @@ import { useState } from 'react';
 import { CalendarCheck, Loader2 } from 'lucide-react';
 import { useQueryClient } from '@tanstack/react-query';
 import { Button } from '../../ui/button';
+import { ConfirmDialog } from '../../ui/ConfirmDialog';
+import { RequiredReasonField } from '../../ui/RequiredReasonField';
 import { Input } from '../../ui/input';
 import { Label } from '../../ui/label';
 import { cn } from '../../ui/utils';
@@ -28,6 +30,9 @@ export function RecurringLeavePanel({ employees }: { employees: EmployeeOption[]
   const [reason, setReason] = useState('');
   const [preview, setPreview] = useState<RecurringLeavePreview | null>(null);
   const [busy, setBusy] = useState(false);
+  const [cancelTargetId, setCancelTargetId] = useState<string | null>(null);
+  const [cancelReason, setCancelReason] = useState('');
+  const [cancelReasonAttempted, setCancelReasonAttempted] = useState(false);
   const list = useTenantQuery(['workforce', 'recurring-leaves'], (signal) => workforceService.listRecurringLeaves(undefined, signal), { staleTime: 10_000 });
   const refresh = () => { void client.invalidateQueries({ queryKey: ['tenant-module'] }); };
   const payload = { employeeId, weekday: Number(weekday), startDate, endDate };
@@ -40,9 +45,9 @@ export function RecurringLeavePanel({ employees }: { employees: EmployeeOption[]
     setBusy(true);
     try { await workforceService.createRecurringLeave({ ...payload, ...(reason.trim() ? { reason: reason.trim() } : {}) }); toast.success('Vacaciones aprobadas para todo el período'); setPreview(null); refresh(); } catch (error) { toast.error(failure(error)); } finally { setBusy(false); }
   };
-  const cancel = async (id: string) => {
+  const cancel = async (id: string, reason: string) => {
     setBusy(true);
-    try { await workforceService.cancelRecurringLeave(id); toast.success('Vacaciones recurrentes canceladas'); refresh(); } catch (error) { toast.error(failure(error)); } finally { setBusy(false); }
+    try { await workforceService.cancelRecurringLeave(id, reason.trim()); toast.success('Vacaciones recurrentes canceladas'); refresh(); } catch (error) { toast.error(failure(error)); } finally { setBusy(false); }
   };
 
   return (
@@ -88,13 +93,14 @@ export function RecurringLeavePanel({ employees }: { employees: EmployeeOption[]
                 <span><b>{row.employeeName}</b> · todos los {WEEKDAY_NAMES[row.weekday].toLowerCase()}s · {dayLabel(row.startDate, { day: 'numeric', month: 'short', year: 'numeric' })} al {dayLabel(row.endDate, { day: 'numeric', month: 'short', year: 'numeric' })} · {days(row.portion)} día cada uno{row.reason ? ` · ${row.reason}` : ''}</span>
                 <span className="flex items-center gap-2">
                   <span className={cn('rounded-full px-2 py-0.5 text-[10px] font-black uppercase', row.status === 'ACTIVE' ? 'bg-emerald-100 text-emerald-900' : 'bg-slate-200 text-slate-600')}>{row.status === 'ACTIVE' ? 'Vigente' : 'Cancelada'}</span>
-                  {row.status === 'ACTIVE' && canApprove && <Button type="button" size="sm" variant="outline" disabled={busy} onClick={() => void cancel(row.id)}>Cancelar</Button>}
+                  {row.status === 'ACTIVE' && canApprove && <Button type="button" size="sm" variant="outline" disabled={busy} onClick={() => { setCancelTargetId(row.id); setCancelReason(''); setCancelReasonAttempted(false); }}>Cancelar</Button>}
                 </span>
               </li>
             ))}
           </ul>
         )}
       </div>
+      <ConfirmDialog open={cancelTargetId !== null} onOpenChange={(open) => { if (!open && !busy) { setCancelTargetId(null); setCancelReason(''); setCancelReasonAttempted(false); } }} title="¿Cancelar vacaciones recurrentes?" description="Se detendrán las próximas vacaciones recurrentes y se conservará el historial del período." confirmLabel="Cancelar período" variant="destructive" loading={busy} children={<RequiredReasonField id="recurring-leave-cancel-reason" label="Motivo de cancelación" value={cancelReason} onChange={setCancelReason} attempted={cancelReasonAttempted} disabled={busy} />} onConfirm={async () => { if (!cancelTargetId) return; if (!cancelReason.trim()) { setCancelReasonAttempted(true); return false; } await cancel(cancelTargetId, cancelReason.trim()); setCancelTargetId(null); return true; }} />
     </section>
   );
 }

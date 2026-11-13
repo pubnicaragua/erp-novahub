@@ -502,8 +502,8 @@ export const TicketsView: React.FC<TicketsViewProps> = ({ data, customerCatalog 
         await supportService.deactivateCategory(category.id);
       }
       await onRefresh();
-    } catch {
-      toast.error('No se pudo actualizar la categoría');
+    } catch (error: unknown) {
+      toast.apiFailure(error, 'No se pudo actualizar la categoría del ticket.');
     }
   };
 
@@ -591,8 +591,8 @@ export const TicketsView: React.FC<TicketsViewProps> = ({ data, customerCatalog 
       await Promise.all([commentsQuery.refetch(), auditQuery.refetch()]);
       onRefresh();
       toast.success('Comentario agregado');
-    } catch {
-      toast.error('Error al agregar comentario');
+    } catch (error: unknown) {
+      toast.apiFailure(error, 'No se pudo agregar el comentario al ticket.');
     } finally {
       setCommentLoading(false);
     }

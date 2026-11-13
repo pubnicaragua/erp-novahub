@@ -135,7 +135,7 @@ export function ForceSalesCustomerLinkDialog({ open, point = null, canCreate = f
           >
             <p className="text-xs text-muted-foreground">Se crea en Ventas y queda amarrado a este punto.</p>
             <label className="block space-y-1 text-xs font-semibold">
-              Nombre
+              Nombre <span className="text-destructive" aria-hidden="true">*</span>
               <Input value={form.name} onChange={(event) => setForm((current) => ({ ...current, name: event.target.value }))} maxLength={180} autoFocus required />
             </label>
             <label className="block space-y-1 text-xs font-semibold">

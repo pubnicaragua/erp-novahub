@@ -1,7 +1,8 @@
-import { useMemo } from 'react';
+import { useId, useMemo } from 'react';
 import { api, getApiErrorMessage } from '../../services/api';
 import { accountingList, useAccountingQuery } from '../../hooks/useAccountingQuery';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from './select';
+import { Label } from './label';
 
 export type BankAccountOption = {
   id: string;
@@ -19,6 +20,9 @@ type BankAccountSelectProps = {
   label?: string;
   placeholder?: string;
   required?: boolean;
+  invalid?: boolean;
+  errorMessage?: string;
+  id?: string;
   allowUnlinked?: boolean;
   disabled?: boolean;
   className?: string;
@@ -36,6 +40,9 @@ export function BankAccountSelect({
   label = 'Banco de destino',
   placeholder = 'Seleccionar banco',
   required = true,
+  invalid = false,
+  errorMessage,
+  id,
   allowUnlinked = false,
   disabled = false,
   className,
@@ -45,6 +52,9 @@ export function BankAccountSelect({
   showUnavailableOptions = false,
   showCommissionPercent = true,
 }: BankAccountSelectProps) {
+  const generatedId = useId();
+  const triggerId = id || `bank-account-${generatedId}`;
+  const errorId = `${triggerId}-error`;
   const normalizedCurrency = String(currency || '').trim().toUpperCase() || undefined;
   const requestCurrency = showUnavailableOptions ? undefined : normalizedCurrency;
   const query = useAccountingQuery<any[]>(['bank-accounts', endpoint, 'payment-options', requestCurrency, showUnavailableOptions], async (signal) =>
@@ -67,11 +77,9 @@ export function BankAccountSelect({
 
   return (
     <div className={className}>
-      <p className="mb-1 text-[10px] font-black uppercase tracking-widest text-muted-foreground">
-        {label}{required && ' *'}
-      </p>
+      <Label htmlFor={triggerId} required={required} className="mb-1 text-[10px] font-black uppercase tracking-widest text-muted-foreground">{label}</Label>
       <Select value={value || ''} onValueChange={handleChange} disabled={disabled || query.isLoading}>
-        <SelectTrigger aria-label={label} className="h-8 text-xs">
+        <SelectTrigger id={triggerId} aria-label={label} aria-required={required || undefined} aria-invalid={invalid || undefined} aria-describedby={invalid && errorMessage ? errorId : undefined} className="h-8 text-xs">
           <SelectValue placeholder={query.isLoading ? 'Cargando bancos...' : placeholder} />
         </SelectTrigger>
         <SelectContent>
@@ -104,6 +112,7 @@ export function BankAccountSelect({
           Se muestran las cuentas activas de esta sucursal. Solo se pueden seleccionar las de {normalizedCurrency}{allowUnlinked ? '.' : ' con cuenta contable vinculada.'}
         </p>
       )}
+      {invalid && errorMessage && <p id={errorId} role="alert" className="mt-1 text-[10px] text-destructive">{errorMessage}</p>}
       {query.isError && (
         <p className="mt-1 text-[10px] font-medium text-destructive">
           {getApiErrorMessage(query.error, 'No se pudieron cargar los bancos disponibles para el pago.')}

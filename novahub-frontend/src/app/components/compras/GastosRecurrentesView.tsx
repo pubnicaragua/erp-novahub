@@ -15,6 +15,7 @@ import { ViewLayoutSelect } from '../ui/ViewLayoutSelect';
 import { useLocalStorageState } from '../../hooks/useLocalStorageState';
 import { toast } from '@/app/services/toast';
 import { ConfirmDialog } from '../ui/ConfirmDialog';
+import { RequiredReasonField } from '../ui/RequiredReasonField';
 import { cn } from '../ui/utils';
 import { useCurrency } from '../../contexts/CurrencyContext';
 import { useAuth } from '../../contexts/AuthContext';
@@ -55,6 +56,8 @@ export function GastosRecurrentesView({ data, summaryData, summaryLoading, summa
   const [statusFilter, setStatusFilter] = useState<'ALL' | 'ACTIVE' | 'PAUSED'>('ALL');
   const [pendingCancelId, setPendingCancelId] = useState<string | null>(null);
   const [cancelLoading, setCancelLoading] = useState(false);
+  const [cancelReason, setCancelReason] = useState('');
+  const [cancelReasonAttempted, setCancelReasonAttempted] = useState(false);
   const [suppliers, setSuppliers] = useState<Supplier[]>([]);
 
   const [editingId, setEditingId] = useState<string | null>(null);
@@ -229,10 +232,11 @@ export function GastosRecurrentesView({ data, summaryData, summaryLoading, summa
     if (!pendingCancelId || !canPerform('PURCHASES_EXPENSES_REC', 'read') || !canPerform('PURCHASES_EXPENSES_REC', 'cancel')) return;
     const pendingExpense = data.find((expense) => String(expense.id) === String(pendingCancelId));
     if (!pendingExpense || String((pendingExpense as any).originModule || 'PURCHASES_EXPENSES_REC') !== 'PURCHASES_EXPENSES_REC') return;
+    if (!cancelReason.trim()) { setCancelReasonAttempted(true); return false; }
     setCancelLoading(true);
     const cancelToastId = toast.loading('Anulando gasto recurrente...');
     try {
-      await recurringExpensesService.cancel(pendingCancelId);
+      await recurringExpensesService.cancel(pendingCancelId, cancelReason.trim());
       toast.success('Gasto recurrente anulado; se conservó su historial', { id: cancelToastId });
       setPendingCancelId(null);
       if (editingId === pendingCancelId) openEditor(null);
@@ -524,12 +528,13 @@ export function GastosRecurrentesView({ data, summaryData, summaryLoading, summa
         />
         <ConfirmDialog
           open={!!pendingCancelId}
-          onOpenChange={(open) => !open && setPendingCancelId(null)}
+          onOpenChange={(open) => { if (!open && !cancelLoading) { setPendingCancelId(null); setCancelReason(''); setCancelReasonAttempted(false); } }}
           title="Anular Gasto Recurrente"
           description="¿Estás seguro de que deseas anular este gasto recurrente? Dejará de generar ejecuciones automáticas."
           confirmLabel="Anular Gasto"
           onConfirm={handleCancelConfirm}
           loading={cancelLoading}
+          children={<RequiredReasonField id="purchase-recurring-expense-cancel-reason" label="Motivo de anulación" value={cancelReason} onChange={setCancelReason} attempted={cancelReasonAttempted} disabled={cancelLoading} />}
         />
       </div>
     </div>

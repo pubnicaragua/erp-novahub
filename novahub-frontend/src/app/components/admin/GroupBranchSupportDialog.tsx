@@ -7,6 +7,7 @@ import { getPasswordError, isValidEmail } from '../../utils/accountValidation';
 import { BUSINESS_TYPE_OPTIONS, getBusinessTypeOption } from '../../constants/businessTypes';
 import { Button } from '../ui/button';
 import { Badge } from '../ui/badge';
+import { Label } from '../ui/label';
 import { BrandLogo } from '../BrandLogo';
 import { PasswordRequirements } from '../PasswordRequirements';
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '../ui/dialog';
@@ -225,14 +226,12 @@ export function GroupBranchSupportDialog({ branch, onChanged }: BranchSupportDia
           ) : tab === 'summary' ? (
             <div className="grid min-w-0 gap-5 lg:grid-cols-[minmax(0,1fr)_minmax(280px,340px)]">
               <div className="grid min-w-0 gap-4 sm:grid-cols-2">
-                <label className="space-y-2 text-xs font-bold text-muted-foreground">
-                  Nombre de la sucursal
-                  <input value={detailsForm.name} onChange={(event) => setDetailsForm((current) => ({ ...current, name: event.target.value }))} className="h-11 min-w-0 w-full rounded-xl border border-border bg-background px-3 text-sm text-foreground outline-none focus:border-primary" />
-                </label>
-                <label className="space-y-2 text-xs font-bold text-muted-foreground">
-                  Slug de la sucursal
-                  <input value={detailsForm.slug} onChange={(event) => setDetailsForm((current) => ({ ...current, slug: event.target.value }))} className="h-11 min-w-0 w-full rounded-xl border border-border bg-background px-3 text-sm text-foreground outline-none focus:border-primary" />
-                </label>
+                <div className="space-y-2"><Label htmlFor="branch-support-name" required className="text-xs font-bold text-muted-foreground">Nombre de la sucursal</Label>
+                  <input id="branch-support-name" required value={detailsForm.name} onChange={(event) => setDetailsForm((current) => ({ ...current, name: event.target.value }))} className="h-11 min-w-0 w-full rounded-xl border border-border bg-background px-3 text-sm text-foreground outline-none focus:border-primary" />
+                </div>
+                <div className="space-y-2"><Label htmlFor="branch-support-slug" required className="text-xs font-bold text-muted-foreground">Slug de la sucursal</Label>
+                  <input id="branch-support-slug" required value={detailsForm.slug} onChange={(event) => setDetailsForm((current) => ({ ...current, slug: event.target.value }))} className="h-11 min-w-0 w-full rounded-xl border border-border bg-background px-3 text-sm text-foreground outline-none focus:border-primary" />
+                </div>
                 <label className="space-y-2 text-xs font-bold text-muted-foreground sm:col-span-2">
                   Tipo de negocio
                   <select value={detailsForm.businessType} onChange={(event) => { const selected = BUSINESS_TYPE_OPTIONS.find((option) => option.key === event.target.value) || BUSINESS_TYPE_OPTIONS[BUSINESS_TYPE_OPTIONS.length - 1]; setDetailsForm((current) => ({ ...current, businessType: selected.key, industry: selected.industry, subIndustry: selected.subIndustry })); }} className="h-11 min-w-0 w-full rounded-xl border border-border bg-background px-3 text-sm text-foreground">
@@ -296,7 +295,7 @@ export function GroupBranchSupportDialog({ branch, onChanged }: BranchSupportDia
             <DialogTitle className="font-black uppercase italic tracking-tight">Cambiar contraseña</DialogTitle>
             <DialogDescription>Actualiza la contraseña de {passwordUser?.name} desde el soporte de la sucursal.</DialogDescription>
           </DialogHeader>
-          <input type="password" value={newPassword} onChange={(event) => setNewPassword(event.target.value)} placeholder="Nueva contraseña" className="h-11 w-full rounded-xl border border-border bg-background px-3 text-sm outline-none focus:border-primary" />
+          <div className="space-y-2"><Label htmlFor="branch-support-password" required>Nueva contraseña</Label><input id="branch-support-password" type="password" required value={newPassword} onChange={(event) => setNewPassword(event.target.value)} placeholder="Nueva contraseña" className="h-11 w-full rounded-xl border border-border bg-background px-3 text-sm outline-none focus:border-primary" /></div>
           <PasswordRequirements value={newPassword} />
           <DialogFooter>
             <Button variant="outline" className="rounded-xl" onClick={() => setPasswordUser(null)} disabled={savingPassword}>Cancelar</Button>
@@ -311,10 +310,7 @@ export function GroupBranchSupportDialog({ branch, onChanged }: BranchSupportDia
             <DialogTitle className="font-black uppercase italic tracking-tight">Cambiar correo</DialogTitle>
             <DialogDescription>Actualiza el correo de acceso de {emailUser?.name}. Se valida contra todos los usuarios del ERP antes de guardar.</DialogDescription>
           </DialogHeader>
-          <label className="space-y-2 text-xs font-bold text-muted-foreground">
-            Correo de acceso
-            <input autoFocus type="email" value={newEmail} onChange={(event) => setNewEmail(event.target.value)} placeholder="usuario@empresa.com" className="h-11 w-full rounded-xl border border-border bg-background px-3 text-sm text-foreground outline-none focus:border-primary" />
-          </label>
+          <div className="space-y-2"><Label htmlFor="branch-support-email" required className="text-xs font-bold text-muted-foreground">Correo de acceso</Label><input id="branch-support-email" autoFocus type="email" required value={newEmail} onChange={(event) => setNewEmail(event.target.value)} placeholder="usuario@empresa.com" className="h-11 w-full rounded-xl border border-border bg-background px-3 text-sm text-foreground outline-none focus:border-primary" /></div>
           <p className="text-xs text-muted-foreground">Debe ser válido y no estar registrado en ninguna otra cuenta, empresa o Manager.</p>
           <DialogFooter>
             <Button variant="outline" className="rounded-xl" onClick={() => setEmailUser(null)} disabled={savingEmail}>Cancelar</Button>
@@ -329,10 +325,7 @@ export function GroupBranchSupportDialog({ branch, onChanged }: BranchSupportDia
             <DialogTitle className="font-black uppercase italic tracking-tight">Cambiar nombre</DialogTitle>
             <DialogDescription>Actualiza el nombre visible de {nameUser?.email || 'este usuario'} en la sucursal.</DialogDescription>
           </DialogHeader>
-          <label className="space-y-2 text-xs font-bold text-muted-foreground">
-            Nombre completo
-            <input autoFocus type="text" value={newName} onChange={(event) => setNewName(event.target.value)} placeholder="Nombre y apellido" className="h-11 w-full rounded-xl border border-border bg-background px-3 text-sm text-foreground outline-none focus:border-primary" />
-          </label>
+          <div className="space-y-2"><Label htmlFor="branch-support-user-name" required className="text-xs font-bold text-muted-foreground">Nombre completo</Label><input id="branch-support-user-name" autoFocus type="text" required value={newName} onChange={(event) => setNewName(event.target.value)} placeholder="Nombre y apellido" className="h-11 w-full rounded-xl border border-border bg-background px-3 text-sm text-foreground outline-none focus:border-primary" /></div>
           <DialogFooter>
             <Button variant="outline" className="rounded-xl" onClick={() => setNameUser(null)} disabled={savingName}>Cancelar</Button>
             <Button className="rounded-xl" disabled={savingName || !safeTrim(newName)} onClick={saveName}>{savingName ? 'Guardando…' : 'Guardar nombre'}</Button>

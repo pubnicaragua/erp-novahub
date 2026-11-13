@@ -121,13 +121,13 @@ export function MovimientoManualModal({ open, onOpenChange, onAddMovement }: Mov
           </div>
 
           <div className="space-y-2">
-            <Label>Descripción / Motivo <span className="text-red-500">*</span></Label>
-            <Input value={description} onChange={e => setDescription(e.target.value)} placeholder="Ej. Pago de proveedor, Fondo extra..." />
+            <Label htmlFor="manual-cash-movement-description" required>Descripción / Motivo</Label>
+            <Input id="manual-cash-movement-description" value={description} onChange={e => setDescription(e.target.value)} placeholder="Ej. Pago de proveedor, Fondo extra..." required aria-required="true" />
           </div>
 
           {hasPaymentReferenceField(paymentMethod) && <div className="space-y-2">
-            <Label>Referencia *</Label>
-            <Input value={reference} onChange={e => setReference(e.target.value)} placeholder="Transferencia, cheque o voucher..." required={requiresPaymentReference(paymentMethod)} />
+            <Label htmlFor="manual-cash-movement-reference" required={requiresPaymentReference(paymentMethod)}>Referencia</Label>
+            <Input id="manual-cash-movement-reference" value={reference} onChange={e => setReference(e.target.value)} placeholder="Transferencia, cheque o voucher..." required={requiresPaymentReference(paymentMethod)} />
           </div>}
 
         </div>

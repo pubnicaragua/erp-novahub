@@ -421,6 +421,16 @@ select.erp-filter-select,
   }
 }
 
+/* Error de formulario común: los controles nativos solo se marcan después
+   de que el usuario los valida; los componentes controlados pueden activar
+   el mismo estado mediante aria-invalid. Los campos requeridos no se pintan
+   de rojo al abrir un formulario. */
+:where(input, select, textarea):user-invalid,
+:where(input, select, textarea, [data-slot='select-trigger'], [role='combobox'])[aria-invalid='true'] {
+  border-color: var(--destructive) !important;
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--destructive) 16%, transparent);
+}
+
 /* El catálogo empresarial se añadió antes del documento; este selector estable
    mantiene la tabla editable responsive sin depender del orden de los bloques. */
 @media (max-width: 1279px) {

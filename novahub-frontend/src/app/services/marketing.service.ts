@@ -86,7 +86,7 @@ export const marketingApi = {
   saveSettings: (data: Partial<MktConfig>) => api.patch<MktConfig>('/marketing/settings', data),
   report: (params: Params, signal?: AbortSignal) => api.get<MktReport>('/marketing/reports/summary', { params, signal }),
   campaign: (id: string, signal?: AbortSignal) => api.get<MktCampaignDetail>(`/marketing/campaigns/${id}`, { signal }),
-  setCampaignStatus: (id: string, status: string) => api.post<MktCampaign>(`/marketing/campaigns/${id}/status`, { status }),
+  setCampaignStatus: (id: string, status: string, reason?: string) => api.post<MktCampaign>(`/marketing/campaigns/${id}/status`, { status, ...(status === 'CANCELLED' ? { reason } : {}) }),
   requestBudget: (id: string, data: { amount?: number; reason?: string }) => api.post<MktApproval>(`/marketing/campaigns/${id}/request-budget`, data),
   createCampaignTask: (id: string, data: { title: string; dueDate?: string; priority?: string; assignedTo?: string[] }) => api.post(`/marketing/campaigns/${id}/tasks`, data),
   requestStrategy: (briefId: string) => api.post<MktApproval>(`/marketing/briefs/${briefId}/request-approval`, {}),

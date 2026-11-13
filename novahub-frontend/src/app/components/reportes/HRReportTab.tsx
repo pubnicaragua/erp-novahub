@@ -1210,7 +1210,7 @@ export const HRReportTab = forwardRef<ReportExportRef, ReportProps>(({ dateRange
         showPdfInBrowserPreview(doc.output('blob'), buildReportDownloadFileName(['reporte_recursos_humanos'], 'pdf', dateRange));
         toast.success("PDF generado exitosamente");
       } catch (e: any) {
-        toast.error(e?.response?.data?.message || e?.message || "Error exportando PDF");
+        toast.apiFailure(e, 'No se pudo exportar el PDF del reporte de Recursos Humanos.');
       }
     },
     exportExcel: async () => {
@@ -1345,7 +1345,7 @@ export const HRReportTab = forwardRef<ReportExportRef, ReportProps>(({ dateRange
         await downloadExcelWorkbook(wb, buildReportDownloadFileName(['reporte_recursos_humanos'], 'xlsx', dateRange));
         toast.success("Excel exportado exitosamente");
       } catch (e: any) {
-        toast.error(e?.response?.data?.message || e?.message || "Error exportando Excel");
+        toast.apiFailure(e, 'No se pudo exportar el Excel del reporte de Recursos Humanos.');
       }
     }
   }));

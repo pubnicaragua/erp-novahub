@@ -326,7 +326,7 @@ export const inventoryService = {
     items?: { productId: string; variantId?: string; variantName?: string | null; variantSku?: string | null; code: string; name: string; systemStock: number; countedStock: number; difference: number; reason?: string | null }[];
   }) => api.post<any>('/inventory/audits', data),
   deleteAudit: (id: string) => api.delete<any>(`/inventory/audits/${id}`),
-  changeAuditStatus: (id: string, status: string, items?: { productId: string; reason?: string | null }[]) => api.patch<any>(`/inventory/audits/${id}/status`, { status, ...(items ? { items } : {}) }),
+  changeAuditStatus: (id: string, status: string, items?: { productId: string; reason?: string | null }[], reason?: string) => api.patch<any>(`/inventory/audits/${id}/status`, { status, ...(items ? { items } : {}), ...(status === 'CANCELLED' ? { reason } : {}) }),
   approveAudit: (id: string, items?: { productId: string; reason?: string | null }[]) => api.post<any>(`/inventory/audits/${id}/approve`, items ? { items } : {}),
   getAuditTheoretical: (id: string) => api.get<any[]>(`/inventory/audits/${id}/theoretical`),
 

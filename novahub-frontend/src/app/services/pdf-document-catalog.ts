@@ -165,6 +165,7 @@ const BASE_PDF_TEMPLATE_TARGETS: PdfTemplateTarget[] = [
   { key: 'ventas.payment', module: 'ventas', moduleLabel: 'Ventas', label: 'Pagos recibidos', structure: 'receipt', legacyKeys: ['payment'], source: 'generateEstimatePDF' },
   { key: 'ventas.return', module: 'ventas', moduleLabel: 'Ventas', label: 'Devoluciones', structure: 'transaction', legacyKeys: ['return'], source: 'generateEstimatePDF' },
   { key: 'ventas.credit', module: 'ventas', moduleLabel: 'Ventas', label: 'Créditos', structure: 'transaction', legacyKeys: ['credit'], source: 'generateEstimatePDF' },
+  { key: 'ventas.customer-installment-plan', module: 'ventas', moduleLabel: 'Ventas', label: 'Plan de abonos de clientes', structure: 'report', exportPermission: 'SALES_CREDIT_NOTES', source: 'CustomerCreditInstallmentSchedule.print' },
   { key: 'ventas.credit-note', module: 'ventas', moduleLabel: 'Ventas', label: 'Notas de crédito', structure: 'transaction', legacyKeys: ['credit-note'], source: 'generateEstimatePDF' },
   { key: 'ventas.cash-session', module: 'ventas', moduleLabel: 'Ventas', label: 'Resumen de sesión de caja', structure: 'receipt', source: 'generateSessionSummaryPDF' },
   { key: 'ventas.cash-ticket', module: 'ventas', moduleLabel: 'Ventas', label: 'Ticket de caja', structure: 'print', family: 'cash-ticket', source: 'printPosTicket' },

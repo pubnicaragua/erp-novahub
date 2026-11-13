@@ -327,15 +327,15 @@ export const restaurantService = {
     api.get<RestaurantOrder>(`/restaurant/orders/${id}`, { signal }),
   addItems: (id: string, body: { expectedVersion?: number; sendToKitchen?: boolean; items: Array<{ menuItemId: string; quantity: number; notes?: string; variantId?: string; warehouseId?: string; selectedOptions?: Record<string, string | string[]> }> }, key?: string) =>
     api.idempotentPost<RestaurantOrder>(`/restaurant/orders/${id}/items`, body, key),
-  updateOrderStatus: (id: string, status: string, expectedVersion?: number, key?: string) =>
-    api.idempotentPatch<RestaurantOrder>(`/restaurant/orders/${id}/status`, { status, ...(expectedVersion === undefined ? {} : { expectedVersion }) }, key),
-  updateDelivery: (id: string, body: { expectedVersion?: number; status?: RestaurantOrder['deliveryStatus']; address?: string; reference?: string; riderName?: string }, key?: string) =>
+  updateOrderStatus: (id: string, status: string, expectedVersion?: number, key?: string, reason?: string) =>
+    api.idempotentPatch<RestaurantOrder>(`/restaurant/orders/${id}/status`, { status, ...(expectedVersion === undefined ? {} : { expectedVersion }), ...(status === 'CANCELLED' ? { reason } : {}) }, key),
+  updateDelivery: (id: string, body: { expectedVersion?: number; status?: RestaurantOrder['deliveryStatus']; address?: string; reference?: string; riderName?: string; reason?: string }, key?: string) =>
     api.idempotentPatch<RestaurantOrder>(`/restaurant/orders/${id}/delivery`, body, key),
   sendToKitchen: (id: string, key?: string) => api.idempotentPost(`/restaurant/orders/${id}/send-to-kitchen`, {}, key),
   listKitchenTickets: (branchId?: string, signal?: AbortSignal) =>
     api.get<RestaurantKitchenTicket[]>('/restaurant/kitchen/tickets', { params: { branchId }, signal }),
-  updateKitchenTicket: (id: string, status: string, key?: string) =>
-    api.idempotentPatch<RestaurantKitchenTicket>(`/restaurant/kitchen/tickets/${id}/status`, { status }, key),
+  updateKitchenTicket: (id: string, status: string, key?: string, reason?: string) =>
+    api.idempotentPatch<RestaurantKitchenTicket>(`/restaurant/kitchen/tickets/${id}/status`, { status, ...(status === 'CANCELLED' ? { reason } : {}) }, key),
   listOrderPayments: (id: string, signal?: AbortSignal) => api.get<{ orderId: string; total: number; amountPaid: number; balance: number; status?: string; customerId?: string | null; dueDate?: string | null; payments: Array<{ id: string; number: string; amount: number; currency: string; method: string; reference?: string | null; date: string }> }>(`/restaurant/orders/${id}/payments`, { signal }),
   addOrderPayment: (id: string, body: { expectedVersion?: number; registerId: string; sessionId: string; customerId?: string; dueDate?: string; payments: Array<{ method: 'CASH' | 'CARD' | 'TRANSFER' | 'CHECK' | 'QR' | 'VOUCHER'; amount: number; currency: string; reference?: string }> }) =>
     api.idempotentPost<{ order: RestaurantOrder; payment: unknown }>(`/restaurant/orders/${id}/payments`, body),

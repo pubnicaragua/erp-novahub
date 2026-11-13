@@ -1722,7 +1722,7 @@ export function ProductosView({ products, summaryProducts, summaryProductsLoaded
       .map((productId) => catalogById.get(String(productId)))
       .filter(Boolean);
     if (selected.length !== selectedIds.size) {
-      toast.error('No se pudieron cargar todos los productos seleccionados. Actualiza el inventario e inténtalo nuevamente.');
+      toast.info('Algunos productos seleccionados no aparecen en la lista de inventario cargada, por eso no es posible incluirlos. Actualiza el inventario y vuelve a seleccionar los productos disponibles.');
       return;
     }
     setSolicitudWarehouseId('');
@@ -3111,7 +3111,7 @@ export function ProductosView({ products, summaryProducts, summaryProductsLoaded
       return;
     }
     if (selectedCatalogProducts.length !== selectedIds.size) {
-      toast.error('No se pudieron resolver todos los productos seleccionados. Actualiza la vista e inténtalo de nuevo.');
+      toast.info('Algunos productos seleccionados no aparecen en la lista actual, por eso no se puede preparar la plantilla. Actualiza la vista y vuelve a seleccionarlos.');
       return;
     }
     try {

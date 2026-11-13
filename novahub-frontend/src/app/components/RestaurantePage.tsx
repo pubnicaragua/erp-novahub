@@ -37,6 +37,8 @@ import { ModuleSubnavigation } from './ui/ModuleSubnavigation';
 import { Button } from './ui/button';
 import { Badge } from './ui/badge';
 import { Input } from './ui/input';
+import { ConfirmDialog } from './ui/ConfirmDialog';
+import { RequiredReasonField } from './ui/RequiredReasonField';
 import { useBranchScope } from '../hooks/useBranchScope';
 import { useNotificationDomainRefresh } from '../hooks/useNotificationDomainRefresh';
 import { useAuth } from '../contexts/AuthContext';
@@ -68,6 +70,10 @@ type RestaurantTab = 'pos' | 'salon' | 'comandas' | 'cocina' | 'delivery' | 'car
 type RestaurantSelectedOptions = Record<string, string | string[]>;
 type RestaurantCartLine = { menuItemId: string; quantity: number; selectedOptions: RestaurantSelectedOptions };
 type RestaurantSalonMode = 'floor' | 'pos';
+type RestaurantCancelTarget =
+  | { kind: 'order'; order: RestaurantOrder }
+  | { kind: 'kitchen'; ticket: RestaurantKitchenTicket }
+  | { kind: 'delivery'; order: RestaurantOrder };
 type RestaurantTableFilter = 'ALL' | 'OCCUPIED' | 'AVAILABLE' | 'RESERVED' | 'PREPARING' | 'PAYMENT';
 type RestaurantOrderType = 'DINE_IN' | 'COUNTER' | 'TAKEAWAY' | 'DELIVERY';
 type RestaurantPaymentLine = { method: 'CASH' | 'CARD' | 'TRANSFER' | 'CHECK' | 'QR' | 'VOUCHER'; amount: string; reference: string };
@@ -352,6 +358,10 @@ export function RestaurantePage({ activeSubModule, onSubModuleChange, isSidebarC
   const [posAction, setPosAction] = useState<'save' | 'send' | 'charge' | 'round' | null>(null);
   const [tableAction, setTableAction] = useState(false);
   const [sendingOrderIds, setSendingOrderIds] = useState<Set<string>>(new Set());
+  const [pendingCancel, setPendingCancel] = useState<RestaurantCancelTarget | null>(null);
+  const [cancelReason, setCancelReason] = useState('');
+  const [cancelReasonAttempted, setCancelReasonAttempted] = useState(false);
+  const [cancelSubmitting, setCancelSubmitting] = useState(false);
   const sendingKitchenKeys = useRef<Map<string, string>>(new Map());
   const knownOrderIds = useRef<Set<string> | null>(null);
   const sessionCreatedOrderIds = useRef<Set<string>>(new Set());
@@ -742,7 +752,7 @@ export function RestaurantePage({ activeSubModule, onSubModuleChange, isSidebarC
       if ((data?.code === 'TABLE_CODE_CONFLICT' || nested?.code === 'TABLE_CODE_CONFLICT') && conflictTable) {
         if (conflictTable.zone) setActiveZone(conflictTable.zone);
         if (conflictTable.id) setSelectedTableId(conflictTable.id);
-        toast.error(`${(typeof data?.message === 'string' ? data.message : nested?.message) || `Ya existe la mesa ${conflictTable.code}.`} Está en ${conflictTable.zone || 'sin zona'} · ${tableStatus[conflictTable.status || '']?.label || conflictTable.status || 'estado desconocido'}${conflictTable.isActive === false ? ' · archivada' : ''}. Usa otro código o abre la mesa existente.`);
+        toast.warning(`${(typeof data?.message === 'string' ? data.message : nested?.message) || `Ya existe la mesa ${conflictTable.code}.`} Está en ${conflictTable.zone || 'sin zona'} · ${tableStatus[conflictTable.status || '']?.label || conflictTable.status || 'estado desconocido'}${conflictTable.isActive === false ? ' · archivada' : ''}. Usa otro código o abre la mesa existente.`);
       } else {
         toast.error(getApiErrorMessage(error, 'No se pudo crear la mesa.'));
       }
@@ -797,45 +807,61 @@ export function RestaurantePage({ activeSubModule, onSubModuleChange, isSidebarC
     }
   };
 
-  const updateKitchen = async (ticket: RestaurantKitchenTicket, status: string) => {
+  const updateKitchen = async (ticket: RestaurantKitchenTicket, status: string, reason?: string): Promise<boolean> => {
     const actionAllowed = status === 'IN_PREPARATION' ? canStartKitchenTickets
       : status === 'READY' ? canMarkKitchenReady
         : status === 'SERVED' ? canServeKitchenTickets
           : status === 'CANCELLED' ? canCancelKitchenTickets : false;
-    if (!actionAllowed) return;
+    if (!actionAllowed) return false;
+    if (status === 'CANCELLED' && !reason?.trim()) {
+      setPendingCancel({ kind: 'kitchen', ticket });
+      setCancelReason('');
+      setCancelReasonAttempted(false);
+      return false;
+    }
     const actionToken = beginNotificationAction();
     try {
-      await restaurantService.updateKitchenTicket(ticket.id, status);
+      await restaurantService.updateKitchenTicket(ticket.id, status, undefined, status === 'CANCELLED' ? reason?.trim() : undefined);
       toast.success(`Comanda ${ticket.order.number}: ${restaurantKitchenStatusLabel(status)}.`);
       await loadData();
+      return true;
     } catch (error: unknown) {
       toast.error(getApiErrorMessage(error, 'No se pudo actualizar cocina.'));
+      return false;
     } finally {
       completeNotificationAction(actionToken);
     }
   };
 
-  const changeOrderStatus = async (order: RestaurantOrder, status: string) => {
+  const changeOrderStatus = async (order: RestaurantOrder, status: string, reason?: string): Promise<boolean> => {
     const actionAllowed = status === 'CONFIRMED' ? canConfirmOrders
       : status === 'SENT_TO_KITCHEN' ? canSendToKitchen
         : status === 'IN_PREPARATION' ? canStartPreparation
           : status === 'READY' ? canMarkOrdersReady
             : status === 'SERVED' ? canServeOrders
               : status === 'CANCELLED' ? canCancelOrders : false;
-    if (!actionAllowed) return;
+    if (!actionAllowed) return false;
+    if (status === 'CANCELLED' && !reason?.trim()) {
+      setPendingCancel({ kind: 'order', order });
+      setCancelReason('');
+      setCancelReasonAttempted(false);
+      return false;
+    }
     const actionToken = beginNotificationAction();
     try {
-      await restaurantService.updateOrderStatus(order.id, status);
+      await restaurantService.updateOrderStatus(order.id, status, undefined, undefined, status === 'CANCELLED' ? reason?.trim() : undefined);
       toast.success(`Comanda ${order.number}: ${orderStatus[status] || status}.`);
       await loadData();
+      return true;
     } catch (error: unknown) {
       toast.error(getApiErrorMessage(error, 'No se pudo actualizar la comanda.'));
+      return false;
     } finally {
       completeNotificationAction(actionToken);
     }
   };
 
-  const updateDelivery = async (order: RestaurantOrder, body: { status?: RestaurantOrder['deliveryStatus']; riderName?: string; address?: string; reference?: string }) => {
+  const updateDelivery = async (order: RestaurantOrder, body: { status?: RestaurantOrder['deliveryStatus']; riderName?: string; address?: string; reference?: string }, reason?: string): Promise<boolean> => {
     const statusPermission = body.status === 'PENDING' ? canQueueDelivery
       : body.status === 'PREPARING' ? canStartDeliveryPreparation
         : body.status === 'READY' ? canMarkDeliveryReady
@@ -844,16 +870,45 @@ export function RestaurantePage({ activeSubModule, onSubModuleChange, isSidebarC
               : body.status === 'CANCELLED' ? canCancelDelivery : true;
     const updatesDetails = body.address !== undefined || body.reference !== undefined
       || (body.riderName !== undefined && body.status !== 'OUT_FOR_DELIVERY');
-    if (!statusPermission || (updatesDetails && !canEditDeliveryDetails)) return;
+    if (!statusPermission || (updatesDetails && !canEditDeliveryDetails)) return false;
+    if (body.status === 'CANCELLED' && !reason?.trim()) {
+      setPendingCancel({ kind: 'delivery', order });
+      setCancelReason('');
+      setCancelReasonAttempted(false);
+      return false;
+    }
     const actionToken = beginNotificationAction();
     try {
-      await restaurantService.updateDelivery(order.id, body);
+      await restaurantService.updateDelivery(order.id, { ...body, ...(body.status === 'CANCELLED' ? { reason: reason?.trim() } : {}) });
       toast.success(`Entrega ${order.number} actualizada.`);
       await loadData();
+      return true;
     } catch (error: unknown) {
       toast.error(getApiErrorMessage(error, 'No se pudo actualizar la entrega.'));
+      return false;
     } finally {
       completeNotificationAction(actionToken);
+    }
+  };
+
+  const confirmRestaurantCancellation = async () => {
+    if (!pendingCancel) return false;
+    if (!cancelReason.trim()) { setCancelReasonAttempted(true); return false; }
+    setCancelSubmitting(true);
+    try {
+      const reason = cancelReason.trim();
+      const cancelled = pendingCancel.kind === 'order'
+        ? await changeOrderStatus(pendingCancel.order, 'CANCELLED', reason)
+        : pendingCancel.kind === 'kitchen'
+          ? await updateKitchen(pendingCancel.ticket, 'CANCELLED', reason)
+          : await updateDelivery(pendingCancel.order, { status: 'CANCELLED' }, reason);
+      if (!cancelled) return false;
+      setPendingCancel(null);
+      setCancelReason('');
+      setCancelReasonAttempted(false);
+      return true;
+    } finally {
+      setCancelSubmitting(false);
     }
   };
 
@@ -1119,6 +1174,17 @@ export function RestaurantePage({ activeSubModule, onSubModuleChange, isSidebarC
        {checkoutOrder && <RestaurantCheckoutDialog order={checkoutOrder} balance={checkoutBalance} registers={registers} customers={checkoutCustomers} customerId={checkoutCustomerId} dueDate={checkoutDueDate} allowPartialPayments={restaurantConfiguration?.cash.rules.partialPayments !== false} registerId={checkoutRegisterId} payments={checkoutPayments} onRegisterChange={setCheckoutRegisterId} onCustomerChange={setCheckoutCustomerId} onDueDateChange={setCheckoutDueDate} onPaymentsChange={setCheckoutPayments} onClose={() => setCheckoutOrder(null)} onConfirm={checkout} />}
       {orderDetail && <RestaurantOrderDetailDialog order={orderDetail} loading={orderDetailLoading} onClose={() => setOrderDetail(null)} onCheckout={openCheckout} canPayOrders={canPayOrders} />}
       {pendingOptionItem && <RestaurantOptionsDialog item={pendingOptionItem} onClose={() => setPendingOptionItem(null)} onConfirm={(selectedOptions) => { addCartLine(pendingOptionItem, selectedOptions); setPendingOptionItem(null); }} />}
+      <ConfirmDialog
+        open={Boolean(pendingCancel)}
+        onOpenChange={(open) => { if (!open && !cancelSubmitting) { setPendingCancel(null); setCancelReason(''); setCancelReasonAttempted(false); } }}
+        title={pendingCancel?.kind === 'delivery' ? '¿Cancelar entrega?' : pendingCancel?.kind === 'kitchen' ? '¿Cancelar comanda de cocina?' : '¿Cancelar comanda?'}
+        description="El registro quedará cancelado y se conservará en su historial."
+        confirmLabel="Confirmar cancelación"
+        variant="destructive"
+        loading={cancelSubmitting}
+        children={<RequiredReasonField id="restaurant-cancel-reason" label="Motivo de cancelación" value={cancelReason} onChange={setCancelReason} attempted={cancelReasonAttempted} disabled={cancelSubmitting} />}
+        onConfirm={confirmRestaurantCancellation}
+      />
     </div>
   );
 }
@@ -1541,7 +1607,7 @@ type DeliveryBoardProps = {
   canMarkDelivered: boolean;
   canCancel: boolean;
   canPayOrders: boolean;
-  onUpdate: (order: RestaurantOrder, body: { status?: RestaurantOrder['deliveryStatus']; riderName?: string; address?: string; reference?: string }) => Promise<void>;
+  onUpdate: (order: RestaurantOrder, body: { status?: RestaurantOrder['deliveryStatus']; riderName?: string; address?: string; reference?: string }) => Promise<boolean | void>;
   onOpenDetail: (order: RestaurantOrder) => void;
   onCheckout: (order: RestaurantOrder) => void;
 };

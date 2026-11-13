@@ -12,6 +12,7 @@ import { Table, TableHeader, TableRow, TableHead, TableBody, TableCell } from '.
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../ui/select';
 import { DateField } from '../ui/DateField';
 import { ConfirmDialog } from '../ui/ConfirmDialog';
+import { RequiredReasonField } from '../ui/RequiredReasonField';
 import {useTenantQuery, asList, invalidateTenantQueries } from '../../hooks/useTenantQuery';
 import { usersService } from '../../services/users.service';
 import { projectsService, type ProjectMilestone, type ProjectTask } from '../../services/projects.service';
@@ -33,8 +34,8 @@ interface ProyectoPlanificacionPanelProps {
 export function ProyectoPlanificacionPanel({ projectId, showTasks = true, showMilestones = true, showTimeline = true }: ProyectoPlanificacionPanelProps) {
   const { canPerform } = useAuth();
   const queryClient = useQueryClient();
-  const [taskDialog, setTaskDialog] = useState<{ open: boolean; editing?: ProjectTask | null }>({ open: false, editing: null });
-  const [milestoneDialog, setMilestoneDialog] = useState<{ open: boolean; editing?: ProjectMilestone | null }>({ open: false, editing: null });
+  const [taskDialog, setTaskDialog] = useState<{ open: boolean; editing?: ProjectTask | null; forceCancel?: boolean }>({ open: false, editing: null });
+  const [milestoneDialog, setMilestoneDialog] = useState<{ open: boolean; editing?: ProjectMilestone | null; forceCancel?: boolean }>({ open: false, editing: null });
   const [confirmDelete, setConfirmDelete] = useState<{ type: 'milestone' | 'task'; id: string; title: string } | null>(null);
 
   const canViewTasks = showTasks && canPerform('PROJECTS_TASKS', 'view');
@@ -74,7 +75,7 @@ export function ProyectoPlanificacionPanel({ projectId, showTasks = true, showMi
       if (args.type === 'update') {
         const entries = Object.entries(args.payload || {}).filter(([, value]) => value !== undefined);
         const hasStatus = entries.some(([key]) => key === 'status');
-        const hasDetails = entries.some(([key]) => key !== 'status');
+        const hasDetails = entries.some(([key]) => key !== 'status' && key !== 'reason');
         requirePermission(!hasDetails || canEditTasks, 'No tienes permiso para editar los datos de la tarea.');
         requirePermission(!hasStatus || canPerform('PROJECTS_TASKS', taskStatusAction(args.payload.status)), 'No tienes permiso para cambiar al estado solicitado.');
         requirePermission(hasDetails || hasStatus ? true : canEditTasks, 'No tienes permiso para editar tareas.');
@@ -103,7 +104,7 @@ export function ProyectoPlanificacionPanel({ projectId, showTasks = true, showMi
       if (args.type === 'update') {
         const entries = Object.entries(args.payload || {}).filter(([, value]) => value !== undefined);
         const hasStatus = entries.some(([key]) => key === 'status');
-        const hasDetails = entries.some(([key]) => key !== 'status');
+        const hasDetails = entries.some(([key]) => key !== 'status' && key !== 'reason');
         requirePermission(!hasDetails || canEditMilestones, 'No tienes permiso para editar los datos del hito.');
         requirePermission(!hasStatus || canPerform('PROJECTS_MILESTONES', milestoneStatusAction(args.payload.status)), 'No tienes permiso para cambiar al estado solicitado.');
         requirePermission(hasDetails || hasStatus ? true : canEditMilestones, 'No tienes permiso para editar hitos.');
@@ -154,7 +155,7 @@ export function ProyectoPlanificacionPanel({ projectId, showTasks = true, showMi
                   {(canEditMilestones || canChangeMilestoneStatus || canCompleteMilestones || canCancelMilestones || canDeleteMilestones) && (
                     <div className="mt-3 flex gap-1">
                       {m.status !== 'COMPLETED' && canCompleteMilestones && <Button size="sm" variant="outline" onClick={() => milestoneMutations.mutate({ type: 'update', id: m.id, payload: { status: 'COMPLETED' } })}><CheckCircle2 className="size-3.5" /> Completar</Button>}
-                      {m.status !== 'CANCELLED' && canCancelMilestones && <Button size="icon" variant="ghost" className="size-8 text-rose-500" title="Cancelar hito" aria-label="Cancelar hito" onClick={() => milestoneMutations.mutate({ type: 'update', id: m.id, payload: { status: 'CANCELLED' } })}><XCircle className="size-4" /></Button>}
+                      {m.status !== 'CANCELLED' && canCancelMilestones && <Button size="icon" variant="ghost" className="size-8 text-rose-500" title="Cancelar hito" aria-label="Cancelar hito" onClick={() => setMilestoneDialog({ open: true, editing: m, forceCancel: true })}><XCircle className="size-4" /></Button>}
                       {(canEditMilestones || canChangeMilestoneStatus) && <Button size="icon" variant="ghost" className="size-8" title="Editar hito" aria-label="Editar hito" onClick={() => setMilestoneDialog({ open: true, editing: m })}><Pencil className="size-4" /></Button>}
                       {canDeleteMilestones && <Button size="icon" variant="ghost" className="size-8 text-rose-500" onClick={() => setConfirmDelete({ type: 'milestone', id: m.id, title: m.name })}><Trash2 className="size-4" /></Button>}
                     </div>
@@ -213,7 +214,7 @@ export function ProyectoPlanificacionPanel({ projectId, showTasks = true, showMi
                     <TableCell>
                       <div className="flex justify-end gap-1">
                         {t.status !== 'COMPLETED' && canCompleteTasks && <Button size="icon" variant="ghost" className="size-8 text-emerald-600" title="Completar" aria-label="Completar tarea" onClick={() => taskMutations.mutate({ type: 'complete', id: t.id })}><CheckCircle2 className="size-4" /></Button>}
-                        {t.status !== 'CANCELLED' && canCancelTasks && <Button size="icon" variant="ghost" className="size-8 text-rose-500" title="Cancelar" aria-label="Cancelar tarea" onClick={() => taskMutations.mutate({ type: 'update', id: t.id, payload: { status: 'CANCELLED' } })}><XCircle className="size-4" /></Button>}
+                        {t.status !== 'CANCELLED' && canCancelTasks && <Button size="icon" variant="ghost" className="size-8 text-rose-500" title="Cancelar" aria-label="Cancelar tarea" onClick={() => setTaskDialog({ open: true, editing: t, forceCancel: true })}><XCircle className="size-4" /></Button>}
                         {(canEditTasks || canChangeTaskStatus) && <Button size="icon" variant="ghost" className="size-8" title="Editar tarea" aria-label="Editar tarea" onClick={() => setTaskDialog({ open: true, editing: t })}><Pencil className="size-4" /></Button>}
                         {canDeleteTasks && <Button size="icon" variant="ghost" className="size-8 text-rose-500" onClick={() => setConfirmDelete({ type: 'task', id: t.id, title: t.title })}><Trash2 className="size-4" /></Button>}
                       </div>
@@ -229,11 +230,11 @@ export function ProyectoPlanificacionPanel({ projectId, showTasks = true, showMi
       {canViewTimeline && <Cronograma tasks={timelineTasks} milestones={timelineMilestones} />}
 
       {taskDialog.open && (
-        <TaskFormDialog editing={taskDialog.editing} users={users} milestones={milestones} canEdit={canEditTasks} canChangeStatus={canChangeTaskStatus} canComplete={canCompleteTasks} canCancel={canCancelTasks} onClose={() => setTaskDialog({ open: false, editing: null })}
+        <TaskFormDialog editing={taskDialog.editing} forceCancel={taskDialog.forceCancel} users={users} milestones={milestones} canEdit={canEditTasks} canChangeStatus={canChangeTaskStatus} canComplete={canCompleteTasks} canCancel={canCancelTasks} onClose={() => setTaskDialog({ open: false, editing: null })}
           onSubmit={(payload) => taskMutations.mutate(taskDialog.editing ? { type: 'update', id: taskDialog.editing.id, payload } : { type: 'create', payload })} />
       )}
       {canViewMilestones && milestoneDialog.open && (
-        <MilestoneFormDialog editing={milestoneDialog.editing} canEdit={canEditMilestones} canChangeStatus={canChangeMilestoneStatus} canComplete={canCompleteMilestones} canCancel={canCancelMilestones} onClose={() => setMilestoneDialog({ open: false, editing: null })}
+        <MilestoneFormDialog editing={milestoneDialog.editing} forceCancel={milestoneDialog.forceCancel} canEdit={canEditMilestones} canChangeStatus={canChangeMilestoneStatus} canComplete={canCompleteMilestones} canCancel={canCancelMilestones} onClose={() => setMilestoneDialog({ open: false, editing: null })}
           onSubmit={(payload) => milestoneMutations.mutate(milestoneDialog.editing ? { type: 'update', id: milestoneDialog.editing.id, payload } : { type: 'create', payload })} />
       )}
 
@@ -319,8 +320,9 @@ export function Cronograma({ tasks, milestones }: { tasks: Array<Pick<ProjectTas
   );
 }
 
-function TaskFormDialog({ editing, users, milestones, canEdit, canChangeStatus, canComplete, canCancel, onClose, onSubmit }: {
+function TaskFormDialog({ editing, forceCancel = false, users, milestones, canEdit, canChangeStatus, canComplete, canCancel, onClose, onSubmit }: {
   editing?: ProjectTask | null;
+  forceCancel?: boolean;
   users: any[];
   milestones: ProjectMilestone[];
   canEdit: boolean;
@@ -333,7 +335,7 @@ function TaskFormDialog({ editing, users, milestones, canEdit, canChangeStatus, 
   const [form, setForm] = useState<any>({
     title: editing?.title || '',
     description: editing?.description || '',
-    status: editing?.status || 'PENDING',
+    status: forceCancel ? 'CANCELLED' : editing?.status || 'PENDING',
     priority: editing?.priority || 'MEDIUM',
     dueDate: toLocalDate(editing?.dueDate) || '',
     startDate: toLocalDate(editing?.startDate) || '',
@@ -341,6 +343,8 @@ function TaskFormDialog({ editing, users, milestones, canEdit, canChangeStatus, 
     assignedToId: editing?.assignedToId || '',
     progress: editing?.progress != null ? String(editing.progress) : '',
   });
+  const [cancelReason, setCancelReason] = useState('');
+  const [cancelReasonAttempted, setCancelReasonAttempted] = useState(false);
   const isDateInvalid = Boolean(form.startDate && form.dueDate && form.dueDate < form.startDate);
   const valid = form.title?.trim() && !isDateInvalid;
   const maySetStatus = (value: string) => value === 'COMPLETED' ? canComplete : value === 'CANCELLED' ? canCancel : canChangeStatus;
@@ -348,6 +352,8 @@ function TaskFormDialog({ editing, users, milestones, canEdit, canChangeStatus, 
   const canSave = !editing || canEdit || (statusChanged && maySetStatus(form.status));
   const submit = () => {
     if (!valid || !canSave) return;
+    const needsCancelReason = form.status === 'CANCELLED' && (!editing || form.status !== editing.status);
+    if (needsCancelReason && !cancelReason.trim()) { setCancelReasonAttempted(true); return; }
     const payload: Record<string, unknown> = {};
     if (!editing || canEdit) Object.assign(payload, {
       title: form.title.trim(),
@@ -359,7 +365,10 @@ function TaskFormDialog({ editing, users, milestones, canEdit, canChangeStatus, 
       assignedToId: form.assignedToId || undefined,
       progress: form.progress === '' ? undefined : Number(form.progress),
     });
-    if ((!editing && maySetStatus(form.status)) || (editing && statusChanged && maySetStatus(form.status))) payload.status = form.status;
+    if ((!editing && maySetStatus(form.status)) || (editing && statusChanged && maySetStatus(form.status))) {
+      payload.status = form.status;
+      if (form.status === 'CANCELLED') payload.reason = cancelReason.trim();
+    }
     onSubmit(payload);
     onClose();
   };
@@ -371,6 +380,7 @@ function TaskFormDialog({ editing, users, milestones, canEdit, canChangeStatus, 
           <div className="sm:col-span-2"><Label>Título *</Label><Input disabled={Boolean(editing) && !canEdit} value={form.title} onChange={(e) => setForm((f: any) => ({ ...f, title: e.target.value }))} placeholder="Ej. Levantamiento de requerimientos" /></div>
           <div className="sm:col-span-2"><Label>Descripción</Label><Textarea disabled={Boolean(editing) && !canEdit} rows={2} value={form.description} onChange={(e) => setForm((f: any) => ({ ...f, description: e.target.value }))} /></div>
           {(canChangeStatus || canComplete || canCancel) && <div><Label>Estado</Label><Select value={form.status} onValueChange={(v) => setForm((f: any) => ({ ...f, status: v }))}><SelectTrigger><SelectValue /></SelectTrigger><SelectContent>{TASK_STATUS_OPTIONS.filter((o) => o.value === form.status || maySetStatus(o.value)).map((o) => <SelectItem key={o.value} value={o.value}>{o.label}</SelectItem>)}</SelectContent></Select></div>}
+          {form.status === 'CANCELLED' && (!editing || form.status !== editing.status) && <div className="sm:col-span-2"><RequiredReasonField id="project-task-cancel-reason" label="Motivo de cancelación" value={cancelReason} onChange={setCancelReason} attempted={cancelReasonAttempted} /></div>}
           <div><Label>Prioridad</Label><Select value={form.priority} onValueChange={(v) => setForm((f: any) => ({ ...f, priority: v }))}><SelectTrigger disabled={Boolean(editing) && !canEdit}><SelectValue /></SelectTrigger><SelectContent>{PRIORITY_OPTIONS.map((o) => <SelectItem key={o.value} value={o.value}>{o.label}</SelectItem>)}</SelectContent></Select></div>
           <div><Label>Responsable</Label><Select value={form.assignedToId || EMPTY_SELECT_VALUE} onValueChange={(v) => setForm((f: any) => ({ ...f, assignedToId: v === EMPTY_SELECT_VALUE ? '' : v }))}><SelectTrigger disabled={Boolean(editing) && !canEdit}><SelectValue placeholder="Seleccionar" /></SelectTrigger><SelectContent><SelectItem value={EMPTY_SELECT_VALUE}>Sin asignar</SelectItem>{users.map((u: any) => <SelectItem key={u.id} value={u.id}>{u.name}</SelectItem>)}</SelectContent></Select></div>
           <div><Label>Hito</Label><Select value={form.milestoneId || EMPTY_SELECT_VALUE} onValueChange={(v) => setForm((f: any) => ({ ...f, milestoneId: v === EMPTY_SELECT_VALUE ? '' : v }))}><SelectTrigger disabled={Boolean(editing) && !canEdit}><SelectValue placeholder="Seleccionar" /></SelectTrigger><SelectContent><SelectItem value={EMPTY_SELECT_VALUE}>Sin hito</SelectItem>{milestones.map((m) => <SelectItem key={m.id} value={m.id}>{m.name}</SelectItem>)}</SelectContent></Select></div>
@@ -389,16 +399,23 @@ function TaskFormDialog({ editing, users, milestones, canEdit, canChangeStatus, 
   );
 }
 
-function MilestoneFormDialog({ editing, canEdit, canChangeStatus, canComplete, canCancel, onClose, onSubmit }: { editing?: ProjectMilestone | null; canEdit: boolean; canChangeStatus: boolean; canComplete: boolean; canCancel: boolean; onClose: () => void; onSubmit: (payload: any) => void }) {
-  const [form, setForm] = useState<any>({ name: editing?.name || '', description: editing?.description || '', dueDate: toLocalDate(editing?.dueDate) || '', status: editing?.status || 'PENDING' });
+function MilestoneFormDialog({ editing, forceCancel = false, canEdit, canChangeStatus, canComplete, canCancel, onClose, onSubmit }: { editing?: ProjectMilestone | null; forceCancel?: boolean; canEdit: boolean; canChangeStatus: boolean; canComplete: boolean; canCancel: boolean; onClose: () => void; onSubmit: (payload: any) => void }) {
+  const [form, setForm] = useState<any>({ name: editing?.name || '', description: editing?.description || '', dueDate: toLocalDate(editing?.dueDate) || '', status: forceCancel ? 'CANCELLED' : editing?.status || 'PENDING' });
+  const [cancelReason, setCancelReason] = useState('');
+  const [cancelReasonAttempted, setCancelReasonAttempted] = useState(false);
   const maySetStatus = (value: string) => value === 'COMPLETED' ? canComplete : value === 'CANCELLED' ? canCancel : canChangeStatus;
   const statusChanged = Boolean(editing && form.status !== editing.status);
   const canSave = !editing || canEdit || (statusChanged && maySetStatus(form.status));
   const submit = () => {
     if (!form.name?.trim() || !canSave) return;
+    const needsCancelReason = form.status === 'CANCELLED' && (!editing || form.status !== editing.status);
+    if (needsCancelReason && !cancelReason.trim()) { setCancelReasonAttempted(true); return; }
     const payload: Record<string, unknown> = {};
     if (!editing || canEdit) Object.assign(payload, { name: form.name.trim(), description: form.description?.trim() || undefined, dueDate: fromLocalDate(form.dueDate) });
-    if ((!editing && maySetStatus(form.status)) || (editing && statusChanged && maySetStatus(form.status))) payload.status = form.status;
+    if ((!editing && maySetStatus(form.status)) || (editing && statusChanged && maySetStatus(form.status))) {
+      payload.status = form.status;
+      if (form.status === 'CANCELLED') payload.reason = cancelReason.trim();
+    }
     onSubmit(payload);
     onClose();
   };
@@ -411,6 +428,7 @@ function MilestoneFormDialog({ editing, canEdit, canChangeStatus, canComplete, c
           <div><Label>Descripción</Label><Textarea disabled={Boolean(editing) && !canEdit} rows={2} value={form.description} onChange={(e) => setForm((f: any) => ({ ...f, description: e.target.value }))} /></div>
           <div><Label>Fecha límite</Label><DateField disabled={Boolean(editing) && !canEdit} value={form.dueDate || ''} onChange={(v) => setForm((f: any) => ({ ...f, dueDate: v }))} /></div>
           {(canChangeStatus || canComplete || canCancel) && <div><Label>Estado</Label><Select value={form.status} onValueChange={(v) => setForm((f: any) => ({ ...f, status: v }))}><SelectTrigger><SelectValue /></SelectTrigger><SelectContent>{TASK_STATUS_OPTIONS.filter((o) => o.value === form.status || maySetStatus(o.value)).map((o) => <SelectItem key={o.value} value={o.value}>{o.label}</SelectItem>)}</SelectContent></Select></div>}
+          {form.status === 'CANCELLED' && (!editing || form.status !== editing.status) && <div><RequiredReasonField id="project-milestone-cancel-reason" label="Motivo de cancelación" value={cancelReason} onChange={setCancelReason} attempted={cancelReasonAttempted} /></div>}
         </div>
         <DialogFooter><Button variant="outline" onClick={onClose}>Cancelar</Button>{canSave && <Button onClick={submit} disabled={!form.name?.trim() || (Boolean(editing) && !canEdit && !statusChanged)}>{editing ? 'Guardar' : 'Crear hito'}</Button>}</DialogFooter>
       </DialogContent>

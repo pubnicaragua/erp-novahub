@@ -19,7 +19,7 @@ interface ConfirmDialogProps {
   confirmLabel?: string;
   cancelLabel?: string;
   variant?: 'destructive' | 'warning' | 'default';
-  onConfirm: () => void | Promise<void>;
+  onConfirm: () => void | boolean | Promise<void | boolean>;
   loading?: boolean;
   disabled?: boolean;
   closeOnConfirm?: boolean;
@@ -66,8 +66,8 @@ export const ConfirmDialog: React.FC<ConfirmDialogProps> = ({
 
   const handleConfirm = async () => {
     try {
-      await onConfirm();
-      if (closeOnConfirm) onOpenChange(false);
+      const result = await onConfirm();
+      if (closeOnConfirm && result !== false) onOpenChange(false);
     } catch {
       // Error handling is done by the caller
     }

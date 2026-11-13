@@ -613,10 +613,10 @@ export function FinanzasPage({ activeSubModule, onSubModuleChange, isSidebarColl
     }
   };
 
-  const handleCancelExpense = async (id: string) => {
+  const handleCancelExpense = async (id: string, reason: string) => {
     const actionToken = beginNotificationAction();
     try {
-      await expensesService.cancel(id);
+      await expensesService.cancel(id, reason.trim());
       await queryClient.invalidateQueries({ queryKey: ['finance', 'expenses'] });
       await invalidateDashboardSummary();
       toast.success('Gasto anulado; se conservó su historial');
@@ -628,7 +628,7 @@ export function FinanzasPage({ activeSubModule, onSubModuleChange, isSidebarColl
     }
   };
 
-  const handleRecurringTransition = async (id: string, income: boolean, action: 'pause' | 'resume' | 'cancel') => {
+  const handleRecurringTransition = async (id: string, income: boolean, action: 'pause' | 'resume' | 'cancel', reason?: string) => {
     const module = income ? 'FINANCIAL_INCOMES_REC' : 'FINANCIAL_EXPENSES_REC';
     if (!canPerform(module, action)) {
       toast.error('No tienes permiso para cambiar esta programación');
@@ -639,13 +639,13 @@ export function FinanzasPage({ activeSubModule, onSubModuleChange, isSidebarColl
       if (income) {
         if (action === 'pause') await recurringIncomesService.pause(id);
         else if (action === 'resume') await recurringIncomesService.resume(id);
-        else await recurringIncomesService.cancel(id);
+        else await recurringIncomesService.cancel(id, reason?.trim() || '');
         await queryClient.invalidateQueries({ queryKey: ['finance', 'recurring-incomes'] });
         await invalidateDashboardSummary();
       } else {
         if (action === 'pause') await recurringExpensesService.pause(id);
         else if (action === 'resume') await recurringExpensesService.resume(id);
-        else await recurringExpensesService.cancel(id);
+        else await recurringExpensesService.cancel(id, reason?.trim() || '');
         await queryClient.invalidateQueries({ queryKey: ['finance', 'recurring-expenses'] });
         await invalidateDashboardSummary();
       }
@@ -894,7 +894,7 @@ export function FinanzasPage({ activeSubModule, onSubModuleChange, isSidebarColl
                           onResume={(id) => handleRecurringTransition(id, true, 'resume')}
                           canCancel={canPerform('FINANCIAL_INCOMES_REC', 'cancel')}
                           canCancelItem={(item) => ['ACTIVE', 'PAUSED'].includes(String(item.status || '').toUpperCase()) && !item.recurringInvoiceId}
-                          onCancel={(id) => handleRecurringTransition(id, true, 'cancel')}
+                          onCancel={(id, reason) => handleRecurringTransition(id, true, 'cancel', reason)}
                           cancelActionLabel="Cancelar programación"
                           cancelDialogTitle="¿Cancelar programación de ingreso?"
                           cancelDialogDescription="Se detendrán las próximas ejecuciones. La programación y los ingresos ya generados se conservarán."
@@ -926,7 +926,7 @@ export function FinanzasPage({ activeSubModule, onSubModuleChange, isSidebarColl
                           onResume={(id) => handleRecurringTransition(id, false, 'resume')}
                           canCancel={canPerform('FINANCIAL_EXPENSES_REC', 'cancel')}
                           canCancelItem={(item) => ['ACTIVE', 'PAUSED'].includes(String(item.status || '').toUpperCase()) && !String(item.source || '').trim().toLowerCase().startsWith('compras')}
-                          onCancel={(id) => handleRecurringTransition(id, false, 'cancel')}
+                          onCancel={(id, reason) => handleRecurringTransition(id, false, 'cancel', reason)}
                           cancelActionLabel="Cancelar programación"
                           cancelDialogTitle="¿Cancelar programación de gasto?"
                           cancelDialogDescription="Se detendrán las próximas ejecuciones. La programación y los gastos ya generados se conservarán."
@@ -963,7 +963,7 @@ export function FinanzasPage({ activeSubModule, onSubModuleChange, isSidebarColl
                     onResume={(id) => handleRecurringTransition(id, true, 'resume')}
                     canCancel={canPerform('FINANCIAL_INCOMES_REC', 'cancel')}
                     canCancelItem={(item) => ['ACTIVE', 'PAUSED'].includes(String(item.status || '').toUpperCase()) && !item.recurringInvoiceId}
-                    onCancel={(id) => handleRecurringTransition(id, true, 'cancel')}
+                    onCancel={(id, reason) => handleRecurringTransition(id, true, 'cancel', reason)}
                     cancelActionLabel="Cancelar programación"
                     cancelDialogTitle="¿Cancelar programación de ingreso?"
                     cancelDialogDescription="Se detendrán las próximas ejecuciones. La programación y los ingresos ya generados se conservarán."

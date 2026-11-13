@@ -291,7 +291,7 @@ export const ProvidersReportTab = forwardRef<ReportExportRef, ReportProps>(({ da
         toast.success('PDF generado exitosamente');
       } catch (e: any) {
         console.error(e);
-        toast.error(e?.response?.data?.message || e?.message || "Error exportando PDF");
+        toast.apiFailure(e, 'No se pudo exportar el PDF del reporte de proveedores.');
       }
     },
     exportExcel: async () => {
@@ -428,7 +428,7 @@ export const ProvidersReportTab = forwardRef<ReportExportRef, ReportProps>(({ da
         toast.success('Excel exportado exitosamente');
       } catch (e: any) {
         console.error(e);
-        toast.error(e?.response?.data?.message || e?.message || "Error exportando Excel");
+        toast.apiFailure(e, 'No se pudo exportar el Excel del reporte de proveedores.');
       }
     }
   }));

@@ -12,7 +12,7 @@ export function TrialExtensionRequestsPanel() {
   const { data: requestData, isLoading: loading, refetch: refetchRequests } = useTenantQuery(
     ['trial-extension-requests'],
     async (signal) => asList(await api.get<any[]>('/admin/trial-extension-requests', { signal })),
-    { onError: () => toast.error('No se pudieron cargar las solicitudes de extensión') },
+    { onError: (error) => toast.apiFailure(error, 'No se pudieron cargar las solicitudes de extensión.') },
   )
   const requests = requestData || []
 

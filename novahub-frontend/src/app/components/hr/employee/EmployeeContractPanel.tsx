@@ -9,6 +9,8 @@ import { Label } from '../../ui/label';
 import { Textarea } from '../../ui/textarea';
 import { Skeleton } from '../../ui/skeleton';
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from '../../ui/dialog';
+import { ConfirmDialog } from '../../ui/ConfirmDialog';
+import { RequiredReasonField } from '../../ui/RequiredReasonField';
 import { useTenantQuery } from '../../../hooks/useTenantQuery';
 import { toast } from '../../../services/toast';
 import { CONTRACT_STATUS_LABEL, employeeProfileService, type Contract } from '../../../services/employee-profile.service';
@@ -35,6 +37,9 @@ function ContractDialog({ contractId, canEdit, onClose, onChanged }: { contractI
   const [body, setBody] = useState<string | null>(null);
   const [link, setLink] = useState<{ url: string; expiresAt: string; sentTo: string | null } | null>(null);
   const [busy, setBusy] = useState(false);
+  const [cancelOpen, setCancelOpen] = useState(false);
+  const [cancelReason, setCancelReason] = useState('');
+  const [cancelReasonAttempted, setCancelReasonAttempted] = useState(false);
   const contract = query.data;
   const editable = canEdit && contract?.status === 'DRAFT';
   const text = body ?? contract?.body ?? '';
@@ -43,9 +48,10 @@ function ContractDialog({ contractId, canEdit, onClose, onChanged }: { contractI
     setBusy(true);
     try { await action(); if (done) toast.success(done); onChanged(); await query.refetch(); } catch (error) { toast.error(failure(error)); } finally { setBusy(false); }
   };
-  const copy = async (value: string) => { try { await navigator.clipboard.writeText(value); toast.success('Enlace copiado'); } catch { toast.error('No se pudo copiar. Selecciona el enlace y cópialo.'); } };
+  const copy = async (value: string) => { try { await navigator.clipboard.writeText(value); toast.success('Enlace copiado'); } catch { toast.error('El navegador no permitió copiar el enlace. Selecciónalo y cópialo manualmente.'); } };
 
   return (
+    <>
     <Dialog open onOpenChange={(open) => !open && !busy && onClose()}>
       <DialogContent className="max-h-[92vh] max-w-3xl overflow-y-auto">
         <DialogHeader><DialogTitle>{contract?.title ?? 'Contrato'}</DialogTitle><DialogDescription>Revisa y ajusta el texto antes de enviarlo. Es un borrador de referencia: conviene que un asesor legal revise la plantilla.</DialogDescription></DialogHeader>
@@ -66,12 +72,14 @@ function ContractDialog({ contractId, canEdit, onClose, onChanged }: { contractI
               {editable && body !== null && body !== contract.body && <Button type="button" variant="outline" disabled={busy} onClick={() => void run(() => employeeProfileService.updateContract(contract.id, { body: text }), 'Texto guardado')}>Guardar cambios</Button>}
               {canEdit && ['DRAFT', 'SENT'].includes(contract.status) && !contract.companySignedAt && <Button type="button" variant="outline" disabled={busy} onClick={() => void run(() => employeeProfileService.companySign(contract.id), 'Firmado por la empresa')}><FileSignature className="mr-1.5 size-4" /> Firmar por la empresa</Button>}
               {canEdit && ['DRAFT', 'SENT', 'EXPIRED'].includes(contract.status) && <Button type="button" disabled={busy || (editable && body !== null && body !== contract.body)} onClick={() => void run(async () => setLink(await employeeProfileService.sendContract(contract.id)))}>{busy ? <Loader2 className="mr-1.5 size-4 animate-spin" /> : <Send className="mr-1.5 size-4" />}Enviar a firmar</Button>}
-              {canEdit && contract.status !== 'SIGNED' && contract.status !== 'CANCELLED' && <Button type="button" variant="ghost" className="text-destructive" disabled={busy} onClick={() => void run(() => employeeProfileService.cancelContract(contract.id), 'Contrato cancelado')}>Cancelar contrato</Button>}
+              {canEdit && contract.status !== 'SIGNED' && contract.status !== 'CANCELLED' && <Button type="button" variant="ghost" className="text-destructive" disabled={busy} onClick={() => { setCancelReason(''); setCancelReasonAttempted(false); setCancelOpen(true); }}>Cancelar contrato</Button>}
             </div>
           </div>
         )}
       </DialogContent>
     </Dialog>
+    <ConfirmDialog open={cancelOpen} onOpenChange={(open) => { if (!open && !busy) { setCancelOpen(false); setCancelReason(''); setCancelReasonAttempted(false); } }} title="¿Cancelar contrato?" description="El contrato quedará cancelado y se conservará en el historial del empleado." confirmLabel="Cancelar contrato" variant="destructive" loading={busy} children={<RequiredReasonField id="employee-contract-cancel-reason" label="Motivo de cancelación" value={cancelReason} onChange={setCancelReason} attempted={cancelReasonAttempted} disabled={busy} />} onConfirm={async () => { if (!contract) return; if (!cancelReason.trim()) { setCancelReasonAttempted(true); return false; } await run(() => employeeProfileService.cancelContract(contract.id, cancelReason.trim()), 'Contrato cancelado'); setCancelOpen(false); return true; }} />
+    </>
   );
 }
 

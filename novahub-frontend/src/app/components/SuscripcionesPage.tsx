@@ -647,18 +647,18 @@ export function SuscripcionesPage({ activeSubModule, onSubModuleChange, isSideba
       toast.success('Suscripción aprobada y módulo habilitado');
       fetchData();
       refreshEnabledModules();
-    } catch (error) {
-      toast.error('Error al aprobar suscripción');
+    } catch (error: unknown) {
+      toast.apiFailure(error, 'No se pudo aprobar la solicitud de suscripción.');
     }
   };
 
   const handleReject = async (id: string) => {
     try {
       await subscriptionsService.updateRequestStatus(id, { status: 'REJECTED' });
-      toast.error('Suscripción rechazada');
+      toast.success('Solicitud de suscripción rechazada.');
       fetchData();
-    } catch (error) {
-      toast.error('Error al rechazar suscripción');
+    } catch (error: unknown) {
+      toast.apiFailure(error, 'No se pudo rechazar la solicitud de suscripción.');
     }
   };
 

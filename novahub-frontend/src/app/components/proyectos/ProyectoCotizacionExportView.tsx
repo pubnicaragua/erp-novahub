@@ -377,7 +377,7 @@ Quedamos a su disposición para la formalización del contrato.`;
       toast.success('Resumen comercial copiado al portapapeles.');
       setTimeout(() => setCopied(false), 2500);
     } catch {
-      toast.error('No se pudo copiar el resumen al portapapeles.');
+      toast.error('El navegador no permitió copiar el resumen. Selecciona el texto y cópialo manualmente.');
     }
   };
 

@@ -94,7 +94,7 @@ export function SupplierHistoryModal({ supplier, open, onOpenChange }: SupplierH
       setTransactions(all);
     } catch (error) {
       console.error('Error fetching supplier history:', error);
-      toast.error('Error al sincronizar transacciones');
+      toast.apiFailure(error, 'No se pudo cargar el historial de transacciones del proveedor.');
     } finally {
       setLoading(false);
     }
@@ -123,7 +123,7 @@ export function SupplierHistoryModal({ supplier, open, onOpenChange }: SupplierH
       });
       toast.success('Estado de cuenta exportado');
     } catch (error) {
-      toast.error('Error al generar PDF');
+      toast.apiFailure(error, 'No se pudo generar el PDF del estado de cuenta del proveedor.');
     }
   };
 

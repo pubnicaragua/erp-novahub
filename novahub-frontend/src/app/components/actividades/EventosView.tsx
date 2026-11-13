@@ -28,6 +28,8 @@ import { ActivityDetailSheet } from './ActivityDetailSheet';
 import { DateTimePickerField } from '../ui/DateTimePickerField';
 import { detectMeetingUrl } from '../../utils/meetingLink';
 import { KpiSummaryNotice } from '../ui/KpiSummaryNotice';
+import { ConfirmDialog } from '../ui/ConfirmDialog';
+import { RequiredReasonField } from '../ui/RequiredReasonField';
 
 interface EventosViewProps {
   data: Event[];
@@ -119,6 +121,10 @@ export const EventosView: React.FC<EventosViewProps> = ({ data, loading, summary
   const [isAddOpen, setIsAddOpen] = useState(false);
   const [costReason, setCostReason] = useState('');
   const [selectedEvent, setSelectedEvent] = useState<Event | null>(null);
+  const [pendingCancelEvent, setPendingCancelEvent] = useState<Event | null>(null);
+  const [cancelReason, setCancelReason] = useState('');
+  const [cancelReasonAttempted, setCancelReasonAttempted] = useState(false);
+  const [cancellingEventId, setCancellingEventId] = useState<string | null>(null);
   const [completingEventId, setCompletingEventId] = useState<string | null>(null);
   const [completedEventIds, setCompletedEventIds] = useState<Set<string>>(new Set());
   const [newEvent, setNewEvent] = useState({
@@ -544,16 +550,31 @@ export const EventosView: React.FC<EventosViewProps> = ({ data, loading, summary
     }
   };
 
-  const handleCancelEvent = async (event: Event) => {
+  const handleCancelEvent = async (event: Event, reason?: string): Promise<boolean> => {
     const status = String(event.status || '').toUpperCase();
-    if (!canPerformEventAction(event, 'cancel') || ['COMPLETED', 'CANCELLED'].includes(status)) return;
+    if (!canPerformEventAction(event, 'cancel') || ['COMPLETED', 'CANCELLED'].includes(status)) return false;
+    if (!reason?.trim()) {
+      setPendingCancelEvent(event);
+      setCancelReason('');
+      setCancelReasonAttempted(false);
+      setSelectedEvent(null);
+      return false;
+    }
     try {
-      const updated = await eventsService.update(String(event.id), { status: 'CANCELLED' } as any);
+      setCancellingEventId(String(event.id));
+      const updated = await eventsService.update(String(event.id), { status: 'CANCELLED', reason: reason.trim() } as any);
       setSelectedEvent((current) => current?.id === event.id ? { ...current, ...(updated || {}), status: 'CANCELLED' } : current);
       toast.success(isMeetingMode ? 'Reunión cancelada' : 'Evento cancelado');
+      setPendingCancelEvent(null);
+      setCancelReason('');
+      setCancelReasonAttempted(false);
       onRefresh();
+      return true;
     } catch (error: any) {
       toast.error(error?.response?.data?.message || error?.message || 'No se pudo cancelar');
+      return false;
+    } finally {
+      setCancellingEventId(null);
     }
   };
 
@@ -906,8 +927,8 @@ export const EventosView: React.FC<EventosViewProps> = ({ data, loading, summary
           <div className="grid gap-5 px-6 py-6 sm:px-8">
             <div className="grid gap-4 sm:grid-cols-2">
               <div className="space-y-2 sm:col-span-2">
-                <Label className="text-xs font-bold">{isMeetingMode ? 'Título de la reunión' : 'Título del evento'}</Label>
-                <Input autoFocus value={newEvent.title} onChange={e => setNewEvent({ ...newEvent, title: e.target.value })} placeholder={isMeetingMode ? "Ej. Reunión de seguimiento con clientes" : "Ej. Presentación corporativa"} className="h-11 rounded-xl bg-background" />
+                <Label htmlFor="activity-event-title" required className="text-xs font-bold">{isMeetingMode ? 'Título de la reunión' : 'Título del evento'}</Label>
+                <Input id="activity-event-title" autoFocus required value={newEvent.title} onChange={e => setNewEvent({ ...newEvent, title: e.target.value })} placeholder={isMeetingMode ? "Ej. Reunión de seguimiento con clientes" : "Ej. Presentación corporativa"} className="h-11 rounded-xl bg-background" />
               </div>
               <div className="space-y-2">
                 <Label className="text-xs font-bold">Inicio</Label>
@@ -1259,7 +1280,7 @@ export const EventosView: React.FC<EventosViewProps> = ({ data, loading, summary
           </div>
           <DialogFooter className="border-t border-border/50 bg-muted/[0.12] px-6 py-4 sm:px-8">
             <Button variant="outline" onClick={() => setInvitation(null)}>Cerrar</Button>
-            <Button onClick={async () => { if (!invitation) return; try { await navigator.clipboard.writeText(invitation.text); toast.success('Invitación copiada'); } catch { toast.error('No se pudo copiar; selecciona el texto manualmente.'); } }}><Copy className="mr-2 size-4" /> Copiar invitación</Button>
+            <Button onClick={async () => { if (!invitation) return; try { await navigator.clipboard.writeText(invitation.text); toast.success('Invitación copiada'); } catch { toast.error('El navegador no permitió copiar la invitación. Selecciona el texto y cópialo manualmente.'); } }}><Copy className="mr-2 size-4" /> Copiar invitación</Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
@@ -1334,6 +1355,21 @@ export const EventosView: React.FC<EventosViewProps> = ({ data, loading, summary
           </DialogFooter>
         </DialogContent>
       </Dialog>
+      <ConfirmDialog
+        open={Boolean(pendingCancelEvent)}
+        onOpenChange={(open) => { if (!open && !cancellingEventId) { setPendingCancelEvent(null); setCancelReason(''); setCancelReasonAttempted(false); } }}
+        title={`¿Cancelar ${isMeetingMode ? 'reunión' : 'evento'}?`}
+        description={`${pendingCancelEvent?.title || 'El registro'} quedará cancelado y se conservará en el historial.`}
+        confirmLabel={isMeetingMode ? 'Cancelar reunión' : 'Cancelar evento'}
+        variant="destructive"
+        loading={cancellingEventId === String(pendingCancelEvent?.id || '')}
+        children={<RequiredReasonField id="activity-event-cancel-reason" label="Motivo de cancelación" value={cancelReason} onChange={setCancelReason} attempted={cancelReasonAttempted} disabled={cancellingEventId !== null} />}
+        onConfirm={async () => {
+          if (!pendingCancelEvent) return false;
+          if (!cancelReason.trim()) { setCancelReasonAttempted(true); return false; }
+          return handleCancelEvent(pendingCancelEvent, cancelReason.trim());
+        }}
+      />
     </div>
   );
 };

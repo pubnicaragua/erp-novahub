@@ -667,7 +667,7 @@ export const FinanceReportTab = forwardRef<ReportExportRef, ReportProps>(({ date
         toast.success("PDF generado exitosamente");
       } catch (e: any) {
         console.error(e);
-        toast.error(e?.response?.data?.message || e?.message || "Error al generar PDF");
+        toast.apiFailure(e, 'No se pudo generar el PDF del reporte financiero.');
       }
     },
     exportExcel: async () => {
@@ -793,7 +793,7 @@ export const FinanceReportTab = forwardRef<ReportExportRef, ReportProps>(({ date
         toast.success("Excel generado exitosamente");
       } catch (e: any) {
         console.error(e);
-        toast.error(e?.response?.data?.message || e?.message || "Error al generar Excel");
+        toast.apiFailure(e, 'No se pudo generar el Excel del reporte financiero.');
       }
     }
   }));

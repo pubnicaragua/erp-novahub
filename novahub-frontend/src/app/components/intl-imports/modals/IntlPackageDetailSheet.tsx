@@ -24,6 +24,7 @@ import { Button } from '../../ui/button';
 import { Badge } from '../../ui/badge';
 import { Input } from '../../ui/input';
 import { ConfirmDialog } from '../../ui/ConfirmDialog';
+import { RequiredReasonField } from '../../ui/RequiredReasonField';
 import {
   Sheet,
   SheetContent,
@@ -124,6 +125,8 @@ export function IntlPackageDetailSheet({
   const [newEventLabel, setNewEventLabel] = useState('');
   const [newEventLocation, setNewEventLocation] = useState('');
   const [newEventDescription, setNewEventDescription] = useState('');
+  const [cancelReason, setCancelReason] = useState('');
+  const [cancelReasonAttempted, setCancelReasonAttempted] = useState(false);
   const [loadingEvent, setLoadingEvent] = useState(false);
 
   // Deletion & Edit state
@@ -168,6 +171,7 @@ export function IntlPackageDetailSheet({
           ? canCancel
           : false;
     if (!hasEventPermission) return;
+    if (newEventStatus === 'CANCELLED' && !cancelReason.trim()) { setCancelReasonAttempted(true); return; }
     try {
       setLoadingEvent(true);
       await intlImportsService.addPackageEvent(packageData.id, {
@@ -175,12 +179,15 @@ export function IntlPackageDetailSheet({
         label: newEventLabel.trim() || INTL_PACKAGE_STATUS_LABELS[newEventStatus],
         location: newEventLocation.trim() || undefined,
         description: newEventDescription.trim() || undefined,
+        ...(newEventStatus === 'CANCELLED' ? { reason: cancelReason.trim() } : {}),
       });
       toast.success('Evento de trazabilidad registrado exitosamente');
       setAddingEvent(false);
       setNewEventLabel('');
       setNewEventLocation('');
       setNewEventDescription('');
+      setCancelReason('');
+      setCancelReasonAttempted(false);
       onRefresh?.();
     } catch (error) {
       toast.error(getApiErrorMessage(error, 'Error al agregar evento'));
@@ -509,7 +516,7 @@ export function IntlPackageDetailSheet({
                         <select
                           className="w-full text-xs rounded-lg border border-border bg-background p-2"
                           value={newEventStatus}
-                          onChange={(e) => setNewEventStatus(e.target.value as IntlImportPackageStatus)}
+                          onChange={(e) => { setNewEventStatus(e.target.value as IntlImportPackageStatus); setCancelReason(''); setCancelReasonAttempted(false); }}
                         >
                           {availableEventStatuses.map(([k, label]) => (
                             <option key={k} value={k}>{label}</option>
@@ -527,6 +534,8 @@ export function IntlPackageDetailSheet({
                         />
                       </div>
                     </div>
+
+                    {newEventStatus === 'CANCELLED' && <RequiredReasonField id="intl-package-cancel-reason" label="Motivo de cancelación" value={cancelReason} onChange={setCancelReason} attempted={cancelReasonAttempted} disabled={loadingEvent} />}
 
                     <div>
                       <label className="text-[10px] font-bold text-muted-foreground uppercase block mb-1">Título del Evento *</label>
