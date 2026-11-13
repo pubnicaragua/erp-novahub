@@ -464,8 +464,35 @@ export function GastosRecurrentesView({ data, summaryData, summaryLoading, summa
                   />
                 </div>
                 <div className="min-w-0">
-                  <div className="mb-1 flex items-center justify-between gap-2">
-                    <p className="text-[10px] text-muted-foreground">Categoría</p>
+                  <p className="mb-1 text-[10px] text-muted-foreground">Categoría</p>
+                  <div className="flex min-w-0 items-center gap-1">
+                    <Select
+                      disabled={isNew ? !canPerform('PURCHASES_EXPENSES_REC', 'create') : !canPerform('PURCHASES_EXPENSES_REC', 'edit')}
+                      value={categorySelectValue}
+                      onValueChange={(value) => {
+                        if (value.startsWith('standard:')) {
+                          setLocalDoc({ ...localDoc, category: value.slice('standard:'.length), expenseCategoryId: null });
+                          return;
+                        }
+                        if (value.startsWith('catalog:')) {
+                          const categoryId = value.slice('catalog:'.length);
+                          const category = [...selectableCategories, ...(currentCategory ? [currentCategory] : [])].find((option) => option.id === categoryId);
+                          if (category) setLocalDoc({ ...localDoc, category: category.name, expenseCategoryId: category.id });
+                          return;
+                        }
+                        if (value.startsWith('legacy:')) {
+                          setLocalDoc({ ...localDoc, category: value.slice('legacy:'.length), expenseCategoryId: null });
+                        }
+                      }}
+                    >
+                      <SelectTrigger className="h-8 min-w-0 flex-1 text-xs uppercase"><SelectValue placeholder="Seleccionar categoría" /></SelectTrigger>
+                      <SelectContent>
+                        {standardExpenseCategories.map((category) => <SelectItem key={category.value} value={`standard:${category.value}`}>{category.label}</SelectItem>)}
+                        {selectableCategories.map((category) => <SelectItem key={category.id} value={`catalog:${category.id}`}>{category.name}</SelectItem>)}
+                        {currentCategory && <SelectItem value={`catalog:${currentCategory.id}`}>{currentCategory.name}</SelectItem>}
+                        {legacyCategories.map((category) => <SelectItem key={category} value={`legacy:${category}`}>{category} · registrada</SelectItem>)}
+                      </SelectContent>
+                    </Select>
                     {canCreateCategoryInline && <Button
                       type="button"
                       variant="ghost"
@@ -480,33 +507,6 @@ export function GastosRecurrentesView({ data, summaryData, summaryLoading, summa
                       }}
                     ><Plus className="size-4" /></Button>}
                   </div>
-                  <Select
-                    disabled={isNew ? !canPerform('PURCHASES_EXPENSES_REC', 'create') : !canPerform('PURCHASES_EXPENSES_REC', 'edit')}
-                    value={categorySelectValue}
-                    onValueChange={(value) => {
-                      if (value.startsWith('standard:')) {
-                        setLocalDoc({ ...localDoc, category: value.slice('standard:'.length), expenseCategoryId: null });
-                        return;
-                      }
-                      if (value.startsWith('catalog:')) {
-                        const categoryId = value.slice('catalog:'.length);
-                        const category = [...selectableCategories, ...(currentCategory ? [currentCategory] : [])].find((option) => option.id === categoryId);
-                        if (category) setLocalDoc({ ...localDoc, category: category.name, expenseCategoryId: category.id });
-                        return;
-                      }
-                      if (value.startsWith('legacy:')) {
-                        setLocalDoc({ ...localDoc, category: value.slice('legacy:'.length), expenseCategoryId: null });
-                      }
-                    }}
-                  >
-                    <SelectTrigger className="h-8 text-xs uppercase"><SelectValue placeholder="Seleccionar categoría" /></SelectTrigger>
-                    <SelectContent>
-                      {standardExpenseCategories.map((category) => <SelectItem key={category.value} value={`standard:${category.value}`}>{category.label}</SelectItem>)}
-                      {selectableCategories.map((category) => <SelectItem key={category.id} value={`catalog:${category.id}`}>{category.name}</SelectItem>)}
-                      {currentCategory && <SelectItem value={`catalog:${currentCategory.id}`}>{currentCategory.name}</SelectItem>}
-                      {legacyCategories.map((category) => <SelectItem key={category} value={`legacy:${category}`}>{category} · registrada</SelectItem>)}
-                    </SelectContent>
-                  </Select>
                   <p className="mt-1 text-[10px] text-muted-foreground">
                     {canCreateCategoryInline
                       ? 'Puedes agregar una categoría reutilizable desde aquí.'
