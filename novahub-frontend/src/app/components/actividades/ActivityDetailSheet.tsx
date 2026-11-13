@@ -450,11 +450,8 @@ function TaskDetails({ item, onUpdate, canEdit, canReassign, canManageSubtasks, 
 
       <TaskProgressSummary task={item} />
 
-      <DetailSection title="Seguimiento" icon={Info}>
-        <div className="grid gap-3 sm:grid-cols-2"><DetailItem label="Tipo de actividad" value={formatLabel(item.type || 'TASK')} icon={FileText} /><DetailItem label="Responsables" value={`${assignments.length} ${assignments.length === 1 ? 'persona asignada' : 'personas asignadas'}`} icon={Users} /><DetailItem label="Responsable principal" value={assignments[0]?.user?.name || assignments[0]?.user?.email || (assignments.length ? 'Responsable asignado' : 'Sin asignar')} icon={Users} /><DetailItem label="Última actualización" value={formatDate(item.updatedAt || item.createdAt)} icon={CalendarClock} /></div>
-      </DetailSection>
-      <DetailSection title="Descripción" icon={FileText}>
-        <p className="whitespace-pre-wrap text-sm leading-6 text-muted-foreground">{item.description || 'Esta tarea no tiene una descripción.'}</p>
+      <DetailSection title="Qué se asignó" icon={FileText}>
+        <p className="whitespace-pre-wrap text-sm leading-6 text-muted-foreground">{item.description || 'Esta tarea no tiene una descripción. Revisa los reportes y comentarios de abajo.'}</p>
       </DetailSection>
 
       <DetailSection title="Reportes de avance" icon={FileText}>
@@ -463,6 +460,10 @@ function TaskDetails({ item, onUpdate, canEdit, canReassign, canManageSubtasks, 
 
       <DetailSection title="Comentarios del equipo" icon={Users}>
         <TaskCommentsPanel taskId={String(item.id)} onChanged={() => onUpdate?.()} />
+      </DetailSection>
+
+      <DetailSection title="Seguimiento" icon={Info}>
+        <div className="grid gap-3 sm:grid-cols-2"><DetailItem label="Tipo de actividad" value={formatLabel(item.type || 'TASK')} icon={FileText} /><DetailItem label="Responsables" value={`${assignments.length} ${assignments.length === 1 ? 'persona asignada' : 'personas asignadas'}`} icon={Users} /><DetailItem label="Responsable principal" value={assignments[0]?.user?.name || assignments[0]?.user?.email || (assignments.length ? 'Responsable asignado' : 'Sin asignar')} icon={Users} /><DetailItem label="Última actualización" value={formatDate(item.updatedAt || item.createdAt)} icon={CalendarClock} /></div>
       </DetailSection>
 
       <DetailSection title="Checklist y Subtareas" icon={CheckCircle2}>

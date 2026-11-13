@@ -158,6 +158,7 @@ export function TareasCategoriasView({
   const [selected, setSelected] = useState<string>(ALL_KEY);
   const [layout, setLayout] = useState<'gallery' | 'list'>('gallery');
   const [showTeam, setShowTeam] = useState(true);
+  const [showFreePeople, setShowFreePeople] = useState(false);
   const clock = useMemo(() => now ?? new Date(), [now]);
 
   const stats = useMemo(() => countByCategory(tasks as never[], clock), [tasks, clock]);
@@ -168,6 +169,8 @@ export function TareasCategoriasView({
   );
   const scoped: CountSet = useMemo(() => countTasks(scopedTasks as never[], clock), [scopedTasks, clock]);
   const team = useMemo(() => countByPerson(scopedTasks as never[], people, clock), [scopedTasks, people, clock]);
+  const busyPeople = useMemo(() => team.filter((person) => person.open > 0), [team]);
+  const freePeople = useMemo(() => team.filter((person) => person.open === 0), [team]);
 
   const activeCategories = categories.filter((category) => !category.isArchived);
   // Una categoría archivada con tareas sigue apareciendo, para que esas tareas no queden invisibles.
@@ -229,7 +232,7 @@ export function TareasCategoriasView({
     <div className="grid min-w-0 gap-4 p-3 sm:p-4 lg:grid-cols-[17rem_minmax(0,1fr)]" data-testid="activities-task-categories-view">
       <aside className="min-w-0 space-y-2 lg:self-start" aria-label="Categorías">
         <div className="flex items-center justify-between gap-2 px-1">
-          <h3 className="text-[10px] font-black uppercase tracking-widest text-muted-foreground">Categorías</h3>
+          <p className="text-[10px] font-black uppercase tracking-widest text-muted-foreground">Categorías</p>
           {onManageCategories && (
             <Button type="button" variant="ghost" size="sm" className="h-8 gap-1.5 rounded-lg px-2 text-[10px] font-black uppercase tracking-widest" onClick={onManageCategories} data-testid="activities-manage-categories">
               <Settings2 className="size-3.5" /> Gestionar
@@ -271,14 +274,14 @@ export function TareasCategoriasView({
 
         <div className="grid grid-cols-2 gap-2 sm:grid-cols-3 xl:grid-cols-5" aria-label={`Resumen de ${scopeTitle}`}>
           <CountPill value={scoped.total} label="Tareas" />
-          <CountPill value={scoped.open} label="Pendientes" />
+          <CountPill value={scoped.open} label="Abiertas" />
           <CountPill value={scoped.overdue} label="Vencidas" tone="alert" />
           <CountPill value={scoped.unassigned} label="Sin asignar" tone="alert" />
           <CountPill value={scoped.notStarted} label="Sin tomar" tone="alert" />
         </div>
         {selected !== ALL_KEY && (
           <p className="text-[11px] text-muted-foreground">
-            En toda la empresa hay {global.open} {global.open === 1 ? 'tarea pendiente' : 'tareas pendientes'}, {global.unassigned} sin asignar y {global.notStarted} asignadas que nadie ha tomado todavía.
+            En toda la empresa hay {global.open} {global.open === 1 ? 'tarea abierta' : 'tareas abiertas'}, {global.unassigned} sin asignar y {global.notStarted} asignadas que nadie ha tomado todavía.
           </p>
         )}
 
@@ -288,12 +291,12 @@ export function TareasCategoriasView({
             {showTeam ? <ChevronDown className="size-4 text-muted-foreground" /> : <ChevronRight className="size-4 text-muted-foreground" />}
           </button>
           {showTeam && (
-            <div className="overflow-x-auto border-t border-border/40 px-2 pb-2">
+            <div className="overflow-x-auto border-t border-border/40 px-2 pb-2" data-table-content-sized="true">
               <table className="w-full min-w-[28rem] text-left text-xs">
                 <thead>
                   <tr className="text-[10px] font-black uppercase tracking-widest text-muted-foreground">
                     <th className="px-2 py-2">Persona</th>
-                    <th className="px-2 py-2 text-right">Pendientes</th>
+                    <th className="px-2 py-2 text-right">Abiertas</th>
                     <th className="px-2 py-2 text-right">En progreso</th>
                     <th className="px-2 py-2 text-right">Sin tomar</th>
                     <th className="px-2 py-2 text-right">Vencidas</th>
@@ -307,7 +310,7 @@ export function TareasCategoriasView({
                     <td className="px-2 py-2 text-right text-muted-foreground">—</td>
                     <td className="px-2 py-2 text-right text-muted-foreground">—</td>
                   </tr>
-                  {team.map((person) => (
+                  {[...busyPeople, ...(showFreePeople ? freePeople : [])].map((person) => (
                     <tr key={person.id} className="border-t border-border/30">
                       <td className="max-w-[14rem] truncate px-2 py-2 font-semibold text-foreground" title={person.name}>
                         {person.name}
@@ -319,10 +322,19 @@ export function TareasCategoriasView({
                       <td className={cn('px-2 py-2 text-right tabular-nums', person.overdue > 0 && 'font-bold text-rose-600 dark:text-rose-400')}>{person.overdue}</td>
                     </tr>
                   ))}
+                  {freePeople.length > 0 && (
+                    <tr className="border-t border-border/30">
+                      <td colSpan={5} className="px-2 py-2">
+                        <button type="button" className="text-[11px] font-bold text-primary hover:underline" aria-expanded={showFreePeople} onClick={() => setShowFreePeople((value) => !value)}>
+                          {showFreePeople ? 'Ocultar a quienes no tienen tareas abiertas' : `Mostrar ${freePeople.length} ${freePeople.length === 1 ? 'persona sin tareas abiertas' : 'personas sin tareas abiertas'}`}
+                        </button>
+                      </td>
+                    </tr>
+                  )}
                 </tbody>
               </table>
               <p className="px-2 pb-1 pt-2 text-[11px] text-muted-foreground">
-                «Sin tomar»: tiene responsable pero sigue en Pendiente. «Pendientes» cuenta todo lo que no está completado ni cancelado.
+                «Sin tomar»: tiene responsable pero sigue en Pendiente. «Abiertas» es todo lo que no está completado ni cancelado, vencidas incluidas.
               </p>
             </div>
           )}

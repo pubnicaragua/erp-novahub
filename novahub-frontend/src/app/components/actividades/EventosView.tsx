@@ -833,6 +833,7 @@ export const EventosView: React.FC<EventosViewProps> = ({ data, loading, summary
             );
           }}
           actionsWidth="w-80"
+          showHorizontalControls
         />
       </Card>
 

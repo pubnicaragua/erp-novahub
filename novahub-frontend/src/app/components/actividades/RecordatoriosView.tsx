@@ -180,6 +180,7 @@ export const RecordatoriosView: React.FC<RecordatoriosViewProps> = ({ data, load
               <Button type="button" variant="ghost" size="icon" title="Ver detalle del recordatorio" aria-label="Ver detalle del recordatorio" className="size-8 rounded-lg text-muted-foreground hover:bg-primary/10 hover:text-primary" onClick={() => setSelectedReminder(row)}><Eye className="size-4" /></Button>
             </div>
           )}
+          showHorizontalControls
         />
       </Card>
 

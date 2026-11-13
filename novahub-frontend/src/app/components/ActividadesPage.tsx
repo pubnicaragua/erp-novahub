@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { useQueryClient } from '@tanstack/react-query';
 import { ListTodo, CalendarDays, Bell, Database, ClipboardCheck } from 'lucide-react';
 import { Tabs } from './ui/tabs';
@@ -49,6 +49,7 @@ export const ActividadesPage = ({ activeSubModule, onSubModuleChange, isSidebarC
   const queryClient = useQueryClient();
   const [internalActiveTab, setInternalActiveTab] = useState('tareas');
   const activeTab = activeSubModule || internalActiveTab;
+  const navRef = useRef<HTMLDivElement | null>(null);
 
   // Cada pestaña consulta solo sus datos cuando se activa. React Query conserva
   // los resultados por tenant y aborta la petición anterior al cambiar rápido.
@@ -109,6 +110,9 @@ export const ActividadesPage = ({ activeSubModule, onSubModuleChange, isSidebarC
   const canExportActive = Boolean(activeExportTarget
     && canPerform(activeExportTarget.permission, 'view')
     && canPerform(activeExportTarget.permission, 'export'));
+
+  // Las pestañas sin exportación del menú (Reportes tiene la suya propia) también necesitan la barra para poder cambiar de pestaña.
+  const showFloatingNav = canExportActive || !activeExportTarget;
 
   const exportActivities = async (format: 'pdf' | 'xlsx', paperFormat: PdfDownloadFormat = 'letter') => {
     if (!activeExportTarget || !canExportActive) return;
@@ -182,6 +186,35 @@ export const ActividadesPage = ({ activeSubModule, onSubModuleChange, isSidebarC
     onSubModuleChange?.(fallback);
   }, [activeTab, onSubModuleChange, visibleTabs]);
 
+  // La barra de pestañas flota arriba a la derecha. Medimos cuánto ocupa para que el subtítulo de cada vista
+  // no quede debajo de ella: se angosta a su izquierda o, si no cabe, baja por debajo de la barra.
+  useLayoutEffect(() => {
+    const nav = navRef.current;
+    const host = nav?.parentElement;
+    if (!nav || !host) return;
+    const measure = () => {
+      const floating = window.getComputedStyle(nav).position === 'absolute' && nav.offsetWidth > 0;
+      let clear = 0;
+      let push = 0;
+      if (floating) {
+        const room = host.clientWidth - nav.offsetWidth - 16;
+        if (room >= 320) clear = nav.offsetWidth + 16;
+        else push = Math.max(0, nav.offsetHeight + 8 - 44);
+      }
+      host.style.setProperty('--activities-nav-clear', clear + 'px');
+      host.style.setProperty('--activities-nav-push', push + 'px');
+    };
+    measure();
+    const observer = typeof ResizeObserver === 'undefined' ? null : new ResizeObserver(measure);
+    observer?.observe(nav);
+    observer?.observe(host);
+    window.addEventListener('resize', measure);
+    return () => {
+      observer?.disconnect();
+      window.removeEventListener('resize', measure);
+    };
+  }, [showFloatingNav, visibleTabs.length, isSidebarCollapsed]);
+
   const handleTabChange = (value: string) => {
     if (!visibleTabs.some((tab) => tab.id === value)) return;
     setInternalActiveTab(value);
@@ -196,7 +229,7 @@ export const ActividadesPage = ({ activeSubModule, onSubModuleChange, isSidebarC
           <CurrencyValuationBanner className="mb-3" />
 
           <Tabs value={activeTab} className="relative w-full min-w-0" onValueChange={handleTabChange}>
-            <div className={cn('flex w-full min-w-0 max-w-full items-center gap-2', canExportActive ? 'mb-4 sm:absolute sm:right-0 sm:top-0 sm:z-10 sm:mb-0 sm:w-auto' : 'mb-0 sm:hidden')}>
+            <div ref={navRef} className={cn('flex w-full min-w-0 max-w-full items-center gap-2', showFloatingNav ? 'mb-4 sm:absolute sm:right-0 sm:top-0 sm:z-10 sm:mb-0 sm:w-auto' : 'mb-0 sm:hidden')}>
             <ModuleSubnavigation
               items={visibleTabs.map((tab) => ({ id: tab.id, label: tab.label, icon: <tab.icon className="size-4" /> }))}
               value={activeTab}

@@ -30,6 +30,7 @@ export function TaskReportsPanel({ taskId, canReport, canReview, onChanged }: Ta
   const [percent, setPercent] = useState('');
   const [files, setFiles] = useState<File[]>([]);
   const [sending, setSending] = useState(false);
+  const [composerOpen, setComposerOpen] = useState(false);
 
   const refresh = () => {
     void invalidateTenantQueries(queryClient);
@@ -63,6 +64,7 @@ export function TaskReportsPanel({ taskId, canReport, canReview, onChanged }: Ta
       setBody('');
       setPercent('');
       setFiles([]);
+      setComposerOpen(false);
       refresh();
     } catch (e: unknown) {
       const failure = e as { response?: { data?: { message?: string } }; message?: string } | null;
@@ -74,7 +76,44 @@ export function TaskReportsPanel({ taskId, canReport, canReview, onChanged }: Ta
 
   return (
     <div className="space-y-4">
-      {canReport && (
+      {reportsQuery.isLoading ? (
+        <p className="text-sm text-muted-foreground" role="status">Cargando reportes…</p>
+      ) : reportsQuery.isError ? (
+        <p className="text-sm text-destructive" role="alert">No se pudieron cargar los reportes.</p>
+      ) : reports.length === 0 ? (
+        <p className="text-sm text-muted-foreground">Todavía nadie ha reportado avance en esta tarea.</p>
+      ) : (
+        <div className="space-y-3">
+          {reports.map((report) => (
+            <ReportEntry
+              key={report.id}
+              canReview={canReview}
+              onReviewed={refresh}
+              report={{
+                id: report.id,
+                kind: report.kind,
+                body: report.body,
+                progressPercent: report.progressPercent,
+                isIncomplete: report.isIncomplete,
+                incompleteNote: report.incompleteNote,
+                flaggedBy: report.flaggedBy,
+                flaggedAt: report.flaggedAt,
+                createdAt: report.createdAt,
+                author: report.author ? { id: report.author.id, name: report.author.name } : null,
+                files: report.evidences || [],
+              }}
+            />
+          ))}
+        </div>
+      )}
+
+      {canReport && reports.length > 0 && !composerOpen && (
+        <Button type="button" variant="outline" className="h-9 rounded-xl px-4 text-xs font-black uppercase tracking-widest" onClick={() => setComposerOpen(true)} data-testid="activities-task-report-open">
+          <Send className="mr-1.5 size-4" /> Escribir un reporte
+        </Button>
+      )}
+
+      {canReport && (reports.length === 0 || composerOpen) && (
         <div className="space-y-3 rounded-2xl border border-border/50 bg-muted/[0.12] p-3.5" data-testid="activities-task-report-form">
           <div className="space-y-1.5">
             <Label htmlFor={`report-body-${taskId}`} className="text-[10px] font-black uppercase tracking-widest text-muted-foreground">¿Qué hiciste?</Label>
@@ -134,37 +173,6 @@ export function TaskReportsPanel({ taskId, canReport, canReview, onChanged }: Ta
               {sending ? <Loader2 className="mr-1.5 size-4 animate-spin" /> : <Send className="mr-1.5 size-4" />} Guardar reporte
             </Button>
           </div>
-        </div>
-      )}
-
-      {reportsQuery.isLoading ? (
-        <p className="text-sm text-muted-foreground" role="status">Cargando reportes…</p>
-      ) : reportsQuery.isError ? (
-        <p className="text-sm text-destructive" role="alert">No se pudieron cargar los reportes.</p>
-      ) : reports.length === 0 ? (
-        <p className="text-sm text-muted-foreground">Todavía nadie ha reportado avance en esta tarea.</p>
-      ) : (
-        <div className="space-y-3">
-          {reports.map((report) => (
-            <ReportEntry
-              key={report.id}
-              canReview={canReview}
-              onReviewed={refresh}
-              report={{
-                id: report.id,
-                kind: report.kind,
-                body: report.body,
-                progressPercent: report.progressPercent,
-                isIncomplete: report.isIncomplete,
-                incompleteNote: report.incompleteNote,
-                flaggedBy: report.flaggedBy,
-                flaggedAt: report.flaggedAt,
-                createdAt: report.createdAt,
-                author: report.author ? { id: report.author.id, name: report.author.name } : null,
-                files: report.evidences || [],
-              }}
-            />
-          ))}
         </div>
       )}
     </div>

@@ -240,6 +240,7 @@ export const TareasView: React.FC<TareasViewProps> = ({ data, loading, summaryEr
   /** Solo una tarea libre o de otro usuario se puede tomar (§2.2). */
   const canClaimTask = (task?: TaskLike | null): boolean => {
     if (!currentUserId || isClosedTaskStatus(task)) return false;
+    if (String(task?.status || '').toUpperCase() === 'WAITING_APPROVAL') return false;
     const assigneeId = getTaskAssigneeId(task);
     return !assigneeId || assigneeId !== currentUserId;
   };
@@ -1015,20 +1016,8 @@ export const TareasView: React.FC<TareasViewProps> = ({ data, loading, summaryEr
             layoutMode={isCardsLayout ? 'cards' : 'table'}
             onRowUpdate={canPerform('ACTIVITIES_TASKS', 'edit') ? handleUpdate : undefined}
             onRowClick={(row) => setDetailTask(row)}
+            editOnPencilOnly
             isLoading={loading}
-            onBulkDelete={
-              canPerform('ACTIVITIES_TASKS', 'delete')
-                ? async (selectedIds) => {
-                    try {
-                      await Promise.all(selectedIds.map((id) => tasksService.delete(String(id))));
-                      toast.success(`${selectedIds.length} tareas eliminadas`);
-                      onRefresh();
-                    } catch (e: any) {
-                      toast.error(e?.response?.data?.message || e?.message || 'Error al eliminar tareas seleccionadas');
-                    }
-                  }
-                : undefined
-            }
             bulkActions={(selectedIds) => (
               <div className="flex flex-wrap items-center gap-2">
                 {canPerform('ACTIVITIES_TASKS', 'submit') && filtered.filter((task) => selectedIds.includes(task.id)).every((task) => ['PENDING', 'IN_PROGRESS'].includes(String(task.status || '').toUpperCase())) && (

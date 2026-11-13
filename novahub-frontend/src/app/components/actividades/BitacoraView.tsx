@@ -304,6 +304,7 @@ export const BitacoraView: React.FC<BitacoraViewProps> = ({ data, loading, summa
               )}
             </div>
           )}
+          showHorizontalControls
         />
       </Card>
 

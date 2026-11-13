@@ -35,7 +35,18 @@ export function ActivityViewHeader({ title, tourPrefix, helpLabel, helpTitle, he
           }}
         />
       </div>
-      {purpose && <p className="max-w-3xl text-xs leading-5 text-muted-foreground">{purpose}</p>}
+      {purpose && (
+        <p
+          className="text-xs leading-5 text-muted-foreground"
+          style={{
+            // La página mide la barra de pestañas que flota a la derecha y deja estas dos medidas (ver ActividadesPage).
+            maxWidth: 'min(48rem, calc(100% - var(--activities-nav-clear, 0px)))',
+            marginTop: 'calc(0.25rem + var(--activities-nav-push, 0px))',
+          }}
+        >
+          {purpose}
+        </p>
+      )}
     </div>
   );
 }
