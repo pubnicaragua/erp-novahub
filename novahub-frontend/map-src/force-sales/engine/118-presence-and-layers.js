@@ -86,7 +86,7 @@ function presencePopupContent(row){
   const gpsTime=row.gpsCapturedAt?` · captura ${new Date(row.gpsCapturedAt).toLocaleString('es-NI',{dateStyle:'short',timeStyle:'short'})}`:'';
   const routeLabel=presenceRouteLabel(row);
   const markerContent=routeLabel?esc(routeLabel):row.avatar?`<img src="${esc(row.avatar)}" alt="${esc(row.name||'Colaborador')}">`:esc(row.initials||'V');
-  return `<div style="min-width:220px;padding:4px 2px;font:12px Poppins,Arial,sans-serif;color:#123f35"><div style="display:flex;align-items:center;gap:9px;margin-bottom:8px"><div class="nova-presence-marker${online?'':' stale'}" style="width:42px;height:42px;flex:0 0 auto">${markerContent}</div><div><h3 style="margin:0;font-size:14px">${esc(row.name||'Colaborador')}</h3><span style="color:#687a73;font-size:10px">${esc(row.email||'')} · ${esc(row.role||'')}</span></div></div><div style="display:grid;gap:5px;font-size:10px"><div><b>Presencia:</b> ${presenceLabel}</div><div><b>GPS:</b> ${gpsLabel}${esc(gpsTime)}</div><div><b>Actividad:</b> ${esc(row.currentActivity||'Disponible')}</div><div>${current}</div><div>${last}</div><div style="color:#687a73">Última actualización del servidor ${new Date(row.lastSeenAt).toLocaleString('es-NI',{dateStyle:'short',timeStyle:'short'})}</div></div></div>`;
+  return `<div style="min-width:220px;padding:4px 2px;font:12px Montserrat,Arial,sans-serif;color:#123f35"><div style="display:flex;align-items:center;gap:9px;margin-bottom:8px"><div class="nova-presence-marker${online?'':' stale'}" style="width:42px;height:42px;flex:0 0 auto">${markerContent}</div><div><h3 style="margin:0;font-size:14px">${esc(row.name||'Colaborador')}</h3><span style="color:#687a73;font-size:10px">${esc(row.email||'')} · ${esc(row.role||'')}</span></div></div><div style="display:grid;gap:5px;font-size:10px"><div><b>Presencia:</b> ${presenceLabel}</div><div><b>GPS:</b> ${gpsLabel}${esc(gpsTime)}</div><div><b>Actividad:</b> ${esc(row.currentActivity||'Disponible')}</div><div>${current}</div><div>${last}</div><div style="color:#687a73">Última actualización del servidor ${new Date(row.lastSeenAt).toLocaleString('es-NI',{dateStyle:'short',timeStyle:'short'})}</div></div></div>`;
 }
 function openPresenceDetails(row,anchor){
   presenceClusterListOpen=false;
@@ -102,7 +102,7 @@ function createPresenceClusterContent(count){
   badge.setAttribute('role','img');
   badge.setAttribute('aria-label',`${count} usuarios; abrir grupo`);
   badge.textContent=String(count);
-  Object.assign(badge.style,{width:'44px',height:'44px',display:'grid',placeItems:'center',border:'3px solid #fff',borderRadius:'50%',background:'#123f35',color:'#fff',boxShadow:'0 4px 14px rgba(12,53,43,.35)',font:'900 14px/1 Poppins,Arial,sans-serif',pointerEvents:'none'});
+  Object.assign(badge.style,{width:'44px',height:'44px',display:'grid',placeItems:'center',border:'3px solid #fff',borderRadius:'50%',background:'#123f35',color:'#fff',boxShadow:'0 4px 14px rgba(12,53,43,.35)',font:'900 14px/1 Montserrat,Arial,sans-serif',pointerEvents:'none'});
   return badge;
 }
 function clearPresenceClusterLines(){
@@ -115,7 +115,7 @@ function setPresenceMarkerPosition(marker,position){
 function presenceClusterListContent(groupMarker){
   const container=document.createElement('div');
   container.className='nova-presence-cluster-list';
-  Object.assign(container.style,{width:'min(300px,70vw)',maxHeight:'min(360px,60vh)',overflowY:'auto',padding:'4px',fontFamily:'Poppins,Arial,sans-serif',color:'#123f35'});
+  Object.assign(container.style,{width:'min(300px,70vw)',maxHeight:'min(360px,60vh)',overflowY:'auto',padding:'4px',fontFamily:'Montserrat,Arial,sans-serif',color:'#123f35'});
   const heading=document.createElement('strong');
   heading.textContent=`${groupMarker._presenceGroup.rows.length} usuarios en esta ubicación`;
   Object.assign(heading.style,{display:'block',padding:'6px 8px',fontSize:'12px'});

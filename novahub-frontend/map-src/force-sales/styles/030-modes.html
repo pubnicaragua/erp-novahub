@@ -64,4 +64,39 @@ body.embedded-view .panel-status #liveStatus,body.embedded-view .panel-status #o
 .visit-item .itemtop:has(.check) .itemname{text-align:left}
 body.embedded-view .panel-status #liveStatus{display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden}
 .mode-block .search-meta{display:none}
+/* Panel del mapa embebido: sin título repetido, acciones compactas y zonas fáciles de marcar. */
+body.embedded-view #sheetHeader h1{display:none}
+body.embedded-view[data-mode="visits"] .panel-status[data-ok="true"],body.embedded-view[data-mode="delivery"] .panel-status[data-ok="true"]{display:none}
+body.embedded-view #offlineStatusText{cursor:pointer}
+@media(min-width:821px){body.embedded-view .fabbar #newPoint{display:none}}
+body.embedded-view .action-cards{grid-template-columns:1fr 1fr}
+body.embedded-view .action-card{min-height:44px}
+body.embedded-view .action-card-copy small,body.embedded-view .action-card-chevron{display:none}
+body.embedded-view .action-card-copy b{font-size:12px}
+.zone-mark-button{min-height:44px;width:100%;border:0;border-radius:12px;background:var(--nova-ui-primary,#08785a);color:#fff;font-size:14px;font-weight:800;cursor:pointer}
+.zone-mark-button[hidden]{display:none}
+.zone-hint{position:fixed;z-index:950;top:14px;left:50%;transform:translateX(-50%);display:flex;align-items:center;gap:10px;padding:10px 14px;border-radius:14px;background:#08785a;color:#fff;font-size:14px;font-weight:700;box-shadow:0 8px 24px rgba(0,0,0,.25)}
+.zone-hint[hidden]{display:none}
+.zone-hint button{min-height:32px;padding:4px 12px;border:1px solid rgba(255,255,255,.7);border-radius:9px;background:transparent;color:#fff;font-weight:700;cursor:pointer}
+#workZoneModal{background:transparent!important;pointer-events:none;align-items:flex-end!important;justify-content:flex-start!important}
+#workZoneModal .confirm-modal{pointer-events:auto;box-shadow:0 12px 40px rgba(0,0,0,.28);width:min(380px,calc(100% - 24px))}
+.radius-chips{display:flex;flex-wrap:wrap;gap:6px}
+.radius-chips button{flex:1;min-height:38px;border:1px solid var(--nova-ui-border,#dce8e3);border-radius:10px;background:var(--nova-ui-card,#fff);color:inherit;font-weight:700;cursor:pointer}
+.radius-chips button.active{background:var(--nova-ui-primary,#08785a);border-color:transparent;color:#fff}
+#workZoneModal{-webkit-backdrop-filter:none!important;backdrop-filter:none!important}
+.radius-chips button{flex:1 1 0;min-width:0;white-space:nowrap;padding:0 2px;font-size:11px}
+/* Mismo estilo que el ERP: Montserrat, pesos medios y botones de tamaño normal para que el panel no se vea cargado. */
+.visit-item .itemname{font-size:13px;font-weight:600}
+.visit-item .meta{font-size:12px;font-weight:400}
+.visit-pill{font-size:10px;font-weight:600}
+.visit-item .item-actions{flex-wrap:nowrap;gap:6px;margin-top:8px}
+.visit-item .item-actions button{min-height:32px;padding:4px 8px;font-size:11px;font-weight:600;border-radius:8px}
+.visit-item .item-actions .visit-action{flex:1 1 auto}
+.visit-item .item-actions button:not(.visit-action){flex:0 0 auto}
+.zone-mark-button{min-height:40px;font-size:13px;font-weight:600;border-radius:10px}
+.delivery-new-route{min-height:36px;font-size:13px;font-weight:600}
+.delivery-guide b{font-weight:600}
+.empty-list b{font-weight:600}
+.zone-hint{font-weight:600}
+.radius-chips button{font-weight:600}
 </style>

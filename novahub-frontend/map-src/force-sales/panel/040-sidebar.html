@@ -45,6 +45,7 @@
 
   <!-- Modo Visitas y zonas: estado de la visita. -->
   <section class="mode-block visit-tools" data-mode-only="visits" aria-label="Filtrar clientes por visita">
+   <button id="workZoneNew" class="zone-mark-button" type="button" hidden>◎ Marcar zona en el mapa</button>
    <div class="chips visit-chips" id="visitChips" role="group" aria-label="Estado de la visita">
     <button class="chip active" type="button" data-visit-filter="all">Todos</button>
     <button class="chip" type="button" data-visit-filter="pending">Por visitar</button>
@@ -99,7 +100,7 @@
 
   <!-- Modo Visitas y zonas (debajo de la lista): zonas de trabajo con gestor responsable. -->
   <section class="mode-block work-zones" data-mode-only="visits" aria-label="Zonas de trabajo">
-   <div class="work-zones-head"><b>Zonas de trabajo</b><button id="workZoneNew" type="button" hidden>+ Nueva zona</button></div>
+   <div class="work-zones-head"><b>Zonas de trabajo</b></div>
    <div id="workZoneList" class="work-zone-list" role="list"><div class="meta">Cargando zonas…</div></div>
   </section>
 

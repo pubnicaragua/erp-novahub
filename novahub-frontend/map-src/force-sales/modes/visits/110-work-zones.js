@@ -6,6 +6,7 @@ let workZonesLoading = false;
 let workZoneDraft = null;
 let workZoneDrawing = false;
 let workZoneReassignId = '';
+let workZonePreview = null;
 const WORK_ZONE_COLORS = ['#2364d2', '#08785a', '#cb5a2b', '#8557b8', '#b18a00', '#167d8d', '#b63872'];
 
 function workZoneColor(zone){
@@ -90,25 +91,45 @@ function fillAssigneeSelect(select, selected){
 function startWorkZoneDrawing(){
   if(!canManageWorkZones()){requireForceSales('createRoute');return}
   workZoneDrawing = true;
-  toast('Toca el mapa para marcar el centro de la zona');
+  if(innerWidth <= 820)document.getElementById('sheet')?.classList.add('collapsed');
+  const hint = document.getElementById('workZoneHint');
+  if(hint)hint.hidden = false;
   document.getElementById('map')?.classList.add('drawing-zone');
 }
 function stopWorkZoneDrawing(){
   workZoneDrawing = false;
+  const hint = document.getElementById('workZoneHint');
+  if(hint)hint.hidden = true;
   document.getElementById('map')?.classList.remove('drawing-zone');
 }
 function openWorkZoneEditor(center){
   workZoneDraft = {centerLat:center.lat, centerLng:center.lng};
   const modal = document.getElementById('workZoneModal');
   if(!modal)return;
-  document.getElementById('workZoneName').value = '';
-  document.getElementById('workZoneRadius').value = '1000';
+  document.getElementById('workZoneName').value = `Zona ${workZones.length + 1}`;
+  setWorkZoneRadius(1000);
+  showWorkZonePreview(center);
   fillAssigneeSelect(document.getElementById('workZoneAssignee'), '');
-  document.getElementById('workZoneEditorStatus').textContent = `Centro: ${center.lat.toFixed(5)}, ${center.lng.toFixed(5)}`;
   modal.hidden = false;
-  document.getElementById('workZoneName').focus();
+  const nameInput = document.getElementById('workZoneName');
+  nameInput.focus();
+  nameInput.select();
+}
+function showWorkZonePreview(center){
+  if(workZonePreview){workZonePreview.setMap(null);workZonePreview = null}
+  if(!window.google?.maps?.Circle || !googleMap)return;
+  workZonePreview = new google.maps.Circle({map:googleMap, center, radius:Number(document.getElementById('workZoneRadius').value) || 1000, strokeColor:'#08785a', strokeOpacity:.9, strokeWeight:2, fillColor:'#08785a', fillOpacity:.14, clickable:false, zIndex:2});
+  const radius = Number(document.getElementById('workZoneRadius').value) || 1000;
+  googleMap.panTo(center);
+  googleMap.setZoom(Math.max(10, Math.min(17, Math.round(15 - Math.log2(Math.max(radius, 100) / 500)))));
+}
+function setWorkZoneRadius(meters){
+  document.getElementById('workZoneRadius').value = String(meters);
+  document.querySelectorAll('#workZoneRadiusChips [data-radius]').forEach(chip => chip.classList.toggle('active', Number(chip.dataset.radius) === Number(meters)));
+  workZonePreview?.setRadius(meters);
 }
 function closeWorkZoneEditor(){
+  if(workZonePreview){workZonePreview.setMap(null);workZonePreview = null}
   workZoneDraft = null;
   const modal = document.getElementById('workZoneModal');
   if(modal)modal.hidden = true;
@@ -212,6 +233,11 @@ if(ACTIVE_MODE === 'visits'){
   });
   document.getElementById('workZoneSave')?.addEventListener('click', () => void saveWorkZone());
   document.getElementById('workZoneCancel')?.addEventListener('click', closeWorkZoneEditor);
+  document.getElementById('workZoneHintCancel')?.addEventListener('click', stopWorkZoneDrawing);
+  document.getElementById('workZoneRadiusChips')?.addEventListener('click', event => {
+    const chip = event.target?.closest?.('[data-radius]');
+    if(chip)setWorkZoneRadius(Number(chip.dataset.radius));
+  });
   document.getElementById('workZoneReassignConfirm')?.addEventListener('click', () => void confirmWorkZoneReassign());
   document.getElementById('workZoneReassignCancel')?.addEventListener('click', closeWorkZoneReassign);
 }

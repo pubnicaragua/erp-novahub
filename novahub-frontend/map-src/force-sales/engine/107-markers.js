@@ -28,7 +28,7 @@ function clusterSvg(count){
   if(NOVAHUB_ISOTIPO_URL){
     return {url:NOVAHUB_ISOTIPO_URL,scaledSize:new google.maps.Size(24,24),anchor:new google.maps.Point(12,12)};
   }
-  return {url:svgDataUrl(`<svg xmlns="http://www.w3.org/2000/svg" width="58" height="58"><circle cx="29" cy="29" r="25" fill="#123f35" stroke="#b4f4d8" stroke-width="4"/><path d="M20 17v24M38 17v24M20 17l18 18M20 41l18-24" fill="none" stroke="white" stroke-width="3.2" stroke-linecap="round"/><text x="29" y="34" text-anchor="middle" font-family="Poppins,Arial" font-size="11" font-weight="900" fill="#8df1be">${count}</text></svg>`),scaledSize:new google.maps.Size(58,58),anchor:new google.maps.Point(29,29)};
+  return {url:svgDataUrl(`<svg xmlns="http://www.w3.org/2000/svg" width="58" height="58"><circle cx="29" cy="29" r="25" fill="#123f35" stroke="#b4f4d8" stroke-width="4"/><path d="M20 17v24M38 17v24M20 17l18 18M20 41l18-24" fill="none" stroke="white" stroke-width="3.2" stroke-linecap="round"/><text x="29" y="34" text-anchor="middle" font-family="Montserrat,Arial" font-size="11" font-weight="900" fill="#8df1be">${count}</text></svg>`),scaledSize:new google.maps.Size(58,58),anchor:new google.maps.Point(29,29)};
 }
 function markerContentFromIcon(icon,title,label){
   if(!icon?.url)return undefined;

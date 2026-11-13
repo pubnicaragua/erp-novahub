@@ -128,11 +128,12 @@
 <div class="modal-backdrop" id="workZoneModal" hidden>
  <div class="confirm-modal" role="dialog" aria-modal="true" aria-labelledby="workZoneTitle">
   <h2 id="workZoneTitle">Nueva zona de trabajo</h2>
-  <p id="workZoneEditorStatus" role="status" aria-live="polite">Centro de la zona</p>
+  <p id="workZoneEditorStatus" role="status" aria-live="polite">Ajusta el tamaño: el círculo se ve en el mapa.</p>
   <label for="workZoneName">Nombre de la zona</label>
   <input id="workZoneName" type="text" maxlength="120" placeholder="Ej. Zona Mercado Oriental" autocomplete="off">
-  <label for="workZoneRadius">Radio</label>
-  <select id="workZoneRadius"><option value="300">300 m</option><option value="500">500 m</option><option value="1000" selected>1 km</option><option value="2000">2 km</option><option value="3000">3 km</option><option value="5000">5 km</option><option value="10000">10 km</option></select>
+  <label id="workZoneRadiusLabel">Tamaño de la zona</label>
+  <input id="workZoneRadius" type="hidden" value="1000">
+  <div class="radius-chips" id="workZoneRadiusChips" role="group" aria-labelledby="workZoneRadiusLabel"><button type="button" data-radius="300">300 m</button><button type="button" data-radius="500">500 m</button><button type="button" class="active" data-radius="1000">1 km</button><button type="button" data-radius="2000">2 km</button><button type="button" data-radius="5000">5 km</button></div>
   <label for="workZoneAssignee">Gestor responsable</label>
   <select id="workZoneAssignee"><option value="">Sin gestor</option></select>
   <div class="confirm-modal-actions"><button class="cancel" id="workZoneCancel" type="button">Cancelar</button><button class="save" id="workZoneSave" type="button">Guardar zona</button></div>

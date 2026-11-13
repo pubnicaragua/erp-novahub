@@ -1,4 +1,4 @@
-import { ShieldAlert } from 'lucide-react';
+import { Minimize2, ShieldAlert } from 'lucide-react';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import * as XLSX from 'xlsx';
 import { useAuth } from '../contexts/AuthContext';
@@ -226,6 +226,13 @@ export function FuerzaComercialPage({ activeSubModule, onSubModuleChange, isSide
     return () => window.removeEventListener('message', onMapMessage);
   }, [canLinkCustomer]);
 
+  useEffect(() => {
+    if (!mapFullscreen) return undefined;
+    const onKey = (event: KeyboardEvent) => { if (event.key === 'Escape') setMapFullscreen(false); };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [mapFullscreen]);
+
   const selectCustomer = (customer: ForceSalesCustomerOption) => {
     if (!customerLinkPoint) return;
     sendToMap('force-sales-customer-link-selected', { pointId: customerLinkPoint.id, customer });
@@ -268,6 +275,7 @@ export function FuerzaComercialPage({ activeSubModule, onSubModuleChange, isSide
                 sendToMap('force-sales-search', { query, submit });
               }}
               onPrimaryAction={() => sendToMap('force-sales-primary-action')}
+              onToggleFullscreen={() => setMapFullscreen(true)}
             />
           )}
         </div>
@@ -295,6 +303,12 @@ export function FuerzaComercialPage({ activeSubModule, onSubModuleChange, isSide
             </button>
           </div>
         </div>}
+        {mapFullscreen && (
+          <button type="button" onClick={() => setMapFullscreen(false)} className="absolute right-3 top-3 z-30 inline-flex min-h-10 items-center gap-2 rounded-xl border border-border bg-card px-3 text-sm font-semibold text-foreground shadow-lg focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring" aria-label="Salir de pantalla completa">
+            <Minimize2 className="size-4" aria-hidden="true" />
+            Salir
+          </button>
+        )}
         {!mapConfig && <div className="flex h-full items-center justify-center text-sm font-semibold text-[#123f35]">Cargando configuración de mapas…</div>}
       </div>
       <ForceSalesCustomerLinkDialog

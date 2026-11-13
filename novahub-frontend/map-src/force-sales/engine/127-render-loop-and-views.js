@@ -115,13 +115,16 @@ function updateOfflineStatus(){
   if(!label)return;
   const firstError=forceSalesSyncErrors.entries().next().value;
   document.getElementById('panelStatus')?.setAttribute('data-ok',String(navigator.onLine&&!firstError));
-  label.textContent=!navigator.onLine
+  const detail=!navigator.onLine
     ? 'Sin sincronizar · sin conexión; el catálogo compartido no está confirmado'
     : firstError
       ? `Sin sincronizar · ${firstError[0]}: ${firstError[1]}`
       : forceSalesRealtimeConnected
         ? 'Conectado · catálogo y ubicaciones compartidos'
         : 'Reconectando · respaldo de sincronización cada 15 s';
+  label.title=detail;
+  label.textContent=(!navigator.onLine||firstError)?'Sin sincronizar · toca para ver el detalle':detail;
+  if(!label.dataset.bound){label.dataset.bound='1';label.addEventListener('click',()=>{if(label.title&&/^Sin sincronizar/.test(label.title))toast(label.title)})}
 }
 window.addEventListener('online',()=>{updateOfflineStatus();void loadPendingRouteActions().then(()=>flushPendingRouteActions());flushOutbox().finally(()=>refreshForceSalesData({resource:'location-trail'}));startPresenceWatch()});
 window.addEventListener('offline',updateOfflineStatus);
