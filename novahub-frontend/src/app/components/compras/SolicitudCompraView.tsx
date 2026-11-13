@@ -669,6 +669,7 @@ export function SolicitudCompraView({ data, summaryData, summaryLoading, summary
           columns={columns}
           isLoading={loading}
           pagination={pagination}
+          showSelection={false}
           layoutMode="responsive"
           highlightedRowId={highlightedAlertId}
           actionsWidth="w-64"
