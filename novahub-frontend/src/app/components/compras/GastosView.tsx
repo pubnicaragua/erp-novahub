@@ -1052,7 +1052,6 @@ export function GastosView({ data, summaryData, summaryLoading, summaryError, lo
                 </Button>}
               </div>
             )}
-            {canExpensePerform(localDoc, 'export') && <PdfDownloadButton label="Exportar" includePageSizes includeRoll onDownload={(format) => void handleDownloadExpensePdf(localDoc as Expense, format)} />}
           </div>
         </div>
 
@@ -1444,7 +1443,7 @@ export function GastosView({ data, summaryData, summaryLoading, summaryError, lo
         </div>
         <div className="min-w-0">
           <div className="min-w-0">
-        <EditableDataTable data={filteredData} columns={columns} onRowUpdate={handleUpdate} isLoading={loading} pagination={pagination} layoutMode={layoutMode === 'cards' ? 'cards' : 'responsive'} highlightedRowId={highlightedAlertId} canEditRow={(row) => canExpensePerform(row, 'edit')} showSelection={filteredData.some((row) => canDeleteExpense(row))} isRowSelectable={(row) => canDeleteExpense(row)} onRowClick={(row) => setSelectedExpenseDetail(row)}
+        <EditableDataTable data={filteredData} columns={columns} onRowUpdate={handleUpdate} showRowEditAction={false} isLoading={loading} pagination={pagination} layoutMode={layoutMode === 'cards' ? 'cards' : 'responsive'} highlightedRowId={highlightedAlertId} canEditRow={(row) => canExpensePerform(row, 'edit')} showSelection={filteredData.some((row) => canDeleteExpense(row))} isRowSelectable={(row) => canDeleteExpense(row)} onRowClick={(row) => setSelectedExpenseDetail(row)}
           onBulkDelete={filteredData.some((row) => canDeleteExpense(row)) ? async (ids) => {
             const deleteToastId = toast.loading(`Eliminando ${ids.length} borrador${ids.length === 1 ? '' : 'es'}...`);
             try {

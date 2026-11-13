@@ -716,7 +716,7 @@ export function ProveedoresView({ data, loading, onRefresh, pagination, onSearch
             )}
           </div>
         </div>
-        <EditableDataTable data={filteredData} columns={columns} onRowUpdate={handleUpdate} onRowClick={(row) => setSelectedSupplierDetail(row)} onRowDoubleClick={canPerform('PURCHASES_PROVIDERS', 'edit') ? (row) => handleOpenEdit(row) : undefined} editOnPencilOnly isLoading={loading} pagination={pagination} actionsWidth="w-40" fitContent showHorizontalControls showSelection={canPerform('PURCHASES_PROVIDERS', 'deactivate')} layoutMode={layoutMode === 'cards' ? 'cards' : 'responsive'}
+        <EditableDataTable data={filteredData} columns={columns} onRowUpdate={handleUpdate} onRowClick={(row) => setSelectedSupplierDetail(row)} showRowEditAction={false} isLoading={loading} pagination={pagination} actionsWidth="w-40" fitContent showHorizontalControls showSelection={canPerform('PURCHASES_PROVIDERS', 'deactivate')} layoutMode={layoutMode === 'cards' ? 'cards' : 'responsive'}
           onAddRow={canPerform('PURCHASES_PROVIDERS', 'create') ? handleAdd : undefined}
           bulkActions={canPerform('PURCHASES_PROVIDERS', 'deactivate') ? (ids) => (
             <Button variant="destructive" size="sm" className="h-8 text-[10px] font-black uppercase tracking-wider"

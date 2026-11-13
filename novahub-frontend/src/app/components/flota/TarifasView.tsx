@@ -1,5 +1,5 @@
 import { useRef, useState } from 'react';
-import { Loader2, Plus, Trash2, Upload } from 'lucide-react';
+import { Loader2, Pencil, Plus, Trash2, Upload } from 'lucide-react';
 import { Button } from '../ui/button';
 import { Input } from '../ui/input';
 import { Skeleton } from '../ui/skeleton';
@@ -15,25 +15,6 @@ import { useFleetRefresh } from './flota.helpers';
 
 const EMPTY = { origin: '', destination: '', zone: '', distanceKm: '', rate: '' };
 
-/** Celda editable: guarda al salir del campo o con Enter, solo si el valor cambió. */
-function EditableCell({ value, disabled, onSave, align = 'left', inputMode }: { value: string; disabled: boolean; onSave: (next: string) => Promise<void>; align?: 'left' | 'right'; inputMode?: 'decimal' }) {
-  const [text, setText] = useState(value);
-  const [saving, setSaving] = useState(false);
-  const commit = async () => {
-    if (text === value) return;
-    setSaving(true);
-    try { await onSave(text); } catch (e) { setText(value); toast.error(errorMessage(e)); } finally { setSaving(false); }
-  };
-  return (
-    <Input
-      value={text} disabled={disabled || saving} inputMode={inputMode}
-      onChange={(event) => setText(event.target.value)} onBlur={() => void commit()}
-      onKeyDown={(event) => { if (event.key === 'Enter') (event.target as HTMLInputElement).blur(); }}
-      className={`h-8 min-w-[90px] ${align === 'right' ? 'text-right tabular-nums' : ''}`}
-    />
-  );
-}
-
 export function TarifasView() {
   const { canPerform } = useAuth();
   const refresh = useFleetRefresh();
@@ -44,6 +25,9 @@ export function TarifasView() {
   const query = useTenantQuery(['fleet', 'routes', search], (signal) => flotaService.listRoutes({ search: search || undefined }, signal));
   const [draft, setDraft] = useState(EMPTY);
   const [adding, setAdding] = useState(false);
+  const [editingRoute, setEditingRoute] = useState<FleetRoute | null>(null);
+  const [routeEditDraft, setRouteEditDraft] = useState(EMPTY);
+  const [savingEdit, setSavingEdit] = useState(false);
   const [error, setError] = useState('');
   const fileRef = useRef<HTMLInputElement>(null);
   const [importRows, setImportRows] = useState<RateImportRow[] | null>(null);
@@ -62,6 +46,29 @@ export function TarifasView() {
     } catch (e) { setError(errorMessage(e)); } finally { setAdding(false); }
   };
   const patch = (route: FleetRoute, data: Record<string, unknown>) => flotaService.updateRoute(route.id, data).then(() => { void refresh(); });
+  const openEditRoute = (route: FleetRoute) => {
+    setEditingRoute(route);
+    setRouteEditDraft({
+      origin: route.origin || '',
+      destination: route.destination || '',
+      zone: route.zone || '',
+      distanceKm: route.distanceKm == null ? '' : String(route.distanceKm),
+      rate: String(route.rate ?? ''),
+    });
+  };
+  const saveRouteEdit = async () => {
+    if (!editingRoute || savingEdit) return;
+    setSavingEdit(true);
+    try {
+      await patch(editingRoute, routeEditDraft);
+      toast.success('Tarifa actualizada');
+      setEditingRoute(null);
+    } catch (e) {
+      toast.error(errorMessage(e));
+    } finally {
+      setSavingEdit(false);
+    }
+  };
   const remove = async (route: FleetRoute) => {
     try { await flotaService.removeRoute(route.id); toast.success('Tarifa eliminada'); await refresh(); } catch (e) { toast.error(errorMessage(e)); }
   };
@@ -128,18 +135,43 @@ export function TarifasView() {
               {routes.length === 0 && <tr><td colSpan={6} className="px-3 py-10 text-center text-muted-foreground">Todavía no hay tarifas. Agrega una arriba o importa tu tabla de Excel.</td></tr>}
               {routes.map((route) => (
                 <tr key={`${route.id}:${route.origin}:${route.destination}:${route.zone}:${route.distanceKm}:${route.rate}`} className="border-b border-border/60 last:border-0">
-                  <td className="px-3 py-1.5"><EditableCell value={route.origin} disabled={!canEdit} onSave={(next) => patch(route, { origin: next })} /></td>
-                  <td className="px-3 py-1.5"><EditableCell value={route.destination} disabled={!canEdit} onSave={(next) => patch(route, { destination: next })} /></td>
-                  <td className="px-3 py-1.5"><EditableCell value={route.zone ?? ''} disabled={!canEdit} onSave={(next) => patch(route, { zone: next })} /></td>
-                  <td className="px-3 py-1.5"><EditableCell value={route.distanceKm != null ? String(route.distanceKm) : ''} disabled={!canEdit} align="right" inputMode="decimal" onSave={(next) => patch(route, { distanceKm: next })} /></td>
-                  <td className="px-3 py-1.5"><EditableCell value={String(route.rate)} disabled={!canEdit} align="right" inputMode="decimal" onSave={(next) => patch(route, { rate: next })} /></td>
-                  <td className="px-3 py-1.5"><div className="flex justify-end">{canDelete && <Button type="button" variant="ghost" size="icon" className="size-8" onClick={() => void remove(route)} aria-label={`Eliminar ${route.origin} a ${route.destination}`}><Trash2 className="size-4" /></Button>}</div></td>
+                  <td className="px-3 py-1.5 font-medium">{route.origin}</td>
+                  <td className="px-3 py-1.5 font-medium">{route.destination}</td>
+                  <td className="px-3 py-1.5">{route.zone || '—'}</td>
+                  <td className="px-3 py-1.5 text-right tabular-nums">{route.distanceKm ?? '—'}</td>
+                  <td className="px-3 py-1.5 text-right tabular-nums">{route.rate}</td>
+                  <td className="px-3 py-1.5"><div className="flex justify-end gap-1">
+                    {canEdit && <Button type="button" variant="ghost" size="icon" className="size-8" onClick={() => openEditRoute(route)} aria-label={`Editar tarifa ${route.origin} a ${route.destination}`} title="Editar tarifa"><Pencil className="size-4" /></Button>}
+                    {canDelete && <Button type="button" variant="ghost" size="icon" className="size-8" onClick={() => void remove(route)} aria-label={`Eliminar ${route.origin} a ${route.destination}`} title="Eliminar tarifa"><Trash2 className="size-4" /></Button>}
+                  </div></td>
                 </tr>
               ))}
             </tbody>
           </table>
         </div>
       )}
+
+      <Dialog open={editingRoute !== null} onOpenChange={(open) => { if (!open && !savingEdit) setEditingRoute(null); }}>
+        <DialogContent className="w-[calc(100%-2rem)] !max-w-2xl rounded-3xl">
+          <DialogHeader>
+            <DialogTitle>Editar tarifa</DialogTitle>
+            <DialogDescription>Actualiza los datos de la ruta.</DialogDescription>
+          </DialogHeader>
+          <div className="grid min-w-0 grid-cols-1 gap-3 sm:grid-cols-2">
+            <Field label="Origen" htmlFor="edit-rate-origin" required><Input id="edit-rate-origin" value={routeEditDraft.origin} onChange={(event) => setRouteEditDraft({ ...routeEditDraft, origin: event.target.value })} disabled={savingEdit} /></Field>
+            <Field label="Destino" htmlFor="edit-rate-destination" required><Input id="edit-rate-destination" value={routeEditDraft.destination} onChange={(event) => setRouteEditDraft({ ...routeEditDraft, destination: event.target.value })} disabled={savingEdit} /></Field>
+            <Field label="Zona" htmlFor="edit-rate-zone"><Input id="edit-rate-zone" value={routeEditDraft.zone} onChange={(event) => setRouteEditDraft({ ...routeEditDraft, zone: event.target.value })} disabled={savingEdit} /></Field>
+            <Field label="Kilómetros" htmlFor="edit-rate-distance"><Input id="edit-rate-distance" inputMode="decimal" value={routeEditDraft.distanceKm} onChange={(event) => setRouteEditDraft({ ...routeEditDraft, distanceKm: event.target.value })} disabled={savingEdit} /></Field>
+            <Field label="Tarifa" htmlFor="edit-rate-amount" required><Input id="edit-rate-amount" inputMode="decimal" value={routeEditDraft.rate} onChange={(event) => setRouteEditDraft({ ...routeEditDraft, rate: event.target.value })} disabled={savingEdit} /></Field>
+          </div>
+          <DialogFooter>
+            <Button type="button" variant="outline" onClick={() => setEditingRoute(null)} disabled={savingEdit}>Cancelar</Button>
+            <Button type="button" onClick={() => void saveRouteEdit()} disabled={savingEdit || !routeEditDraft.origin || !routeEditDraft.destination || !routeEditDraft.rate}>
+              {savingEdit ? <Loader2 className="size-4 animate-spin" /> : 'Guardar cambios'}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
 
       <Dialog open={importRows !== null} onOpenChange={(value) => { if (!value) { setImportRows(null); setImportPreview(null); } }}>
         <DialogContent className="max-w-lg">

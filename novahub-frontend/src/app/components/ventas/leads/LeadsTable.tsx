@@ -131,7 +131,7 @@ export function LeadsTable({ items, canCreate, canEdit, countries, businessLines
 
       {rows.length === 0
         ? <p className="rounded-xl border border-dashed border-border p-6 text-center text-sm text-muted-foreground">Aún no hay leads. Escribe el primero arriba o pega varios desde Excel.</p>
-        : <EditableDataTable<TableRow> data={rows} columns={columns} idField="id" onRowUpdate={update} canEdit={canEdit} layoutMode="table" actions={(row) => <Button type="button" variant="ghost" size="sm" onClick={() => onOpen(row.id)}>Abrir</Button>} />}
+        : <EditableDataTable<TableRow> data={rows} columns={columns} idField="id" onRowUpdate={update} canEdit={canEdit} allowInlineEditing showRowEditAction={false} layoutMode="table" actions={(row) => <Button type="button" variant="ghost" size="sm" onClick={() => onOpen(row.id)}>Abrir</Button>} />}
       {pasting && <PasteDialog onClose={() => setPasting(false)} onDone={onChanged} />}
     </div>
   );

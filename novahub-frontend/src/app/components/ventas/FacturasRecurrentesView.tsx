@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import { 
-  RotateCcw, Plus, Search, TrendingUp, Clock, Calendar, Play, Pause, Eye, Trash2, ChevronLeft, Ban
+  RotateCcw, Plus, Search, TrendingUp, Clock, Calendar, Play, Pause, Pencil, Trash2, ChevronLeft, Ban
 } from 'lucide-react';
 import { Card, CardContent } from '../ui/card';
 import { Button } from '../ui/button';
@@ -916,7 +916,7 @@ export function FacturasRecurrentesView({ data, summaryData, summaryLoading, sum
           showSelection={canPerform('SALES_RECURRING', 'cancel')}
           isRowSelectable={(row) => canPerform('SALES_RECURRING', 'cancel') && ['ACTIVE', 'PAUSED'].includes(String(row.status || '').toUpperCase())}
           onBulkDelete={canPerform('SALES_RECURRING', 'cancel') ? async (ids) => { if (!canPerform('SALES_RECURRING', 'cancel')) return; const validIds = ids.map(String).filter((id) => !id.startsWith('new-')); if (!validIds.length) return; setCancelReason(''); setCancelReasonAttempted(false); setPendingDeleteIds(validIds); } : undefined}
-          columns={columns} onRowUpdate={handleUpdate} onRowClick={(row) => setDetailRecurring(row)} isLoading={loading} actionsWidth="w-28" fitContent showHorizontalControls
+          columns={columns} onRowUpdate={handleUpdate} showRowEditAction={false} onRowClick={(row) => setDetailRecurring(row)} isLoading={loading} actionsWidth="w-28" fitContent showHorizontalControls
           layoutMode={layoutMode}
           verticalScroll
           highlightedRowId={highlightedAlertId}
@@ -929,7 +929,7 @@ export function FacturasRecurrentesView({ data, summaryData, summaryLoading, sum
                    <Button title="Reanudar" onClick={() => toggleStatus(row)} variant="ghost" size="icon" className="size-8 rounded-lg text-emerald-500 hover:bg-emerald-500/10 transition-colors"><Play className="size-4" /></Button>
                  )
                )}
-               <Button title="Ver factura recurrente completa" aria-label="Ver factura recurrente completa" variant="ghost" size="icon" className="size-8 rounded-lg text-muted-foreground hover:bg-primary/10 hover:text-primary transition-colors" onClick={() => { setDetailRecurring(null); setEditingId(row.id); }}><Eye className="size-4" /></Button>
+               {canPerform('SALES_RECURRING', 'edit') && <Button title="Editar factura recurrente" aria-label="Editar factura recurrente" variant="ghost" size="icon" className="size-8 rounded-lg text-muted-foreground hover:bg-primary/10 hover:text-primary transition-colors" onClick={() => { setDetailRecurring(null); setEditingId(row.id); }}><Pencil className="size-4" /></Button>}
                {canPerform('SALES_RECURRING', 'cancel') && ['ACTIVE', 'PAUSED'].includes((row.status||'').toUpperCase()) && (
                  <Button title="Cancelar factura recurrente" aria-label="Cancelar factura recurrente" variant="ghost" size="icon" className="size-8 rounded-lg text-muted-foreground hover:bg-rose-500/10 hover:text-rose-500 transition-colors" onClick={() => { setCancelReason(''); setCancelReasonAttempted(false); setPendingDeleteIds([row.id]); }}><Ban className="size-4" /></Button>
                )}

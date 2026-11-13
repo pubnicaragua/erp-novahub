@@ -1489,8 +1489,7 @@ export function ClientesView({ data, loading, error, onRefresh, pagination, onSe
               columns={visibleColumns}
               onRowUpdate={handleUpdate}
               onRowClick={(row) => setSelectedCustomerDetail(row)}
-              onRowDoubleClick={canPerform('SALES_CLIENTS', 'edit') ? (row) => openEditCustomer(row) : undefined}
-              editOnPencilOnly
+              showRowEditAction={false}
               showSelection={canPerform('SALES_CLIENTS', 'deactivate')}
               isLoading={loading}
               pagination={pagination}

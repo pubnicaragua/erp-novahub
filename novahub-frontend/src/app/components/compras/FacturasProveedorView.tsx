@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { 
-  FileStack, Plus, Search, Eye, Pencil, Trash2, Ban, Clock, AlertTriangle, CheckCircle2, ChevronLeft, Download, Banknote, FileDown, Info
+  FileStack, Plus, Search, Eye, Pencil, Trash2, Ban, Clock, AlertTriangle, CheckCircle2, ChevronLeft, Banknote, FileDown, Info
 } from 'lucide-react';
 import { Card, CardContent } from '../ui/card';
 import { Button } from '../ui/button';
@@ -444,13 +444,13 @@ export function FacturasProveedorView({ data, summaryData, summaryLoading, summa
     setLocalDoc(prev => ({ ...prev!, items, ...totals }));
   };
 
-  const handleDownloadSupplierInvoicePdf = async (format: PdfDownloadFormat) => {
-    if (!localDoc) return;
+  const handleDownloadSupplierInvoicePdf = async (format: PdfDownloadFormat, sourceDocument: SupplierInvoice | any = localDoc) => {
+    if (!sourceDocument) return;
     const exportToastId = toast.loading('Generando PDF de la factura de proveedor…');
     try {
-      const currency = String(localDoc.currency || displayCurrency || 'NIO');
-      const rate = Number(localDoc.exchangeRate || globalRate || 1);
-      const items = Array.isArray(localDoc.items) ? localDoc.items : Array.isArray(localDoc.lines) ? localDoc.lines : [];
+      const currency = String(sourceDocument.currency || displayCurrency || 'NIO');
+      const rate = Number(sourceDocument.exchangeRate || globalRate || 1);
+      const items = Array.isArray(sourceDocument.items) ? sourceDocument.items : Array.isArray(sourceDocument.lines) ? sourceDocument.lines : [];
       const totals = calculateTotals(items);
       const money = (value: unknown) => formatConvertedAmount(Number(value || 0), currency as any, rate);
       await generatePurchaseRecordPDF({
@@ -460,14 +460,14 @@ export function FacturasProveedorView({ data, summaryData, summaryLoading, summa
         tenantLogo: user?.sessionBranding?.logo || null,
         document: {
           title: 'Factura de proveedor',
-          number: String(localDoc.number || localDoc.id || 'N/A'),
-          date: localDoc.date ? new Date(localDoc.date).toLocaleDateString('es-NI') : undefined,
-          status: localDoc.status,
-          supplier: localDoc.supplier?.name || localDoc.supplierName || '',
-          supplierData: localDoc.supplier || undefined,
+          number: String(sourceDocument.number || sourceDocument.id || 'N/A'),
+          date: sourceDocument.date ? new Date(sourceDocument.date).toLocaleDateString('es-NI') : undefined,
+          status: sourceDocument.status,
+          supplier: sourceDocument.supplier?.name || sourceDocument.supplierName || '',
+          supplierData: sourceDocument.supplier || undefined,
           fields: [
             { label: 'Moneda', value: currency },
-            ...(localDoc.dueDate ? [{ label: 'Vencimiento', value: new Date(localDoc.dueDate).toLocaleDateString('es-NI') }] : []),
+            ...(sourceDocument.dueDate ? [{ label: 'Vencimiento', value: new Date(sourceDocument.dueDate).toLocaleDateString('es-NI') }] : []),
           ],
           lines: items.map((item: any) => ({
             description: item.description || item.product?.name || 'Producto',
@@ -476,11 +476,11 @@ export function FacturasProveedorView({ data, summaryData, summaryLoading, summa
             total: money(item.total ?? Number(item.quantity || 0) * Number(item.unitPrice ?? item.price ?? 0)),
           })),
           totals: [
-            { label: 'Subtotal', value: money(localDoc.subtotal ?? totals.subtotal) },
-            { label: 'Impuestos', value: money(localDoc.taxAmount ?? totals.taxAmount) },
+            { label: 'Subtotal', value: money(sourceDocument.subtotal ?? totals.subtotal) },
+            { label: 'Impuestos', value: money(sourceDocument.taxAmount ?? totals.taxAmount) },
           ],
-          total: money(localDoc.total ?? totals.total),
-          notes: localDoc.notes || '',
+          total: money(sourceDocument.total ?? totals.total),
+          notes: sourceDocument.notes || '',
         },
       });
       toast.success('Previsualización abierta. Descarga o imprime el PDF desde el visor del navegador.', { id: exportToastId });
@@ -521,7 +521,6 @@ export function FacturasProveedorView({ data, summaryData, summaryLoading, summa
           </div>
           <div className="flex items-center gap-3" data-tour="purchases-form-actions">
             <PurchaseViewTutorial view="invoices" context="form" />
-             {!isNew && canPerform('PURCHASES_RECEIPTS', 'export') && <PdfDownloadButton label="Descargar" includePageSizes includeRoll size="sm" className="h-10 rounded-xl px-4 text-[10px] font-black uppercase tracking-widest" onDownload={(format) => void handleDownloadSupplierInvoicePdf(format)} />}
                 {!isNew && canPerform('PURCHASES_RECEIPTS', 'read') && canPerform('PURCHASES_RECEIPTS', 'cancelInvoice') && (
                   <Button variant="outline" className="rounded-xl border-rose-500/50 text-rose-500 hover:bg-rose-700 hover:text-white font-black uppercase text-[10px] tracking-widest px-4"
                     onClick={() => { setPendingCancelIds([editingId]); setCancelReason(''); setCancelReasonAttempted(false); }}>
@@ -861,7 +860,7 @@ export function FacturasProveedorView({ data, summaryData, summaryLoading, summa
             {purchaseAlert && <PurchaseAlertsButton alert={purchaseAlert} onItemSelect={setHighlightedAlertId} />}
           </div>
         </div>
-        <EditableDataTable data={filtered} columns={columns} onRowUpdate={handleUpdate} isLoading={loading} pagination={pagination} showSelection={canPerform('PURCHASES_RECEIPTS', 'read') && canPerform('PURCHASES_RECEIPTS', 'cancelInvoice')} layoutMode={layoutMode === 'cards' ? 'cards' : 'responsive'} highlightedRowId={highlightedAlertId} bulkAction="cancel"
+        <EditableDataTable data={filtered} columns={columns} onRowUpdate={handleUpdate} isLoading={loading} pagination={pagination} actionsWidth="w-56" showSelection={canPerform('PURCHASES_RECEIPTS', 'read') && canPerform('PURCHASES_RECEIPTS', 'cancelInvoice')} layoutMode={layoutMode === 'cards' ? 'cards' : 'responsive'} highlightedRowId={highlightedAlertId} bulkAction="cancel"
           onBulkDelete={canPerform('PURCHASES_RECEIPTS', 'read') && canPerform('PURCHASES_RECEIPTS', 'cancelInvoice') ? async (ids) => {
             const validIds = ids.map(String).filter((id) => !id.startsWith('new-'));
             if (!validIds.length) return;
@@ -872,6 +871,7 @@ export function FacturasProveedorView({ data, summaryData, summaryLoading, summa
           actions={(row) => (
             <div className="flex gap-1">
               <Button title={canPerform('PURCHASES_RECEIPTS', 'edit') ? "Editar" : "Ver"} variant="ghost" size="icon" className="size-8 rounded-lg hover:bg-primary/10 hover:text-primary" onClick={() => openEditor(row.id)}>{canPerform('PURCHASES_RECEIPTS', 'edit') ? <Pencil className="size-4" /> : <Eye className="size-4" />}</Button>
+              {canPerform('PURCHASES_RECEIPTS', 'export') && !String(row.id).startsWith('new-') && <PdfDownloadButton label="" includePageSizes includeRoll size="sm" className="size-8 rounded-lg p-0" onDownload={(format) => void handleDownloadSupplierInvoicePdf(format, row)} />}
               {canPerform('PURCHASES_PAYMENTS', 'read') && canPerform('PURCHASES_PAYMENTS', 'pay') && onRegisterPaymentFromInvoice && Number(row.balance ?? row.total ?? 0) > 0.01 && !['PAID', 'CANCELLED'].includes(String(row.status || '').toUpperCase()) && (
                 <Button
                   title="Registrar Pago"

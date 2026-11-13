@@ -781,7 +781,6 @@ export function PagosRealizadosView({ data, summaryData, summaryLoading, summary
           </div>
           <div className="flex items-center gap-3" data-tour="purchases-form-actions">
             <PurchaseViewTutorial view="payments" context="form" />
-             {!isNew && canPerform('PURCHASES_PAYMENTS', 'export') && <PdfDownloadButton label="Exportar" includePageSizes includeRoll onDownload={(format) => void handleDownloadPaymentPdf(localDoc as PaymentMade, format)} />}
              {!isNew && canPerform('PURCHASES_PAYMENTS', 'read') && canPerform('PURCHASES_PAYMENTS', 'cancel') && (
                  <Button variant="outline" className="rounded-xl border-rose-500/50 text-rose-500 hover:bg-rose-700 hover:text-white font-black uppercase text-[10px] tracking-widest px-4"
                   onClick={() => { setPendingCancelId(editingId); setCancelReason(''); }}>

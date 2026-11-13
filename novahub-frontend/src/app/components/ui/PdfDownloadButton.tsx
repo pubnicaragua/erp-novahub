@@ -41,10 +41,11 @@ interface PdfDownloadButtonProps {
     defaultValue?: string;
     options: Array<{ value: string; label: string; description?: string }>;
   };
+  ariaLabel?: string;
 }
 
 /** Menú único para previsualizar una transacción sin ofrecer reportes de la tabla. */
-export function PdfDownloadButton({ onDownload, onExcel, className, disabled = false, size = 'sm', hasImages = false, imagesCount = 0, label = 'Descargar', scopeSelector, filterSelector }: PdfDownloadButtonProps) {
+export function PdfDownloadButton({ onDownload, onExcel, className, disabled = false, size = 'sm', hasImages = false, imagesCount = 0, label = 'Descargar', scopeSelector, filterSelector, ariaLabel }: PdfDownloadButtonProps) {
   const [scope, setScope] = useState<PdfExportScope>(scopeSelector?.defaultScope || 'page');
   const [filter, setFilter] = useState(filterSelector?.defaultValue || filterSelector?.options[0]?.value || '');
   const [includeAttachedImages, setIncludeAttachedImages] = useState(true);
@@ -64,7 +65,7 @@ export function PdfDownloadButton({ onDownload, onExcel, className, disabled = f
   return (
     <DropdownMenu>
       <DropdownMenuTrigger asChild>
-        <Button type="button" variant="outline" size={size} disabled={disabled} className={cn('group gap-1.5 rounded-xl', className)}>
+        <Button type="button" variant="outline" size={size} disabled={disabled} aria-label={ariaLabel || label || 'Descargar PDF'} title={ariaLabel || label || 'Descargar PDF'} className={cn('group gap-1.5 rounded-xl', className)}>
           <Download className="size-4 shrink-0 text-primary transition-colors group-hover:text-foreground" />
           {Boolean(label) && <span>{label}</span>}
           <ChevronDown className="size-3.5 opacity-60" />

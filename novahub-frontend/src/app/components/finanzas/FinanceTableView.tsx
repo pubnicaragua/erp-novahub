@@ -123,8 +123,6 @@ export function FinanceTableView({
   const { user } = useAuth();
   const { themeConfig } = useTheme();
   const [localData, setLocalData] = useState<any[]>(data);
-  const [editingCell, setEditingCell] = useState<{ id: string; key: string } | null>(null);
-  const [savingIds, setSavingIds] = useState<Set<string>>(new Set());
   const [searchTerm, setSearchTerm] = useState('');
   const [categoryFilter, setCategoryFilter] = useState('');
   const [dateRange, setDateRange] = useState(() => ({
@@ -186,28 +184,6 @@ export function FinanceTableView({
     setCurrentPage(1);
   }
 
-  const handleCellEdit = (id: string, key: string, value: any) => {
-    setLocalData(prev => prev.map(item => {
-      if (item.id === id) {
-        if (item.isPayment) { toast.error('No se puede editar un pago de factura desde este módulo'); return item; }
-        return { ...item, [key]: value, isDraft: true };
-      }
-      return item;
-    }));
-  };
-
-  const handleBlur = async (id: string, key: string, originalValue: any, newValue: any) => {
-    setEditingCell(null);
-    if (originalValue === newValue) return;
-    try {
-      setSavingIds(prev => new Set(prev).add(id));
-      await onUpdate(id, { [key]: newValue });
-      toast.success('Cambio guardado automáticamente');
-      setLocalData(prev => prev.map(item => item.id === id ? { ...item, isDraft: false } : item));
-    } catch (e: any) { toast.error(e?.response?.data?.message || e?.message || 'Error al guardar cambio'); }
-    finally { setSavingIds(prev => { const n = new Set(prev); n.delete(id); return n; }); }
-  };
-
   const handleDelete = async (id: string) => {
     if (!onDelete) return;
     try { setDeleteLoading(true); await onDelete(id); }
@@ -235,12 +211,11 @@ export function FinanceTableView({
   };
 
   const handleSaveNewCategory = async () => {
-    if (!newCategoryName.trim() || !categoryTargetItem) return;
+    if (!newCategoryName.trim() || !categoryTargetItem || !itemBeingEdited) return;
     const upperCat = newCategoryName.trim().toUpperCase();
-    handleCellEdit(categoryTargetItem.id, categoryTargetItem.key, upperCat);
-    await handleBlur(categoryTargetItem.id, categoryTargetItem.key, data.find(d => d.id === categoryTargetItem.id)?.[categoryTargetItem.key], upperCat);
+    setItemBeingEdited((current: any) => current ? { ...current, [categoryTargetItem.key]: upperCat } : current);
     setIsCategoryDialogOpen(false); setNewCategoryName(''); setCategoryTargetItem(null);
-    toast.success(`Categoría "${upperCat}" creada y asignada`);
+    toast.success(`Categoría "${upperCat}" agregada al formulario; guarda los cambios para aplicarla`);
   };
 
   const handleModalSave = async () => {
@@ -719,10 +694,19 @@ export function FinanceTableView({
                   <select 
                     className="flex h-10 w-full rounded-xl border border-input bg-background/50 px-3 py-2 text-sm ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
                     value={itemBeingEdited[col.key] || ''}
-                    onChange={e => setItemBeingEdited({...itemBeingEdited, [col.key]: e.target.value})}
+                    onChange={e => {
+                      if (e.target.value === '___NEW___' && col.key === 'category') {
+                        setCategoryTargetItem({ id: String(itemBeingEdited.id), key: col.key });
+                        setIsCategoryDialogOpen(true);
+                      } else {
+                        setItemBeingEdited({ ...itemBeingEdited, [col.key]: e.target.value });
+                      }
+                    }}
                   >
                     <option value="">Seleccione...</option>
+                    {itemBeingEdited[col.key] && !(col.options || []).some((option) => option.value === itemBeingEdited[col.key]) && <option value={itemBeingEdited[col.key]}>{itemBeingEdited[col.key]}</option>}
                     {(col.options || []).map(opt => <option key={opt.value} value={opt.value}>{opt.label}</option>)}
+                    {col.key === 'category' && <option value="___NEW___">+ Nueva Categoría...</option>}
                   </select>
                 ) : (
                   <Input 
@@ -787,37 +771,15 @@ export function FinanceTableView({
               ) : paginatedData.map(item => (
                 <TableRow key={item.id} className="group hover:bg-muted/30 border-border/30 transition-colors">
                   <TableCell>
-                    {savingIds.has(item.id) ? <div className="size-4 rounded-full border-2 border-primary border-t-transparent animate-spin" />
-                    : item.isPayment ? <div className="size-4 rounded-full bg-emerald-500/20 flex items-center justify-center" title="Pago de Compras (Solo lectura)"><CheckCircle2 className="size-3 text-emerald-600" /></div>
+                    {item.isPayment ? <div className="size-4 rounded-full bg-emerald-500/20 flex items-center justify-center" title="Pago de Compras (Solo lectura)"><CheckCircle2 className="size-3 text-emerald-600" /></div>
                     : item.isDraft ? <Edit3 className="size-4 text-orange-400" />
                     : <CheckCircle2 className="size-4 text-green-500/50" />}
                   </TableCell>
                   {columns.map(col => (
-                    <TableCell key={col.key} className={cn("p-1.5 transition-all", editingCell?.id === item.id && editingCell?.key === col.key ? "bg-primary/5 ring-1 ring-inset ring-primary" : "")} onDoubleClick={() => canEdit && col.editable && setEditingCell({ id: item.id, key: col.key })}>
-                      {editingCell?.id === item.id && editingCell?.key === col.key ? (
-                        col.type === 'select' ? (
-                          <select autoFocus className="w-full bg-transparent border-none outline-none text-sm px-1 font-medium" value={item[col.key] || ''}
-                            onChange={e => { if (e.target.value === '___NEW___') { setCategoryTargetItem({ id: item.id, key: col.key }); setIsCategoryDialogOpen(true); setEditingCell(null); } else handleCellEdit(item.id, col.key, e.target.value); }}
-                            onBlur={e => e.target.value !== '___NEW___' && handleBlur(item.id, col.key, data.find(d => d.id === item.id)?.[col.key], e.target.value)}
-                            onKeyDown={e => { if (e.key === 'Escape') setEditingCell(null); }}>
-                            <option value="">Seleccione...</option>
-                            {item[col.key] && !(col.options || []).find(o => o.value === item[col.key]) && <option value={item[col.key]}>{item[col.key]}</option>}
-                            {(col.options || []).map(opt => <option key={opt.value} value={opt.value}>{opt.label}</option>)}
-                            {col.key === 'category' && <option value="___NEW___">+ Nueva Categoría...</option>}
-                          </select>
-                        ) : (
-                          <input autoFocus type={col.type === 'number' ? 'number' : col.type.includes('date') ? 'date' : 'text'} className="w-full bg-transparent border-none outline-none text-sm px-1 font-medium" value={item[col.key] || ''}
-                            onChange={e => handleCellEdit(item.id, col.key, col.type === 'number' ? Number(e.target.value) : e.target.value)}
-                            onBlur={e => handleBlur(item.id, col.key, data.find(d => d.id === item.id)?.[col.key], e.target.value)}
-                            onWheel={e => e.currentTarget.type === 'number' && e.currentTarget.blur()}
-                            onClick={e => { if (e.currentTarget.type === 'date') { try { e.currentTarget.showPicker?.(); } catch {} } }}
-                            onKeyDown={e => { if (e.key === 'Enter') e.currentTarget.blur(); if (e.key === 'Escape') setEditingCell(null); }} />
-                        )
-                      ) : (
-                        <div className={cn("px-1 py-1 text-sm cursor-pointer hover:bg-muted/50 rounded transition-colors", col.type === 'currency' ? "font-bold" : "font-medium")} onClick={() => canEdit && col.editable && setEditingCell({ id: item.id, key: col.key })}>
-                          {renderCellContent(item, col)}
-                        </div>
-                      )}
+                    <TableCell key={col.key} className="p-1.5">
+                      <div className={cn("px-1 py-1 text-sm rounded", col.type === 'currency' ? "font-bold" : "font-medium")}>
+                        {renderCellContent(item, col)}
+                      </div>
                     </TableCell>
                   ))}
                   <TableCell className="text-right">
@@ -826,7 +788,7 @@ export function FinanceTableView({
                         <button onClick={() => setDetailItem(item)} className="p-1.5 text-primary hover:bg-primary/10 rounded-md transition-colors" title="Ver detalles" aria-label="Ver detalles"><Eye className="size-3.5" /></button>
                       )}
                       {canEdit && (
-                        <button onClick={() => { if (item.isPayment) toast.error('No se puede editar un pago de factura'); else setEditingCell({ id: item.id, key: columns.find(c => c.editable)?.key || columns[0].key }); }} disabled={item.isPayment} className="p-1.5 text-muted-foreground hover:text-foreground hover:bg-muted rounded-md transition-colors disabled:opacity-50" title="Editar"><Edit3 className="size-3.5" /></button>
+                        <button type="button" onClick={() => { if (item.isPayment) toast.error('No se puede editar un pago de factura'); else { setItemBeingEdited({ ...item }); setIsEditModalOpen(true); } }} disabled={item.isPayment} className="p-1.5 text-muted-foreground hover:text-foreground hover:bg-muted rounded-md transition-colors disabled:opacity-50" title="Editar registro" aria-label={`Editar registro ${item.number || item.description || ''}`}><Edit3 className="size-3.5" /></button>
                       )}
                       {canPause && onPause && canPauseItem(item) && !item.isPayment && (
                         <button onClick={() => void runScheduleAction(item.id, onPause)} disabled={scheduleActionLoadingId === item.id} className="p-1.5 text-muted-foreground hover:text-foreground hover:bg-muted rounded-md transition-colors disabled:opacity-50" title="Pausar programación" aria-label="Pausar programación">{scheduleActionLoadingId === item.id ? <span className="block size-3.5 animate-pulse" /> : <Pause className="size-3.5" />}</button>
@@ -865,9 +827,7 @@ export function FinanceTableView({
                     "size-9 rounded-xl flex items-center justify-center shadow-sm shrink-0",
                     item.isPayment ? "bg-emerald-500/10 text-emerald-600" : "bg-primary/10 text-primary"
                   )}>
-                    {savingIds.has(item.id) ? (
-                      <div className="size-4 rounded-full border-2 border-current border-t-transparent animate-spin" />
-                    ) : item.isPayment ? (
+                    {item.isPayment ? (
                       <CheckCircle2 className="size-5" />
                     ) : (
                       <div className="text-[10px] font-black">{item.number?.slice(-3) || '??'}</div>
@@ -940,7 +900,7 @@ export function FinanceTableView({
                     <div className={cn(
                       "transition-all",
                       col.type === 'currency' ? "text-lg font-black" : "text-sm font-semibold text-foreground/90"
-                    )} onDoubleClick={() => canEdit && col.editable && setEditingCell({ id: item.id, key: col.key })}>
+                    )}>
                       {renderCellContent(item, col)}
                     </div>
                   </div>

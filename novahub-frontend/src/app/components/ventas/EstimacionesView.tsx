@@ -43,7 +43,7 @@ import { formatDateEs } from '../../utils/dateFormat';
 import { SALES_WORKFLOW_STATUS_COLORS } from '../../utils/salesStatus';
 import { SalesDocumentDetailSheet, getSalesLineIdentifiers, type SalesDocumentPanelData } from './SalesDocumentDetailSheet';
 import type { PdfDownloadFormat } from '../../utils/pdfDownloadFormats';
-import { PdfDownloadButton, type PdfDownloadExtraOptions } from '../ui/PdfDownloadButton';
+import type { PdfDownloadExtraOptions } from '../ui/PdfDownloadButton';
 import { EstimacionesKanban } from './EstimacionesKanban';
 import { getLegacySalesExtraCostFields, getSalesExtraChargesAmount, getSalesExtraChargesPayload, normalizeSalesExtraCharges, type SalesExtraChargeLine } from '../../utils/salesCharges';
 import { summarizeAmountsByCurrency } from '../../utils/currency';
@@ -917,16 +917,6 @@ export function EstimacionesView({ data, summaryData, summaryLoading, summaryErr
               <Button variant="outline" onClick={() => void handleWhatsApp()} className="w-full rounded-xl border-emerald-200 px-4 text-[10px] font-black uppercase tracking-widest text-emerald-600 hover:bg-emerald-50 hover:text-emerald-700 dark:border-emerald-400/30 dark:hover:bg-emerald-500/10 dark:hover:text-emerald-300 sm:w-auto">
                 <WhatsAppIcon fontSize="inherit" className="size-4" style={{ width: '1rem', height: '1rem', fontSize: '1rem' }} aria-hidden="true" /> WhatsApp
               </Button>
-            )}
-            {canPerform('SALES_QUOTES', 'export') && localDoc && (
-              <PdfDownloadButton
-                onDownload={(format, _scope, _filter, options) => void handleExportPDF(localDoc, format, options)}
-                includePageSizes
-                includeRoll
-                hasImages={Boolean(normalizeEstimateImages(localDoc.images).items.length)}
-                imagesCount={normalizeEstimateImages(localDoc.images).items.length}
-                className="w-full sm:w-auto"
-              />
             )}
             {canPerform('SALES_QUOTES', 'edit') && !['APPROVED', 'CANCELLED'].includes(normalizeEstimateStatus(localDoc?.status)) && (
               <>

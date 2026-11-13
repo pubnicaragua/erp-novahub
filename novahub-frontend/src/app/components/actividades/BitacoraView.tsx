@@ -290,6 +290,7 @@ export const BitacoraView: React.FC<BitacoraViewProps> = ({ data, loading, summa
 
       <Card className="min-w-0 overflow-hidden rounded-3xl border-border/50 bg-card/80 shadow-sm">
         <EditableDataTable layoutMode="table"
+          showRowEditAction={false}
           data={filtered}
           columns={columns}
           onRowUpdate={canPerform('ACTIVITIES_LOGS', 'edit') ? handleUpdate : undefined}

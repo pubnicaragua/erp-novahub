@@ -2885,7 +2885,6 @@ export function OrdenesCompraView({ data, summarySearch, loading, onRefresh, sup
                   <Eye className="size-3 mr-2" /> Vista previa
                 </Button>
              )}
-             {!isNew && <PdfDownloadButton label="Descargar PDF" includePageSizes includeRoll onDownload={(format) => void handleDownloadOrderPdf(localDoc, format)} />}
             {isNew && canPerform('PURCHASES_ORDERS', 'create') && (
               <>
                 <Button variant="outline" onClick={() => handleSaveDoc('DRAFT')} className="rounded-xl font-black uppercase text-[10px] tracking-widest px-4">

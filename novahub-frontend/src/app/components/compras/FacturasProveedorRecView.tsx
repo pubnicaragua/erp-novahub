@@ -802,7 +802,7 @@ export function FacturasProveedorRecView({ data, summaryData, summaryLoading, su
             )}
           </div>
         </div>
-        <EditableDataTable data={filtered} columns={columns} onRowUpdate={handleUpdate} onRowClick={(row) => setDetailInvoice(row)} isLoading={loading} pagination={pagination} actionsWidth="w-40" showSelection={canPerform('PURCHASES_INVOICES_REC', 'read') && (canPerform('PURCHASES_INVOICES_REC', 'cancel') || canPerform('PURCHASES_INVOICES_REC', 'delete'))} layoutMode={layoutMode === 'cards' ? 'cards' : 'responsive'} bulkAction={canPerform('PURCHASES_INVOICES_REC', 'cancel') ? 'cancel' : 'delete'}
+        <EditableDataTable data={filtered} columns={columns} onRowUpdate={handleUpdate} showRowEditAction={false} onRowClick={(row) => setDetailInvoice(row)} isLoading={loading} pagination={pagination} actionsWidth="w-40" showSelection={canPerform('PURCHASES_INVOICES_REC', 'read') && (canPerform('PURCHASES_INVOICES_REC', 'cancel') || canPerform('PURCHASES_INVOICES_REC', 'delete'))} layoutMode={layoutMode === 'cards' ? 'cards' : 'responsive'} bulkAction={canPerform('PURCHASES_INVOICES_REC', 'cancel') ? 'cancel' : 'delete'}
           isRowSelectable={(row) => canPerform('PURCHASES_INVOICES_REC', 'cancel')
             ? ['ACTIVE', 'PAUSED'].includes(String(row.status || '').toUpperCase())
             : canPerform('PURCHASES_INVOICES_REC', 'delete')}

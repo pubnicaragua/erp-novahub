@@ -15,7 +15,8 @@ import { Checkbox } from './checkbox';
 import { motion, AnimatePresence } from 'motion/react';
 import { toast } from '@/app/services/toast';
 import { ConfirmDialog } from './ConfirmDialog';
-import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from './dialog';
+import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from './dialog';
+import { Label } from './label';
 import { Skeleton as BoneyardSkeleton } from 'boneyard-js/react';
 import type { SalesPaginationControls } from '../../types';
 import { TABLE_LAYOUT_BREAKPOINT, useCardsOnlyBelowTableBreakpoint } from './ViewLayoutSelect';
@@ -25,6 +26,20 @@ import { cardHeading } from '../../utils/displayText';
 const EMPTY_SELECT_VALUE = '__erp_empty_select_value__';
 const toRadixSelectValue = (value: unknown) => value === '' || value === null || value === undefined ? EMPTY_SELECT_VALUE : String(value);
 const fromRadixSelectValue = (value: string) => value === EMPTY_SELECT_VALUE ? '' : value;
+const toEditorInputValue = (value: unknown, type?: ColumnDef<any>['type']) => {
+  if (value === null || value === undefined) return '';
+  if (type === 'date') {
+    if (value instanceof Date) return value.toISOString().slice(0, 10);
+    return String(value).slice(0, 10);
+  }
+  if (type === 'datetime-local') {
+    const parsed = value instanceof Date ? value : new Date(String(value));
+    if (Number.isNaN(parsed.getTime())) return String(value).slice(0, 16);
+    const local = new Date(parsed.getTime() - parsed.getTimezoneOffset() * 60_000);
+    return local.toISOString().slice(0, 16);
+  }
+  return String(value);
+};
 
 export interface ColumnDef<T> {
   key: keyof T | string;
@@ -55,7 +70,6 @@ interface EditableDataTableProps<T> {
   onRowClick?: (row: T) => void;
   onRowDoubleClick?: (row: T) => void;
   highlightedRowId?: string | number | null;
-  editOnPencilOnly?: boolean;
   showSelection?: boolean;
   bulkActions?: (selectedIds: (string | number)[]) => React.ReactNode;
   showClearSelection?: boolean;
@@ -69,7 +83,11 @@ interface EditableDataTableProps<T> {
   verticalScroll?: boolean;
   /** Explicit UI permission. Defaults to whether an update handler exists. */
   canEdit?: boolean;
-  /** Optional row-level authorization for inline editing. */
+  /** Opt in to cell editing for exceptional grids such as Leads y red. */
+  allowInlineEditing?: boolean;
+  /** Show the shared record editor in the action column when editable fields exist. */
+  showRowEditAction?: boolean;
+  /** Optional row-level authorization for editing and inline editing. */
   canEditRow?: (row: T) => boolean;
   /** Optional row-level authorization for deletion controls. */
   canDeleteRow?: (row: T) => boolean;
@@ -90,7 +108,6 @@ export function EditableDataTable<T extends { [key: string]: any }>({
   onRowClick,
   onRowDoubleClick,
   highlightedRowId,
-  editOnPencilOnly = false,
   showSelection = true,
   bulkActions,
   pagination,
@@ -100,6 +117,8 @@ export function EditableDataTable<T extends { [key: string]: any }>({
   showHorizontalControls = false,
   verticalScroll = true,
   canEdit,
+  allowInlineEditing = false,
+  showRowEditAction = true,
   canEditRow,
   canDeleteRow,
 }: EditableDataTableProps<T>) {
@@ -107,11 +126,14 @@ export function EditableDataTable<T extends { [key: string]: any }>({
   const isBulkReject = bulkAction === 'reject';
   const bulkActionLabel = isBulkCancel ? 'Cancelar' : isBulkReject ? 'Rechazar' : 'Eliminar';
   const isEditingAllowed = canEdit ?? Boolean(onRowUpdate);
-  const isCellEditable = (row: T, column: ColumnDef<T>) => Boolean(
+  const isColumnEditable = (row: T, column: ColumnDef<T>) => Boolean(
     (typeof column.editable === 'function' ? column.editable(row) : column.editable)
       && isEditingAllowed
       && (canEditRow?.(row) ?? true),
   );
+  const getEditableColumns = (row: T) => columns.filter((column) => isColumnEditable(row, column));
+  const canOpenRowEditor = (row: T) => Boolean(showRowEditAction && onRowUpdate && getEditableColumns(row).length > 0);
+  const isCellEditable = (row: T, column: ColumnDef<T>) => allowInlineEditing && isColumnEditable(row, column);
   const isCompactTableViewport = useCardsOnlyBelowTableBreakpoint();
   const tableRootRef = useRef<HTMLDivElement>(null);
   const [isCompactTableContainer, setIsCompactTableContainer] = useState(false);
@@ -129,6 +151,9 @@ export function EditableDataTable<T extends { [key: string]: any }>({
   const [selectedIds, setSelectedIds] = useState<Set<string | number>>(new Set());
   const [editingCell, setEditingCell] = useState<{ rowId: string | number; colKey: string } | null>(null);
   const [editValue, setEditValue] = useState<any>(null);
+  const [editingRecord, setEditingRecord] = useState<T | null>(null);
+  const [recordEditValues, setRecordEditValues] = useState<Record<string, unknown>>({});
+  const [recordEditSaving, setRecordEditSaving] = useState(false);
   const [draftRows, setDraftRows] = useState<Set<string | number>>(new Set());
   const inputRef = useRef<HTMLInputElement>(null);
   const [confirmDeleteId, setConfirmDeleteId] = useState<string | number | null>(null);
@@ -145,9 +170,10 @@ export function EditableDataTable<T extends { [key: string]: any }>({
   const scrollAnimationRef = useRef<number | null>(null);
   const [focusedCell, setFocusedCell] = useState({ rowIndex: 0, colIndex: 0 });
   const [horizontalScroll, setHorizontalScroll] = useState({ left: false, right: false });
+  const hasRowEditAction = showRowEditAction && data.some((row) => canOpenRowEditor(row));
   const actionColumnWidth = (() => {
     const match = /^w-(\d+)$/.exec(actionsWidth);
-    return match ? Number(match[1]) * 4 : 128;
+    return (match ? Number(match[1]) * 4 : 128) + (hasRowEditAction ? 40 : 0);
   })();
   const selectableRows = data.filter((row) => isRowSelectable?.(row) ?? true);
   const selectableIds = selectableRows.map((row) => row[idField]);
@@ -175,6 +201,46 @@ export function EditableDataTable<T extends { [key: string]: any }>({
     markRowOpening(row);
     onRowClick?.(row);
   }, [markRowOpening, onRowClick]);
+
+  const openRowEditor = (row: T) => {
+    if (!canOpenRowEditor(row)) return;
+    setEditingRecord(row);
+    setRecordEditValues(Object.fromEntries(getEditableColumns(row).map((column) => {
+      const key = String(column.key);
+      return [key, row[key] ?? ''];
+    })));
+  };
+
+  const saveRowEditor = async () => {
+    if (!editingRecord || !onRowUpdate || recordEditSaving) return;
+    const rowId = editingRecord[idField] as string | number;
+    const updates: Partial<T> = {};
+    getEditableColumns(editingRecord).forEach((column) => {
+      const key = String(column.key);
+      const originalValue = toEditorInputValue(editingRecord[key], column.type);
+      const rawValue = recordEditValues[key] ?? '';
+      const value = column.type === 'number' && rawValue !== '' ? Number(rawValue) : rawValue;
+      if (String(originalValue ?? '') !== String(rawValue ?? '')) updates[key as keyof T] = value as T[keyof T];
+    });
+    if (Object.keys(updates).length === 0) {
+      setEditingRecord(null);
+      return;
+    }
+
+    try {
+      setRecordEditSaving(true);
+      await onRowUpdate(rowId, updates);
+      setData((current) => current.map((row) => row[idField] === rowId ? { ...row, ...updates } : row));
+      toast.success('Registro actualizado');
+      setEditingRecord(null);
+    } catch (error) {
+      console.error('Failed to update row:', error);
+      const message = (error as any)?.response?.data?.message || (error instanceof Error ? error.message : '');
+      toast.error(message || 'No se pudo actualizar el registro');
+    } finally {
+      setRecordEditSaving(false);
+    }
+  };
 
   const handleRowInteraction = useCallback((event: React.MouseEvent, row: T, doubleClick = false) => {
     const target = event.target as HTMLElement;
@@ -331,7 +397,7 @@ export function EditableDataTable<T extends { [key: string]: any }>({
   };
 
   const handleSave = async (rowId: string | number, colKey: string, valueToSave?: any) => {
-    if (!isEditingAllowed || !onRowUpdate) return;
+    if (!allowInlineEditing || !isEditingAllowed || !onRowUpdate) return;
     if (!editingCell && valueToSave === undefined) return;
     
     const column = columns.find((item) => String(item.key) === colKey);
@@ -400,7 +466,7 @@ export function EditableDataTable<T extends { [key: string]: any }>({
   };
 
   const handlePaste = useCallback((e: React.ClipboardEvent) => {
-    if (!isEditingAllowed || !onRowUpdate) return;
+    if (!allowInlineEditing || !isEditingAllowed || !onRowUpdate) return;
     if ((e.target as HTMLElement).tagName === 'INPUT' || (e.target as HTMLElement).tagName === 'TEXTAREA') return;
     e.preventDefault();
     const text = e.clipboardData.getData('text');
@@ -429,7 +495,7 @@ export function EditableDataTable<T extends { [key: string]: any }>({
     });
     setData(newData);
     toast.success(`Sincronizadas ${updatedCount} filas desde Excel`);
-  }, [data, columns, onRowUpdate, idField, isEditingAllowed, canEditRow]);
+  }, [data, columns, onRowUpdate, idField, isEditingAllowed, canEditRow, allowInlineEditing]);
 
   const handleBulkDuplicate = async () => {
     if (!onBulkDuplicate || selectedIds.size === 0) return;
@@ -495,7 +561,7 @@ export function EditableDataTable<T extends { [key: string]: any }>({
         <TableHead
           data-actions-column="true"
           className={cn('h-12 whitespace-nowrap pr-3 text-right align-middle text-[13px] font-semibold text-muted-foreground', actionsWidth, verticalScroll && 'sticky top-0 z-60 bg-card')}
-          style={verticalScroll ? { position: 'sticky', top: 0, zIndex: 60, backgroundColor: 'var(--card)', backgroundClip: 'padding-box' } : undefined}
+          style={{ width: `${actionColumnWidth}px`, minWidth: `${actionColumnWidth}px`, ...(verticalScroll ? { position: 'sticky', top: 0, zIndex: 60, backgroundColor: 'var(--card)', backgroundClip: 'padding-box' } : {}) }}
         >
           Acciones
         </TableHead>
@@ -626,7 +692,7 @@ export function EditableDataTable<T extends { [key: string]: any }>({
                   onDoubleClick={(event) => handleRowInteraction(event, row, true)}
                   className={cn(
                     "group/row h-14 transition-colors duration-150",
-                    (onRowClick || onRowDoubleClick) && !editOnPencilOnly && "cursor-pointer",
+                    (onRowClick || onRowDoubleClick) && "cursor-pointer",
                     isHighlighted
                       ? "bg-primary/10 hover:bg-primary/15 border-l-2 border-l-primary ring-1 ring-inset ring-primary/50"
                       : isSelected ? "bg-primary/5 hover:bg-primary/10 border-l-2 border-l-primary" : "hover:bg-muted/20"
@@ -653,18 +719,18 @@ export function EditableDataTable<T extends { [key: string]: any }>({
                     return (
                       <TableCell 
                         key={colKey}
-                        data-row-click-exempt={isCellEditable(row, col) && !editOnPencilOnly ? 'true' : undefined}
+                        data-row-click-exempt={isCellEditable(row, col) ? 'true' : undefined}
                         tabIndex={focusedCell.rowIndex === rowIndex && focusedCell.colIndex === colIndex ? 0 : -1}
                         data-grid-row-index={rowIndex}
                         data-grid-col-index={colIndex}
                         onFocus={() => setFocusedCell({ rowIndex, colIndex })}
                         onClick={() => {
                           focusGridCell(rowIndex, colIndex);
-                          if (!editOnPencilOnly) handleCellClick(rowId, colKey, value, isCellEditable(row, col));
+                          handleCellClick(rowId, colKey, value, isCellEditable(row, col));
                         }}
                         className={cn(
                           "relative group/cell h-14 min-w-0",
-                          editOnPencilOnly ? "cursor-default" : "cursor-cell",
+                          isCellEditable(row, col) ? "cursor-cell" : "cursor-default",
                           isCellEditable(row, col) && "hover:bg-primary/5 transition-colors",
                           isEditing && "p-0",
                           focusedCell.rowIndex === rowIndex && focusedCell.colIndex === colIndex && !isEditing && "ring-1 ring-inset ring-primary/50"
@@ -717,26 +783,7 @@ export function EditableDataTable<T extends { [key: string]: any }>({
                                 {value}
                               </span>
                             )}
-                            {isCellEditable(row, col) && (
-                              editOnPencilOnly ? (
-                                <button
-                                  type="button"
-                                  title="Editar campo"
-                                  aria-label={`Editar ${col.header}`}
-                                  className="pointer-events-none ml-auto inline-flex size-7 shrink-0 cursor-pointer items-center justify-center rounded-md text-primary opacity-0 transition-opacity group-hover/row:pointer-events-auto group-hover/row:opacity-100 hover:bg-primary/10"
-                                  onPointerDown={(event) => event.stopPropagation()}
-                                  onClick={(event) => {
-                                    event.preventDefault();
-                                    event.stopPropagation();
-                                    handleCellClick(rowId, colKey, value, isCellEditable(row, col));
-                                  }}
-                                >
-                                  <Pencil className="size-3" />
-                                </button>
-                              ) : (
-                                <Pencil className="ml-auto size-3 opacity-0 transition-opacity group-hover:opacity-30 text-primary" />
-                              )
-                            )}
+                            {isCellEditable(row, col) && <Pencil className="ml-auto size-3 opacity-0 transition-opacity group-hover:opacity-30 text-primary" />}
                           </div>
                         )}
                       </TableCell>
@@ -748,11 +795,25 @@ export function EditableDataTable<T extends { [key: string]: any }>({
                       'h-14 min-w-0 max-w-full overflow-hidden whitespace-nowrap pr-2 text-right align-middle transition-colors pointer-events-auto',
                       actionsWidth,
                     )}
+                    style={{ width: `${actionColumnWidth}px`, minWidth: `${actionColumnWidth}px` }}
                   >
                     <div data-action-group="true" className="relative z-30 flex min-w-max flex-nowrap items-center justify-end gap-1 overflow-visible whitespace-nowrap transition-all pointer-events-auto">
                       {isOpening && <span role="status" className="inline-flex shrink-0 items-center gap-1 rounded-lg bg-primary/10 px-2 py-1 text-[9px] font-black uppercase tracking-wider text-primary" title="Abriendo detalle">
                         <Loader2 className="size-3 animate-spin" /> <span className="hidden 2xl:inline">Abriendo…</span>
                       </span>}
+                      {canOpenRowEditor(row) && (
+                        <Button
+                          type="button"
+                          variant="ghost"
+                          size="icon"
+                          title="Editar registro"
+                          aria-label={`Editar registro ${cardHeading(row).title}`}
+                          className="size-8 shrink-0 rounded-lg text-muted-foreground hover:bg-primary/10 hover:text-primary"
+                          onClick={(event) => { event.stopPropagation(); openRowEditor(row); }}
+                        >
+                          <Pencil className="size-4" />
+                        </Button>
+                      )}
                       {actions?.(row)}
                       {onRowDelete && (canDeleteRow?.(row) ?? true) && (
                         <Button
@@ -802,7 +863,7 @@ export function EditableDataTable<T extends { [key: string]: any }>({
               onDoubleClick={(event) => handleRowInteraction(event, row, true)}
               className={cn(
                 'overflow-hidden rounded-2xl border border-border/50 bg-card/70 shadow-sm',
-                (onRowClick || onRowDoubleClick) && !editOnPencilOnly && 'cursor-pointer',
+                (onRowClick || onRowDoubleClick) && 'cursor-pointer',
                 isHighlighted ? 'border-primary bg-primary/10 ring-2 ring-primary/40' : isSelected && 'border-primary/50 bg-primary/5'
               )}
               aria-busy={isOpening || undefined}
@@ -843,7 +904,7 @@ export function EditableDataTable<T extends { [key: string]: any }>({
                       key={colKey}
                       className={cn('min-w-0 rounded-xl', isCellEditable(row, col) && 'transition-colors hover:bg-primary/5')}
                       onClick={(event) => {
-                        if (!isCellEditable(row, col) || editOnPencilOnly) return;
+                        if (!isCellEditable(row, col)) return;
                         event.stopPropagation();
                         handleCellClick(rowId, colKey, value, isCellEditable(row, col));
                       }}
@@ -909,8 +970,18 @@ export function EditableDataTable<T extends { [key: string]: any }>({
                   );
                 })}
               </div>
-              {(actions || onRowDelete) && (
+              {(actions || onRowDelete || canOpenRowEditor(row)) && (
                 <div data-action-group="true" className="flex min-w-0 flex-wrap items-center justify-end gap-2 border-t border-border/40 bg-muted/10 p-3">
+                  {canOpenRowEditor(row) && (
+                    <Button
+                      type="button"
+                      variant="outline"
+                      className="h-10 rounded-xl px-4 text-xs font-black uppercase tracking-widest"
+                      onClick={(event) => { event.stopPropagation(); openRowEditor(row); }}
+                    >
+                      <Pencil className="mr-2 size-4" /> Editar
+                    </Button>
+                  )}
                   {actions?.(row)}
                   {onRowDelete && (canDeleteRow?.(row) ?? true) && (
                     <Button
@@ -960,6 +1031,64 @@ export function EditableDataTable<T extends { [key: string]: any }>({
           </div>
         </div>
       )}
+
+      <Dialog open={editingRecord !== null} onOpenChange={(open) => { if (!open && !recordEditSaving) setEditingRecord(null); }}>
+        <DialogContent className="w-[calc(100%-2rem)] !max-w-2xl rounded-3xl">
+          <DialogHeader>
+            <DialogTitle>Editar registro</DialogTitle>
+            <DialogDescription>Actualiza los campos permitidos para este registro.</DialogDescription>
+          </DialogHeader>
+          {editingRecord && (
+            <div className="grid min-w-0 grid-cols-1 gap-4 sm:grid-cols-2">
+              {getEditableColumns(editingRecord).map((column) => {
+                const key = String(column.key);
+                const fieldId = `row-edit-${String(editingRecord[idField])}-${key}`;
+                const value = recordEditValues[key];
+                const options = column.options || [];
+                const currentOptionExists = options.some((option) => String(option.value) === String(value ?? ''));
+                return (
+                  <div key={key} className="min-w-0 space-y-1.5">
+                    <Label htmlFor={fieldId}>{column.header}</Label>
+                    {column.type === 'select' && options.length > 0 ? (
+                      <Select
+                        value={toRadixSelectValue(value)}
+                        onValueChange={(nextValue) => setRecordEditValues((current) => ({ ...current, [key]: fromRadixSelectValue(nextValue) }))}
+                        disabled={recordEditSaving}
+                      >
+                        <SelectTrigger id={fieldId} className="w-full max-w-full">
+                          <SelectValue placeholder={`Seleccionar ${column.header.toLowerCase()}`} />
+                        </SelectTrigger>
+                        <SelectContent>
+                          {value !== '' && value !== null && value !== undefined && !currentOptionExists && (
+                            <SelectItem value={toRadixSelectValue(value)}>{String(value)}</SelectItem>
+                          )}
+                          {options.map((option) => <SelectItem key={option.value} value={toRadixSelectValue(option.value)}>{option.label}</SelectItem>)}
+                        </SelectContent>
+                      </Select>
+                    ) : (
+                      <Input
+                        id={fieldId}
+                        type={column.type === 'datetime-local' ? 'datetime-local' : column.type === 'date' ? 'date' : column.type === 'number' ? 'number' : 'text'}
+                        value={toEditorInputValue(value, column.type)}
+                        onChange={(event) => setRecordEditValues((current) => ({ ...current, [key]: event.target.value }))}
+                        disabled={recordEditSaving}
+                        className="w-full max-w-full"
+                      />
+                    )}
+                  </div>
+                );
+              })}
+            </div>
+          )}
+          <DialogFooter>
+            <Button type="button" variant="outline" onClick={() => setEditingRecord(null)} disabled={recordEditSaving}>Cancelar</Button>
+            <Button type="button" onClick={() => void saveRowEditor()} disabled={recordEditSaving}>
+              {recordEditSaving && <Loader2 className="mr-2 size-4 animate-spin" />}
+              {recordEditSaving ? 'Guardando…' : 'Guardar cambios'}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
 
       <Dialog open={mobileActionsRow !== null} onOpenChange={(open) => !open && setMobileActionsRow(null)}>
         <DialogContent className="w-[calc(100%-2rem)] !max-w-sm rounded-3xl p-0">
