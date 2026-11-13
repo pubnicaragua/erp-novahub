@@ -274,7 +274,7 @@ export function PlanCuentasView({ isSidebarCollapsed = true, helpTrigger }: Plan
     parentId: '' as string | undefined, currency: 'USD' as Currency,
     subtype: 'DETAIL_ACCOUNT' as AccountSubtype,
     detailType: 'BALANCE_SHEET' as AccountDetailType,
-    allowManualEntry: true, isActive: true, notes: '',
+    allowManualEntry: true, acceptsPostings: true, isActive: true, notes: '',
   });
   const [saving, setSaving] = useState(false);
 
@@ -328,7 +328,7 @@ export function PlanCuentasView({ isSidebarCollapsed = true, helpTrigger }: Plan
         currency: a.currency ?? 'USD', isActive: a.isActive !== false,
         subtype: a.subtype ?? 'DETAIL_ACCOUNT',
         detailType: a.detailType ?? ((a.type === 'INCOME' || a.type === 'EXPENSE') ? 'INCOME_STATEMENT' : 'BALANCE_SHEET'),
-        allowManualEntry: a.allowManualEntry !== false && a.acceptsPostings !== false,
+        allowManualEntry: a.allowManualEntry !== false,
         acceptsPostings: a.acceptsPostings !== false,
         notes: a.notes ?? null,
         children: [], level: 0,
@@ -511,7 +511,7 @@ export function PlanCuentasView({ isSidebarCollapsed = true, helpTrigger }: Plan
     setFormData({
       code, name: '', type, parentId, currency: 'USD',
       subtype: parentId ? 'SUBACCOUNT' : 'DETAIL_ACCOUNT',
-      detailType: 'BALANCE_SHEET', allowManualEntry: true, isActive: true, notes: '',
+      detailType: 'BALANCE_SHEET', allowManualEntry: true, acceptsPostings: true, isActive: true, notes: '',
     });
     setDialogOpen(true);
   };
@@ -522,7 +522,7 @@ export function PlanCuentasView({ isSidebarCollapsed = true, helpTrigger }: Plan
       code: account.code, name: account.name, type: account.type,
       parentId: account.parentId ?? undefined, currency: account.currency,
       subtype: account.subtype, detailType: account.detailType,
-      allowManualEntry: account.allowManualEntry, isActive: account.isActive,
+      allowManualEntry: account.allowManualEntry, acceptsPostings: account.acceptsPostings !== false, isActive: account.isActive,
       notes: account.notes ?? '',
     });
     setDialogOpen(true);
@@ -538,7 +538,7 @@ export function PlanCuentasView({ isSidebarCollapsed = true, helpTrigger }: Plan
         type: formData.type, parentId: formData.parentId || null,
         currency: formData.currency, subtype: formData.subtype,
         detailType: formData.detailType, allowManualEntry: formData.allowManualEntry,
-        acceptsPostings: formData.allowManualEntry,
+        acceptsPostings: formData.acceptsPostings,
         isActive: formData.isActive, notes: formData.notes.trim() || undefined,
       };
       if (editingAccount) {
@@ -1178,6 +1178,12 @@ export function PlanCuentasView({ isSidebarCollapsed = true, helpTrigger }: Plan
                     </Badge>
                   </div>
                   <div className="min-w-0 space-y-1">
+                    <p className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground">Movimientos del sistema</p>
+                    <Badge variant={selectedAccount.acceptsPostings === false ? 'destructive' : 'default'} className="max-w-full truncate">
+                      {selectedAccount.acceptsPostings === false ? 'No los acepta' : 'Los acepta'}
+                    </Badge>
+                  </div>
+                  <div className="min-w-0 space-y-1">
                     <p className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground">Hijos</p>
                     <p className="text-sm font-semibold tabular-nums">{selectedAccount._count?.children ?? selectedAccount.children.length}</p>
                   </div>
@@ -1595,6 +1601,13 @@ export function PlanCuentasView({ isSidebarCollapsed = true, helpTrigger }: Plan
                 <p className="text-xs text-muted-foreground">Habilita esta cuenta para asientos manuales.</p>
               </div>
               <Switch id="allowManualEntry" checked={formData.allowManualEntry} onCheckedChange={(checked) => setFormData(previous => ({ ...previous, allowManualEntry: checked }))} />
+            </div>
+            <div className="flex items-center justify-between rounded-md border p-3">
+              <div className="pr-3">
+                <Label htmlFor="acceptsPostings">Acepta movimientos del sistema</Label>
+                <p className="text-xs text-muted-foreground">Permite que facturas, créditos, cobros y pagos usen esta cuenta en sus asientos automáticos. Si la apagas, esos procesos fallan al contabilizar. No la apagues en cuentas configuradas en Contabilidad → Configuración.</p>
+              </div>
+              <Switch id="acceptsPostings" checked={formData.acceptsPostings} onCheckedChange={(checked) => setFormData(previous => ({ ...previous, acceptsPostings: checked }))} />
             </div>
             <div className="flex items-center justify-between rounded-md border p-3">
               <div>

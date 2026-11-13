@@ -604,6 +604,14 @@ export function NotasCreditoView({ data, summaryData, summaryLoading, summaryErr
     setIsCreating(false);
     const draft = JSON.parse(JSON.stringify(record));
     draft.interestValue = draft.interestMode === 'PERCENTAGE' ? Number(draft.interestRate || 0) : Number(draft.interestAmount || 0);
+    // El servidor guarda `total` = capital + interés. En el editor `total` es solo el capital
+    // (suma de líneas y cargos) y el interés se calcula aparte; si no se normaliza aquí, el
+    // interés se cuenta dos veces: en «Total financiado», en el plan de abonos y al guardar.
+    const savedPrincipal = Number(draft.principalAmount || 0) > 0
+      ? Number(draft.principalAmount)
+      : roundCurrencyNumber(Number(draft.total || 0) - Number(draft.interestAmount || 0));
+    draft.total = savedPrincipal;
+    delete draft.principalAmount;
     commitLocalDoc(draft);
   };
 
@@ -1118,7 +1126,7 @@ export function NotasCreditoView({ data, summaryData, summaryLoading, summaryErr
     const availableCredit = availableCreditFor(selectedCustomer);
     const interestMode = String(localDoc.interestMode || 'NONE');
     const interestValue = Number(localDoc.interestValue ?? (interestMode === 'PERCENTAGE' ? localDoc.interestRate : localDoc.interestAmount) ?? 0);
-    const principalForInterest = Number(localDoc.principalAmount || (Number(localDoc.total || 0) - Number(localDoc.interestAmount || 0)));
+    const principalForInterest = Number(localDoc.total || 0);
     const interestPreview = interestMode === 'PERCENTAGE'
       ? principalForInterest * interestValue / 100
       : interestMode === 'FIXED_AMOUNT' ? interestValue : 0;
@@ -1143,7 +1151,10 @@ export function NotasCreditoView({ data, summaryData, summaryLoading, summaryErr
         manualInstallments: manualInstallmentDrafts,
       })
       : null;
-    const installmentSchedule: CustomerCreditScheduleRow[] = planCalculationMode === 'MANUAL' && installmentPlanEstimate
+    // Mientras el crédito se puede editar, el calendario (y lo que imprime «Imprimir plan») sale del
+    // cálculo vigente; usar el guardado mostraba y mandaba a imprimir un plan viejo tras cambiar
+    // monto, frecuencia, fechas o interés. Ya emitido, se muestra el guardado con sus pagos aplicados.
+    const installmentSchedule: CustomerCreditScheduleRow[] = (canEditDocument || planCalculationMode === 'MANUAL') && installmentPlanEstimate
       ? installmentPlanEstimate.schedule
       : localDoc.installments?.length
       ? localDoc.installments
@@ -1491,9 +1502,19 @@ export function NotasCreditoView({ data, summaryData, summaryLoading, summaryErr
               {getSalesExtraChargesPayload(localDoc).map((charge, index) => <div key={`extra-summary-${index}`} className="flex items-center justify-between gap-2 text-xs"><span className="text-muted-foreground">{charge.description || `Coste extra ${index + 1}`}</span><span className="font-bold tabular-nums">+ {formatConvertedAmount(Number(charge.amount || 0), localDoc.currency, localDoc.exchangeRate)}</span></div>)}
               {Number(localDoc.deliveryAmount || 0) > 0 && <div className="flex items-center justify-between gap-2 text-xs"><span className="text-muted-foreground">{localDoc.deliveryDescription || 'Delivery'}</span><span className="font-bold tabular-nums">+ {formatConvertedAmount(Number(localDoc.deliveryAmount || 0), localDoc.currency, localDoc.exchangeRate)}</span></div>}
               <div className="flex items-center justify-between gap-2 border-t border-border/50 pt-2 mt-2">
-                <span className="text-sm font-black uppercase tracking-widest">Total del crédito</span>
+                <span className="text-sm font-black uppercase tracking-widest">{planInterestAmount > 0 ? 'Capital del crédito' : 'Total del crédito'}</span>
                 <span className="text-xl font-black text-primary tabular-nums">{formatConvertedAmount(Number(localDoc.total || 0), localDoc.currency, localDoc.exchangeRate)}</span>
               </div>
+              {planInterestAmount > 0 && <>
+                <div className="flex items-center justify-between gap-2 text-xs">
+                  <span className="text-muted-foreground">Interés</span>
+                  <span className="font-bold tabular-nums">+ {formatConvertedAmount(planInterestAmount, localDoc.currency, localDoc.exchangeRate)}</span>
+                </div>
+                <div className="flex items-center justify-between gap-2 border-t border-border/50 pt-2">
+                  <span className="text-sm font-black uppercase tracking-widest">Total a cancelar</span>
+                  <span className="text-xl font-black text-primary tabular-nums">{formatConvertedAmount(roundCurrencyNumber(Number(localDoc.total || 0) + planInterestAmount), localDoc.currency, localDoc.exchangeRate)}</span>
+                </div>
+              </>}
             </div>
           </CardContent>
         </Card>
