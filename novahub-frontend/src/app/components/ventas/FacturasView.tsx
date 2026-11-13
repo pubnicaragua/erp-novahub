@@ -2992,7 +2992,7 @@ export function FacturasView({ data, summaryData, summaryLoading, summaryError, 
       />
 
       <Dialog open={!!creditInvoice} onOpenChange={(open) => { if (!open && !creditLoading) setCreditInvoice(null); }}>
-        <DialogContent className="!flex !flex-col !max-h-[calc(100dvh-1rem)] w-[calc(100%-1rem)] !max-w-3xl !overflow-hidden rounded-3xl p-4 sm:w-[calc(100%-2rem)] sm:p-6">
+        <DialogContent className="!flex !flex-col !max-h-[calc(100dvh-1rem)] w-[calc(100%-1.5rem)] !max-w-6xl !overflow-hidden rounded-3xl p-4 sm:w-[calc(100%-3rem)] sm:p-6">
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2 nh-module-title">
               <Send className="size-5 text-primary" /> Enviar factura a crédito
