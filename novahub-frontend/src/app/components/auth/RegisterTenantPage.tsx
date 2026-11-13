@@ -22,6 +22,7 @@ import { useAuth } from '../../contexts/AuthContext';
 import { normalizeEmail } from '../../utils/accountValidation';
 import { PasswordRequirements } from '../PasswordRequirements';
 import { TechnicalSheetStep } from './TechnicalSheetStep';
+import novahubLogotipo from '../../../assets/branding/novahub-logotipo-transparent.png';
 import { SIDEBAR_PERMISSION_PARENT_ORDER, SIDEBAR_PERMISSION_SUBMODULES } from '../../utils/sidebarPermissions';
 
 const WA_NUMBER = '50588241003';
@@ -70,7 +71,7 @@ const step1Schema = z.object({
 type Step1Data = z.infer<typeof step1Schema>;
 
 const STEP_MESSAGES = [
-  'Contanos sobre tu empresa para empezar',
+  'Cuéntanos sobre tu empresa para empezar',
   'Seleccioná tu industria y tamaño de empresa',
   'Personalizá tu NovaHub con los módulos que necesitás',
   'Completá la ficha técnica para que conozcamos tu operación (Opcional)',
@@ -78,12 +79,12 @@ const STEP_MESSAGES = [
 
 const LEFT_BRANDING = [
   {
-    title: 'Probá NovaHub gratis: 3 días de Demo',
+    title: 'Prueba NovaHub gratis: 3 días de Demo',
     subtitle: 'Acceso completo a las herramientas que usan las empresas que crecen. Sin tarjeta, sin compromiso.',
     benefits: ['Ventas, Inventario y Compras integrados', 'Reportes en tiempo real con datos reales', 'Configura tu empresa en minutos', 'Soporte por email incluido'],
   },
   {
-    title: 'Contanos sobre tu negocio',
+    title: 'Cuéntanos sobre tu negocio',
     subtitle: 'Personalizamos NovaHub para tu industria. Cada empresa es única y merece herramientas a medida.',
     benefits: ['Recomendaciones inteligentes de módulos', 'Configuración optimizada para tu giro', 'Precios justos, solo lo que necesitás', 'Dashboard adaptado a tu negocio'],
   },
@@ -589,10 +590,9 @@ export function RegisterTenantPage() {
         <div className="absolute -bottom-20 -left-20 size-96 rounded-full bg-emerald-400/10 blur-3xl" />
         <div className="relative z-10">
           <div className="flex items-center gap-3 mb-12">
-            <div className="size-12 rounded-2xl bg-white/10 backdrop-blur-md flex items-center justify-center border border-white/20">
-              <Package className="size-7 text-white" />
+            <div className="rounded-2xl bg-white px-5 py-3 shadow-lg">
+              <img src={novahubLogotipo} alt="NovaHub" className="h-10 w-auto object-contain" draggable={false} />
             </div>
-            <span className="text-2xl font-black tracking-tighter">NovaHub</span>
           </div>
           <AnimatePresence mode="wait">
             <motion.div
@@ -602,7 +602,7 @@ export function RegisterTenantPage() {
               exit={{ opacity: 0, x: -20 }}
               transition={{ duration: 0.25 }}
             >
-              <h1 className="text-4xl font-black tracking-tighter leading-tight mb-6">{content.title}</h1>
+              <h1 className="nh-module-title text-4xl leading-tight mb-6" style={{ fontSize: '2.4rem' }}>{content.title}</h1>
               <p className="text-emerald-100 text-lg max-w-md mb-10">{content.subtitle}</p>
               <ul className="space-y-3 max-w-md">
                 {content.benefits.map((benefit) => (
@@ -835,7 +835,7 @@ export function RegisterTenantPage() {
       <div className="space-y-1.5">
         <Label className="text-[10px] uppercase font-black tracking-widest text-muted-foreground ml-1">Descripción breve (opcional)</Label>
         <Textarea value={companyDescription} onChange={(e) => setCompanyDescription(e.target.value)}
-          placeholder="Contanos brevemente qué hace tu empresa..." maxLength={300} rows={3}
+          placeholder="Cuéntanos brevemente qué hace tu empresa..." maxLength={300} rows={3}
           className="rounded-xl bg-white/5 border-white/10 resize-none" />
         <span className="text-[10px] text-muted-foreground ml-1">{companyDescription.length}/300</span>
       </div>
@@ -1255,7 +1255,7 @@ export function RegisterTenantPage() {
                 </motion.div>
               </AnimatePresence>
               <p className="text-center text-sm text-muted-foreground pt-4">
-                {step === 0 && <>Ya tenés cuenta?{' '}<Link to="/login" className="text-primary font-bold hover:underline">Iniciar sesión</Link></>}
+                {step === 0 && <>¿Ya tienes cuenta?{' '}<Link to="/login" className="text-primary font-bold hover:underline">Iniciar sesión</Link></>}
               </p>
             </>
           )}

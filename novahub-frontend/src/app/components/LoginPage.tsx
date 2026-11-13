@@ -6,7 +6,7 @@ import { Button } from './ui/button';
 import { Input } from './ui/input';
 import { Label } from './ui/label';
 import { Checkbox } from './ui/checkbox';
-import { NovaHubLogo } from './NovaHubLogo';
+import novahubLogotipo from '../../assets/branding/novahub-logotipo-transparent.png';
 
 interface LoginPageProps {
   onLogin: (email: string, password: string) => Promise<void>;
@@ -63,13 +63,10 @@ export function LoginPage({ onLogin }: LoginPageProps) {
               transition={{ delay: 0.1, duration: 0.4 }}
               className="mb-8 text-center"
             >
-              <div className="flex justify-center mb-4">
-                <NovaHubLogo size={64} />
-              </div>
-              <h1 className="text-2xl font-black tracking-tight">
-                Nova<span className="text-emerald-500">Hub</span>
+              <h1 className="flex justify-center">
+                <img src={novahubLogotipo} alt="NovaHub" className="h-14 w-auto object-contain" draggable={false} />
               </h1>
-              <p className="mt-1 text-sm text-muted-foreground">Enterprise Resource Planning</p>
+              <p className="mt-3 text-sm text-muted-foreground">Enterprise Resource Planning</p>
             </motion.div>
 
             {/* Form */}
@@ -151,12 +148,12 @@ export function LoginPage({ onLogin }: LoginPageProps) {
               Nova<span className="text-emerald-500/70">Hub</span> ERP v1.0.0 &copy; 2026
             </p>
 
-            <p className="mt-4 text-center text-sm text-muted-foreground">
-              ¿No tenés cuenta?{' '}
-              <a href="/register" className="font-medium text-emerald-500 hover:text-emerald-400 hover:underline transition-colors">
-                Probalo gratis
+            <div className="mt-5 rounded-xl border border-border/60 bg-muted/30 p-4 text-center">
+              <p className="text-sm text-muted-foreground">¿Aún no tienes cuenta?</p>
+              <a href="/register" className="mt-2 inline-flex h-10 w-full items-center justify-center rounded-lg border border-emerald-700 text-sm font-semibold text-emerald-700 transition-colors hover:bg-emerald-700 hover:text-white dark:border-emerald-500 dark:text-emerald-400">
+                Probar gratis
               </a>
-            </p>
+            </div>
           </CardContent>
         </Card>
       </motion.div>
