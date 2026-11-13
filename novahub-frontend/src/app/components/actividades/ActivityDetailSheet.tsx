@@ -13,6 +13,7 @@ import { translateAuditAction } from '../ui/AuditHistoryModal';
 import { SubtasksManager } from './SubtasksManager';
 import { TaskReportsPanel } from './TaskReportsPanel';
 import { TaskCommentsPanel } from './TaskCommentsPanel';
+import { assigneeNames, buildTaskTrace } from './taskTrace';
 import { describeProgressSource, getTaskProgress } from './actividades.progress';
 import { TimeTracker } from './TimeTracker';
 import { SlaBadge } from './SlaBadge';
@@ -400,6 +401,37 @@ function TaskProgressSummary({ task }: { task: any }) {
   );
 }
 
+/** Quién creó la tarea, a quién se asignó y cuándo pasó por cada etapa (en progreso, revisión, completada). */
+function TaskTraceSection({ task }: { task: any }) {
+  const steps = buildTaskTrace(task);
+  const people = assigneeNames(task);
+  const line = (key: string, label: string, done: boolean, text: ReactNode) => (
+    <li key={key} className="flex min-w-0 items-start gap-3" data-testid={`activities-trace-${key}`}>
+      <span className={`mt-1.5 size-2.5 shrink-0 rounded-full ${done ? 'bg-emerald-500' : 'bg-muted-foreground/30'}`} aria-hidden="true" />
+      <div className="flex min-w-0 flex-1 flex-wrap items-baseline justify-between gap-x-3 gap-y-0.5">
+        <span className="text-xs font-black uppercase tracking-wider text-muted-foreground">{label}</span>
+        <span className={`min-w-0 break-words text-sm ${done ? 'font-semibold text-foreground' : 'text-muted-foreground'}`}>{text}</span>
+      </div>
+    </li>
+  );
+  const when = (step: { done: boolean; who: string | null; at: string | null }, fallbackWho = 'Persona no registrada') => {
+    if (!step.done) return 'Aún no';
+    const who = step.who || fallbackWho;
+    return step.at ? `${who} · ${formatDate(step.at)}` : `${who} · sin fecha registrada`;
+  };
+  return (
+    <DetailSection title="Trazabilidad" icon={History}>
+      <ol className="space-y-3">
+        {line('created', steps[0].label, true, when(steps[0]))}
+        {line('assigned', 'Asignada a', people.length > 0, people.length > 0 ? people.join(', ') : 'Sin asignar')}
+        {line('started', steps[1].label, steps[1].done, when(steps[1]))}
+        {line('submitted', steps[2].label, steps[2].done, when(steps[2]))}
+        {line('completed', steps[3].label, steps[3].done, when(steps[3]))}
+      </ol>
+    </DetailSection>
+  );
+}
+
 function TaskDetails({ item, onUpdate, canEdit, canReassign, canManageSubtasks, canStartTimeTracking, canStopTimeTracking, canAddManualTimeEntry, canRate, canReport, canReview, onReassign }: {
   item: any;
   onUpdate?: () => void;
@@ -449,6 +481,8 @@ function TaskDetails({ item, onUpdate, canEdit, canReassign, canManageSubtasks, 
       )}
 
       <TaskProgressSummary task={item} />
+
+      <TaskTraceSection task={item} />
 
       <DetailSection title="Qué se asignó" icon={FileText}>
         <p className="whitespace-pre-wrap text-sm leading-6 text-muted-foreground">{item.description || 'Esta tarea no tiene una descripción. Revisa los reportes y comentarios de abajo.'}</p>

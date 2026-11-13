@@ -7,6 +7,8 @@ import { Card } from '../ui/card';
 import { cn } from '../ui/utils';
 import type { ActivityCategoryItem, Task } from '../../types';
 import { TaskProgressCell } from './TaskProgressCell';
+import { TaskTraceLine } from './TaskTraceLine';
+import { truncateText } from './taskTrace';
 import { getCategoryColor, getCategoryIcon } from './categoryStyle';
 import {
   NO_CATEGORY_KEY, categoryKeyOf, countByCategory, countByPerson, countTasks, isOverdueTask, taskAssignees, taskCountLabel,
@@ -111,7 +113,7 @@ function TaskCard({ task, layout, favorite, toggling, onToggleFavorite, onOpen, 
           className="flex min-w-0 cursor-pointer flex-wrap items-center gap-x-4 gap-y-1.5 rounded-xl border border-border/40 bg-card px-3 py-2.5 transition-colors hover:border-primary/40 hover:bg-primary/[0.03]"
         >
           {star}
-          <p className="min-w-0 flex-1 basis-56 break-words text-sm font-bold leading-5 text-foreground [overflow-wrap:anywhere]">{task.title}</p>
+          <p className="min-w-0 flex-1 basis-56 break-words text-sm font-bold leading-5 text-foreground [overflow-wrap:anywhere]" title={task.title}>{truncateText(task.title, 90)}</p>
           <Badge variant="outline" className={cn('shrink-0 border-transparent px-2 py-0.5 text-[9px] font-black uppercase', status.className)}>{status.label}</Badge>
           <div className="min-w-0 basis-40"><AssigneesText task={task} /></div>
           <span className={cn('inline-flex shrink-0 items-center gap-1 text-xs font-medium', overdue ? 'font-bold text-rose-600 dark:text-rose-400' : 'text-muted-foreground')}><Clock className="size-3.5" />{dueLabel(task)}</span>
@@ -130,15 +132,16 @@ function TaskCard({ task, layout, favorite, toggling, onToggleFavorite, onOpen, 
         className="flex h-full min-w-0 cursor-pointer flex-col gap-3 rounded-2xl border border-border/50 bg-card p-4 shadow-sm transition-colors hover:border-primary/40"
       >
         <div className="flex min-w-0 items-start justify-between gap-2">
-          <p className="min-w-0 flex-1 break-words text-sm font-bold leading-5 text-foreground [overflow-wrap:anywhere]">{task.title}</p>
+          <p className="min-w-0 flex-1 break-words text-sm font-bold leading-5 text-foreground [overflow-wrap:anywhere]" title={task.title}>{truncateText(task.title, 90)}</p>
           {star}
         </div>
-        {task.description && <p className="line-clamp-3 min-w-0 break-words text-xs leading-5 text-muted-foreground [overflow-wrap:anywhere]">{task.description}</p>}
+        {task.description && <p className="line-clamp-3 min-w-0 break-words text-xs leading-5 text-muted-foreground [overflow-wrap:anywhere]" title={String(task.description)}>{truncateText(task.description, 120)}</p>}
         <div className="flex flex-wrap items-center gap-1.5">
           <Badge variant="outline" className={cn('border-transparent px-2 py-0.5 text-[9px] font-black uppercase', status.className)}>{status.label}</Badge>
           {priority && <Badge variant="outline" className="px-2 py-0.5 text-[9px] font-black uppercase">{priority}</Badge>}
         </div>
         <TaskProgressCell task={task} />
+        <TaskTraceLine task={task as never} />
         <div className="mt-auto flex min-w-0 flex-wrap items-center justify-between gap-x-3 gap-y-1">
           <AssigneesText task={task} />
           <span className={cn('inline-flex items-center gap-1 text-xs font-medium', overdue ? 'font-bold text-rose-600 dark:text-rose-400' : 'text-muted-foreground')}><Clock className="size-3.5" />{dueLabel(task)}</span>

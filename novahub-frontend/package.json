@@ -33,6 +33,7 @@
     "test:force-sales-tracking": "node --experimental-strip-types scripts/test-force-sales-tracking-controller.mjs",
     "test:task-category-stats": "node --experimental-strip-types --test scripts/test-task-category-stats.mjs",
     "test:task-category-groups": "node --experimental-strip-types --test scripts/test-task-category-groups.mjs",
+    "test:task-trace": "node --experimental-strip-types --test scripts/test-task-trace.mjs",
     "test:calendar-layout": "node --experimental-strip-types --test scripts/test-calendar-layout.mjs",
     "test:seguimiento-utils": "node --experimental-strip-types --test scripts/test-seguimiento-utils.mjs",
     "test:employee-card-html": "node --experimental-strip-types --test scripts/test-employee-card-html.mjs",

@@ -1,11 +1,13 @@
 import React, { useState, useCallback, useMemo } from 'react';
 import { motion } from 'motion/react';
-import { GripVertical, Eye, Clock, CheckCircle2, AlertTriangle, ShieldCheck, UserCheck } from 'lucide-react';
+import { GripVertical, Eye, Clock, CheckCircle2, AlertTriangle, ShieldCheck, UserCheck, Pencil, Users } from 'lucide-react';
 import { cn } from '../ui/utils';
 import { Badge } from '../ui/badge';
 import { Button } from '../ui/button';
 import type { Task } from '../../types';
 import { format } from 'date-fns';
+import { TaskTraceLine } from './TaskTraceLine';
+import { assigneeNames, truncateText } from './taskTrace';
 
 export interface TaskKanbanColumn {
   id: string;
@@ -32,6 +34,8 @@ interface TareasKanbanProps {
   canMoveToStatus: (task: Task, status: string) => boolean;
   /** Alto menor: se usa cuando hay un tablero por categoría. */
   compact?: boolean;
+  /** Abre la edición de la tarea (el botón solo aparece si se pasa). */
+  onEdit?: (task: Task) => void;
 }
 
 export const TareasKanban: React.FC<TareasKanbanProps> = ({
@@ -43,6 +47,7 @@ export const TareasKanban: React.FC<TareasKanbanProps> = ({
   onComplete,
   canMoveToStatus,
   compact = false,
+  onEdit,
 }) => {
   const [draggedTaskId, setDraggedTaskId] = useState<string | null>(null);
   const [dragOverColId, setDragOverColId] = useState<string | null>(null);
@@ -204,26 +209,46 @@ export const TareasKanban: React.FC<TareasKanbanProps> = ({
                     <div className="flex items-start justify-between gap-2 mb-2">
                       <div className="flex items-center gap-1.5 min-w-0 flex-1">
                         <GripVertical className="size-3 text-muted-foreground/40 group-hover:text-muted-foreground transition-colors shrink-0" />
-                        <h4 className="text-xs font-bold truncate text-foreground">
-                          {task.title}
+                        <h4 className="text-xs font-bold truncate text-foreground" title={task.title}>
+                          {truncateText(task.title, 70)}
                         </h4>
                       </div>
-                      <Button
-                        variant="ghost"
-                        size="icon"
-                        className="size-5 opacity-0 group-hover:opacity-100 transition-opacity rounded-md text-muted-foreground hover:text-primary shrink-0"
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          onViewDetail(task);
-                        }}
-                      >
-                        <Eye className="size-3.5" />
-                      </Button>
+                      <div className="flex shrink-0 items-center gap-0.5">
+                        {onEdit && !['COMPLETED', 'CANCELLED'].includes(String(task.status || '').toUpperCase()) && (
+                          <Button
+                            variant="ghost"
+                            size="icon"
+                            title="Editar tarea"
+                            aria-label="Editar tarea"
+                            data-testid={`activities-kanban-edit-${task.id}`}
+                            className="size-5 opacity-0 group-hover:opacity-100 focus-visible:opacity-100 transition-opacity rounded-md text-muted-foreground hover:text-primary shrink-0"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              onEdit(task);
+                            }}
+                          >
+                            <Pencil className="size-3.5" />
+                          </Button>
+                        )}
+                        <Button
+                          variant="ghost"
+                          size="icon"
+                          title="Ver detalle"
+                          aria-label="Ver detalle"
+                          className="size-5 opacity-0 group-hover:opacity-100 focus-visible:opacity-100 transition-opacity rounded-md text-muted-foreground hover:text-primary shrink-0"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            onViewDetail(task);
+                          }}
+                        >
+                          <Eye className="size-3.5" />
+                        </Button>
+                      </div>
                     </div>
 
                     {task.description && (
-                      <p className="text-[11px] text-muted-foreground line-clamp-2 mb-2.5">
-                        {task.description}
+                      <p className="text-[11px] text-muted-foreground line-clamp-2 mb-2.5" title={String(task.description)}>
+                        {truncateText(task.description, 90)}
                       </p>
                     )}
 
@@ -254,6 +279,14 @@ export const TareasKanban: React.FC<TareasKanbanProps> = ({
                         Rechazado: {task.rejectedReason}
                       </div>
                     )}
+
+                    <div className="mb-2 space-y-1">
+                      <TaskTraceLine task={task as never} />
+                      <p className="flex min-w-0 items-center gap-1.5 text-[11px] text-muted-foreground" title={assigneeNames(task as never).join(', ') || 'Sin asignar'}>
+                        <Users className="size-3 shrink-0" aria-hidden="true" />
+                        <span className="min-w-0 truncate">{assigneeNames(task as never).join(', ') || 'Sin asignar'}</span>
+                      </p>
+                    </div>
 
                     {/* Footer */}
                     <div className="flex items-center justify-between pt-2 border-t border-border/40 text-[10px]">

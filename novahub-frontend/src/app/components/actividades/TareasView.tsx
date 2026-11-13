@@ -32,6 +32,7 @@ import {
   Tag,
   UserCheck,
   Gauge,
+  Pencil,
 } from 'lucide-react';
 import { activityCategoriesService, activityFavoritesService, tasksService } from '../../services/actividades.service';
 import { usersService } from '../../services/users.service';
@@ -50,6 +51,8 @@ import { TareasKanban } from './TareasKanban';
 import { TareasCardsView } from './TareasCardsView';
 import { TareasCategoriasView } from './TareasCategoriasView';
 import { CategoryGroupedSections } from './CategoryGroupedSections';
+import { TaskEditDialog, type TaskEditPatch } from './TaskEditDialog';
+import { shortDateTime, truncateText } from './taskTrace';
 import { groupTasksByCategory } from './taskCategoryGroups';
 import { CategoryManagerDialog } from './CategoryManagerDialog';
 import { useActivityCategories } from './useActivityCategories';
@@ -122,6 +125,8 @@ export const TareasView: React.FC<TareasViewProps> = ({ data, loading, summaryEr
   const [priorityFilter, setPriorityFilter] = useState<string>('ALL');
   const [assignedFilter, setAssignedFilter] = useState<string>('ALL');
   const [categoryFilter, setCategoryFilter] = useState<string>('ALL');
+  const [editingTask, setEditingTask] = useState<Task | null>(null);
+  const [savingEdit, setSavingEdit] = useState(false);
   const [collapsedGroups, setCollapsedGroups] = useState<Set<string>>(() => {
     try {
       const raw = window.localStorage.getItem('activities-task-groups-collapsed');
@@ -403,6 +408,22 @@ export const TareasView: React.FC<TareasViewProps> = ({ data, loading, summaryEr
     }
   };
 
+  /** Guarda los cambios hechos en «Editar tarea». Solo se envía lo que cambió. */
+  const handleSaveEdit = async (task: Task, patch: TaskEditPatch) => {
+    if (!canPerform('ACTIVITIES_TASKS', 'edit') || Object.keys(patch).length === 0) return;
+    try {
+      setSavingEdit(true);
+      await tasksService.update(task.id, patch as Partial<Task>);
+      toast.success('Tarea actualizada');
+      setEditingTask(null);
+      onRefresh();
+    } catch (e: any) {
+      toast.error(e?.response?.data?.message || e?.message || 'No se pudo guardar la tarea');
+    } finally {
+      setSavingEdit(false);
+    }
+  };
+
   /** Serializa los campos personalizados del formulario al objeto plano de §7. */
   const buildCustomFieldsPayload = (values: Record<string, string>): Record<string, string> =>
     toCustomFieldsRecord(
@@ -555,8 +576,8 @@ export const TareasView: React.FC<TareasViewProps> = ({ data, loading, summaryEr
       width: '380px',
       editable: canPerform('ACTIVITIES_TASKS', 'edit'),
       render: (value: unknown) => (
-        <span className="block min-w-0 max-w-full whitespace-normal break-words leading-5 [overflow-wrap:anywhere]">
-          {String(value || '—')}
+        <span className="block min-w-0 max-w-full whitespace-normal break-words leading-5 [overflow-wrap:anywhere]" title={String(value || '')}>
+          {truncateText(value, 100) || '—'}
         </span>
       ),
     },
@@ -578,6 +599,18 @@ export const TareasView: React.FC<TareasViewProps> = ({ data, loading, summaryEr
           </div>
         );
       },
+    },
+    {
+      key: 'createdAt',
+      header: 'Creada',
+      width: '190px',
+      editable: false,
+      render: (_val: unknown, row: any) => (
+        <div className="min-w-0 text-xs leading-4" title={`Creada por ${row.createdBy?.name || 'persona no registrada'} el ${shortDateTime(row.createdAt)}`}>
+          <p className="truncate font-semibold text-foreground">{row.createdBy?.name || 'No registrado'}</p>
+          <p className="text-muted-foreground">{shortDateTime(row.createdAt)}</p>
+        </div>
+      ),
     },
     {
       key: 'priority',
@@ -980,6 +1013,7 @@ export const TareasView: React.FC<TareasViewProps> = ({ data, loading, summaryEr
           renderGrouped((rows) => <TareasKanban
             data={rows}
             compact={groupByCategory}
+            onEdit={canPerform('ACTIVITIES_TASKS', 'edit') ? (task) => setEditingTask(task) : undefined}
             onViewDetail={(task) => setDetailTask(task)}
             canMoveToStatus={canMoveTaskToStatus}
             onStatusChange={async (taskId, status) => {
@@ -1044,6 +1078,8 @@ export const TareasView: React.FC<TareasViewProps> = ({ data, loading, summaryEr
             isClaiming={claimingId}
             onClaimTask={handleClaimTask}
             onReassignTask={handleOpenReassign}
+            onEdit={(task) => setEditingTask(task)}
+            canEditAction={canPerform('ACTIVITIES_TASKS', 'edit')}
           />)
         ) : (
           renderGrouped((rows) => <div className="min-w-0" data-activities-task-table="true">
@@ -1247,6 +1283,15 @@ export const TareasView: React.FC<TareasViewProps> = ({ data, loading, summaryEr
         )}
       </Card>
 
+      <TaskEditDialog
+        task={editingTask}
+        categories={categoriesApi.categories}
+        open={Boolean(editingTask)}
+        saving={savingEdit}
+        onOpenChange={(open) => { if (!open) setEditingTask(null); }}
+        onSave={handleSaveEdit}
+      />
+
       <CategoryManagerDialog
         open={isCategoryManagerOpen}
         onOpenChange={setIsCategoryManagerOpen}
@@ -1262,6 +1307,21 @@ export const TareasView: React.FC<TareasViewProps> = ({ data, loading, summaryEr
         extraActions={
           detailTask && (
             <div className="flex flex-wrap gap-2">
+              {canPerform('ACTIVITIES_TASKS', 'edit') && !isClosedTaskStatus(detailTask) && (
+                <Button
+                  type="button"
+                  variant="outline"
+                  className="rounded-xl border-border/60 bg-background text-foreground hover:bg-muted"
+                  data-testid="activities-detail-edit"
+                  onClick={() => {
+                    const task = detailTask as Task;
+                    setDetailTask(null);
+                    setEditingTask(task);
+                  }}
+                >
+                  <Pencil className="mr-1.5 size-4" /> Editar
+                </Button>
+              )}
               {canClaimTask(detailTask) && canPerform('ACTIVITIES_TASKS', 'claim') && (
                 <Button
                   type="button"

@@ -1,12 +1,14 @@
 import React from 'react';
 import { motion } from 'motion/react';
-import { Clock, Eye, CheckCircle2, Send, Undo2, Paperclip, Users, Flag, HandHelping, UserCog, Loader2, RotateCcw } from 'lucide-react';
+import { Clock, Eye, CheckCircle2, Send, Undo2, Paperclip, Users, Flag, HandHelping, UserCog, Loader2, RotateCcw, Pencil } from 'lucide-react';
 import { cn } from '../ui/utils';
 import { Badge } from '../ui/badge';
 import { Button } from '../ui/button';
 import { Card, CardContent } from '../ui/card';
 import type { Task } from '../../types';
 import { SlaBadge } from './SlaBadge';
+import { TaskTraceLine } from './TaskTraceLine';
+import { assigneeNames, truncateText } from './taskTrace';
 import { useActivityCategories } from './useActivityCategories';
 import { format } from 'date-fns';
 
@@ -37,6 +39,9 @@ interface TareasCardsViewProps {
   isClaiming?: string | null;
   onClaimTask?: (task: Task) => void | Promise<void>;
   onReassignTask?: (task: Task) => void;
+  /** Abre la edición de la tarea. */
+  onEdit?: (task: Task) => void;
+  canEditAction?: boolean;
 }
 
 const statusOpts = [
@@ -78,6 +83,8 @@ export const TareasCardsView: React.FC<TareasCardsViewProps> = ({
   isClaiming,
   onClaimTask,
   onReassignTask,
+  onEdit,
+  canEditAction = false,
 }) => {
   const { labelOf: categoryLabelOf } = useActivityCategories();
   if (data.length === 0) {
@@ -116,6 +123,8 @@ export const TareasCardsView: React.FC<TareasCardsViewProps> = ({
         const isMine = Boolean(currentUserId) && Boolean(isTaskMine?.(task));
         const showClaim = canClaimAction && Boolean(onClaimTask) && Boolean(canClaimTask?.(task)) && !isMine;
         const showReassign = canReassignAction && Boolean(onReassignTask) && !isClosed;
+        const showEdit = canEditAction && Boolean(onEdit) && !isClosed;
+        const people = assigneeNames(task as never);
 
         return (
           <motion.div
@@ -170,13 +179,14 @@ export const TareasCardsView: React.FC<TareasCardsViewProps> = ({
                   <h3
                     className="min-w-0 max-w-full cursor-pointer whitespace-normal break-words text-base font-bold leading-6 text-foreground transition-colors hover:text-primary [overflow-wrap:anywhere]"
                     onClick={() => onViewDetail(task)}
+                    title={task.title}
                   >
-                    {task.title}
+                    {truncateText(task.title, 90)}
                   </h3>
 
                   {task.description && (
-                    <p className="mt-1.5 min-w-0 max-w-full whitespace-normal break-words text-xs leading-5 text-muted-foreground [overflow-wrap:anywhere]">
-                      {task.description}
+                    <p className="mt-1.5 min-w-0 max-w-full whitespace-normal break-words text-xs leading-5 text-muted-foreground [overflow-wrap:anywhere]" title={String(task.description)}>
+                      {truncateText(task.description, 120)}
                     </p>
                   )}
                 </div>
@@ -198,14 +208,16 @@ export const TareasCardsView: React.FC<TareasCardsViewProps> = ({
                     </div>
                   )}
 
+                  <TaskTraceLine task={task as never} />
+
                   {/* Assignees */}
                   <div className="flex min-w-0 flex-col gap-2 text-xs text-muted-foreground sm:flex-row sm:items-center sm:justify-between">
                     <span className="flex min-w-0 items-center gap-1 font-semibold">
                       <Users className="size-3.5 text-primary" />
                       {assignments.length > 0 ? (
                         <span className="flex min-w-0 items-center gap-1">
-                          <span className="min-w-0 truncate">
-                            {assignments[0].user?.name || 'Asignado'} {assignments.length > 1 ? `+${assignments.length - 1}` : ''}
+                          <span className="min-w-0 truncate" title={people.join(', ')}>
+                            {people.join(', ') || 'Asignado'}
                           </span>
                           {isMine && (
                             <span className="shrink-0 rounded-md bg-primary/10 px-1.5 py-0.5 text-[9px] font-black uppercase text-primary">
@@ -237,6 +249,20 @@ export const TareasCardsView: React.FC<TareasCardsViewProps> = ({
                     </Button>
 
                     <div className="flex flex-wrap items-center gap-1">
+                      {showEdit && onEdit && (
+                        <Button
+                          type="button"
+                          variant="ghost"
+                          size="icon"
+                          data-testid={`activities-card-edit-${task.id}`}
+                          title="Editar tarea"
+                          aria-label="Editar tarea"
+                          className="size-8 rounded-lg text-muted-foreground hover:bg-primary/10 hover:text-primary"
+                          onClick={() => onEdit(task)}
+                        >
+                          <Pencil className="size-3.5" />
+                        </Button>
+                      )}
                       {showClaim && onClaimTask && (
                         <Button
                           type="button"

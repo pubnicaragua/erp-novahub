@@ -2009,6 +2009,17 @@ export interface Task {
   estimatedMinutes?: number | null;
   /** Cuándo pasó a completada (null en tareas anteriores a este registro). */
   completedAt?: string | null;
+  /** Quién creó la tarea (null en tareas anteriores que no se pudieron reconstruir). */
+  createdById?: string | null;
+  createdBy?: { id: string; name: string } | null;
+  /** Primera vez que pasó a En progreso y quién la empezó. */
+  startedAt?: string | null;
+  startedBy?: { id: string; name: string } | null;
+  /** Última vez que se mandó a revisión y quién la mandó. */
+  submittedAt?: string | null;
+  submittedBy?: { id: string; name: string } | null;
+  /** Quién la marcó como completada o la aprobó. */
+  completedBy?: { id: string; name: string } | null;
   /** Calificación 1–5 de quien revisó la tarea y su retroalimentación. */
   rating?: number | null;
   ratingComment?: string | null;
