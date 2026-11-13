@@ -1,4 +1,5 @@
-import { useState, useEffect } from 'react';
+import { useMemo, useState, useEffect } from 'react';
+import { useQueryClient } from '@tanstack/react-query';
 import { CalendarClock, Plus, Search, Eye, Pencil, RotateCcw, TrendingDown, Clock, Ban, ChevronLeft, PlayCircle, PauseCircle } from 'lucide-react';
 import { Card, CardContent } from '../ui/card';
 import { Button } from '../ui/button';
@@ -32,9 +33,13 @@ import { formatCurrencyAmount, summarizeAmountsByCurrency } from '../../utils/cu
 import { formatDecimalInput, normalizeDecimalInput } from '../../utils/decimalInput';
 import { fetchAllPaginatedRows } from '../../utils/export-utils';
 import { createReportWorkbook } from '../../utils/reportWorkbook';
+import { contabilidadService } from '../../services/contabilidad.service';
+import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '../ui/dialog';
+import { Label } from '../ui/label';
+import { beginNotificationAction, completeNotificationAction, failNotificationAction } from '../../services/notification-action-coordinator';
 
 interface ExpenseCategoryOption { id: string; name: string; isActive?: boolean; }
-interface Props { data: RecurringExpense[]; summaryData?: RecurringExpenseSummary; summaryLoading?: boolean; summaryError?: boolean; loading: boolean; onRefresh: () => void; supplierCatalog?: Supplier[]; expenseCategoryCatalog?: ExpenseCategoryOption[]; pagination?: SalesPaginationControls; onSearchChange?: (value: string) => void; }
+interface Props { data: RecurringExpense[]; summaryData?: RecurringExpenseSummary; summaryLoading?: boolean; summaryError?: boolean; loading: boolean; onRefresh: () => void; supplierCatalog?: Supplier[]; expenseCategoryCatalog?: ExpenseCategoryOption[]; accountCatalog?: any[]; accountCatalogLoading?: boolean; canCreateCategoryInline?: boolean; pagination?: SalesPaginationControls; onSearchChange?: (value: string) => void; }
 
 const standardExpenseCategories = [
   { value: 'OPERATIVO', label: 'Operativo' },
@@ -57,8 +62,9 @@ const statusOpts = [
   { label: 'Anulado',    value: 'CANCELLED', color: 'bg-primary/10 text-primary' },
 ];
 
-export function GastosRecurrentesView({ data, summaryData, summaryLoading, summaryError, loading, onRefresh, supplierCatalog = [], expenseCategoryCatalog = [], pagination, onSearchChange }: Props) {
+export function GastosRecurrentesView({ data, summaryData, summaryLoading, summaryError, loading, onRefresh, supplierCatalog = [], expenseCategoryCatalog = [], accountCatalog = [], accountCatalogLoading = false, canCreateCategoryInline = false, pagination, onSearchChange }: Props) {
   const { canPerform, user } = useAuth();
+  const queryClient = useQueryClient();
   const { exchangeRate: globalRate, displayCurrency, displayCurrencyLabel, baseCurrency, displayMode, valuationMode, valuationModeSuffix, formatConvertedAmount, formatCurrentAmount, formatExplicitAmount, convertAmount, convertCurrentAmount, convertDisplayAmount } = useCurrency();
   const [searchTerm, setSearchTerm] = useState('');
   const [layoutMode, setLayoutMode] = useLocalStorageState<'table' | 'cards'>('purchases-recurring-expenses-layout', 'table', 24 * 365);
@@ -72,6 +78,21 @@ export function GastosRecurrentesView({ data, summaryData, summaryLoading, summa
   const [editingId, setEditingId] = useState<string | null>(null);
   const [localDoc, setLocalDoc] = useState<Partial<RecurringExpense> | null>(null);
   const [detailExpense, setDetailExpense] = useState<RecurringExpense | null>(null);
+  const [categoryDialogOpen, setCategoryDialogOpen] = useState(false);
+  const [categorySaving, setCategorySaving] = useState(false);
+  const [categoryForm, setCategoryForm] = useState({ code: '', name: '', accountId: '', description: '' });
+  const canCreateExpenseCategory = canPerform('ACCOUNTING_EXPENSE_CATEGORIES', 'create');
+  const expenseCategoryAccounts = useMemo(() => {
+    const flat: any[] = [];
+    const visit = (accounts: any[]) => accounts.forEach((account) => {
+      if (!account || typeof account !== 'object') return;
+      const { children, ...row } = account;
+      flat.push(row);
+      if (Array.isArray(children)) visit(children);
+    });
+    visit(accountCatalog);
+    return flat.filter((account) => account.isActive !== false && account.acceptsPostings !== false);
+  }, [accountCatalog]);
 
   useEffect(() => {
     setSuppliers(supplierCatalog);
@@ -300,6 +321,45 @@ export function GastosRecurrentesView({ data, summaryData, summaryLoading, summa
     }
   };
 
+  const handleCreateCategory = async () => {
+    if (!canCreateExpenseCategory || !canCreateCategoryInline) return;
+    const payload = {
+      code: categoryForm.code.trim(),
+      name: categoryForm.name.trim(),
+      accountId: categoryForm.accountId,
+      description: categoryForm.description.trim() || undefined,
+      isActive: true,
+    };
+    if (!payload.code || !payload.name || !payload.accountId) {
+      toast.error('Completa el código, el nombre y la cuenta contable');
+      return;
+    }
+
+    const actionToken = beginNotificationAction();
+    setCategorySaving(true);
+    try {
+      const response: any = await contabilidadService.createExpenseCategory(payload);
+      const created = response?.data?.data ?? response?.data ?? response;
+      if (!created?.id) throw new Error('La categoría se creó sin devolver su identificador');
+      setLocalDoc((current) => current ? {
+        ...current,
+        category: String(created.name || payload.name),
+        expenseCategoryId: String(created.id),
+      } : current);
+      setCategoryDialogOpen(false);
+      setCategoryForm({ code: '', name: '', accountId: '', description: '' });
+      void queryClient.invalidateQueries({ queryKey: ['purchases', 'expense-categories-catalog'] });
+      toast.success('Categoría creada y seleccionada');
+      completeNotificationAction(actionToken);
+    } catch (error: any) {
+      failNotificationAction(actionToken);
+      const message = error?.response?.data?.message || error?.message || 'No se pudo crear la categoría';
+      toast.error(String(Array.isArray(message) ? message[0] : message));
+    } finally {
+      setCategorySaving(false);
+    }
+  };
+
   if (editingId && localDoc) {
     const isNew = editingId === 'NEW';
     const currentStatus = statusOpts.find(s => s.value === (localDoc.status||'').toUpperCase());
@@ -403,8 +463,23 @@ export function GastosRecurrentesView({ data, summaryData, summaryLoading, summa
                     className="h-8 text-xs" 
                   />
                 </div>
-                <div>
-                  <p className="text-[10px] text-muted-foreground mb-1">Categoría</p>
+                <div className="min-w-0">
+                  <div className="mb-1 flex items-center justify-between gap-2">
+                    <p className="text-[10px] text-muted-foreground">Categoría</p>
+                    {canCreateCategoryInline && <Button
+                      type="button"
+                      variant="outline"
+                      size="sm"
+                      className="h-7 shrink-0 gap-1 px-2 text-[10px]"
+                      title={accountCatalogLoading ? 'Cargando cuentas contables…' : expenseCategoryAccounts.length ? 'Agregar categoría de gasto' : 'No hay cuentas contables disponibles'}
+                      aria-label="Agregar categoría de gasto"
+                      disabled={accountCatalogLoading || expenseCategoryAccounts.length === 0}
+                      onClick={() => {
+                        setCategoryForm({ code: '', name: '', accountId: '', description: '' });
+                        setCategoryDialogOpen(true);
+                      }}
+                    ><Plus className="size-3" /> Agregar</Button>}
+                  </div>
                   <Select
                     disabled={isNew ? !canPerform('PURCHASES_EXPENSES_REC', 'create') : !canPerform('PURCHASES_EXPENSES_REC', 'edit')}
                     value={categorySelectValue}
@@ -433,9 +508,11 @@ export function GastosRecurrentesView({ data, summaryData, summaryLoading, summa
                     </SelectContent>
                   </Select>
                   <p className="mt-1 text-[10px] text-muted-foreground">
-                    {canPerform('ACCOUNTING_EXPENSE_CATEGORIES', 'create')
-                      ? 'Para agregar categorías reutilizables, usa Contabilidad > Categorías de gastos.'
-                      : 'Puedes elegir una categoría registrada o una categoría usada anteriormente.'}
+                    {canCreateCategoryInline
+                      ? 'Puedes agregar una categoría reutilizable desde aquí.'
+                      : canCreateExpenseCategory
+                        ? 'Necesitas permisos para consultar cuentas contables para agregar categorías.'
+                        : 'Puedes elegir una categoría registrada o una categoría usada anteriormente.'}
                   </p>
                 </div>
 
@@ -450,10 +527,10 @@ export function GastosRecurrentesView({ data, summaryData, summaryLoading, summa
                     <SelectContent>{freqOpts.map(o => <SelectItem key={o.value} value={o.value}>{o.label}</SelectItem>)}</SelectContent>
                   </Select>
                 </div>
-                <div>
+                {!isNew && <div>
                   <p className="text-[10px] text-muted-foreground mb-1">Estado</p>
                   <div className="flex h-8 items-center"><Badge variant="outline" className={cn('text-[9px] font-black uppercase border-none', currentStatus?.color || 'bg-muted/20 text-muted-foreground')}>{currentStatus?.label || localDoc.status || 'Activa'}</Badge></div>
-                </div>
+                </div>}
               </div>
             </CardContent>
           </Card>
@@ -500,6 +577,45 @@ export function GastosRecurrentesView({ data, summaryData, summaryLoading, summa
              </CardContent>
           </Card>
         </div>
+        <Dialog open={categoryDialogOpen} onOpenChange={(open) => { if (!categorySaving) setCategoryDialogOpen(open); }}>
+          <DialogContent className="w-[calc(100%-1.5rem)] sm:w-[calc(100%-2rem)] !max-w-lg rounded-2xl">
+            <DialogHeader>
+              <DialogTitle>Nueva categoría de gasto</DialogTitle>
+              <DialogDescription>Vincula la categoría con una cuenta contable para usarla en este gasto recurrente y en Contabilidad.</DialogDescription>
+            </DialogHeader>
+            <form className="space-y-4" onSubmit={(event) => { event.preventDefault(); void handleCreateCategory(); }}>
+              <div className="grid min-w-0 gap-3 sm:grid-cols-2">
+                <div className="min-w-0 space-y-1.5">
+                  <Label htmlFor="recurring-expense-category-code">Código *</Label>
+                  <Input id="recurring-expense-category-code" value={categoryForm.code} onChange={(event) => setCategoryForm((current) => ({ ...current, code: event.target.value }))} placeholder="Ej. CAT-001" maxLength={40} />
+                </div>
+                <div className="min-w-0 space-y-1.5">
+                  <Label htmlFor="recurring-expense-category-name">Nombre *</Label>
+                  <Input id="recurring-expense-category-name" value={categoryForm.name} onChange={(event) => setCategoryForm((current) => ({ ...current, name: event.target.value }))} placeholder="Ej. Suscripciones" maxLength={120} />
+                </div>
+              </div>
+              <div className="min-w-0 space-y-1.5">
+                <Label htmlFor="recurring-expense-category-account">Cuenta contable *</Label>
+                <Select value={categoryForm.accountId} onValueChange={(accountId) => setCategoryForm((current) => ({ ...current, accountId }))}>
+                  <SelectTrigger id="recurring-expense-category-account" className="w-full"><SelectValue placeholder="Seleccionar cuenta" /></SelectTrigger>
+                  <SelectContent className="max-h-64 overflow-y-auto">
+                    {expenseCategoryAccounts.map((account) => <SelectItem key={account.id} value={account.id}>{account.code} · {account.name}</SelectItem>)}
+                  </SelectContent>
+                </Select>
+              </div>
+              <div className="min-w-0 space-y-1.5">
+                <Label htmlFor="recurring-expense-category-description">Descripción (opcional)</Label>
+                <Input id="recurring-expense-category-description" value={categoryForm.description} onChange={(event) => setCategoryForm((current) => ({ ...current, description: event.target.value }))} placeholder="Descripción de la categoría" maxLength={240} />
+              </div>
+              <DialogFooter>
+                <Button type="button" variant="outline" disabled={categorySaving} onClick={() => setCategoryDialogOpen(false)}>Cancelar</Button>
+                <Button type="submit" disabled={categorySaving || !categoryForm.code.trim() || !categoryForm.name.trim() || !categoryForm.accountId}>
+                  {categorySaving ? 'Creando…' : 'Crear y seleccionar'}
+                </Button>
+              </DialogFooter>
+            </form>
+          </DialogContent>
+        </Dialog>
       </div>
     );
   }
