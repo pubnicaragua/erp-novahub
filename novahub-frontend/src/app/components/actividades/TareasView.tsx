@@ -317,7 +317,7 @@ export const TareasView: React.FC<TareasViewProps> = ({ data, loading, summaryEr
     try {
       setIsCreatingCategory(true);
       const created = await activityCategoriesService.create({ name });
-      await invalidateTenantQueries(queryClient, ['activities', 'categories']);
+      await invalidateTenantQueries(queryClient);
       await categoriesApi.refetch();
       setNewTask((current) => ({ ...current, categoryId: created.key }));
       setNewCategoryName('');
@@ -603,7 +603,7 @@ export const TareasView: React.FC<TareasViewProps> = ({ data, loading, summaryEr
     {
       key: 'slaDueAt',
       header: 'SLA',
-      width: '150px',
+      width: '225px',
       editable: false,
       render: (val: string | null | undefined, row: Task) => (
         <div className="flex min-w-0 flex-wrap gap-1">
@@ -1016,7 +1016,6 @@ export const TareasView: React.FC<TareasViewProps> = ({ data, loading, summaryEr
             layoutMode={isCardsLayout ? 'cards' : 'table'}
             onRowUpdate={canPerform('ACTIVITIES_TASKS', 'edit') ? handleUpdate : undefined}
             onRowClick={(row) => setDetailTask(row)}
-            editOnPencilOnly
             isLoading={loading}
             bulkActions={(selectedIds) => (
               <div className="flex flex-wrap items-center gap-2">
