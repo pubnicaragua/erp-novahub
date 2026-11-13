@@ -85,7 +85,7 @@ export function IntlImportsPage({ activeSubModule, onSubModuleChange, isSidebarC
               <Globe className="size-5 sm:size-6" />
             </div>
             <div className="min-w-0">
-              <h1 className="text-lg sm:text-xl font-bold tracking-tight text-foreground break-words leading-tight">
+              <h1 className="nh-module-title text-foreground">
                 Importaciones Internacionales
               </h1>
               <p className="text-xs text-muted-foreground mt-0.5 leading-normal">

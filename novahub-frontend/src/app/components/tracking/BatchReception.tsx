@@ -396,7 +396,7 @@ export function BatchReception() {
           <div className="flex size-10 items-center justify-center rounded-2xl bg-primary/10 text-primary"><ReceiptText className="size-5" /></div>
           <div className="min-w-0 flex-1">
             <div className="flex flex-wrap items-center gap-2">
-              <h1 className="text-lg font-black tracking-tight">{batch.sourceTicket ? `${batch.sourceTicket} · ${batch.number}` : batch.number}</h1>
+              <h1 className="nh-module-title">{batch.sourceTicket ? `${batch.sourceTicket} · ${batch.number}` : batch.number}</h1>
               <Badge variant="outline" className={`rounded-lg text-[10px] ring-1 ${open ? 'ring-amber-300 text-amber-600' : 'ring-emerald-300 text-emerald-600'}`}>
                 {open ? 'Abierta' : 'Confirmada'}
               </Badge>
@@ -634,7 +634,7 @@ export function BatchReception() {
         <div className="flex items-center gap-3">
           <div className="flex size-10 items-center justify-center rounded-2xl bg-primary/10 text-primary"><ReceiptText className="size-5" /></div>
           <div>
-            <h1 className="text-lg font-black tracking-tight">Historial de referencias</h1>
+            <h1 className="nh-module-title">Historial de referencias</h1>
             <p className="text-xs text-muted-foreground">Consulta las referencias de recepción creadas desde el flujo principal.</p>
           </div>
         </div>

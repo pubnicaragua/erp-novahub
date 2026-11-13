@@ -340,7 +340,7 @@ export function InvoiceAuditView() {
             <ClipboardCheck className="size-5 text-primary" />
           </div>
           <div>
-            <h3 className="text-sm font-black uppercase tracking-widest">Auditoría de Facturas</h3>
+            <h2 className="nh-module-title">Auditoría de Facturas</h2>
             <p className="text-[10px] text-muted-foreground">
               Valida líneas, IVA, retenciones, totales y saldos; permite corregir o anular directamente las facturas con anomalías.
             </p>

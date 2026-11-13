@@ -28,6 +28,7 @@ import { ChevronDown, ChevronUp, ChevronsLeft, ChevronLeft, ChevronRight, Chevro
 import { BankAccountsView } from './BankAccountsView'
 import { TaxCatalogView } from './TaxCatalogView'
 import { ActividadModulosView } from './ActividadModulosView'
+import { IntegrityCheckPanel } from './IntegrityCheckPanel'
 import { contabilidadService, type AccountMappingPatch } from '../../services/contabilidad.service'
 import { CHART_ACCOUNT_CSV_HEADERS, csvRowsToText, downloadXlsx, templateRows } from '../../utils/chartOfAccountsCsv'
 import { accountingList, useAccountingQuery } from '../../hooks/useAccountingQuery'
@@ -2062,6 +2063,8 @@ const [mappingsSearch, setMappingsSearch] = useState('')
           </CardContent>
         )}
       </Card>
+
+      <IntegrityCheckPanel />
 
       {/* Catálogo por Defecto */}
       <Card className="min-w-0">

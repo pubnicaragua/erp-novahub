@@ -404,7 +404,7 @@ export function Reception() {
         <div className="flex flex-wrap items-center gap-3">
           <div className="flex size-10 items-center justify-center rounded-2xl bg-primary/10 text-primary"><Truck className="size-5" /></div>
           <div className="min-w-0 flex-1">
-            <h1 className="text-lg font-black tracking-tight" data-tour="log-reception-title">Nueva recepción</h1>
+            <h1 className="nh-module-title" data-tour="log-reception-title">Nueva recepción</h1>
             <p className="text-xs text-muted-foreground">Aquí haces todo: eliges proveedor, cargas PDF o agregas paquetes manualmente y los agrupas en una referencia.</p>
           </div>
           <input ref={pdfInputRef} type="file" accept="application/pdf" multiple className="hidden" onChange={(event) => { void onPickPdfs(Array.from(event.target.files || [])); event.target.value = ''; }} />

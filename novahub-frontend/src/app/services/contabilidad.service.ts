@@ -175,6 +175,7 @@ export const contabilidadService = {
   updateConfig: (data: AccountingConfigUpdate) => api.put<any>('/accounting/config', data),
   seedConfig: () => api.post<any>('/accounting/config/seed', {}),
   getOpeningBalanceAccountingPreview: (signal?: AbortSignal) => api.get<any>('/accounting/opening-balances/preview', { signal }),
+  getIntegrityReport: (signal?: AbortSignal) => api.get<any>('/accounting/integrity', { signal }),
   postOpeningBalanceAccounting: (cutoffDate: string) => api.post<any>('/accounting/opening-balances/post', { cutoffDate }),
 
   // Cuentas sugeridas por tipo de documento

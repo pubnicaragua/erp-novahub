@@ -235,7 +235,7 @@ export function TrainingHubView({ activeSubModule, onSubModuleChange, isSidebarC
           </div>
           <div className="min-w-0">
             <p className="text-[10px] font-black uppercase tracking-widest text-primary">Centro de capacitación</p>
-            <h1 className="mt-1 text-2xl font-black uppercase italic tracking-tight sm:text-3xl">Aprende a usar NovaHub</h1>
+            <h1 className="nh-module-title mt-1">Aprende a usar NovaHub</h1>
             <p className="mt-1 max-w-2xl text-sm text-muted-foreground">Encuentra guías, videos y material de referencia para trabajar mejor con tu ERP.</p>
           </div>
         </div>

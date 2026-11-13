@@ -398,7 +398,7 @@ export function Billing() {
         <div className="flex items-center gap-3">
           <div className="flex size-10 items-center justify-center rounded-2xl bg-primary/10 text-primary"><BadgeDollarSign className="size-5" /></div>
           <div>
-            <h1 className="text-lg font-black tracking-tight">Disponibles para facturar y venta</h1>
+            <h1 className="nh-module-title">Disponibles para facturar y venta</h1>
             <p className="text-xs text-muted-foreground">Factura al cliente con el módulo de Ventas y registra la entrega.</p>
           </div>
         </div>

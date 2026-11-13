@@ -56,6 +56,11 @@ const SECTIONS = [
   { id: 'configuracion', label: 'Configuración', icon: Settings2 },
 ];
 
+// Vistas de reportes que no dibujan su propio título: la página les pone el mismo título editorial (Playfair cursiva) que al resto de Contabilidad.
+const SECTIONS_WITHOUT_OWN_TITLE = new Set([
+  'balance-comprobacion', 'estado-resultados', 'balance-general-contable', 'flujo-efectivo', 'diferencias-cambiarias',
+]);
+
 const SECTION_PERMISSIONS: Record<string, string> = {
   'plan-cuentas': 'ACCOUNTING_CHART',
   'solicitudes-pago': 'ACCOUNTING_HR_PAYMENT_REQUESTS',
@@ -397,6 +402,9 @@ export function ContabilidadPage({ activeSubModule, onSubModuleChange, isSidebar
                   exit={{ opacity: 0, y: -12 }}
                   transition={{ duration: 0.2 }}
                 >
+                  {SECTIONS_WITHOUT_OWN_TITLE.has(activeSection) && (
+                    <h2 className="nh-module-title mb-4">{SECTIONS.find((section) => section.id === activeSection)?.label}</h2>
+                  )}
                   {activeSection === 'plan-cuentas' && <PlanCuentasView isSidebarCollapsed={isSidebarCollapsed} helpTrigger={helpTrigger} />}
                   {activeSection === 'solicitudes-pago' && <SolicitudesPagoRRHHView />}
                   {activeSection === 'diario' && <DiarioView />}

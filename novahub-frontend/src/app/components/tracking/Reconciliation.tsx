@@ -211,7 +211,7 @@ export function Reconciliation() {
       <div className="flex items-center gap-3">
         <div className="flex size-10 items-center justify-center rounded-2xl bg-primary/10 text-primary"><FileCheck2 className="size-5" /></div>
         <div>
-          <h1 className="text-lg font-black tracking-tight">Conciliación de compras</h1>
+          <h1 className="nh-module-title">Conciliación de compras</h1>
           <p className="text-xs text-muted-foreground">Asocia paquetes recibidos a una OC y factura de proveedor (módulo Compras).</p>
         </div>
       </div>
