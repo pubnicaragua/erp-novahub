@@ -29,9 +29,6 @@ export function canManageTenantFeatures(role?: string | null) {
 }
 
 export const tenantFeaturesService = {
-  getMine: (signal?: AbortSignal) =>
-    api.get<string[]>('/tenant-features/me', { signal }),
-
   getCatalog: (signal?: AbortSignal) =>
     api.get<TenantFeatureDefinition[]>('/tenant-features/platform/catalog', { signal }),
 

@@ -34,7 +34,6 @@ import {
   Gauge,
 } from 'lucide-react';
 import { activityCategoriesService, activityFavoritesService, tasksService } from '../../services/actividades.service';
-import { tenantFeaturesService } from '../../services/tenant-features.service';
 import { usersService } from '../../services/users.service';
 import { useAuth } from '../../contexts/AuthContext';
 import { toast } from 'sonner';
@@ -79,7 +78,6 @@ interface TareasViewProps {
 
 /** Valor centinela del selector de categoría del formulario (Radix no admite ''). */
 const CATEGORY_NONE = 'NONE';
-const CUSTOM_ACTIVITY_CATEGORIES_FEATURE = 'CUSTOM_ACTIVITY_CATEGORIES';
 
 /** Subconjunto de `Task` que necesitan los filtros de identidad, responsable y estado. */
 type TaskLike = Pick<Task, 'id' | 'status' | 'assignedToId' | 'categoryId'> & {
@@ -171,14 +169,8 @@ export const TareasView: React.FC<TareasViewProps> = ({ data, loading, summaryEr
   const slaNow = useMemo(() => new Date(currentTime), [currentTime]);
 
   const categoriesApi = useActivityCategories();
-  const tenantFeaturesQuery = useTenantQuery<string[]>(
-    ['tenant-features', 'me'],
-    (signal) => tenantFeaturesService.getMine(signal),
-  );
-  const customActivityCategoriesEnabled = asList(tenantFeaturesQuery.data).includes(CUSTOM_ACTIVITY_CATEGORIES_FEATURE);
-  const canManageTaskCategories = customActivityCategoriesEnabled
-    && canPerform('ACTIVITIES_TASKS', 'create')
-    && canPerform('ACTIVITIES_TASKS', 'edit');
+  const canCreateTaskCategory = canPerform('ACTIVITIES_TASKS', 'create');
+  const canManageTaskCategories = canCreateTaskCategory && canPerform('ACTIVITIES_TASKS', 'edit');
   const favoritesQuery = useTenantQuery<string[]>(['activities', 'favorites'], (signal) => activityFavoritesService.list(signal));
   const favoriteIds = useMemo(() => new Set(asList(favoritesQuery.data).map((id) => String(id))), [favoritesQuery.data]);
   const categoryTaskCounts = useMemo(() => {
@@ -319,7 +311,7 @@ export const TareasView: React.FC<TareasViewProps> = ({ data, loading, summaryEr
 
   const handleCreateCategory = async () => {
     const name = newCategoryName.trim();
-    if (!name || !canManageTaskCategories) return;
+    if (!name || !canCreateTaskCategory) return;
 
     try {
       setIsCreatingCategory(true);
@@ -1448,7 +1440,7 @@ export const TareasView: React.FC<TareasViewProps> = ({ data, loading, summaryEr
                       ))}
                     </SelectContent>
                   </Select>
-                  {canManageTaskCategories && (
+                  {canCreateTaskCategory && (
                     <Button
                       type="button"
                       size="icon"
