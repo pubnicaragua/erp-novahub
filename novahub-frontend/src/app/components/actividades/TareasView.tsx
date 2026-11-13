@@ -49,6 +49,8 @@ import { TABLE_LAYOUT_BREAKPOINT, ViewLayoutSelect, useCardsOnlyBelowTableBreakp
 import { TareasKanban } from './TareasKanban';
 import { TareasCardsView } from './TareasCardsView';
 import { TareasCategoriasView } from './TareasCategoriasView';
+import { CategoryGroupedSections } from './CategoryGroupedSections';
+import { groupTasksByCategory } from './taskCategoryGroups';
 import { CategoryManagerDialog } from './CategoryManagerDialog';
 import { useActivityCategories } from './useActivityCategories';
 import { SlaBadge } from './SlaBadge';
@@ -120,6 +122,15 @@ export const TareasView: React.FC<TareasViewProps> = ({ data, loading, summaryEr
   const [priorityFilter, setPriorityFilter] = useState<string>('ALL');
   const [assignedFilter, setAssignedFilter] = useState<string>('ALL');
   const [categoryFilter, setCategoryFilter] = useState<string>('ALL');
+  const [collapsedGroups, setCollapsedGroups] = useState<Set<string>>(() => {
+    try {
+      const raw = window.localStorage.getItem('activities-task-groups-collapsed');
+      const parsed = raw ? JSON.parse(raw) : [];
+      return new Set(Array.isArray(parsed) ? parsed.map((key) => String(key)) : []);
+    } catch {
+      return new Set();
+    }
+  });
   const [dateFrom, setDateFrom] = useState<string>('');
   const [dateTo, setDateTo] = useState<string>('');
   const [mineOnly, setMineOnly] = useState<boolean>(false);
@@ -587,7 +598,7 @@ export const TareasView: React.FC<TareasViewProps> = ({ data, loading, summaryEr
     {
       key: 'categoryId',
       header: 'Categoría',
-      width: '145px',
+      width: '200px',
       editable: canPerform('ACTIVITIES_TASKS', 'edit'),
       type: 'select' as const,
       options: categoryOpts,
@@ -706,6 +717,31 @@ export const TareasView: React.FC<TareasViewProps> = ({ data, loading, summaryEr
   const liveDetailTask = detailTask ? (data.find((task) => String(task.id) === String(detailTask.id)) ?? detailTask) : null;
   const filteredWithoutStatus = filterTasks(false);
   const filtered = filterTasks(true);
+
+  // «Todas las categorías» significa mostrar todas, no mezclarlas: cada categoría con su encabezado y sus tareas.
+  const groupByCategory = categoryFilter === 'ALL' && filtered.length > 0;
+  const categoryGroups = groupByCategory ? groupTasksByCategory(filtered, categoriesApi.categories) : [];
+  const updateCollapsedGroups = (next: Set<string>) => {
+    setCollapsedGroups(next);
+    try { window.localStorage.setItem('activities-task-groups-collapsed', JSON.stringify([...next])); } catch { /* sin almacenamiento */ }
+  };
+  const renderGrouped = (render: (rows: Task[]) => ReactNode): ReactNode => {
+    if (!groupByCategory) return render(filtered as Task[]);
+    return (
+      <CategoryGroupedSections
+        groups={categoryGroups}
+        collapsed={collapsedGroups}
+        onToggle={(key) => {
+          const next = new Set(collapsedGroups);
+          if (next.has(key)) next.delete(key); else next.add(key);
+          updateCollapsedGroups(next);
+        }}
+        onToggleAll={(collapseAll) => updateCollapsedGroups(collapseAll ? new Set(categoryGroups.map((group) => group.key)) : new Set())}
+      >
+        {(group) => render(group.tasks)}
+      </CategoryGroupedSections>
+    );
+  };
   const kpiTasks = filteredWithoutStatus.filter((t) => String(t.status || '').toUpperCase() !== 'CANCELLED');
   const averageProgress = kpiTasks.length ? Math.round(kpiTasks.reduce((sum, t) => sum + getTaskProgress(t).percent, 0) / kpiTasks.length) : 0;
   const overdueCount = filteredWithoutStatus.filter((t) => getTaskDisplayStatus(t) === 'OVERDUE').length;
@@ -941,8 +977,9 @@ export const TareasView: React.FC<TareasViewProps> = ({ data, loading, summaryEr
 
       <Card className="min-w-0 overflow-hidden rounded-3xl border-border/50 bg-card/80 shadow-sm">
         {viewLayout === 'kanban' ? (
-          <TareasKanban
-            data={filtered}
+          renderGrouped((rows) => <TareasKanban
+            data={rows}
+            compact={groupByCategory}
             onViewDetail={(task) => setDetailTask(task)}
             canMoveToStatus={canMoveTaskToStatus}
             onStatusChange={async (taskId, status) => {
@@ -958,7 +995,7 @@ export const TareasView: React.FC<TareasViewProps> = ({ data, loading, summaryEr
               setSelectedTask(task);
               setIsCompleteOpen(true);
             }}
-          />
+          />)
         ) : viewLayout === 'categories' ? (
           <TareasCategoriasView
             tasks={filtered}
@@ -974,8 +1011,8 @@ export const TareasView: React.FC<TareasViewProps> = ({ data, loading, summaryEr
             loading={loading}
           />
         ) : isCardsLayout ? (
-          <TareasCardsView
-            data={filtered}
+          renderGrouped((rows) => <TareasCardsView
+            data={rows}
             onViewDetail={(task) => setDetailTask(task)}
             onSubmitApproval={(task) => {
               setSelectedTask(task);
@@ -1007,11 +1044,11 @@ export const TareasView: React.FC<TareasViewProps> = ({ data, loading, summaryEr
             isClaiming={claimingId}
             onClaimTask={handleClaimTask}
             onReassignTask={handleOpenReassign}
-          />
+          />)
         ) : (
-          <div className="min-w-0" data-activities-task-table="true">
+          renderGrouped((rows) => <div className="min-w-0" data-activities-task-table="true">
           <EditableDataTable
-            data={filtered}
+            data={rows}
             columns={columns}
             layoutMode={isCardsLayout ? 'cards' : 'table'}
             onRowUpdate={canPerform('ACTIVITIES_TASKS', 'edit') ? handleUpdate : undefined}
@@ -1019,7 +1056,7 @@ export const TareasView: React.FC<TareasViewProps> = ({ data, loading, summaryEr
             isLoading={loading}
             bulkActions={(selectedIds) => (
               <div className="flex flex-wrap items-center gap-2">
-                {canPerform('ACTIVITIES_TASKS', 'submit') && filtered.filter((task) => selectedIds.includes(task.id)).every((task) => ['PENDING', 'IN_PROGRESS'].includes(String(task.status || '').toUpperCase())) && (
+                {canPerform('ACTIVITIES_TASKS', 'submit') && rows.filter((task) => selectedIds.includes(task.id)).every((task) => ['PENDING', 'IN_PROGRESS'].includes(String(task.status || '').toUpperCase())) && (
                   <Button
                     type="button"
                     variant="outline"
@@ -1038,7 +1075,7 @@ export const TareasView: React.FC<TareasViewProps> = ({ data, loading, summaryEr
                     <Send className="mr-1.5 size-3" /> Enviar a Aprobación ({selectedIds.length})
                   </Button>
                 )}
-                {canPerform('ACTIVITIES_TASKS', 'complete') && filtered.filter((task) => selectedIds.includes(task.id)).every((task) => ['PENDING', 'IN_PROGRESS'].includes(String(task.status || '').toUpperCase())) && (
+                {canPerform('ACTIVITIES_TASKS', 'complete') && rows.filter((task) => selectedIds.includes(task.id)).every((task) => ['PENDING', 'IN_PROGRESS'].includes(String(task.status || '').toUpperCase())) && (
                   <Button
                     type="button"
                     variant="outline"
@@ -1204,8 +1241,9 @@ export const TareasView: React.FC<TareasViewProps> = ({ data, loading, summaryEr
             actionsWidth="w-72"
             fitContent
             showHorizontalControls
+            verticalScroll={!groupByCategory}
           />
-          </div>
+          </div>)
         )}
       </Card>
 

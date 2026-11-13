@@ -30,6 +30,8 @@ interface TareasKanbanProps {
   onApprove?: (task: Task) => void;
   onComplete?: (task: Task) => void;
   canMoveToStatus: (task: Task, status: string) => boolean;
+  /** Alto menor: se usa cuando hay un tablero por categoría. */
+  compact?: boolean;
 }
 
 export const TareasKanban: React.FC<TareasKanbanProps> = ({
@@ -40,6 +42,7 @@ export const TareasKanban: React.FC<TareasKanbanProps> = ({
   onApprove,
   onComplete,
   canMoveToStatus,
+  compact = false,
 }) => {
   const [draggedTaskId, setDraggedTaskId] = useState<string | null>(null);
   const [dragOverColId, setDragOverColId] = useState<string | null>(null);
@@ -129,7 +132,7 @@ export const TareasKanban: React.FC<TareasKanbanProps> = ({
   }, [data]);
 
   return (
-    <div className="grid grid-cols-1 gap-4 md:grid-cols-2 lg:grid-cols-4 p-4 overflow-x-auto min-h-[600px]">
+    <div className={cn('grid grid-cols-1 gap-4 md:grid-cols-2 lg:grid-cols-4 p-4 overflow-x-auto', compact ? 'min-h-[16rem]' : 'min-h-[600px]')}>
       {KANBAN_COLUMNS.map((col) => {
         const tasks = columnTasks[col.status] || [];
         const isDragOver = dragOverColId === col.id;
@@ -142,7 +145,7 @@ export const TareasKanban: React.FC<TareasKanbanProps> = ({
             onDragLeave={(e) => handleDragLeave(e, col.id)}
             onDrop={(e) => handleDrop(e, col)}
             className={cn(
-              'flex flex-col rounded-3xl border border-border/50 bg-card/60 p-3 transition-colors duration-200 min-h-[500px]',
+              'flex flex-col rounded-3xl border border-border/50 bg-card/60 p-3 transition-colors duration-200', compact ? 'min-h-[12rem]' : 'min-h-[500px]',
               isDragOver && 'border-primary/60 bg-primary/[0.04] ring-2 ring-primary/20'
             )}
           >
