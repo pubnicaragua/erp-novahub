@@ -12,6 +12,7 @@ import { CurrencyRateDetails } from '../ui/CurrencyValuation';
 import { managerStatusLabel } from '../../utils/managerLabels';
 import { normalizeEstimateImages } from '../../types';
 import { EstimateImageGallery } from './EstimateImageGallery';
+import { CustomerCreditInstallmentSchedule } from './CustomerCreditInstallmentSchedule';
 
 export interface SalesDocumentPanelLine {
   id: string;
@@ -53,6 +54,9 @@ export interface SalesDocumentPanelData {
   notes?: string;
   reason?: string;
   history?: any[];
+  paymentHistory?: Array<any>;
+  installments?: Array<any>;
+  installmentAmount?: number | null;
   images?: Array<{ id?: string; url: string; name?: string; caption?: string }>;
 }
 
@@ -256,6 +260,27 @@ export function SalesDocumentDetailSheet({
                   )) : <p className="text-sm text-muted-foreground">No hay líneas de detalle disponibles.</p>}
                 </div>
               </section>
+
+              {!!document.installments?.length && <CustomerCreditInstallmentSchedule
+                installments={document.installments}
+                currency={document.sourceCurrency || 'NIO'}
+                formatAmount={(amount) => `${Number(amount || 0).toLocaleString('es-NI', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} ${document.sourceCurrency || ''}`}
+                principalAmount={document.installments.reduce((sum, item) => sum + Number(item.principalAmount || 0), 0)}
+                interestAmount={document.installments.reduce((sum, item) => sum + Number(item.interestAmount || 0), 0)}
+                totalAmount={document.installments.reduce((sum, item) => sum + Number(item.totalAmount || 0), 0)}
+                installmentAmount={document.installmentAmount}
+                finalDueDate={document.installments[document.installments.length - 1]?.dueDate}
+                frequencyLabel={document.metadata?.find((item) => item.label === 'Frecuencia')?.value}
+              />}
+
+              {!!document.paymentHistory?.length && <section className="space-y-3 rounded-2xl border border-border/50 p-4">
+                <div className="flex flex-wrap items-center justify-between gap-2"><p className="text-[10px] font-black uppercase tracking-widest text-muted-foreground">Historial de abonos</p><span className="text-xs font-bold text-muted-foreground">{document.paymentHistory.length} registro(s)</span></div>
+                <div className="space-y-3">{document.paymentHistory.map((payment: any) => <article key={payment.id} className="min-w-0 rounded-xl border border-border/40 bg-muted/10 p-3">
+                    <div className="flex min-w-0 flex-col gap-2 sm:flex-row sm:items-start sm:justify-between"><div className="min-w-0"><p className="break-words text-sm font-bold">{payment.number || 'Abono'}{payment.reversed ? ' · REVERTIDO' : ''} · {payment.method || 'Método no indicado'}</p><p className="mt-1 text-xs text-muted-foreground">Fecha del pago: {payment.paymentDate ? new Date(payment.paymentDate).toLocaleDateString('es-NI') : '—'} · Registrado: {payment.registeredAt ? new Date(payment.registeredAt).toLocaleString('es-NI') : '—'}{payment.reversedAt ? ` · Revertido: ${new Date(payment.reversedAt).toLocaleString('es-NI')}` : ''}</p><p className="mt-1 break-words text-xs text-muted-foreground">Registró: {payment.registeredBy || 'Usuario no identificado'}{payment.reference ? ` · Referencia: ${payment.reference}` : ''}</p></div><p className="shrink-0 text-sm font-black tabular-nums">{Number(payment.amount || 0).toLocaleString('es-NI', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} {payment.currency || ''}</p></div>
+                  {!!payment.allocations?.length && <div className="mt-2 space-y-1 border-t border-border/40 pt-2">{payment.allocations.map((allocation: any, index: number) => <p key={`${payment.id}-${index}`} className="break-words text-[11px] text-muted-foreground">Cuota #{allocation.installmentNumber || '—'} · Capital {Number(allocation.principalAmount || 0).toLocaleString('es-NI')} · Interés {Number(allocation.interestAmount || 0).toLocaleString('es-NI')}{allocation.reversedAt ? ' · Asignación revertida' : ''}</p>)}</div>}
+                  {!!payment.auditEvents?.length && <details className="mt-2"><summary className="cursor-pointer text-[10px] font-bold text-primary">Ver auditoría del pago ({payment.auditEvents.length})</summary><ul className="mt-2 space-y-1">{payment.auditEvents.map((event: any, index: number) => <li key={`${payment.id}-audit-${index}`} className="break-words text-[10px] text-muted-foreground">{event.at ? new Date(event.at).toLocaleString('es-NI') : '—'} · {event.userName || event.userEmail || 'Sistema'} · {event.action}{event.description ? ` · ${event.description}` : ''}{event.metadata ? <pre className="mt-1 whitespace-pre-wrap break-all text-[9px]">{JSON.stringify(event.metadata)}</pre> : null}</li>)}</ul></details>}
+                </article>)}</div>
+              </section>}
 
               {!!document.additionalCharges?.length && <section className="rounded-2xl border border-border/50 bg-muted/10 p-4">
                 <p className="mb-3 text-[10px] font-black uppercase tracking-widest text-muted-foreground">Cargos seleccionados</p>

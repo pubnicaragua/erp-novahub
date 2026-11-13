@@ -1,7 +1,8 @@
 import { useEffect, useRef, useState } from 'react';
+import { useQueryClient } from '@tanstack/react-query';
 import {
   BadgeDollarSign, Plus, Search, TrendingUp, Clock, CheckCircle2, CircleDollarSign,
-  Eye, Trash2, ChevronLeft, Send, CreditCard, AlertTriangle, Ban, Bell, Mail, MessageCircle,
+  Eye, Trash2, ChevronLeft, Send, CreditCard, AlertTriangle, Ban, Bell, Mail, MessageCircle, CalendarDays, FileText,
 } from 'lucide-react';
 import { Card, CardContent } from '../ui/card';
 import { Button } from '../ui/button';
@@ -10,7 +11,7 @@ import { Label } from '../ui/label';
 import { EditableDataTable, ColumnDef } from '../ui/EditableDataTable';
 import { ViewLayoutSelect } from '../ui/ViewLayoutSelect';
 import { useLocalStorageState } from '../../hooks/useLocalStorageState';
-import { creditNotesService, customerCreditRemindersService, customerLoansService } from '../../services/ventas.service';
+import { creditNotesService, customerCreditCalendarService, customerCreditRemindersService, customerLoansService } from '../../services/ventas.service';
 import { createIdempotencyKey } from '../../services/api';
 import { useSalesIntegrationPolicy } from '../../hooks/useSalesIntegrationPolicy';
 import { toast } from '@/app/services/toast';
@@ -49,6 +50,8 @@ import { formatCurrencyAmount, normalizeCurrency, roundCurrencyNumber, summarize
 import { calculateCustomerCreditPlanEstimate, type CustomerCreditManualInstallmentDraft } from '../../utils/customerCreditInstallmentPlan';
 import { CustomerCreditInstallmentSchedule, type CustomerCreditScheduleRow } from './CustomerCreditInstallmentSchedule';
 import { generateCustomerCreditInstallmentReport } from '../../utils/customerCreditInstallmentReport';
+import { CustomerCreditCalendarSelector } from './CustomerCreditCalendarSelector';
+import { generateCustomerDebtStatementReport } from '../../utils/customerDebtStatementReport';
 import { getPaymentLineDocumentAmount } from '../../utils/paymentSettlement';
 import { SalesWarehouseStockHint } from './SalesWarehouseStockHint';
 import { getSingleSalesVariant } from '../../utils/sales-stock';
@@ -281,7 +284,8 @@ const toWholeQuantity = (value: string | number) => {
 
 export function NotasCreditoView({ data, summaryData, summaryLoading, summaryError, loading, onRefresh, customers = [], customersError = false, employees = [], products = [], productsLoading = false, productsError = false, warehouses = [], pagination, onSearchChange, dateFrom = '', dateTo = '', onDateRangeChange }: NotasCreditoViewProps) {
   const { exchangeRate: globalRate, displayCurrency, baseCurrency, displayMode, formatConvertedAmount, formatExplicitAmount, toBaseAmount, convertBetweenCurrencies } = useCurrency();
-  const { user, canPerform } = useAuth();
+  const { user, canPerform, selectedBranchId } = useAuth();
+  const queryClient = useQueryClient();
   const canConfigureCustomerCredit = canPerform('SALES_CLIENTS', 'edit') && canPerform('SALES_CLIENTS', 'view');
   const salesIntegrationQuery = useSalesIntegrationPolicy();
   const salesAccountingRequired = salesIntegrationQuery.data?.accountingRequired ?? true;
@@ -307,6 +311,12 @@ export function NotasCreditoView({ data, summaryData, summaryLoading, summaryErr
   const [paymentLines, setPaymentLines] = useState<CreditPaymentLine[]>([]);
   const [paymentReceipt, setPaymentReceipt] = useState<PaymentReceived | null>(null);
   const [remindersOpen, setRemindersOpen] = useState(false);
+  const [holidayAdminOpen, setHolidayAdminOpen] = useState(false);
+  const [creditHolidays, setCreditHolidays] = useState<Array<{ id: string; name: string; date: string }>>([]);
+  const [holidayName, setHolidayName] = useState('');
+  const [holidayDate, setHolidayDate] = useState('');
+  const [holidayEditingId, setHolidayEditingId] = useState<string | null>(null);
+  const [holidaySaving, setHolidaySaving] = useState(false);
   const [mixedPaymentEnabled, setMixedPaymentEnabled] = useState(false);
   const [partialPaymentEnabled, setPartialPaymentEnabled] = useState(false);
   const [paymentLoading, setPaymentLoading] = useState(false);
@@ -314,6 +324,47 @@ export function NotasCreditoView({ data, summaryData, summaryLoading, summaryErr
   const localDocRef = useRef<any>(null);
   const hydratedDraftKeyRef = useRef<string | null>(null);
   const [draftHydrated, setDraftHydrated] = useState(false);
+
+  const reloadCreditHolidays = async () => {
+    const response: any = await customerCreditCalendarService.listHolidays();
+    const value = response?.data?.data ?? response?.data ?? response;
+    setCreditHolidays(Array.isArray(value) ? value : value?.items || []);
+    await queryClient.invalidateQueries({ queryKey: ['sales', 'customer-credit-holidays'] });
+  };
+
+  useEffect(() => {
+    let active = true;
+    customerCreditCalendarService.listHolidays().then((response: any) => {
+      const value = response?.data?.data ?? response?.data ?? response;
+      if (active) setCreditHolidays(Array.isArray(value) ? value : value?.items || []);
+    }).catch(() => { if (active) setCreditHolidays([]); });
+    return () => { active = false; };
+  }, [user?.clientTenantId, user?.tenantId, selectedBranchId]);
+
+  const saveCreditHoliday = async () => {
+    const name = holidayName.trim();
+    if (!name || !holidayDate) { toast.error('Indica el nombre y la fecha exacta del feriado.'); return; }
+    setHolidaySaving(true);
+    try {
+      if (holidayEditingId) await customerCreditCalendarService.updateHoliday(holidayEditingId, { name, date: holidayDate });
+      else await customerCreditCalendarService.createHoliday({ name, date: holidayDate });
+      await reloadCreditHolidays();
+      setHolidayName(''); setHolidayDate(''); setHolidayEditingId(null);
+      toast.success(holidayEditingId ? 'Feriado actualizado.' : 'Feriado agregado al calendario de la sucursal.');
+    } catch (error: any) {
+      toast.error(error?.response?.data?.message || error?.message || 'No se pudo guardar el feriado.');
+    } finally { setHolidaySaving(false); }
+  };
+
+  const deleteCreditHoliday = async (id: string) => {
+    try {
+      await customerCreditCalendarService.deleteHoliday(id);
+      await reloadCreditHolidays();
+      toast.success('Feriado eliminado del catálogo. Los contratos emitidos conservan su calendario.');
+    } catch (error: any) {
+      toast.error(error?.response?.data?.message || error?.message || 'No se pudo eliminar el feriado.');
+    }
+  };
 
   const commitLocalDoc = (nextDoc: any) => {
     localDocRef.current = nextDoc;
@@ -603,6 +654,9 @@ export function NotasCreditoView({ data, summaryData, summaryLoading, summaryErr
     setEditingId(id);
     setIsCreating(false);
     const draft = JSON.parse(JSON.stringify(record));
+    const calendarSnapshot = draft.calendarExclusions || {};
+    draft.excludedWeekdays = draft.excludedWeekdays || calendarSnapshot.excludedWeekdays || [];
+    draft.holidayIds = draft.holidayIds || (calendarSnapshot.holidays || []).map((holiday: any) => holiday.id).filter(Boolean);
     draft.interestValue = draft.interestMode === 'PERCENTAGE' ? Number(draft.interestRate || 0) : Number(draft.interestAmount || 0);
     // El servidor guarda `total` = capital + interés. En el editor `total` es solo el capital
     // (suma de líneas y cargos) y el interés se calcula aparte; si no se normaliza aquí, el
@@ -628,6 +682,8 @@ export function NotasCreditoView({ data, summaryData, summaryLoading, summaryErr
       planCalculationMode: 'AMOUNT',
       planEnabled: false,
       frequency: 'WEEKLY',
+      excludedWeekdays: [],
+      holidayIds: [],
       manualInstallments: [{ dueDate: '', totalAmount: '', interestAmount: '' }],
       reason: '',
       items: [],
@@ -685,6 +741,8 @@ export function NotasCreditoView({ data, summaryData, summaryLoading, summaryErr
         installmentAmount: localDoc.installmentAmount,
         finalDueDate: isoDate(localDoc.dueDate),
         manualInstallments,
+        excludedWeekdays: localDoc.excludedWeekdays || [],
+        excludedDates: creditHolidays.filter((holiday) => (localDoc.holidayIds || []).includes(holiday.id)).map((holiday) => String(holiday.date).slice(0, 10)),
       })
       : null;
     if (localDoc.planEnabled && (!installmentPlanEstimate || !installmentPlanEstimate.isValid || (planCalculationMode !== 'MANUAL' && !firstInstallmentDate))) {
@@ -722,6 +780,7 @@ export function NotasCreditoView({ data, summaryData, summaryLoading, summaryErr
         planEnabled: Boolean(localDoc.planEnabled),
         planCalculationMode,
         ...(localDoc.planEnabled && planCalculationMode !== 'MANUAL' ? { frequency: localDoc.frequency || 'WEEKLY', installmentAmount: installmentPlanEstimate?.installmentAmount } : {}),
+        ...(localDoc.planEnabled && planCalculationMode !== 'MANUAL' ? { excludedWeekdays: localDoc.excludedWeekdays || [], holidayIds: localDoc.holidayIds || [] } : {}),
         manualInstallments: localDoc.planEnabled && planCalculationMode === 'MANUAL'
           ? manualInstallments.map((item) => ({ dueDate: item.dueDate, totalAmount: Number(item.totalAmount), interestAmount: Number(item.interestAmount) }))
           : undefined,
@@ -948,6 +1007,33 @@ export function NotasCreditoView({ data, summaryData, summaryLoading, summaryErr
     }
   };
 
+  const handleExportDebtStatement = async (row: CreditDocument) => {
+    const toastId = toast.loading('Preparando el estado actualizado de deuda…');
+    try {
+      const response: any = row.kind === 'CUSTOMER_LOAN'
+        ? await customerLoansService.getById(row.id)
+        : await creditNotesService.getById(row.id);
+      const current = response?.data?.data ?? response?.data ?? response;
+      const report = await generateCustomerDebtStatementReport({
+        tenantName: user?.sessionBranding?.name || user?.tenantName || 'Mi Empresa',
+        tenantLogo: themeConfig?.logo,
+        customerName: current.customer?.name || customerName(row),
+        contractNumber: current.number || current.invoice?.number || row.number || row.invoice?.number || row.id,
+        currency: current.currency || row.currency || 'NIO',
+        total: Number(current.total || row.total || 0),
+        amountPaid: Number(current.amountPaid ?? current.invoice?.amountPaid ?? row.amountPaid ?? 0),
+        balance: Number(current.balance ?? current.invoice?.balance ?? row.balance ?? Number(row.total || 0) - Number(row.amountPaid || 0)),
+        overdueBalance: Number(current.overdueBalance ?? row.overdueBalance ?? 0),
+        installments: current.installments || row.installments || [],
+        paymentHistory: current.paymentHistory || row.paymentHistory || [],
+      });
+      if (!report) throw new Error('No se pudo generar el estado de deuda.');
+      toast.success('Estado de deuda listo para imprimir o guardar como PDF.', { id: toastId });
+    } catch (error: any) {
+      toast.error(error?.message || 'No se pudo preparar el estado de deuda.', { id: toastId });
+    }
+  };
+
   const handlePrintPaymentTicket = async (payment: PaymentReceived) => {
     const printToastId = toast.loading('Preparando el ticket de pago...');
     try {
@@ -1001,6 +1087,7 @@ export function NotasCreditoView({ data, summaryData, summaryLoading, summaryErr
       ] : []),
       { label: 'Pagado', value: formatConvertedAmount(Number(row.amountPaid || 0), row.currency, row.exchangeRate) },
       { label: 'Saldo', value: formatConvertedAmount(Number(row.balance ?? row.total ?? 0), row.currency, row.exchangeRate) },
+      { label: 'Saldo atrasado', value: formatConvertedAmount(Number(row.overdueBalance || 0), row.currency, row.exchangeRate) },
       ...normalizeSalesExtraCharges(row)
         .filter((charge) => charge.amount > 0)
         .map((charge, index) => ({ label: charge.description || `Coste extra ${index + 1}`, value: formatConvertedAmount(charge.amount, row.currency, row.exchangeRate) })),
@@ -1009,8 +1096,10 @@ export function NotasCreditoView({ data, summaryData, summaryLoading, summaryErr
     metadata: [
       { label: 'Fecha', value: formatDate(row.date) },
       { label: 'Vencimiento', value: formatDate(row.dueDate) },
+      ...(row.planEnabled ? [{ label: 'Frecuencia', value: row.planCalculationMode === 'MANUAL' ? 'Manual' : ({ DAILY: 'Diaria', WEEKLY: 'Semanal', BIWEEKLY: 'Quincenal', MONTHLY: 'Mensual' } as const)[row.frequency || 'WEEKLY'] }] : []),
+      { label: 'Próximo abono', value: row.nextInstallment ? `${formatDate(row.nextInstallment.dueDate)} · ${formatConvertedAmount(Number(row.nextInstallment.remainingAmount || 0), row.currency, row.exchangeRate)}` : 'Sin abonos pendientes' },
+      { label: 'Saldo atrasado', value: formatConvertedAmount(Number(row.overdueBalance || 0), row.currency, row.exchangeRate) },
       ...(row.kind === 'CUSTOMER_LOAN' ? [
-        { label: 'Frecuencia', value: ({ DAILY: 'Diaria', WEEKLY: 'Semanal', BIWEEKLY: 'Quincenal', MONTHLY: 'Mensual' } as const)[row.frequency || 'WEEKLY'] },
         { label: 'Mora del cliente', value: row.customer?.moraType?.name || 'Sin clasificación asignada' },
       ] : []),
       ...(row.invoice?.number ? [{ label: 'Factura origen', value: row.invoice.number }] : []),
@@ -1026,6 +1115,9 @@ export function NotasCreditoView({ data, summaryData, summaryLoading, summaryErr
     })),
     reason: row.kind === 'CUSTOMER_LOAN' ? 'Préstamo de cliente' : row.reason,
     notes: row.kind === 'CUSTOMER_LOAN' ? row.notes || undefined : undefined,
+    paymentHistory: row.paymentHistory || [],
+    installments: row.installments || [],
+    installmentAmount: row.installmentAmount == null ? null : Number(row.installmentAmount),
   });
 
   const addItem = (itemType: 'PRODUCT' | 'SERVICE') => {
@@ -1096,6 +1188,9 @@ export function NotasCreditoView({ data, summaryData, summaryLoading, summaryErr
     { key: 'customerId', header: 'Cliente', headerExtra: <ColumnFilterMenu label="Cliente" options={distinctCustomers} selected={colFilters.state.customerId?.values || []} onSelect={(values) => colFilters.setValues('customerId', values)} sort={colFilters.state.customerId?.sort || null} onSort={(sort) => colFilters.setSort('customerId', sort)} />, render: (_, row) => <span className="text-[13px] font-bold text-foreground">{customerName(row)}</span> },
     { key: 'invoiceId', header: 'Factura origen', width: '135px', render: (_, row) => row.invoice?.number ? <Badge className="border-none bg-primary/10 px-2 py-0.5 text-[9px] font-black text-primary">{row.invoice.number}</Badge> : <span className="text-xs text-muted-foreground">{row.kind === 'CUSTOMER_LOAN' ? 'Sin factura asociada' : 'Crédito directo'}</span> },
     { key: 'dueDate', header: 'Vence', headerExtra: <ColumnFilterMenu label="Vence" sort={colFilters.state.dueDate?.sort || null} onSort={(sort) => colFilters.setSort('dueDate', sort)} sortOptions={[{ value: 'asc', label: 'Más antiguas' }, { value: 'desc', label: 'Más recientes' }]} />, render: (value) => <span className="text-xs font-medium text-muted-foreground">{formatDate(value as string)}</span> },
+    { key: 'frequency', header: 'Frecuencia', width: '125px', render: (_, row) => <span className="text-xs font-medium text-muted-foreground">{row.planEnabled ? row.planCalculationMode === 'MANUAL' ? 'Manual' : ({ DAILY: 'Diaria', WEEKLY: 'Semanal', BIWEEKLY: 'Quincenal', MONTHLY: 'Mensual' } as const)[row.frequency || 'WEEKLY'] : 'Única'}</span> },
+    { key: 'nextInstallment', header: 'Próximo abono', width: '170px', render: (_, row) => row.nextInstallment ? <span className="text-xs font-semibold text-foreground">{formatDate(row.nextInstallment.dueDate)}<span className="block text-[10px] font-medium text-muted-foreground">{formatConvertedAmount(Number(row.nextInstallment.remainingAmount || 0), row.currency, row.exchangeRate)}</span></span> : <span className="text-xs text-muted-foreground">—</span> },
+    { key: 'overdueBalance', header: 'Atrasado', width: '125px', render: (_, row) => <span className={cn('text-xs font-bold tabular-nums', Number(row.overdueBalance || 0) > 0.01 ? 'text-rose-600 dark:text-rose-400' : 'text-muted-foreground')}>{formatConvertedAmount(Number(row.overdueBalance || 0), row.currency, row.exchangeRate)}</span> },
     { key: 'total', header: 'Monto total', width: '135px', headerExtra: <ColumnFilterMenu label="Monto total" sort={colFilters.state.total?.sort || null} onSort={(sort) => colFilters.setSort('total', sort)} />, render: (_, row) => <span className="text-[13px] font-black tabular-nums text-primary">{formatConvertedAmount(sourceInvoiceTotal(row), sourceCurrency(row), sourceExchangeRate(row))}</span> },
     { key: 'amountPaid', header: 'Abonado', width: '125px', headerExtra: <ColumnFilterMenu label="Abonado" sort={colFilters.state.amountPaid?.sort || null} onSort={(sort) => colFilters.setSort('amountPaid', sort)} />, render: (_, row) => <span className="text-[13px] font-black tabular-nums text-foreground">{formatConvertedAmount(sourceInvoicePaid(row), sourceCurrency(row), sourceExchangeRate(row))}</span> },
     { key: 'balance', header: 'En deuda', width: '125px', headerExtra: <ColumnFilterMenu label="En deuda" sort={colFilters.state.balance?.sort || null} onSort={(sort) => colFilters.setSort('balance', sort)} />, render: (_, row) => <span className={cn('text-[13px] font-black tabular-nums', creditDebt(row) > 0 ? 'text-amber-500' : 'text-emerald-500')}>{formatConvertedAmount(creditDebt(row), sourceCurrency(row), sourceExchangeRate(row))}</span> },
@@ -1149,6 +1244,8 @@ export function NotasCreditoView({ data, summaryData, summaryLoading, summaryErr
         installmentAmount: localDoc.installmentAmount,
         finalDueDate: isoDate(localDoc.dueDate),
         manualInstallments: manualInstallmentDrafts,
+        excludedWeekdays: localDoc.excludedWeekdays || [],
+        excludedDates: creditHolidays.filter((holiday) => (localDoc.holidayIds || []).includes(holiday.id)).map((holiday) => String(holiday.date).slice(0, 10)),
       })
       : null;
     // Mientras el crédito se puede editar, el calendario (y lo que imprime «Imprimir plan») sale del
@@ -1277,6 +1374,11 @@ export function NotasCreditoView({ data, summaryData, summaryLoading, summaryErr
                 </div>}
                 {planCalculationMode !== 'MANUAL' && <div className="min-w-0 space-y-1.5"><Label htmlFor="credit-first-installment" className="text-xs font-semibold">Fecha del primer abono</Label><Input id="credit-first-installment" type="date" required value={localDoc.firstInstallmentDate || isoDate(localDoc.dueDate)} onChange={(event) => setLocalDoc({ ...localDoc, firstInstallmentDate: event.target.value })} className="h-10" /></div>}
                 {planCalculationMode === 'AMOUNT' && <div className="min-w-0 space-y-1.5"><Label htmlFor="credit-installment-amount" className="text-xs font-semibold">Monto por abono</Label><Input id="credit-installment-amount" type="number" min="0.01" step="0.01" value={localDoc.installmentAmount ?? ''} onChange={(event) => setLocalDoc({ ...localDoc, planCalculationMode: 'AMOUNT', installmentAmount: event.target.value })} currencyPrecision className="h-10" /></div>}
+                {planCalculationMode !== 'MANUAL' && <div className="sm:col-span-2 xl:col-span-3"><CustomerCreditCalendarSelector
+                  excludedWeekdays={localDoc.excludedWeekdays || []}
+                  holidayIds={localDoc.holidayIds || []}
+                  onChange={(value) => setLocalDoc({ ...localDoc, excludedWeekdays: value.excludedWeekdays, holidayIds: value.holidayIds })}
+                /></div>}
                 {installmentPlanEstimate && <div className="sm:col-span-2 xl:col-span-3"><CustomerCreditInstallmentSchedule
                 installments={installmentSchedule}
                 currency={localDoc.currency || displayCurrency}
@@ -1553,6 +1655,7 @@ export function NotasCreditoView({ data, summaryData, summaryLoading, summaryErr
       <div className="flex flex-col gap-4">
         <div className="flex flex-col justify-between gap-4 py-2 lg:flex-row lg:items-center">
           <div className="erp-list-toolbar flex flex-wrap items-center justify-end gap-3" data-tour="sales-list-actions">
+            {canPerform('SALES_CREDIT_NOTES', 'edit') && <Button type="button" variant="outline" onClick={() => setHolidayAdminOpen(true)} className="h-10 rounded-xl px-4 text-[10px] font-black uppercase tracking-widest"><CalendarDays className="mr-2 size-4" /> Feriados</Button>}
             {(canPerform('SALES_CREDIT_NOTES', 'edit') || canPerform('SALES_CREDIT_NOTES', 'send')) && <Button type="button" variant="outline" onClick={() => setRemindersOpen(true)} className="h-10 rounded-xl px-4 text-[10px] font-black uppercase tracking-widest"><Bell className="mr-2 size-4" /> Recordatorios</Button>}
             <ViewLayoutSelect value={layoutMode} onChange={(value) => setLayoutMode(value === 'kanban' ? 'table' : value)} ariaLabel="Elegir distribución de créditos" />
             <div className="w-full max-w-full shrink-0 sm:w-[11rem]">
@@ -1623,6 +1726,7 @@ export function NotasCreditoView({ data, summaryData, summaryLoading, summaryErr
           startEdit(detailCredit.id);
         }}
         extraActions={detailCredit ? <>
+          {canPerform('SALES_CREDIT_NOTES', 'export') && <Button type="button" variant="outline" className="rounded-xl" onClick={() => void handleExportDebtStatement(detailCredit)}><FileText className="mr-2 size-4" />Estado de deuda</Button>}
           {detailCredit.kind === 'CREDIT_NOTE' && canPerform('SALES_CREDIT_NOTES', 'issue') && normalizeStatus(detailCredit.status) === 'DRAFT' && <Button type="button" className="rounded-xl bg-emerald-600 text-white hover:bg-emerald-700" onClick={() => handleIssue(detailCredit.id)}><CheckCircle2 className="mr-2 size-4" />Emitir crédito</Button>}
           {detailCredit.kind === 'CREDIT_NOTE' && canPerform('SALES_CREDIT_NOTES', 'send') && ['ISSUED', 'PARTIAL', 'APPLIED'].includes(normalizeStatus(detailCredit.status)) && Number(detailCredit.balance ?? detailCredit.total) > 0.01 && <Button type="button" className="rounded-xl bg-emerald-600 text-white hover:bg-emerald-700" disabled={['PENDING', 'CLAIMED'].includes(normalizeStatus(detailCredit.cashQueue?.status))} onClick={() => void handleSendToCash(detailCredit)}><Send className="mr-2 size-4" />Enviar a Caja</Button>}
           {canPerform('SALES_CREDIT_NOTES', 'pay') && isPayableStatus(detailCredit.status) && Number(detailCredit.balance ?? detailCredit.total) > 0.01 && <Button type="button" variant="outline" className="rounded-xl border-primary/30 text-primary hover:bg-primary/10" onClick={() => openPayment(detailCredit)}><CreditCard className="mr-2 size-4" />{detailCredit.kind === 'CUSTOMER_LOAN' ? 'Registrar abono' : 'Registrar pago'}</Button>}
@@ -1754,6 +1858,21 @@ export function NotasCreditoView({ data, summaryData, summaryLoading, summaryErr
             <Button variant="outline" onClick={() => setPaymentCredit(null)} disabled={paymentLoading}>Cancelar</Button>
             <Button onClick={handlePayment} disabled={paymentLoading || paymentCustomerFavorExceeded || !paymentLines.some((line) => Number(String(line.amount || '').replace(/,/g, '')) > 0) || (salesAccountingRequired && paymentLines.some((line) => requiresManualPaymentAccount(line.method) && !line.accountId)) || (salesAccountingRequired && paymentLines.some((line) => isBankPaymentMethod(line.method, true) && !line.bankAccountId)) || paymentLines.some((line) => requiresPaymentReference(line.method) && !line.reference?.trim()) || paymentAmountMismatch} className="bg-primary font-black">{paymentLoading ? 'Registrando...' : 'Confirmar pago'}</Button>
           </DialogFooter>
+        </DialogContent>
+      </Dialog>
+      <Dialog open={holidayAdminOpen} onOpenChange={(open) => {
+        setHolidayAdminOpen(open);
+        if (!open) { setHolidayName(''); setHolidayDate(''); setHolidayEditingId(null); }
+      }}>
+        <DialogContent className="max-h-[85dvh] w-[calc(100%-1rem)] overflow-y-auto rounded-2xl sm:max-w-2xl">
+          <DialogHeader><DialogTitle>Feriados de la sucursal</DialogTitle><DialogDescription>Configura fechas exactas para excluirlas de los planes automáticos de créditos y préstamos. Los contratos emitidos conservan el calendario que se usó al crearlos.</DialogDescription></DialogHeader>
+          {canPerform('SALES_CREDIT_NOTES', 'edit') && <div className="grid gap-3 rounded-xl border border-border/50 bg-muted/10 p-3 sm:grid-cols-[minmax(0,1fr)_minmax(150px,190px)_auto] sm:items-end">
+            <div className="space-y-1.5"><Label htmlFor="credit-holiday-name">Nombre del feriado</Label><Input id="credit-holiday-name" maxLength={120} value={holidayName} onChange={(event) => setHolidayName(event.target.value)} placeholder="Ej. Feriado local" /></div>
+            <div className="space-y-1.5"><Label htmlFor="credit-holiday-date">Fecha exacta</Label><Input id="credit-holiday-date" type="date" value={holidayDate} onChange={(event) => setHolidayDate(event.target.value)} /></div>
+            <div className="flex gap-2"><Button type="button" onClick={() => void saveCreditHoliday()} disabled={holidaySaving} className="rounded-xl">{holidaySaving ? 'Guardando…' : holidayEditingId ? 'Actualizar' : 'Agregar'}</Button>{holidayEditingId && <Button type="button" variant="outline" onClick={() => { setHolidayEditingId(null); setHolidayName(''); setHolidayDate(''); }}>Cancelar</Button>}</div>
+          </div>}
+          <div className="max-h-72 space-y-2 overflow-y-auto">{creditHolidays.length ? creditHolidays.map((holiday) => <div key={holiday.id} className="flex min-w-0 flex-wrap items-center justify-between gap-2 rounded-xl border border-border/50 p-3"><div className="min-w-0"><p className="break-words text-sm font-semibold">{holiday.name}</p><p className="text-xs text-muted-foreground">{isoDate(holiday.date)}</p></div>{canPerform('SALES_CREDIT_NOTES', 'edit') && <div className="flex shrink-0 gap-2"><Button type="button" variant="outline" size="sm" onClick={() => { setHolidayEditingId(holiday.id); setHolidayName(holiday.name); setHolidayDate(isoDate(holiday.date)); }}>Editar</Button><Button type="button" variant="ghost" size="icon" aria-label={`Eliminar feriado ${holiday.name}`} onClick={() => void deleteCreditHoliday(holiday.id)}><Trash2 className="size-4" /></Button></div>}</div>) : <p className="rounded-xl border border-dashed border-border p-4 text-sm text-muted-foreground">No hay feriados configurados para esta sucursal.</p>}</div>
+          <DialogFooter><Button type="button" variant="outline" onClick={() => setHolidayAdminOpen(false)}>Cerrar</Button></DialogFooter>
         </DialogContent>
       </Dialog>
       <SalesPaymentReceiptDialog

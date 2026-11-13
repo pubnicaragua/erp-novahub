@@ -20,6 +20,17 @@ export type CustomerCreditPlanPayload = {
   frequency?: 'DAILY' | 'WEEKLY' | 'BIWEEKLY' | 'MONTHLY';
   installmentAmount?: number;
   manualInstallments?: CustomerCreditInstallmentPayload[];
+  excludedWeekdays?: number[];
+  holidayIds?: string[];
+};
+
+export type CustomerCreditHoliday = { id: string; date: string; name: string };
+
+export const customerCreditCalendarService = {
+  listHolidays: () => api.get<CustomerCreditHoliday[]>('/sales/customer-credit-calendar/holidays'),
+  createHoliday: (data: { date: string; name: string }) => api.post<CustomerCreditHoliday>('/sales/customer-credit-calendar/holidays', data),
+  updateHoliday: (id: string, data: Partial<{ date: string; name: string }>) => api.patch<CustomerCreditHoliday>(`/sales/customer-credit-calendar/holidays/${id}`, data),
+  deleteHoliday: (id: string) => api.delete<void>(`/sales/customer-credit-calendar/holidays/${id}`),
 };
 
 export interface CustomerPortalAdminAccess {
@@ -415,6 +426,7 @@ export const creditDocumentsService = {
 };
 
 export const customerLoansService = {
+  getById: (id: string, signal?: AbortSignal) => api.get<any>(`/sales/customer-loans/${id}`, signal ? { signal } : undefined),
   applyPayment: (id: string, data: Record<string, unknown>, idempotencyKey?: string) =>
     api.idempotentPost<any>(`/sales/customer-loans/${id}/payments`, data, idempotencyKey),
 };

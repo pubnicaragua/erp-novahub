@@ -107,6 +107,7 @@ export function CustomerCreditInstallmentSchedule({
                 <TableHead className="text-right">Interés</TableHead>
                 <TableHead className="text-right">Total</TableHead>
                 <TableHead className="text-right">Pendiente de cuota</TableHead>
+                <TableHead>Estado</TableHead>
               </>}
             </TableRow>
           </TableHeader>
@@ -132,6 +133,7 @@ export function CustomerCreditInstallmentSchedule({
                     <TableCell className="whitespace-nowrap text-right tabular-nums">{formatAmount(Number(row.interestAmount || 0))}</TableCell>
                     <TableCell className="whitespace-nowrap text-right font-semibold tabular-nums">{formatAmount(Number(row.totalAmount || 0))}</TableCell>
                     <TableCell className="whitespace-nowrap text-right tabular-nums">{formatAmount(pending)}</TableCell>
+                    <TableCell className="whitespace-nowrap"><span className={`rounded-full px-2 py-1 text-[9px] font-black uppercase ${pending <= 0.01 ? 'bg-emerald-500/10 text-emerald-700 dark:text-emerald-300' : paid > 0.01 ? 'bg-amber-500/10 text-amber-700 dark:text-amber-300' : 'bg-muted text-muted-foreground'}`}>{pending <= 0.01 ? 'Pagado' : paid > 0.01 ? 'Parcial' : 'Pendiente'}</span></TableCell>
                   </>}
                 </TableRow>
               );

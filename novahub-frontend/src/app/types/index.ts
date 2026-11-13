@@ -648,6 +648,9 @@ export interface CustomerCreditInstallment {
   totalAmount: number | string;
   principalPaid: number | string;
   interestPaid: number | string;
+  remainingAmount?: number | string;
+  status?: 'PENDING' | 'PARTIAL' | 'PAID' | string;
+  overdue?: boolean;
   remindersEnabled?: boolean;
   allocations?: Array<{ id: string; principalAmount: number | string; interestAmount: number | string }>;
 }
@@ -842,6 +845,9 @@ export interface CreditDocument extends CreditNote {
   moraType?: { id: string; name: string; description?: string } | null;
   moraTypeNameSnapshot?: string | null;
   notes?: string | null;
+  nextInstallment?: { id?: string; installmentNumber?: number; dueDate: string; remainingAmount: number | string } | null;
+  overdueBalance?: number | string;
+  paymentHistory?: Array<any>;
 }
 
 export interface CreditNoteItem {

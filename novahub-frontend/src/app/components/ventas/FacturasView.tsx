@@ -74,6 +74,7 @@ import { SalesImportWizard } from './importacion/SalesImportWizard';
 import { getCurrencyDecimalPlaces, roundCurrencyNumber } from '../../utils/currency';
 import { calculateCustomerCreditPlanEstimate, type CustomerCreditFrequency, type CustomerCreditManualInstallmentDraft, type CustomerCreditPlanCalculationMode } from '../../utils/customerCreditInstallmentPlan';
 import { CustomerCreditPlanEditor } from './CustomerCreditPlanEditor';
+import { CustomerCreditCalendarSelector } from './CustomerCreditCalendarSelector';
 import { generateCustomerCreditInstallmentReport } from '../../utils/customerCreditInstallmentReport';
 import { TripCostBlock } from '../flota/TripCostBlock';
 
@@ -283,6 +284,9 @@ export function FacturasView({ data, summaryData, summaryLoading, summaryError, 
   const [creditFrequency, setCreditFrequency] = useState<'DAILY' | 'WEEKLY' | 'BIWEEKLY' | 'MONTHLY'>('WEEKLY');
   const [creditInstallmentAmount, setCreditInstallmentAmount] = useState('');
   const [creditManualInstallments, setCreditManualInstallments] = useState<CustomerCreditManualInstallmentDraft[]>([{ dueDate: '', totalAmount: '', interestAmount: '' }]);
+  const [creditExcludedWeekdays, setCreditExcludedWeekdays] = useState<number[]>([]);
+  const [creditHolidayIds, setCreditHolidayIds] = useState<string[]>([]);
+  const [creditExcludedDates, setCreditExcludedDates] = useState<string[]>([]);
   const [creditTermOverrideConfirmed, setCreditTermOverrideConfirmed] = useState(false);
   const [creditLoading, setCreditLoading] = useState(false);
   const [detailInvoice, setDetailInvoice] = useState<Invoice | null>(null);
@@ -863,6 +867,9 @@ export function FacturasView({ data, summaryData, summaryLoading, summaryError, 
     setCreditFrequency('WEEKLY');
     setCreditInstallmentAmount('');
     setCreditManualInstallments([{ dueDate: today, totalAmount: '', interestAmount: '' }]);
+    setCreditExcludedWeekdays([]);
+    setCreditHolidayIds([]);
+    setCreditExcludedDates([]);
   };
 
   const handleSendInvoiceToCredit = async () => {
@@ -899,6 +906,8 @@ export function FacturasView({ data, summaryData, summaryLoading, summaryError, 
         initialCreditManualInstallments: creditPlanCalculationMode === 'MANUAL'
           ? creditManualInstallments.map((item) => ({ dueDate: item.dueDate, totalAmount: Number(item.totalAmount), interestAmount: Number(item.interestAmount) }))
           : undefined,
+        initialCreditExcludedWeekdays: creditPlanCalculationMode === 'MANUAL' ? [] : creditExcludedWeekdays,
+        initialCreditHolidayIds: creditPlanCalculationMode === 'MANUAL' ? [] : creditHolidayIds,
       });
       return;
     }
@@ -917,6 +926,8 @@ export function FacturasView({ data, summaryData, summaryLoading, summaryError, 
         manualInstallments: creditPlanCalculationMode === 'MANUAL'
           ? creditManualInstallments.map((item) => ({ dueDate: item.dueDate, totalAmount: Number(item.totalAmount), interestAmount: Number(item.interestAmount) }))
           : undefined,
+        excludedWeekdays: creditPlanCalculationMode === 'MANUAL' ? [] : creditExcludedWeekdays,
+        holidayIds: creditPlanCalculationMode === 'MANUAL' ? [] : creditHolidayIds,
       });
       toast.success(`Factura ${invoice.number} enviada a Créditos por su saldo pendiente`, { id: creditToastId });
       setCreditInvoice(null);
@@ -1210,7 +1221,7 @@ export function FacturasView({ data, summaryData, summaryLoading, summaryError, 
 
   const handleSaveInvoice = async (
     action: InvoiceSaveAction = 'PENDING',
-    settlement?: { payments?: InvoicePaymentLine[]; currency?: string; exchangeRate?: number; paymentDate?: string; dueDate?: string; cashRegisterId?: string; cashSessionId?: string; creditTermOverrideConfirmed?: boolean; planEnabled?: boolean; planCalculationMode?: CustomerCreditPlanCalculationMode; firstInstallmentDate?: string; frequency?: CustomerCreditFrequency; installmentAmount?: number; manualInstallments?: Array<{ dueDate: string; totalAmount: number; interestAmount: number }>; initialCreditInterestMode?: string; initialCreditInterestValue?: number; initialCreditPlanEnabled?: boolean; initialCreditPlanCalculationMode?: 'AMOUNT' | 'DEADLINE' | 'MANUAL'; initialCreditFirstInstallmentDate?: string; initialCreditFrequency?: string; initialCreditInstallmentAmount?: number; initialCreditManualInstallments?: Array<{ dueDate: string; totalAmount: number; interestAmount: number }> },
+    settlement?: { payments?: InvoicePaymentLine[]; currency?: string; exchangeRate?: number; paymentDate?: string; dueDate?: string; cashRegisterId?: string; cashSessionId?: string; creditTermOverrideConfirmed?: boolean; planEnabled?: boolean; planCalculationMode?: CustomerCreditPlanCalculationMode; firstInstallmentDate?: string; frequency?: CustomerCreditFrequency; installmentAmount?: number; manualInstallments?: Array<{ dueDate: string; totalAmount: number; interestAmount: number }>; initialCreditInterestMode?: string; initialCreditInterestValue?: number; initialCreditPlanEnabled?: boolean; initialCreditPlanCalculationMode?: 'AMOUNT' | 'DEADLINE' | 'MANUAL'; initialCreditFirstInstallmentDate?: string; initialCreditFrequency?: string; initialCreditInstallmentAmount?: number; initialCreditManualInstallments?: Array<{ dueDate: string; totalAmount: number; interestAmount: number }>; initialCreditExcludedWeekdays?: number[]; initialCreditHolidayIds?: string[] },
   ) => {
     if (!localDoc) return;
     if (action === 'PENDING' && !canPerform('SALES_INVOICES', 'submit')) {
@@ -1369,6 +1380,8 @@ export function FacturasView({ data, summaryData, summaryLoading, summaryError, 
           initialCreditFrequency: action === 'CREDIT' && settlement?.initialCreditPlanCalculationMode !== 'MANUAL' ? settlement?.initialCreditFrequency || 'WEEKLY' : undefined,
           initialCreditInstallmentAmount: action === 'CREDIT' && settlement?.initialCreditPlanCalculationMode !== 'MANUAL' ? settlement?.initialCreditInstallmentAmount || 0 : undefined,
           initialCreditManualInstallments: action === 'CREDIT' ? settlement?.initialCreditManualInstallments : undefined,
+          initialCreditExcludedWeekdays: action === 'CREDIT' ? settlement?.initialCreditExcludedWeekdays : undefined,
+          initialCreditHolidayIds: action === 'CREDIT' ? settlement?.initialCreditHolidayIds : undefined,
           creditTermOverrideConfirmed: settlement?.creditTermOverrideConfirmed ?? (localDoc as any).creditTermOverrideConfirmed,
           expectedDelivery: localDoc.expectedDelivery ? new Date(localDoc.expectedDelivery).toISOString() : undefined,
           notes: finalNotes,
@@ -1461,6 +1474,8 @@ export function FacturasView({ data, summaryData, summaryLoading, summaryError, 
       installmentAmount: creditInstallmentAmount,
       finalDueDate: creditDueDate,
       manualInstallments: creditManualInstallments,
+      excludedWeekdays: creditExcludedWeekdays,
+      excludedDates: creditExcludedDates,
     })
     : null;
   const effectiveCreditDueDate = creditPlanEnabled && (creditPlanCalculationMode === 'AMOUNT' || creditPlanCalculationMode === 'MANUAL')
@@ -1765,8 +1780,9 @@ export function FacturasView({ data, summaryData, summaryLoading, summaryError, 
   const handleDownloadInvoicePdf = async (invoice: Invoice, format: PdfDownloadFormat = 'configured') => {
     const previewToastId = toast.loading('Preparando la previsualización de la factura...');
     try {
+      const completeInvoice = invoice.id ? await invoicesService.getById(invoice.id).catch(() => invoice) : invoice;
       await previewSalesTransactionPDF({
-        document: invoice,
+        document: completeInvoice,
         tenantName: user?.sessionBranding?.name || user?.tenantName || 'Empresa',
         formatAmount: formatConvertedAmount as any,
         tenantLogo: themeConfig?.logo,
@@ -3081,6 +3097,16 @@ export function FacturasView({ data, summaryData, summaryLoading, summaryError, 
                 onRemoveManualInstallment={(index) => setCreditManualInstallments((rows) => rows.filter((_, rowIndex) => rowIndex !== index))}
                 onPrint={() => void printCreditInstallmentPlan()}
               />
+              {creditPlanEnabled && creditPlanCalculationMode !== 'MANUAL' && <CustomerCreditCalendarSelector
+                excludedWeekdays={creditExcludedWeekdays}
+                holidayIds={creditHolidayIds}
+                onChange={(value) => {
+                  setCreditExcludedWeekdays(value.excludedWeekdays);
+                  setCreditHolidayIds(value.holidayIds);
+                  setCreditExcludedDates(value.excludedDates);
+                  setCreditTermOverrideConfirmed(false);
+                }}
+              />}
             </div>
           )}
           <DialogFooter className="shrink-0">

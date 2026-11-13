@@ -1517,21 +1517,25 @@ export const generateEstimatePDF = async ({ estimate, tenantName, formatAmount, 
 
   // 7. Resumen Financiero
   let finalY = (doc as any).lastAutoTable.finalY || 90;
-  if (documentType === 'credit') {
-    const currency = String(estimate.currency || 'NIO').toUpperCase();
-    const rate = Number(estimate.exchangeRate || 1) || 1;
-    const interest = Number(estimate.interestAmount ?? estimate.interest ?? 0);
-    const principal = Number(estimate.principalAmount ?? estimate.principal ?? Math.max(0, Number(estimate.total || 0) - interest));
+  const invoiceCreditContract = documentType === 'invoice'
+    ? (Array.isArray(estimate.creditNotes) ? estimate.creditNotes : []).find((credit: any) => credit?.planEnabled && ['ISSUED', 'PARTIAL', 'APPLIED', 'PAID'].includes(String(credit.status || '').toUpperCase()))
+    : null;
+  const financingContract = invoiceCreditContract || estimate;
+  if (documentType === 'credit' || invoiceCreditContract) {
+    const currency = String(financingContract.currency || estimate.currency || 'NIO').toUpperCase();
+    const rate = Number(financingContract.exchangeRate || estimate.exchangeRate || 1) || 1;
+    const interest = Number(financingContract.interestAmount ?? financingContract.interest ?? 0);
+    const principal = Number(financingContract.principalAmount ?? financingContract.principal ?? Math.max(0, Number(financingContract.total || estimate.total || 0) - interest));
     const financingRows: string[][] = [
       ['Capital financiado', formatAmount(principal, currency, rate)],
       ['Interés', interest > 0 ? formatAmount(interest, currency, rate) : 'Sin interés'],
-      ['Total acordado', formatAmount(Number(estimate.total || principal + interest), currency, rate)],
+      ['Total acordado', formatAmount(Number(financingContract.total || principal + interest), currency, rate)],
     ];
-    const installments = Array.isArray(estimate.installments) ? estimate.installments : [];
+    const installments = Array.isArray(financingContract.installments) ? financingContract.installments : [];
     const frequencyLabels: Record<string, string> = { DAILY: 'Diaria', WEEKLY: 'Semanal', BIWEEKLY: 'Cada 15 días', MONTHLY: 'Mensual' };
-    if (estimate.planEnabled) {
-      financingRows.push(['Frecuencia', frequencyLabels[String(estimate.frequency || '').toUpperCase()] || 'Según calendario']);
-      if (Number(estimate.installmentAmount) > 0) financingRows.push(['Monto objetivo por abono', formatAmount(Number(estimate.installmentAmount), currency, rate)]);
+    if (financingContract.planEnabled) {
+      financingRows.push(['Frecuencia', financingContract.planCalculationMode === 'MANUAL' ? 'Manual' : frequencyLabels[String(financingContract.frequency || '').toUpperCase()] || 'Según calendario']);
+      if (Number(financingContract.installmentAmount) > 0) financingRows.push(['Monto objetivo por abono', formatAmount(Number(financingContract.installmentAmount), currency, rate)]);
       installments.forEach((installment: any) => {
         const dueDate = installment?.dueDate ? new Date(installment.dueDate).toLocaleDateString('es-NI') : '—';
         financingRows.push([
@@ -1540,7 +1544,7 @@ export const generateEstimatePDF = async ({ estimate, tenantName, formatAmount, 
         ]);
       });
     } else {
-      const dueDate = installments[0]?.dueDate || estimate.dueDate;
+      const dueDate = installments[0]?.dueDate || financingContract.dueDate || estimate.dueDate;
       financingRows.push(['Vencimiento único', dueDate ? new Date(dueDate).toLocaleDateString('es-NI') : 'Según fecha acordada']);
     }
     autoTable(doc, {
@@ -1735,11 +1739,12 @@ function paymentVariantDetails(transaction: any) {
 }
 
 function customerCreditFinancingDetails(document: any, formatAmount: (amount: number, currency?: string, rate?: number) => string) {
-  const currency = String(document?.currency || 'NIO').toUpperCase();
-  const exchangeRate = Number(document?.exchangeRate || 1) || 1;
-  const interest = Number(document?.interestAmount ?? document?.interest ?? 0);
-  const principal = Number(document?.principalAmount ?? document?.principal ?? Math.max(0, Number(document?.total || 0) - interest));
-  const total = Number(document?.total || principal + interest);
+  const contract = document?.planEnabled ? document : (document?.creditNotes || []).find((credit: any) => credit?.planEnabled && ['ISSUED', 'PARTIAL', 'APPLIED', 'PAID'].includes(String(credit.status || '').toUpperCase())) || document;
+  const currency = String(contract?.currency || document?.currency || 'NIO').toUpperCase();
+  const exchangeRate = Number(contract?.exchangeRate || document?.exchangeRate || 1) || 1;
+  const interest = Number(contract?.interestAmount ?? contract?.interest ?? 0);
+  const principal = Number(contract?.principalAmount ?? contract?.principal ?? Math.max(0, Number((contract?.total ?? document?.total) || 0) - interest));
+  const total = Number(contract?.total || principal + interest);
   const frequencyLabels: Record<string, string> = { DAILY: 'diaria', WEEKLY: 'semanal', BIWEEKLY: 'cada 15 días', MONTHLY: 'mensual' };
   const interestMode = String(document?.interestMode || (interest > 0 ? 'FIXED_AMOUNT' : 'NONE')).toUpperCase();
   const interestDescription = interest <= 0
@@ -1752,13 +1757,13 @@ function customerCreditFinancingDetails(document: any, formatAmount: (amount: nu
     `Interés: ${interestDescription}`,
     `Total acordado: ${formatAmount(total, currency, exchangeRate)}`,
   ];
-  const installments = Array.isArray(document?.installments) ? document.installments : [];
-  const planEnabled = Boolean(document?.planEnabled);
+  const installments = Array.isArray(contract?.installments) ? contract.installments : [];
+  const planEnabled = Boolean(contract?.planEnabled);
   if (planEnabled) {
-    const frequency = frequencyLabels[String(document?.frequency || '').toUpperCase()] || 'según calendario';
+    const frequency = frequencyLabels[String(contract?.frequency || '').toUpperCase()] || (contract?.planCalculationMode === 'MANUAL' ? 'manual' : 'según calendario');
     lines.push(`Plan: abonos ${frequency}; el monto indicado incluye capital e interés.`);
-    if (Number(document?.installmentAmount) > 0) {
-      lines.push(`Monto objetivo por abono: ${formatAmount(Number(document.installmentAmount), currency, exchangeRate)}.`);
+    if (Number(contract?.installmentAmount) > 0) {
+      lines.push(`Monto objetivo por abono: ${formatAmount(Number(contract.installmentAmount), currency, exchangeRate)}.`);
     }
     lines.push('Calendario de abonos:');
     if (installments.length) {
@@ -1770,7 +1775,7 @@ function customerCreditFinancingDetails(document: any, formatAmount: (amount: nu
       lines.push('Consulta el calendario de cuotas en el detalle del contrato.');
     }
   } else {
-    const dueDate = installments[0]?.dueDate || document?.dueDate;
+    const dueDate = installments[0]?.dueDate || contract?.dueDate || document?.dueDate;
     lines.push(`Vencimiento único: ${dueDate ? new Date(dueDate).toLocaleDateString('es-NI') : 'según fecha acordada'}.`);
   }
   return lines.join('\n');
@@ -2343,7 +2348,9 @@ async function generateSalesTicketPDF({
   save?: boolean;
 }) {
   if (save) ensurePdfBrowserPreview(SALES_TRANSACTION_TITLES[documentType]);
-  if (documentType === 'credit') {
+  const invoiceHasInstallmentCredit = documentType === 'invoice'
+    && (Array.isArray(transaction?.creditNotes) ? transaction.creditNotes : []).some((credit: any) => credit?.planEnabled);
+  if (documentType === 'credit' || invoiceHasInstallmentCredit) {
     const financingDetails = customerCreditFinancingDetails(transaction, formatAmount);
     transaction = {
       ...transaction,
@@ -2357,7 +2364,9 @@ async function generateSalesTicketPDF({
     ? transaction.items
     : [{ description: transaction.description || 'Sin líneas de detalle', quantity: 1, unitPrice: Number(transaction.total || 0), total: Number(transaction.total || 0) }];
   const additionalChargeLines = getSalesPdfAdditionalCharges(transaction);
-  const financingDetails = documentType === 'credit' ? customerCreditFinancingDetails(transaction, formatAmount) : '';
+  const financingDetails = documentType === 'credit' || invoiceHasInstallmentCredit
+    ? customerCreditFinancingDetails(transaction, formatAmount)
+    : '';
   const financingDetailsHeight = financingDetails
     ? 12 + financingDetails.split('\n').reduce((height, line) => height + Math.max(1, Math.ceil(line.length / (width === 58 ? 30 : 44))) * 3.2, 0)
     : 0;
@@ -2644,7 +2653,9 @@ export async function generateSalesTransactionPDF({
   withImages?: boolean;
 }) {
   if (save) ensurePdfBrowserPreview(SALES_TRANSACTION_TITLES[documentType]);
-  if (documentType === 'credit') {
+  const invoiceHasInstallmentCredit = documentType === 'invoice'
+    && (Array.isArray(transaction?.creditNotes) ? transaction.creditNotes : []).some((credit: any) => credit?.planEnabled);
+  if (documentType === 'credit' || invoiceHasInstallmentCredit) {
     const financingDetails = customerCreditFinancingDetails(transaction, formatAmount);
     transaction = {
       ...transaction,

@@ -2,6 +2,7 @@ import { getCurrencyDecimalPlaces, roundCurrencyNumber } from './currency';
 
 export type CustomerCreditFrequency = 'DAILY' | 'WEEKLY' | 'BIWEEKLY' | 'MONTHLY';
 export type CustomerCreditPlanCalculationMode = 'AMOUNT' | 'DEADLINE' | 'MANUAL';
+export type CustomerCreditCalendarExclusions = { excludedWeekdays?: number[]; excludedDates?: string[] };
 
 export type CustomerCreditManualInstallmentDraft = {
   dueDate: string;
@@ -55,6 +56,47 @@ function dateAt(firstDate: string, frequency: CustomerCreditFrequency, offset: n
   return new Date(Date.UTC(year, month - 1, day + days * offset)).toISOString().slice(0, 10);
 }
 
+function addDays(value: string, days: number) {
+  const [year, month, day] = value.split('-').map(Number);
+  return new Date(Date.UTC(year, month - 1, day + days)).toISOString().slice(0, 10);
+}
+
+function buildAllowedDate(value: string, exclusions: CustomerCreditCalendarExclusions) {
+  const weekdays = new Set(exclusions.excludedWeekdays || []);
+  const dates = new Set(exclusions.excludedDates || []);
+  let candidate = value;
+  for (let checked = 0; checked < 370; checked += 1) {
+    const [year, month, day] = candidate.split('-').map(Number);
+    const jsDay = new Date(Date.UTC(year, month - 1, day)).getUTCDay();
+    const isoDay = jsDay === 0 ? 7 : jsDay;
+    if (!weekdays.has(isoDay) && !dates.has(candidate)) return candidate;
+    candidate = addDays(candidate, 1);
+  }
+  return '';
+}
+
+function scheduleDates(input: {
+  firstDate: string;
+  frequency: CustomerCreditFrequency;
+  count: number;
+  finalDate?: string;
+  exclusions: CustomerCreditCalendarExclusions;
+}) {
+  const dates: string[] = [];
+  for (let index = 0; index < input.count; index += 1) {
+    let candidate = input.frequency === 'DAILY'
+      ? index === 0 ? input.firstDate : addDays(dates[index - 1], 1)
+      : index === input.count - 1 && input.finalDate
+        ? input.finalDate
+        : dateAt(input.firstDate, input.frequency, index);
+    if (dates.length && candidate <= dates[dates.length - 1]) candidate = addDays(dates[dates.length - 1], 1);
+    const allowed = buildAllowedDate(candidate, input.exclusions);
+    if (!allowed) return [];
+    dates.push(allowed);
+  }
+  return dates;
+}
+
 function isDateOnly(value: unknown): value is string {
   if (typeof value !== 'string' || !/^\d{4}-\d{2}-\d{2}$/.test(value)) return false;
   const [year, month, day] = value.split('-').map(Number);
@@ -68,8 +110,11 @@ function buildAmountSchedule(input: {
   installmentCount: number;
   frequency: CustomerCreditFrequency;
   firstInstallmentDate: string;
+  exclusions: CustomerCreditCalendarExclusions;
 }): CustomerCreditPlanInstallment[] {
   const schedule: CustomerCreditPlanInstallment[] = [];
+  const dates = scheduleDates({ firstDate: input.firstInstallmentDate, frequency: input.frequency, count: input.installmentCount, exclusions: input.exclusions });
+  if (dates.length !== input.installmentCount) return [];
   let allocatedTotal = 0;
   let allocatedInterest = 0;
 
@@ -84,7 +129,7 @@ function buildAmountSchedule(input: {
 
     schedule.push({
       installmentNumber: index + 1,
-      dueDate: dateAt(input.firstInstallmentDate, input.frequency, index),
+      dueDate: dates[index],
       totalAmount,
       principalAmount,
       interestAmount,
@@ -103,6 +148,7 @@ function buildDeadlineSchedule(input: {
   frequency: CustomerCreditFrequency;
   firstInstallmentDate: string;
   finalDueDate: string;
+  exclusions: CustomerCreditCalendarExclusions;
 }): CustomerCreditPlanInstallment[] | null {
   const precision = getCurrencyDecimalPlaces();
   const scale = 10 ** precision;
@@ -112,6 +158,8 @@ function buildDeadlineSchedule(input: {
   const baseUnits = Math.floor(totalUnits / input.installmentCount);
   const extraUnits = totalUnits % input.installmentCount;
   const schedule: CustomerCreditPlanInstallment[] = [];
+  const dates = scheduleDates({ firstDate: input.firstInstallmentDate, frequency: input.frequency, count: input.installmentCount, finalDate: input.finalDueDate, exclusions: input.exclusions });
+  if (dates.length !== input.installmentCount) return null;
   let cumulativeUnits = 0;
   let allocatedInterest = 0;
 
@@ -126,9 +174,7 @@ function buildDeadlineSchedule(input: {
 
     schedule.push({
       installmentNumber: index + 1,
-      dueDate: index === input.installmentCount - 1
-        ? input.finalDueDate
-        : dateAt(input.firstInstallmentDate, input.frequency, index),
+      dueDate: dates[index],
       totalAmount,
       principalAmount,
       interestAmount,
@@ -217,6 +263,8 @@ export function calculateCustomerCreditPlanEstimate(input: {
   installmentAmount?: number | string;
   finalDueDate?: string;
   manualInstallments?: CustomerCreditManualInstallmentDraft[];
+  excludedWeekdays?: number[];
+  excludedDates?: string[];
 }): CustomerCreditPlanEstimate | null {
   const principal = Number(input.principal || 0);
   const interest = Number(input.interest || 0);
@@ -240,6 +288,10 @@ export function calculateCustomerCreditPlanEstimate(input: {
   let finalDueDate: string;
   let installmentAmount: number;
   let schedule: CustomerCreditPlanInstallment[] | null;
+  const exclusions: CustomerCreditCalendarExclusions = {
+    excludedWeekdays: input.excludedWeekdays || [],
+    excludedDates: input.excludedDates || [],
+  };
 
   if (input.calculationMode === 'AMOUNT') {
     installmentAmount = Number(input.installmentAmount || 0);
@@ -255,6 +307,7 @@ export function calculateCustomerCreditPlanEstimate(input: {
       installmentCount,
       frequency,
       firstInstallmentDate,
+      exclusions,
     });
     finalDueDate = schedule[schedule.length - 1]?.dueDate || '';
   } else {
@@ -275,13 +328,14 @@ export function calculateCustomerCreditPlanEstimate(input: {
       frequency,
       firstInstallmentDate,
       finalDueDate,
+      exclusions,
     });
     if (!schedule) return null;
   }
 
   return {
     firstInstallmentDate,
-    finalDueDate,
+    finalDueDate: schedule[schedule.length - 1]?.dueDate || finalDueDate,
     installmentAmount,
     installmentCount,
     principalAmount: roundCurrencyNumber(principal),
