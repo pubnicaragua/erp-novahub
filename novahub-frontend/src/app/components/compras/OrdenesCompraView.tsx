@@ -1,7 +1,7 @@
 import { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { 
-  ClipboardList, Plus, Search, Eye, Trash2, Ban, CheckCircle2, Clock, ChevronLeft, ChevronRight, Pencil, Download, FileText, X, Upload, AlertTriangle, Check, CircleHelp
+  ClipboardList, Plus, Search, Eye, Trash2, Ban, CheckCircle2, Clock, ChevronLeft, ChevronRight, Pencil, Download, FileText, X, Upload, AlertTriangle, Check, CircleHelp, ArrowRight
 } from 'lucide-react';
 import * as XLSX from 'xlsx';
 import { Card, CardContent } from '../ui/card';
@@ -88,6 +88,19 @@ interface Props {
 
 const MAX_EVIDENCE_IMAGE_BYTES = 10 * 1024 * 1024;
 const MAX_EVIDENCE_FILE_BYTES = 10 * 1024 * 1024;
+
+const isPurchaseOrderInProcess = (status: unknown) => normalizePurchaseOrderStatus(status) === 'IN_PROCESS';
+
+const getPurchaseOrderItemDisplayName = (item: any) => {
+  const productId = String(item?.productId || '').trim();
+  const candidates = item?.productId
+    ? [item.name, item.description, item.code]
+    : [item.description, item.name, item.code];
+  return candidates
+    .map((value) => String(value || '').trim())
+    .find((value) => value && value.toLowerCase() !== productId.toLowerCase())
+    || 'Producto sin nombre';
+};
 
 type PurchaseImportRow = {
   sku: string;
@@ -2051,7 +2064,7 @@ export function OrdenesCompraView({ data, summarySearch, loading, onRefresh, sup
   const filtered = data.filter(o => {
     const orderStatus = normalizePurchaseOrderStatus(o.status);
     if (statusFilter === 'TO_APPROVE') {
-      if (!PURCHASE_ORDER_ACTIONABLE_STATUSES.includes(orderStatus)) return false;
+      if (!isPurchaseOrderInProcess(orderStatus)) return false;
     } else if (statusFilter !== 'ALL' && normalizePurchaseOrderStatus(statusFilter) !== orderStatus) {
       return false;
     }
@@ -2162,7 +2175,7 @@ export function OrdenesCompraView({ data, summarySearch, loading, onRefresh, sup
         const orderStatus = normalizePurchaseOrderStatus(order.status);
         if (exportFilter === 'approved' && orderStatus !== 'APPROVED') return false;
         if (statusFilter === 'TO_APPROVE') {
-          if (!PURCHASE_ORDER_ACTIONABLE_STATUSES.includes(orderStatus)) return false;
+          if (!isPurchaseOrderInProcess(orderStatus)) return false;
         } else if (statusFilter !== 'ALL' && normalizePurchaseOrderStatus(statusFilter) !== orderStatus) {
           return false;
         }
@@ -2224,7 +2237,7 @@ export function OrdenesCompraView({ data, summarySearch, loading, onRefresh, sup
       const exportRows = colFilters.applyTo(allRows.filter((order) => {
         const orderStatus = normalizePurchaseOrderStatus(order.status);
         if (exportFilter === 'approved' && orderStatus !== 'APPROVED') return false;
-        if (statusFilter === 'TO_APPROVE' && !PURCHASE_ORDER_ACTIONABLE_STATUSES.includes(orderStatus)) return false;
+        if (statusFilter === 'TO_APPROVE' && !isPurchaseOrderInProcess(orderStatus)) return false;
         if (statusFilter !== 'ALL' && statusFilter !== 'TO_APPROVE' && normalizePurchaseOrderStatus(statusFilter) !== orderStatus) return false;
         if (!normalizedSearchTerm) return true;
         const haystack = [order.number, order.supplier?.name, order.address, order.requestedBy, order.notes, ...(order.items || []).flatMap((item: any) => [item.code, item.name, item.category, item.description])].filter(Boolean).join(' ').toLowerCase();
@@ -2289,7 +2302,7 @@ export function OrdenesCompraView({ data, summarySearch, loading, onRefresh, sup
     const requestedCancelIds = [...(pendingCancelId ? [pendingCancelId] : []), ...pendingBulkCancelIds];
     const cancelIds = requestedCancelIds.filter((id) => {
       const status = String(data.find((order) => order.id === id)?.status || '').toUpperCase();
-      return PURCHASE_ORDER_ACTIONABLE_STATUSES.includes(normalizePurchaseOrderStatus(status));
+      return isPurchaseOrderInProcess(status);
     });
     if (cancelIds.length === 0 || !cancelReason.trim()) return;
     setCancelLoading(true);
@@ -2314,6 +2327,7 @@ export function OrdenesCompraView({ data, summarySearch, loading, onRefresh, sup
 
   const handleApproveOrder = async (orderId: string) => {
     if (!canPerform('PURCHASES_ORDERS', 'read') || !canPerform('PURCHASES_ORDERS', 'approve')) return;
+    if (!pendingApproveOrder || String(pendingApproveOrder.id) !== String(orderId) || !isPurchaseOrderInProcess(pendingApproveOrder.status)) return;
     setApproving(true);
     const approveToastId = toast.loading('Aprobando orden de compra y preparando recepción...');
     try {
@@ -2368,7 +2382,7 @@ export function OrdenesCompraView({ data, summarySearch, loading, onRefresh, sup
             { label: 'Bodega', value: order.warehouse?.name || '—' },
           ],
           lines: (order.items || []).map((item: any) => ({
-            description: item.description || item.name || item.code || 'Artículo sin descripción',
+            description: getPurchaseOrderItemDisplayName(item),
             code: item.code,
             productCode: item.productCode,
             variantId: item.variantId,
@@ -2422,7 +2436,7 @@ export function OrdenesCompraView({ data, summarySearch, loading, onRefresh, sup
     ],
     lines: (order.items || []).map((item: any, index) => ({
       id: String(item.id || item.productId || index),
-      description: item.description || item.name || item.code || 'Artículo sin descripción',
+      description: getPurchaseOrderItemDisplayName(item),
       quantity: Number(item.quantity || 0),
       unitPriceLabel: formatConvertedAmount(Number(item.unitPrice || 0), order.currency, order.exchangeRate || globalRate),
       totalLabel: formatConvertedAmount(Number(item.total || (Number(item.quantity || 0) * Number(item.unitPrice || 0))), order.currency, order.exchangeRate || globalRate),
@@ -2444,10 +2458,10 @@ export function OrdenesCompraView({ data, summarySearch, loading, onRefresh, sup
         setEditingId(String(previewOrder.id));
       }}
       extraActions={previewOrder ? <>
-        {canPerform('PURCHASES_ORDERS', 'read') && canPerform('PURCHASES_ORDERS', 'submit') && normalizePurchaseOrderStatus(previewOrder.status) === 'DRAFT' && <Button type="button" variant="outline" className="rounded-xl" disabled={submittingOrderId === previewOrder.id} onClick={() => void handleSubmitOrder(String(previewOrder.id))}><Check className="mr-2 size-4" />Enviar a proceso</Button>}
-        {canPerform('PURCHASES_ORDERS', 'read') && canPerform('PURCHASES_ORDERS', 'approve') && PURCHASE_ORDER_ACTIONABLE_STATUSES.includes(normalizePurchaseOrderStatus(previewOrder.status)) && <Button type="button" className="rounded-xl bg-emerald-600 text-white hover:bg-emerald-700" onClick={() => { setPreviewOrder(null); setPendingApproveOrder(previewOrder); }}><CheckCircle2 className="mr-2 size-4" />Aprobar</Button>}
+        {canPerform('PURCHASES_ORDERS', 'read') && canPerform('PURCHASES_ORDERS', 'submit') && normalizePurchaseOrderStatus(previewOrder.status) === 'DRAFT' && <Button type="button" variant="outline" className="rounded-xl" disabled={submittingOrderId === previewOrder.id} onClick={() => void handleSubmitOrder(String(previewOrder.id))}><ArrowRight className="mr-2 size-4" />Enviar a proceso</Button>}
+        {canPerform('PURCHASES_ORDERS', 'read') && canPerform('PURCHASES_ORDERS', 'approve') && isPurchaseOrderInProcess(previewOrder.status) && <Button type="button" className="rounded-xl bg-emerald-600 text-white hover:bg-emerald-700" onClick={() => { setPreviewOrder(null); setPendingApproveOrder(previewOrder); }}><CheckCircle2 className="mr-2 size-4" />Aprobar</Button>}
         {canPerform('PURCHASES_ORDERS', 'edit') && PURCHASE_ORDER_ACTIONABLE_STATUSES.includes(normalizePurchaseOrderStatus(previewOrder.status)) && <Button type="button" variant="outline" className="rounded-xl" onClick={() => { setPreviewOrder(null); setEditingId(String(previewOrder.id)); }}><Pencil className="mr-2 size-4" />Editar</Button>}
-        {canPerform('PURCHASES_ORDERS', 'read') && canPerform('PURCHASES_ORDERS', 'reject') && PURCHASE_ORDER_ACTIONABLE_STATUSES.includes(normalizePurchaseOrderStatus(previewOrder.status)) && <Button type="button" variant="outline" className="rounded-xl border-rose-500/30 text-rose-600 hover:bg-rose-500/10 dark:text-rose-400" onClick={() => { setPreviewOrder(null); setPendingCancelId(String(previewOrder.id)); setCancelReason(''); }}><Ban className="mr-2 size-4" />Rechazar</Button>}
+        {canPerform('PURCHASES_ORDERS', 'read') && canPerform('PURCHASES_ORDERS', 'reject') && isPurchaseOrderInProcess(previewOrder.status) && <Button type="button" variant="outline" className="rounded-xl border-rose-500/30 text-rose-600 hover:bg-rose-500/10 dark:text-rose-400" onClick={() => { setPreviewOrder(null); setPendingCancelId(String(previewOrder.id)); setCancelReason(''); }}><Ban className="mr-2 size-4" />Rechazar</Button>}
       </> : undefined}
       onDownloadPdf={canPerform('PURCHASES_ORDERS', 'export') ? (format) => previewOrder ? void handleDownloadOrderPdf(previewOrder, format) : undefined : undefined}
     />
@@ -3143,6 +3157,13 @@ export function OrdenesCompraView({ data, summarySearch, loading, onRefresh, sup
                           disabled={!canEditOrderItems}
                           options={[
                             { label: 'Producto nuevo al recepcionar', value: '__none__', description: 'Se creará desde los datos de esta línea' },
+                            ...(item.productId && !products.some((product: any) => String(product?.id || '') === String(item.productId))
+                              ? [{
+                                  label: getPurchaseOrderItemDisplayName(item),
+                                  value: String(item.productId),
+                                  description: item.code ? `Código: ${item.code}` : 'Producto vinculado a esta orden',
+                                }]
+                              : []),
                             ...products.filter(Boolean).map((p: any) => ({
                               label: `${p.name || 'Producto'}${Array.isArray(p.variants) && p.variants.length > 0 ? ' · Tiene variantes' : ''}`,
                               value: String(p.id),
@@ -3525,7 +3546,7 @@ export function OrdenesCompraView({ data, summarySearch, loading, onRefresh, sup
           onBulkDelete={canPerform('PURCHASES_ORDERS', 'reject') ? async (ids) => {
             const validIds = ids.map(String).filter((id) => {
               if (id.startsWith('new-')) return false;
-              return PURCHASE_ORDER_ACTIONABLE_STATUSES.includes(normalizePurchaseOrderStatus(data.find((order) => order.id === id)?.status));
+              return isPurchaseOrderInProcess(data.find((order) => order.id === id)?.status);
             });
             if (validIds.length === 0) return;
             setPendingCancelId(null);
@@ -3537,10 +3558,10 @@ export function OrdenesCompraView({ data, summarySearch, loading, onRefresh, sup
               <Button title="Ver detalle completo" aria-label="Ver detalle completo de la orden" variant="ghost" size="icon" className="size-8 shrink-0 rounded-lg hover:bg-primary/10 hover:text-primary" onClick={() => { setPreviewOrder(null); setEditingId(String(row.id)); }}>
                 <Eye className="size-4" />
               </Button>
-              {canPerform('PURCHASES_ORDERS', 'read') && canPerform('PURCHASES_ORDERS', 'submit') && normalizePurchaseOrderStatus(row.status) === 'DRAFT' && <Button type="button" title="Enviar orden a proceso" aria-label={`Enviar a proceso la orden ${row.number || ''}`} variant="ghost" size="icon" className="size-8 shrink-0 rounded-lg text-primary hover:bg-primary/10" disabled={submittingOrderId === row.id} onClick={() => void handleSubmitOrder(String(row.id))}><Check className="size-4" /></Button>}
-              {canPerform('PURCHASES_ORDERS', 'read') && canPerform('PURCHASES_ORDERS', 'approve') && PURCHASE_ORDER_ACTIONABLE_STATUSES.includes(normalizePurchaseOrderStatus(row.status)) && <Button type="button" title="Aprobar orden de compra" aria-label="Aprobar orden de compra" variant="ghost" size="icon" className="size-8 shrink-0 rounded-lg text-emerald-600 hover:bg-emerald-500/10 hover:text-emerald-700" onClick={() => { setPreviewOrder(null); setPendingApproveOrder(row); }}><CheckCircle2 className="size-4" /></Button>}
+              {canPerform('PURCHASES_ORDERS', 'read') && canPerform('PURCHASES_ORDERS', 'submit') && normalizePurchaseOrderStatus(row.status) === 'DRAFT' && <Button type="button" title="Enviar orden a proceso" aria-label={`Enviar a proceso la orden ${row.number || ''}`} variant="ghost" size="icon" className="size-8 shrink-0 rounded-lg text-primary hover:bg-primary/10" disabled={submittingOrderId === row.id} onClick={() => void handleSubmitOrder(String(row.id))}><ArrowRight className="size-4" /></Button>}
+              {canPerform('PURCHASES_ORDERS', 'read') && canPerform('PURCHASES_ORDERS', 'approve') && isPurchaseOrderInProcess(row.status) && <Button type="button" title="Aprobar orden de compra" aria-label="Aprobar orden de compra" variant="ghost" size="icon" className="size-8 shrink-0 rounded-lg text-emerald-600 hover:bg-emerald-500/10 hover:text-emerald-700" onClick={() => { setPreviewOrder(null); setPendingApproveOrder(row); }}><CheckCircle2 className="size-4" /></Button>}
               {canPerform('PURCHASES_ORDERS', 'edit') && PURCHASE_ORDER_ACTIONABLE_STATUSES.includes(normalizePurchaseOrderStatus(row.status)) && <Button title="Editar orden de compra" aria-label="Editar orden de compra" variant="ghost" size="icon" className="size-8 shrink-0 rounded-lg hover:bg-primary/10 hover:text-primary" onClick={() => setEditingId(String(row.id))}><Pencil className="size-4" /></Button>}
-              {canPerform('PURCHASES_ORDERS', 'read') && canPerform('PURCHASES_ORDERS', 'reject') && PURCHASE_ORDER_ACTIONABLE_STATUSES.includes(normalizePurchaseOrderStatus(row.status)) && <Button type="button" title="Rechazar orden de compra" aria-label="Rechazar orden de compra" variant="ghost" size="icon" className="size-8 shrink-0 rounded-lg text-rose-500 hover:bg-rose-500/10 hover:text-rose-600" onClick={() => { setPreviewOrder(null); setPendingCancelId(String(row.id)); setCancelReason(''); }}><Ban className="size-4" /></Button>}
+              {canPerform('PURCHASES_ORDERS', 'read') && canPerform('PURCHASES_ORDERS', 'reject') && isPurchaseOrderInProcess(row.status) && <Button type="button" title="Rechazar orden de compra" aria-label="Rechazar orden de compra" variant="ghost" size="icon" className="size-8 shrink-0 rounded-lg text-rose-500 hover:bg-rose-500/10 hover:text-rose-600" onClick={() => { setPreviewOrder(null); setPendingCancelId(String(row.id)); setCancelReason(''); }}><Ban className="size-4" /></Button>}
             </div>
           )}
         />
