@@ -30,6 +30,7 @@ import { TaxCatalogView } from './TaxCatalogView'
 import { ActividadModulosView } from './ActividadModulosView'
 import { IntegrityCheckPanel } from './IntegrityCheckPanel'
 import { contabilidadService, type AccountMappingPatch } from '../../services/contabilidad.service'
+import { customersService } from '../../services/ventas.service'
 import { CHART_ACCOUNT_CSV_HEADERS, csvRowsToText, downloadXlsx, templateRows } from '../../utils/chartOfAccountsCsv'
 import { accountingList, useAccountingQuery } from '../../hooks/useAccountingQuery'
 import { useAuth } from '../../contexts/AuthContext'
@@ -931,6 +932,11 @@ export function ConfiguracionContableView() {
   const [customModules, setCustomModules] = useState<ConnectionModule[]>([])
   const [quickSetupOpen, setQuickSetupOpen] = useState(false)
   const configQuery = useAccountingQuery<any>(['config'], async (signal) => contabilidadService.getConfig(signal))
+  const customerLoansConfigQuery = useAccountingQuery<any>(['customer-loans-config'], async signal => {
+    const response: any = await customersService.getCustomerLoansConfig(signal)
+    return response?.data?.data ?? response?.data ?? response
+  }, { staleTime: 30_000 })
+  const customerLoansEnabled = customerLoansConfigQuery.data?.enabled === true
   const accountsQuery = useAccountingQuery<any[]>(['accounts'], async (signal) => accountingList(await contabilidadService.getChartOfAccounts(false, signal)))
   const connectionsQuery = useAccountingQuery<any>(['connections'], async (signal) => contabilidadService.testConnections(signal), { enabled: false, staleTime: 30_000 })
   const suggestedAccountsQuery = useAccountingQuery<SuggestedAccountsResponse>(
@@ -1235,7 +1241,8 @@ const [mappingsSearch, setMappingsSearch] = useState('')
 
   // builtin + custom modules combined for display
   const allModuleDefs = useMemo(() => {
-    const builtins = BUILTIN_MODULES.filter(m => !OPERATIONAL_ONLY_MODULE_IDS.has(m.id)).map(m => ({
+    const builtins = BUILTIN_MODULES.filter(m => !OPERATIONAL_ONLY_MODULE_IDS.has(m.id)
+      && (m.id !== 'customerLoan' || customerLoansEnabled)).map(m => ({
       ...m,
       isBuiltin: true as const,
       fields: m.fields,
@@ -1249,7 +1256,7 @@ const [mappingsSearch, setMappingsSearch] = useState('')
       fields: m.fields,
     }))
     return [...builtins, ...customs]
-  }, [customModules])
+  }, [customModules, customerLoansEnabled])
   const standardModuleDefs = allModuleDefs.filter(module => module.isBuiltin)
   const suggestionsForField = (moduleId: string, fieldKey: string) =>
     suggestedAccountsQuery.data?.mappings?.[moduleId]?.[fieldKey]?.matches || []

@@ -198,7 +198,7 @@ export const customersService = {
   getCustomerHistoryProfile: () => api.get<CustomerHistoryProfile>('/sales/customers/history-profile'),
   saveCustomerHistoryProfile: (profile: Pick<CustomerHistoryProfile, 'activityType' | 'recordCountLabel' | 'measureLabel' | 'measureUnit'>) =>
     api.put<CustomerHistoryProfile>('/sales/customers/history-profile', profile),
-  getCustomerLoansConfig: () => api.get<{ enabled: boolean }>('/sales/customer-loans/config'),
+  getCustomerLoansConfig: (signal?: AbortSignal) => api.get<{ enabled: boolean }>('/sales/customer-loans/config', { signal }),
   getCustomerLoans: (customerId: string) => api.get<any[]>(`/sales/customers/${customerId}/loans`),
   getCustomerLoansPage: (customerId: string, filters: { limit?: number; cursor?: string }, signal?: AbortSignal) =>
     api.get<CustomerLoanPage>(`/sales/customers/${customerId}/loans`, { params: filters, signal }),
