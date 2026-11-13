@@ -105,4 +105,28 @@ body.embedded-view .panel-status{padding:4px 10px;min-height:0;border-radius:999
 body.embedded-view .panel-status #offlineStatusText{font-size:11px;font-weight:600}
 body.embedded-view #sheetHeader{padding-top:6px;padding-bottom:0}
 .work-zone-list .meta{font-size:12px;line-height:1.4}
+/* Planificador de rutas: menos texto, mismo estilo del ERP. */
+#routeNew,#routeFrequencyHint,#routeImportStatus,#routeVicinityHint,.route-vicinity-intro,p.route-order-note:not([id]),#routeAssigneeRoutes,#routeAssigneeHistory,.route-catalog-filters{display:none!important}
+.route-planner-body:not(:has(#routeActionPanel:not([hidden]))) :is(.route-summary,.route-progress){display:none}
+.route-planner-card{font-family:Montserrat,system-ui,sans-serif}
+.route-planner-head h2{font-size:17px;font-weight:700}
+.route-planner-body .route-field,.route-planner-body label{display:grid;gap:5px;margin:10px 0 0;font-size:12px;font-weight:600;color:var(--nova-ui-muted-foreground,#5c6f69);text-transform:none;letter-spacing:0}
+.route-planner-body input,.route-planner-body select{min-height:40px;font-size:14px;font-weight:500;color:var(--nova-ui-foreground,#11241f)}
+.route-row{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+.route-toolbar{display:flex;justify-content:flex-end;gap:12px;margin:10px 0 0}
+.route-toolbar button{border:0;background:transparent;font-size:12px;font-weight:600;color:var(--nova-ui-primary,#08785a);cursor:pointer;padding:4px 0}
+.route-toolbar #routeClear{color:#b42318}
+.route-mode-buttons{display:flex;gap:6px;margin:8px 0}
+.route-mode-buttons button{flex:1;min-height:38px;border:1px solid var(--nova-ui-border,#dce8e3);border-radius:10px;background:var(--nova-ui-card,#fff);font-weight:600;font-size:13px;cursor:pointer}
+.route-mode-buttons button.active{background:var(--nova-ui-primary,#08785a);border-color:transparent;color:#fff}
+.route-vicinity-controls>label:first-child{display:none}
+.route-radius-chips{margin:0 0 8px}
+.route-radius-chips button{font-size:12px;min-height:34px}
+.route-radius-chips button.active{background:var(--nova-ui-primary,#08785a);border-color:transparent;color:#fff}
+.route-reassign{display:grid;gap:3px;margin:6px 0 0;font-size:12px;font-weight:600}
+.route-reassign select{min-height:36px;font-size:13px;font-weight:500}
+@media(max-width:820px){#routeModal{inset:auto 0 0 0!important;width:100%!important;height:auto!important;max-height:68dvh!important}#routeModal .route-planner-card{border-radius:16px 16px 0 0;height:auto;max-height:inherit}.route-row{grid-template-columns:1fr}}
+.route-planner-body .route-transfer-option{display:flex;flex-direction:row;align-items:center;gap:10px;margin:12px 0 0;padding:10px 12px;border-radius:10px}
+.route-planner-body .route-transfer-help,.route-planner-body .route-transfer-copy small{display:none}
+.route-planner-body .route-transfer-title{font-size:13px;font-weight:600}
 </style>

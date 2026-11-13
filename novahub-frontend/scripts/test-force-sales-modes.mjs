@@ -168,4 +168,13 @@ const dialog = await read(root, 'src', 'app', 'components', 'force-sales', 'Forc
 assert.match(dialog, /customersService\.create\(/, 'Si el cliente no existe se crea en Ventas desde el mismo punto');
 assert.match(dialog, /canCreate/, 'Crear cliente exige el permiso de Ventas');
 
+// --- Todo elemento al que el motor le conecta eventos sin comprobarlo existe en el HTML ---------------------------
+// Si falta uno, el arranque del motor se detiene en silencio y el resto de los botones deja de funcionar.
+{
+  const definedIds = new Set([...published.matchAll(/\sid="([^"]+)"/g)].map((match) => match[1]));
+  const unchecked = [...published.matchAll(/document\.getElementById\('([^']+)'\)\.addEventListener/g)].map((match) => match[1]);
+  const missing = [...new Set(unchecked)].filter((id) => !definedIds.has(id));
+  assert.deepEqual(missing, [], 'Elementos con eventos conectados que ya no existen en el HTML: ' + missing.join(', '));
+}
+
 console.log('force-sales modes: assembled map, mode registry, per-mode panels, mode permissions, layers, navigation links and shell wiring passed');

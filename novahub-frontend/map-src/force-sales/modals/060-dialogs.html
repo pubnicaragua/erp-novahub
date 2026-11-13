@@ -28,7 +28,7 @@
 </div>
 <div class="modal-backdrop" id="routeModal" hidden>
  <section class="confirm-modal route-planner-card" role="region" aria-labelledby="routeTitle">
-  <header class="route-planner-head"><div><h2 id="routeTitle">Planificar ruta comercial</h2><p id="routeDescription">Empieza a marcar los puntos comerciales en el mapa. Cada punto agregado aparecerá aquí para ordenarlo.</p></div><button class="route-panel-close" id="routePanelClose" type="button" aria-label="Cerrar panel de rutas" title="Cerrar panel de rutas">×</button></header>
+  <header class="route-planner-head"><div><h2 id="routeTitle">Planificar ruta comercial</h2><p id="routeDescription">Elige los puntos en el mapa.</p></div><button class="route-panel-close" id="routePanelClose" type="button" aria-label="Cerrar panel de rutas" title="Cerrar panel de rutas">×</button></header>
   <div class="route-planner-body">
   <div class="route-summary" aria-label="Progreso de la ruta"><div class="route-stat"><b id="routeStopCount">0</b><span>Puntos en ruta</span></div><div class="route-stat"><b id="routeCompletedCount">0</b><span>Completadas</span></div><div class="route-stat"><b id="routeNextStop">—</b><span>Siguiente parada</span></div></div>
   <p class="route-order-note" id="routeMetrics" aria-live="polite" hidden></p>
@@ -45,10 +45,10 @@
   </section>
   <nav class="route-planner-tabs" role="tablist" aria-label="Gestión de rutas"><button type="button" role="tab" id="routePlanTab" aria-selected="true" aria-controls="routePlanPane">Planificar</button><button type="button" role="tab" id="routeListTab" aria-selected="false" aria-controls="routeListPane">Rutas</button></nav>
   <section id="routePlanPane" class="route-plan-pane" role="tabpanel" aria-labelledby="routePlanTab">
-  <div class="route-toolbar"><span>Orden de visita · selección desde el mapa</span><button id="routeImport" type="button">Importar clientes / rutas</button><button id="routeClear" type="button">Descartar borrador</button></div>
-  <label class="route-field" for="routeFrequency">Frecuencia<select id="routeFrequency"><option value="ONCE">Solo una vez</option><option value="DAILY">Diaria</option></select></label>
-  <p class="meta" id="routeFrequencyHint">Se guardará una sola ejecución de esta ruta.</p>
-  <label class="route-field" for="routeScheduledFor">Fecha de operación<input id="routeScheduledFor" type="date"></label>
+  <div class="route-toolbar"><button id="routeImport" type="button">Importar clientes / rutas</button><button id="routeClear" type="button">Descartar borrador</button></div>
+  <label class="route-field route-name-field" for="routeName">Nombre de la ruta<input id="routeName" type="text" maxlength="180" placeholder="Ej. Cobro zona norte · lunes"></label>
+  <p class="meta" id="routeFrequencyHint" hidden></p>
+  <div class="route-row" id="routeScheduleRow"><label class="route-field" for="routeFrequency">Frecuencia<select id="routeFrequency"><option value="ONCE">Solo una vez</option><option value="DAILY">Diaria</option></select></label><label class="route-field" for="routeScheduledFor">Fecha de inicio<input id="routeScheduledFor" type="date"></label></div>
   <label for="routeAssigneeSearch" id="routeAssigneeLabel">Responsable de la ruta</label>
   <div class="route-assignee-picker" id="routeAssigneePicker">
    <input class="route-assignee-search" id="routeAssigneeSearch" type="text" role="combobox" aria-autocomplete="list" aria-expanded="false" aria-controls="routeAssigneeOptions" aria-activedescendant="" placeholder="Busca y elige un usuario" autocomplete="off">
@@ -62,18 +62,17 @@
   <button class="cancel" id="routeListRetry" type="button" hidden>Reintentar carga de rutas</button>
   <section class="route-assignee-routes" id="routeAssigneeRoutes" aria-live="polite"></section>
   <details class="route-assignee-history" id="routeAssigneeHistory" hidden><summary>Historial</summary><div id="routeAssigneeHistoryList"></div></details>
-  <button class="cancel route-new-button" id="routeNew" type="button">Empezar otra ruta</button>
-  <label for="routeName">Nombre de la ruta</label>
-  <input id="routeName" type="text" maxlength="180" placeholder="Ej. Ruta cobro zona norte - lunes">
+  <button class="cancel route-new-button" id="routeNew" type="button" hidden>Empezar otra ruta</button>
   <label class="route-transfer-option" id="routeTransferWrap"><input class="route-transfer-checkbox" id="routeTransferOwnership" type="checkbox" aria-describedby="routeTransferHelp"><span class="route-transfer-copy"><span class="route-transfer-header"><span class="route-transfer-title">Transferir responsable de los puntos</span><span class="route-transfer-count"><b id="routeTransferCount">0</b><span id="routeTransferUnit">puntos</span></span></span><span class="route-transfer-destination">A: <b id="routeTransferAssigneeName">Sin responsable</b></span><small class="route-transfer-help" id="routeTransferHelp">Si no activas esta opción, cada punto conserva su responsable actual.</small></span></label>
   <div class="route-offline-status" id="routeOfflineStatus" hidden>El borrador se conserva en este dispositivo. Conéctate a internet para guardar y asignar.</div>
   <div class="meta" id="routeImportStatus">El orden inicial será el de selección. “Ordenar por cercanía” usa una aproximación desde la primera parada.</div>
   <p class="route-order-note" id="routeOrderLockHint" role="status" aria-live="polite"></p>
-  <p class="route-order-note">“Ver recorrido” dibuja el trayecto por carretera cuando el servicio está disponible.</p>
   <p class="route-vicinity-hint" id="routeVicinityHint" hidden>En cada parada puedes elegir sus puntos cercanos por cantidad o por radio.</p>
   <section id="routeVicinityTools" class="route-vicinity-tools" hidden aria-label="Selección de puntos cercanos">
    <div class="route-vicinity-head"><b id="routeVicinityTitle">Seleccionar puntos cercanos</b><button id="routeVicinityClose" type="button" aria-label="Cerrar selección cercana">×</button></div>
    <p class="route-vicinity-intro">La parada elegida será el centro. Los resultados respetan los filtros y capas activos, se resaltan en el mapa y se agregan al final de la ruta.</p>
+   <div class="route-mode-buttons" id="routeVicinityModeButtons" role="group" aria-label="Cómo elegir los puntos cercanos"><button type="button" data-mode="count">Por cantidad</button><button type="button" data-mode="radius">Por radio</button></div>
+   <div class="radius-chips route-radius-chips" id="routeRadiusChips" role="group" aria-label="Radios rápidos" hidden><button type="button" data-km="0.5">500 m</button><button type="button" data-km="1">1 km</button><button type="button" data-km="5">5 km</button><button type="button" data-km="10">10 km</button><button type="button" data-km="20">20 km</button></div>
    <div class="route-vicinity-controls">
     <label>Criterio<select id="routeVicinityMode"><option value="count">Cantidad de puntos</option><option value="radius">Radio de distancia</option></select></label>
     <label id="routeVicinityCountWrap">Puntos<input id="routeVicinityCount" type="number" min="1" max="500" step="1" value="10" aria-label="Cantidad de puntos cercanos"></label>

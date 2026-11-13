@@ -277,7 +277,10 @@ function renderRouteVicinityPreview(){
   }).join('');
   const summary=document.getElementById('routeVicinitySummary'),addButton=document.getElementById('routeVicinityAdd'),radiusLabel=radiusMeters<1000?`${radiusMeters} m`:`${Number((radiusMeters/1000).toFixed(2))} km`;
   summary.textContent=mode==='count'?(!validCount?'Ingresa una cantidad de 1 a 500 puntos.':!matches.length?'No hay más puntos disponibles con los filtros y capas actuales.':includedMatches.length?'Se agregarán '+includedMatches.length+' de '+matches.length+' puntos elegibles más cercanos a '+center.name+'.':'Hay '+matches.length+' candidatos, pero ninguno está marcado para agregar.'):!validRadius?'Ingresa un radio mayor que 0 y de hasta 50 km.':!matches.length?'No hay puntos elegibles dentro de '+radiusLabel+'. Prueba con un radio mayor.':includedMatches.length?'Se agregarán '+includedMatches.length+' de '+matches.length+' puntos dentro de '+radiusLabel+' de '+center.name+'.':'Hay '+matches.length+' candidatos dentro de '+radiusLabel+', pero ninguno está marcado para agregar.';
-  if(mode==='radius'&&validRadius&&window.google?.maps?.Circle&&googleMap)routeVicinityCircle=new google.maps.Circle({map:googleMap,center:{lat:Number(center.lat),lng:Number(center.lng)},radius:radiusMeters,fillColor:'#08785a',fillOpacity:.09,strokeColor:'#08785a',strokeOpacity:.75,strokeWeight:2,clickable:false,zIndex:1090});
+  if(mode==='radius'&&validRadius&&window.google?.maps?.Circle&&googleMap)routeVicinityCircle=new google.maps.Circle({map:googleMap,center:{lat:Number(center.lat),lng:Number(center.lng)},radius:radiusMeters,fillColor:'#08785a',fillOpacity:.12,strokeColor:'#08785a',strokeOpacity:.95,strokeWeight:3,clickable:false,zIndex:1090});
+  if(mode==='radius'&&validRadius&&routeVicinityPreview.fittedRadius!==radiusMeters){routeVicinityPreview.fittedRadius=radiusMeters;fitMapToRadius(center,radiusMeters)}
+  document.querySelectorAll('#routeVicinityModeButtons [data-mode]').forEach(button=>button.classList.toggle('active',button.dataset.mode===mode));
+  const radiusChips=document.getElementById('routeRadiusChips');if(radiusChips){radiusChips.hidden=mode!=='radius';radiusChips.querySelectorAll('[data-km]').forEach(chip=>chip.classList.toggle('active',Math.abs(Number(chip.dataset.km)*1000-radiusMeters)<1))}
   addButton.disabled=!includedMatches.length;addButton.textContent=includedMatches.length?'Agregar '+includedMatches.length+' punto'+(includedMatches.length===1?'':'s'):'Selecciona puntos';
   matches.forEach(({business})=>{
     const key=String(keyOf(business)),included=includedKeys.has(key),el=document.createElement('div');el.className='nova-route-marker route-vicinity-marker'+(included?'':' route-vicinity-marker-excluded');el.textContent=included?'✓':'×';
@@ -287,10 +290,30 @@ function renderRouteVicinityPreview(){
     routeVicinityMarkers.push(marker);
   });
 }
+// Encuadra el círculo completo: con radios grandes (p. ej. 20 km) el círculo no cabía en pantalla y parecía no existir.
+function fitMapToRadius(center,radiusMeters){
+  if(!googleMap||!window.google?.maps?.LatLngBounds)return;
+  const lat=Number(center.lat),lng=Number(center.lng);
+  const dLat=radiusMeters/111320,dLng=radiusMeters/(111320*Math.max(.2,Math.cos(lat*Math.PI/180)));
+  const bounds=new google.maps.LatLngBounds();
+  bounds.extend({lat:lat-dLat,lng:lng-dLng});bounds.extend({lat:lat+dLat,lng:lng+dLng});
+  googleMap.fitBounds(bounds,48);
+}
+function setRouteVicinityMode(mode){
+  const select=document.getElementById('routeVicinityMode');if(!select)return;
+  select.value=mode;
+  if(routeVicinityPreview)routeVicinityPreview.fittedRadius=null;
+  renderRouteVicinityPreview();
+}
+function setRouteVicinityRadiusKm(km){
+  const input=document.getElementById('routeVicinityRadius'),unit=document.getElementById('routeVicinityRadiusUnit');if(!input||!unit)return;
+  unit.value='km';input.dataset.unit='km';input.max='50';input.step='0.1';input.value=String(km);
+  renderRouteVicinityPreview();
+}
 function beginRouteVicinity(index){
   if(!canEditRouteComposition())return;
   const center=routeBusinesses[index];if(!center||!routePointCoordinates(center))return;
-  routeVicinityPreview={center,items:[]};document.getElementById('routeVicinityTitle').textContent=`Seleccionar puntos cercanos a ${center.name||'esta parada'}`;const tools=document.getElementById('routeVicinityTools');tools.hidden=false;renderRouteVicinityPreview();
+  routeVicinityPreview={center,items:[],fittedRadius:null};document.getElementById('routeVicinityTitle').textContent=`Seleccionar puntos cercanos a ${center.name||'esta parada'}`;const tools=document.getElementById('routeVicinityTools');tools.hidden=false;renderRouteVicinityPreview();
   if(googleMap){googleMap.panTo({lat:Number(center.lat),lng:Number(center.lng)});if((googleMap.getZoom()||0)<14)googleMap.setZoom(14)}
   tools.scrollIntoView?.({behavior:'smooth',block:'nearest'});document.getElementById('routeVicinityMode').focus({preventScroll:true});
 }

@@ -93,6 +93,8 @@ document.getElementById('routeVicinityRadiusUnit').addEventListener('change',()=
   if(Number.isFinite(value)&&value>0){const meters=value*(previous==='km'?1000:1);input.value=String(Number((meters/(next==='km'?1000:1)).toFixed(4)))}
   input.dataset.unit=next;input.max=next==='km'?'50':'50000';input.step=next==='km'?'0.1':'50';renderRouteVicinityPreview();
 });
+document.getElementById('routeVicinityModeButtons')?.addEventListener('click',event=>{const button=event.target?.closest?.('[data-mode]');if(button)setRouteVicinityMode(button.dataset.mode)});
+document.getElementById('routeRadiusChips')?.addEventListener('click',event=>{const chip=event.target?.closest?.('[data-km]');if(chip)setRouteVicinityRadiusKm(Number(chip.dataset.km))});
 document.getElementById('routeVicinityClose').addEventListener('click',clearRouteVicinityPreview);
 document.getElementById('routeVicinityCancel').addEventListener('click',clearRouteVicinityPreview);
 document.getElementById('routeVicinityCandidates').addEventListener('change',event=>{

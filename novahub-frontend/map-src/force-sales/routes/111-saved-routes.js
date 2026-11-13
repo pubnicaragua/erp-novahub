@@ -155,11 +155,35 @@ function renderRouteCatalog(){
     const recurrenceLabel=route.dailyScheduleId?`Ruta diaria · ${route.dailySchedule?.active?'nueva ejecución cada día':'programación detenida'}`:'Ruta de una sola vez';
     const recurrenceAction=route.dailyScheduleId&&canForceSales('editRoute')?`<button type="button" data-toggle-daily-route="${esc(route.dailyScheduleId)}" data-active="${route.dailySchedule?.active?'true':'false'}">${route.dailySchedule?.active?'Detener ruta diaria':'Reanudar ruta diaria'}</button>`:'';
     const openLabel=String(route.status||'').toUpperCase()==='IN_PROGRESS'?'Continuar':['COMPLETED','CANCELLED'].includes(String(route.status||'').toUpperCase())?'Consultar':'Abrir';
-    return `<article class="route-assignee-card"><div><b>${esc(route.name||'Ruta sin nombre')}</b><span>${esc(routeDateLabel(routeDateValue(route)))} · ${state} · ${done}/${stops.length} visitas</span><span>${recurrenceLabel}</span><span>Inicio: ${esc(started.replace(/^Inicio: /,''))}</span><span>Siguiente parada: ${esc(nextName)}</span><span>Responsable: ${esc(assigned)}</span></div><div class="route-assignee-actions">${startButton}<button type="button" data-open-route="${esc(route.id)}">${openLabel}</button>${recurrenceAction}</div></article>`;
+    return `<article class="route-assignee-card"><div><b>${esc(route.name||'Ruta sin nombre')}</b><span>${esc(routeDateLabel(routeDateValue(route)))} · ${state} · ${done}/${stops.length} visitas</span><span>${recurrenceLabel}</span><span>Inicio: ${esc(started.replace(/^Inicio: /,''))}</span><span>Siguiente parada: ${esc(nextName)}</span>${routeResponsibleLine(route,assigned)}</div><div class="route-assignee-actions">${startButton}<button type="button" data-open-route="${esc(route.id)}">${openLabel}</button>${recurrenceAction}</div></article>`;
   }).join(''):'<p class="meta route-empty">No hay rutas que coincidan con este filtro.</p>';
   list.querySelectorAll('[data-open-route]').forEach(button=>button.addEventListener('click',()=>{if(openSavedRoute(button.dataset.openRoute))setRoutePlannerTab('plan')}));
+  list.querySelectorAll('[data-reassign-route]').forEach(select=>select.addEventListener('change',()=>void reassignSavedRoute(select.dataset.reassignRoute,select.value)));
   list.querySelectorAll('[data-start-route]').forEach(button=>button.addEventListener('click',()=>void startSavedRoute(button.dataset.startRoute)));
   list.querySelectorAll('[data-toggle-daily-route]').forEach(button=>button.addEventListener('click',()=>void setDailyRouteScheduleActive(button.dataset.toggleDailyRoute,button.dataset.active!=='true')));
+}
+// Responsable de la ruta: quien tiene permiso lo cambia aquí mismo, sin abrir la ruta. Los puntos conservan su propio responsable.
+function routeResponsibleLine(route,assignedName){
+  const editable=canForceSales('assignRoute')&&CAN_ASSIGN_TEAM&&['PLANNED','IN_PROGRESS'].includes(String(route.status||'').toUpperCase());
+  if(!editable)return '<span>Responsable: '+esc(assignedName)+'</span>';
+  const options=['<option value="">Sin asignar</option>'].concat(assignees.map(user=>'<option value="'+esc(user.id)+'"'+(String(user.id)===String(route.assignedToId||'')?' selected':'')+'>'+esc(user.name||user.email||user.id)+'</option>')).join('');
+  return '<label class="route-reassign">Responsable<select data-reassign-route="'+esc(route.id)+'" aria-label="Responsable de la ruta '+esc(route.name||'')+'">'+options+'</select></label>';
+}
+async function reassignSavedRoute(routeId,assigneeId){
+  const route=remoteRoutes.find(item=>String(item.id)===String(routeId));
+  if(!route||!requireForceSales('assignRoute'))return;
+  if(!navigator.onLine){toast('Conéctate a internet para cambiar el responsable');renderRouteCatalog();return}
+  const target=assignees.find(user=>String(user.id)===String(assigneeId));
+  if(!confirm(assigneeId?'¿Pasar la ruta «'+(route.name||'sin nombre')+'» a '+(target?.name||'este usuario')+'? Los puntos conservan su responsable.':'¿Dejar la ruta «'+(route.name||'sin nombre')+'» sin responsable?')){renderRouteCatalog();return}
+  try{
+    await forceSalesRequest('/force-sales/routes/'+encodeURIComponent(routeId),{method:'PATCH',body:JSON.stringify({assignedToId:assigneeId||null})});
+    forceSalesSyncErrors.delete('rutas');
+    await loadRemoteRoutes();
+    toast(assigneeId?'Ruta asignada a '+(target?.name||'el usuario'):'Ruta sin responsable');
+  }catch(error){
+    toast('No se pudo cambiar el responsable: '+(error?.message||'el ERP rechazó la operación'));
+    renderRouteCatalog();
+  }
 }
 async function setDailyRouteScheduleActive(scheduleId,active){
   if(!canForceSales('editRoute')){requireForceSales('editRoute');return}

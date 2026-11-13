@@ -289,4 +289,4 @@ document.querySelectorAll('[data-visit-filter]').forEach(chip=>chip.addEventList
   syncVisitChips();
   render();
 }));
-document.getElementById('deliveryNewRoute')?.addEventListener('click',()=>openRoutePlanner(selectedBusinesses()));
+document.getElementById('deliveryNewRoute')?.addEventListener('click',()=>openRoutePlanner(selectedBusinesses().map(business=>business.id)));
