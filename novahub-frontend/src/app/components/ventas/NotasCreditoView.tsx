@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from 'react';
 import { useQueryClient } from '@tanstack/react-query';
 import {
   BadgeDollarSign, Plus, Search, TrendingUp, Clock, CheckCircle2, CircleDollarSign,
-  Eye, Trash2, ChevronLeft, Send, CreditCard, AlertTriangle, Ban, Bell, Mail, MessageCircle, CalendarDays, FileText,
+  Eye, Trash2, ChevronLeft, Send, CreditCard, AlertTriangle, Ban, Bell, Mail, MessageCircle, CalendarDays, FileText, Settings2,
 } from 'lucide-react';
 import { Card, CardContent } from '../ui/card';
 import { Button } from '../ui/button';
@@ -312,6 +312,7 @@ export function NotasCreditoView({ data, summaryData, summaryLoading, summaryErr
   const [paymentReceipt, setPaymentReceipt] = useState<PaymentReceived | null>(null);
   const [remindersOpen, setRemindersOpen] = useState(false);
   const [holidayAdminOpen, setHolidayAdminOpen] = useState(false);
+  const [creditConfigurationOpen, setCreditConfigurationOpen] = useState(false);
   const [creditHolidays, setCreditHolidays] = useState<Array<{ id: string; name: string; date: string }>>([]);
   const [holidayName, setHolidayName] = useState('');
   const [holidayDate, setHolidayDate] = useState('');
@@ -1655,8 +1656,7 @@ export function NotasCreditoView({ data, summaryData, summaryLoading, summaryErr
       <div className="flex flex-col gap-4">
         <div className="flex flex-col justify-between gap-4 py-2 lg:flex-row lg:items-center">
           <div className="erp-list-toolbar flex flex-wrap items-center justify-end gap-3" data-tour="sales-list-actions">
-            {canPerform('SALES_CREDIT_NOTES', 'edit') && <Button type="button" variant="outline" onClick={() => setHolidayAdminOpen(true)} className="h-10 rounded-xl px-4 text-[10px] font-black uppercase tracking-widest"><CalendarDays className="mr-2 size-4" /> Feriados</Button>}
-            {(canPerform('SALES_CREDIT_NOTES', 'edit') || canPerform('SALES_CREDIT_NOTES', 'send')) && <Button type="button" variant="outline" onClick={() => setRemindersOpen(true)} className="h-10 rounded-xl px-4 text-[10px] font-black uppercase tracking-widest"><Bell className="mr-2 size-4" /> Recordatorios</Button>}
+            {(canPerform('SALES_CREDIT_NOTES', 'edit') || canPerform('SALES_CREDIT_NOTES', 'send')) && <Button type="button" variant="outline" onClick={() => setCreditConfigurationOpen(true)} className="h-10 rounded-xl px-4 text-[10px] font-black uppercase tracking-widest"><Settings2 className="mr-2 size-4" /> Configuración</Button>}
             <ViewLayoutSelect value={layoutMode} onChange={(value) => setLayoutMode(value === 'kanban' ? 'table' : value)} ariaLabel="Elegir distribución de créditos" />
             <div className="w-full max-w-full shrink-0 sm:w-[11rem]">
               <Select value={statusFilter} onValueChange={(value) => setStatusFilter(value as typeof statusFilter)}>
@@ -1858,6 +1858,37 @@ export function NotasCreditoView({ data, summaryData, summaryLoading, summaryErr
             <Button variant="outline" onClick={() => setPaymentCredit(null)} disabled={paymentLoading}>Cancelar</Button>
             <Button onClick={handlePayment} disabled={paymentLoading || paymentCustomerFavorExceeded || !paymentLines.some((line) => Number(String(line.amount || '').replace(/,/g, '')) > 0) || (salesAccountingRequired && paymentLines.some((line) => requiresManualPaymentAccount(line.method) && !line.accountId)) || (salesAccountingRequired && paymentLines.some((line) => isBankPaymentMethod(line.method, true) && !line.bankAccountId)) || paymentLines.some((line) => requiresPaymentReference(line.method) && !line.reference?.trim()) || paymentAmountMismatch} className="bg-primary font-black">{paymentLoading ? 'Registrando...' : 'Confirmar pago'}</Button>
           </DialogFooter>
+        </DialogContent>
+      </Dialog>
+      <Dialog open={creditConfigurationOpen} onOpenChange={setCreditConfigurationOpen}>
+        <DialogContent className="w-[calc(100%-1rem)] rounded-2xl sm:max-w-2xl">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2"><Settings2 className="size-5 text-primary" /> Configuración de créditos</DialogTitle>
+            <DialogDescription>Administra el calendario de pagos y los recordatorios desde estas opciones.</DialogDescription>
+          </DialogHeader>
+          <div className="grid min-w-0 gap-3 sm:grid-cols-2">
+            {canPerform('SALES_CREDIT_NOTES', 'edit') && <Card className="min-w-0 rounded-2xl border-border/60 bg-background/60">
+              <CardContent className="flex h-full flex-col items-start gap-3 p-4">
+                <div className="flex size-10 items-center justify-center rounded-xl bg-primary/10 text-primary"><CalendarDays className="size-5" /></div>
+                <div className="min-w-0 flex-1">
+                  <h3 className="font-semibold text-foreground">Feriados</h3>
+                  <p className="mt-1 text-sm text-muted-foreground">Administra las fechas que se pueden excluir de los planes automáticos de créditos y préstamos.</p>
+                </div>
+                <Button type="button" variant="outline" className="w-full rounded-xl" onClick={() => { setCreditConfigurationOpen(false); setHolidayAdminOpen(true); }}>Administrar feriados</Button>
+              </CardContent>
+            </Card>}
+            {(canPerform('SALES_CREDIT_NOTES', 'edit') || canPerform('SALES_CREDIT_NOTES', 'send')) && <Card className="min-w-0 rounded-2xl border-border/60 bg-background/60">
+              <CardContent className="flex h-full flex-col items-start gap-3 p-4">
+                <div className="flex size-10 items-center justify-center rounded-xl bg-primary/10 text-primary"><Bell className="size-5" /></div>
+                <div className="min-w-0 flex-1">
+                  <h3 className="font-semibold text-foreground">Recordatorios</h3>
+                  <p className="mt-1 text-sm text-muted-foreground">Configura alertas y prepara borradores de mensajes para el seguimiento de pagos.</p>
+                </div>
+                <Button type="button" variant="outline" className="w-full rounded-xl" onClick={() => { setCreditConfigurationOpen(false); setRemindersOpen(true); }}>Configurar recordatorios</Button>
+              </CardContent>
+            </Card>}
+          </div>
+          <DialogFooter><Button type="button" variant="outline" onClick={() => setCreditConfigurationOpen(false)}>Cerrar</Button></DialogFooter>
         </DialogContent>
       </Dialog>
       <Dialog open={holidayAdminOpen} onOpenChange={(open) => {
