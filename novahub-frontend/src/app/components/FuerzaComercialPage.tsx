@@ -261,8 +261,9 @@ export function FuerzaComercialPage({ activeSubModule, onSubModuleChange, isSide
   return (
     <section ref={mapSectionRef} className={mapFullscreen ? 'fixed inset-0 z-[100] flex h-[100dvh] min-h-0 flex-col overflow-hidden bg-background' : 'relative flex h-[calc(100dvh-4rem)] min-h-0 flex-col overflow-hidden bg-background'}>
       {!mapFullscreen && (
-        <div className="shrink-0 space-y-3 px-3 pt-3 sm:px-4">
-          <ForceSalesNavigation activeSubModule={activeSubModule} onSubModuleChange={onSubModuleChange} isSidebarCollapsed={isSidebarCollapsed} showKanban={kanbanAvailable} />
+        <div className="shrink-0 px-3 pt-2 sm:px-4">
+          <div className="flex min-w-0 flex-col items-stretch gap-2 sm:flex-row sm:flex-wrap sm:items-center sm:gap-x-3 lg:pr-28">
+          <ForceSalesNavigation activeSubModule={activeSubModule} onSubModuleChange={onSubModuleChange} isSidebarCollapsed={isSidebarCollapsed} showKanban={kanbanAvailable && (activeMode === 'prospecting' || view === 'kanban')} inline={view === 'map'} />
           {mapConfig && view === 'map' && activeMode && (
             <ForceSalesMapHeader
               key={activeMode}
@@ -278,6 +279,7 @@ export function FuerzaComercialPage({ activeSubModule, onSubModuleChange, isSide
               onToggleFullscreen={() => setMapFullscreen(true)}
             />
           )}
+          </div>
         </div>
       )}
       <div className="relative min-h-0 flex-1">

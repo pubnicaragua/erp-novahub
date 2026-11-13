@@ -15,9 +15,11 @@ interface ForceSalesNavigationProps {
   reportContext?: boolean;
   /** El Kanban comercial pertenece al modo Prospección: sin ese modo no se ofrece. */
   showKanban?: boolean;
+  /** Va en la misma fila que la barra del mapa: no ocupa todo el ancho. */
+  inline?: boolean;
 }
 
-export function ForceSalesNavigation({ activeSubModule, onSubModuleChange, isSidebarCollapsed, reportContext = false, showKanban = true }: ForceSalesNavigationProps) {
+export function ForceSalesNavigation({ activeSubModule, onSubModuleChange, isSidebarCollapsed, reportContext = false, showKanban = true, inline = false }: ForceSalesNavigationProps) {
   const items = reportContext
     ? [{ id: 'reportes-gestores-cobro', label: 'Gestores de cobro', icon: BarChart3 }]
     : FORCE_SALES_ITEMS.filter((item) => showKanban || item.id !== 'fuerza-comercial-kanban');
@@ -30,7 +32,7 @@ export function ForceSalesNavigation({ activeSubModule, onSubModuleChange, isSid
       onValueChange={(value) => onSubModuleChange?.(value)}
       isSidebarCollapsed={isSidebarCollapsed}
       ariaLabel={reportContext ? 'Navegación de Reportes de Gestores' : 'Navegación de Fuerza Comercial'}
-      className={reportContext ? undefined : 'mb-0'}
+      className={reportContext ? undefined : inline ? 'mb-0 w-auto max-w-full' : 'mb-0'}
     />
   );
 }

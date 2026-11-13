@@ -39,7 +39,7 @@ export function ForceSalesMapHeader({ modes, activeMode, onModeChange, summary, 
   };
 
   return (
-    <div className="flex min-w-0 flex-wrap items-center gap-2 lg:pr-28" data-tour="force-sales-toolbar">
+    <div className="flex min-w-0 flex-1 flex-wrap items-center gap-2" data-tour="force-sales-toolbar">
       <div className="flex shrink-0 items-center gap-1" data-tour="page-title">
         {modes.length > 1 ? (
           <div role="tablist" aria-label="Modo del mapa" className="flex max-w-full gap-1 overflow-x-auto rounded-xl border border-border/50 bg-muted/40 p-1">
@@ -85,7 +85,7 @@ export function ForceSalesMapHeader({ modes, activeMode, onModeChange, summary, 
 
       <div className="ml-auto flex shrink-0 items-center gap-2">
         {summary?.primaryAction && (
-          <Button type="button" onClick={onPrimaryAction} disabled={summary.primaryAction.disabled} className="h-9 rounded-xl px-4 text-sm font-bold">
+          <Button type="button" onClick={onPrimaryAction} disabled={summary.primaryAction.disabled} className="hidden h-9 rounded-xl px-4 text-sm font-bold sm:inline-flex">
             {summary.primaryAction.label}
           </Button>
         )}

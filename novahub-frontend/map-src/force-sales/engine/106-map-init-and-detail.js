@@ -42,7 +42,10 @@ google.maps.event.addListenerOnce(googleMap, 'tilesloaded', () => {
   if(live) live.textContent = 'Nova Maps activo · datos comerciales listos.';
 });
 setTimeout(() => {
-  if(!googleTilesLoaded) window.__novaShowMapError('Nova Maps cargó el contenedor, pero no entregó los mosaicos. Revisa la configuración, facturación y las restricciones HTTP de la clave.');
+  if(googleTilesLoaded)return;
+  // Algunos mapas vectoriales no avisan que terminaron de cargar aunque ya se ven: si hay mosaicos dibujados, no se alerta.
+  if(document.querySelector('#map .leaflet-tile-loaded, #map .gm-style canvas, #map .gm-style img[src*="googleapis"]'))return;
+  window.__novaShowMapError('El mapa está tardando en cargar. Revisa tu conexión y recarga la página; si sigue igual, avisa al administrador.');
 }, 15000);
 function resizeGoogleMap(){
   const mapElement=document.getElementById('map');

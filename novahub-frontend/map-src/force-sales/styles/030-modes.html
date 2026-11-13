@@ -99,4 +99,10 @@ body.embedded-view .action-card-copy b{font-size:12px}
 .empty-list b{font-weight:600}
 .zone-hint{font-weight:600}
 .radius-chips button{font-weight:600}
+/* Visitas y entregas: sin frases de relleno; el estado solo aparece como una etiqueta pequeña cuando hay un problema. */
+body.embedded-view[data-mode="visits"] #liveStatus,body.embedded-view[data-mode="delivery"] #liveStatus,body.embedded-view[data-mode="visits"] .panel-status-separator,body.embedded-view[data-mode="delivery"] .panel-status-separator{display:none}
+body.embedded-view .panel-status{padding:4px 10px;min-height:0;border-radius:999px;margin-top:6px}
+body.embedded-view .panel-status #offlineStatusText{font-size:11px;font-weight:600}
+body.embedded-view #sheetHeader{padding-top:6px;padding-bottom:0}
+.work-zone-list .meta{font-size:12px;line-height:1.4}
 </style>
