@@ -468,9 +468,9 @@ export function GastosRecurrentesView({ data, summaryData, summaryLoading, summa
                     <p className="text-[10px] text-muted-foreground">Categoría</p>
                     {canCreateCategoryInline && <Button
                       type="button"
-                      variant="outline"
-                      size="sm"
-                      className="h-7 shrink-0 gap-1 px-2 text-[10px]"
+                      variant="ghost"
+                      size="icon"
+                      className="size-7 shrink-0 rounded-lg p-1.5 text-muted-foreground hover:bg-primary/10 hover:text-primary"
                       title={accountCatalogLoading ? 'Cargando cuentas contables…' : expenseCategoryAccounts.length ? 'Agregar categoría de gasto' : 'No hay cuentas contables disponibles'}
                       aria-label="Agregar categoría de gasto"
                       disabled={accountCatalogLoading || expenseCategoryAccounts.length === 0}
@@ -478,7 +478,7 @@ export function GastosRecurrentesView({ data, summaryData, summaryLoading, summa
                         setCategoryForm({ code: '', name: '', accountId: '', description: '' });
                         setCategoryDialogOpen(true);
                       }}
-                    ><Plus className="size-3" /> Agregar</Button>}
+                    ><Plus className="size-4" /></Button>}
                   </div>
                   <Select
                     disabled={isNew ? !canPerform('PURCHASES_EXPENSES_REC', 'create') : !canPerform('PURCHASES_EXPENSES_REC', 'edit')}
