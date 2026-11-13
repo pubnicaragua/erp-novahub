@@ -7,6 +7,21 @@ import type {
 import type { CustomerHistoryProfile } from '../utils/customer-history-profile';
 import { fetchAllReportPages } from '../utils/reportPagination';
 
+export type CustomerCreditInstallmentPayload = {
+  dueDate: string;
+  totalAmount: number;
+  interestAmount: number;
+};
+
+export type CustomerCreditPlanPayload = {
+  planEnabled?: boolean;
+  planCalculationMode?: 'AMOUNT' | 'DEADLINE' | 'MANUAL';
+  firstInstallmentDate?: string;
+  frequency?: 'DAILY' | 'WEEKLY' | 'BIWEEKLY' | 'MONTHLY';
+  installmentAmount?: number;
+  manualInstallments?: CustomerCreditInstallmentPayload[];
+};
+
 export interface CustomerPortalAdminAccess {
   customerId: string;
   customerCode: string;
@@ -284,12 +299,24 @@ export const invoicesService = {
   getById: (id: string, signal?: AbortSignal) => api.get<Invoice>(`/sales/invoices/${id}`, signal ? { signal } : undefined),
   accountingPreflight: (data: { warehouseId?: string; items?: Array<{ productId?: string; warehouseId?: string }> }) =>
     api.post<{ ready: boolean; hasInventoryItems?: boolean; errors: string[]; warnings: string[]; warehouses?: any[] }>('/sales/invoices/accounting-preflight', data),
-  create: (data: Partial<Invoice> & { creditTermOverrideConfirmed?: boolean }, idempotencyKey?: string) => api.idempotentPost<Invoice>('/sales/invoices', data, idempotencyKey),
-  createMixedPayment: (id: string, data: Partial<PaymentReceived> & { payments: Array<{ method: string; amount: number; currency?: 'NIO' | 'USD'; exchangeRate?: number; accountId?: string; bankAccountId?: string; cardCommissionPercent?: number; reference?: string; notes?: string }>; cashRegisterId?: string; cashSessionId?: string; dueDate?: string; creditTermOverrideConfirmed?: boolean }, idempotencyKey?: string) =>
+  create: (data: Partial<Invoice> & {
+    creditTermOverrideConfirmed?: boolean;
+    initialAction?: 'PAYMENT' | 'CREDIT';
+    initialPayment?: {
+      payments: Array<{ method: string; amount: number; currency?: 'NIO' | 'USD'; exchangeRate?: number; bankAccountId?: string; reference?: string; notes?: string }>;
+      currency?: 'NIO' | 'USD';
+      paymentDate?: string;
+      dueDate?: string;
+      cashRegisterId?: string;
+      cashSessionId?: string;
+      creditTermOverrideConfirmed?: boolean;
+    } & CustomerCreditPlanPayload;
+  }, idempotencyKey?: string) => api.idempotentPost<Invoice>('/sales/invoices', data, idempotencyKey),
+  createMixedPayment: (id: string, data: Partial<PaymentReceived> & { payments: Array<{ method: string; amount: number; currency?: 'NIO' | 'USD'; exchangeRate?: number; accountId?: string; bankAccountId?: string; cardCommissionPercent?: number; reference?: string; notes?: string }>; cashRegisterId?: string; cashSessionId?: string; dueDate?: string; creditTermOverrideConfirmed?: boolean } & CustomerCreditPlanPayload, idempotencyKey?: string) =>
     api.idempotentPost<PaymentReceived & { payments?: PaymentReceived[] }>(`/sales/invoices/${id}/payments/mixed`, data, idempotencyKey),
   submit: (id: string, idempotencyKey?: string) => api.idempotentPost<Invoice>(`/sales/invoices/${id}/submit`, {}, idempotencyKey),
   update: (id: string, data: Partial<Invoice> & { creditTermOverrideConfirmed?: boolean }) => api.patch<Invoice>(`/sales/invoices/${id}`, data),
-  sendToCredit: (id: string, data: { dueDate?: string; firstInstallmentDate?: string; creditTermOverrideConfirmed?: boolean; interestMode?: 'NONE' | 'FIXED_AMOUNT' | 'PERCENTAGE'; interestValue?: number; planEnabled?: boolean; planCalculationMode?: 'AMOUNT' | 'DEADLINE' | 'MANUAL'; frequency?: 'DAILY' | 'WEEKLY' | 'BIWEEKLY' | 'MONTHLY'; installmentAmount?: number; manualInstallments?: Array<{ dueDate: string; totalAmount: number; interestAmount: number }> }, idempotencyKey?: string) =>
+  sendToCredit: (id: string, data: { dueDate?: string; creditTermOverrideConfirmed?: boolean; interestMode?: 'NONE' | 'FIXED_AMOUNT' | 'PERCENTAGE'; interestValue?: number } & CustomerCreditPlanPayload, idempotencyKey?: string) =>
     api.idempotentPost<{ invoice: Invoice; credit: CreditNote }>(`/sales/invoices/${id}/send-to-credit`, data, idempotencyKey),
   sendToCash: (id: string, data?: { notes?: string }) =>
     api.post<any>(`/sales/invoices/${id}/send-to-cash`, data || {}),

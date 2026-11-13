@@ -127,7 +127,7 @@ export function PublicTrackingPage() {
                 <div className="bg-slate-950 p-5 text-white sm:p-7">
                   <div className="flex flex-wrap items-start justify-between gap-4">
                     <div className="min-w-0"><p className="text-[10px] font-black uppercase tracking-[0.2em] text-emerald-400">Código de envío</p><p className="mt-2 break-all font-mono text-lg font-bold sm:text-xl">{data.trackingCode}</p></div>
-                    <span className="shrink-0 rounded-full bg-emerald-400/15 px-3 py-1.5 text-[11px] font-black text-emerald-300">{STATUS_LABELS[data.status] || data.status}</span>
+                <span className="shrink-0 rounded-full bg-emerald-400/15 px-3 py-1.5 text-[11px] font-black text-emerald-300">{STATUS_LABELS[data.status] || 'Estado registrado'}</span>
                   </div>
                   <div className="mt-6 grid grid-cols-2 gap-4 text-xs sm:grid-cols-3">
                     <div><p className="text-[10px] font-black uppercase tracking-wider text-slate-400">Cliente</p><p className="mt-1 font-semibold text-white">{data.clientName || 'No indicado'}</p></div>
@@ -147,11 +147,11 @@ export function PublicTrackingPage() {
               <article className="rounded-[1.75rem] border border-slate-200 bg-white p-5 shadow-xl shadow-slate-950/5 dark:border-slate-800 dark:bg-slate-900 sm:p-7">
                 <h2 className="flex items-center gap-2 text-[11px] font-black uppercase tracking-[0.18em] text-slate-500 dark:text-slate-400"><PackageCheck className="size-4 text-emerald-500" /> Historial del envío</h2>
                 <div className="mt-6">
-                  {data.events.length === 0 ? <div className="flex gap-3"><span className="flex size-8 shrink-0 items-center justify-center rounded-full bg-emerald-500/10 text-emerald-600"><Check className="size-4" /></span><div><p className="text-sm font-black">{STATUS_LABELS[data.status] || data.status}</p><p className="mt-1 text-xs text-slate-500 dark:text-slate-400">El paquete ya fue registrado por la agencia.</p></div></div> : data.events.map((event, index) => (
+                  {data.events.length === 0 ? <div className="flex gap-3"><span className="flex size-8 shrink-0 items-center justify-center rounded-full bg-emerald-500/10 text-emerald-600"><Check className="size-4" /></span><div><p className="text-sm font-black">{STATUS_LABELS[data.status] || 'Estado registrado'}</p><p className="mt-1 text-xs text-slate-500 dark:text-slate-400">El paquete ya fue registrado por la agencia.</p></div></div> : data.events.map((event, index) => (
                     <div key={`${event.status}-${event.occurredAt || index}`} className="relative flex gap-3 pb-6 last:pb-0">
                       {index < data.events.length - 1 && <span className="absolute left-4 top-8 h-full w-px bg-slate-200 dark:bg-slate-700" />}
                       <span className="relative z-10 flex size-8 shrink-0 items-center justify-center rounded-full bg-emerald-500/10 text-emerald-600 ring-4 ring-white dark:text-emerald-400 dark:ring-slate-900"><Check className="size-4" /></span>
-                      <div className="min-w-0 flex-1"><div className="flex flex-wrap items-start justify-between gap-2"><p className="text-sm font-black">{event.label || STATUS_LABELS[event.status] || event.status}</p>{event.occurredAt && <p className="flex items-center gap-1 text-[10px] text-slate-500"><Clock3 className="size-3" /> {format(new Date(event.occurredAt), 'dd MMM, HH:mm', { locale: es })}</p>}</div>{event.location && <p className="mt-1 flex items-center gap-1 text-xs text-slate-500 dark:text-slate-400"><MapPin className="size-3" /> {event.location}</p>}{event.description && <p className="mt-1 text-xs text-slate-500 dark:text-slate-400">{event.description}</p>}</div>
+                      <div className="min-w-0 flex-1"><div className="flex flex-wrap items-start justify-between gap-2"><p className="text-sm font-black">{event.label || STATUS_LABELS[event.status] || 'Estado registrado'}</p>{event.occurredAt && <p className="flex items-center gap-1 text-[10px] text-slate-500"><Clock3 className="size-3" /> {format(new Date(event.occurredAt), 'dd MMM, HH:mm', { locale: es })}</p>}</div>{event.location && <p className="mt-1 flex items-center gap-1 text-xs text-slate-500 dark:text-slate-400"><MapPin className="size-3" /> {event.location}</p>}{event.description && <p className="mt-1 text-xs text-slate-500 dark:text-slate-400">{event.description}</p>}</div>
                     </div>
                   ))}
                 </div>

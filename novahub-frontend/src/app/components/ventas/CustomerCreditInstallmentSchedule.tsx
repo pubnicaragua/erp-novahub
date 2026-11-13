@@ -24,6 +24,7 @@ interface CustomerCreditInstallmentScheduleProps {
   onManualInstallmentChange?: (index: number, field: keyof CustomerCreditManualInstallmentDraft, value: string) => void;
   onAddManualInstallment?: () => void;
   onRemoveManualInstallment?: (index: number) => void;
+  manualInterestEditable?: boolean;
   onPrint?: () => void;
   printDisabled?: boolean;
   className?: string;
@@ -44,6 +45,7 @@ export function CustomerCreditInstallmentSchedule({
   onManualInstallmentChange,
   onAddManualInstallment,
   onRemoveManualInstallment,
+  manualInterestEditable = true,
   onPrint,
   printDisabled = false,
   className,
@@ -97,7 +99,7 @@ export function CustomerCreditInstallmentSchedule({
               <TableHead>Fecha{manualEditor && <span className="ml-1 text-destructive" aria-hidden="true">*</span>}</TableHead>
               {manualEditor ? <>
                 <TableHead className="text-right">Monto del abono <span className="text-destructive" aria-hidden="true">*</span></TableHead>
-                <TableHead className="text-right">Interés <span className="text-destructive" aria-hidden="true">*</span></TableHead>
+                <TableHead className="text-right">Interés {manualInterestEditable && <span className="text-destructive" aria-hidden="true">*</span>}</TableHead>
                 <TableHead className="text-right">Capital calculado</TableHead>
                 <TableHead className="w-12" />
               </> : <>
@@ -121,7 +123,7 @@ export function CustomerCreditInstallmentSchedule({
                   {manualEditor ? <>
                     <TableCell><Input type="date" required aria-label={`Fecha de vencimiento del abono ${index + 1}`} value={manualInstallments![index]?.dueDate || ''} onChange={(event) => onManualInstallmentChange!(index, 'dueDate', event.target.value)} className="h-8 min-w-36 text-xs" /></TableCell>
                     <TableCell><Input type="number" required min="0.01" step="0.01" currencyPrecision aria-label={`Monto total del abono ${index + 1}`} value={manualInstallments![index]?.totalAmount ?? ''} onChange={(event) => onManualInstallmentChange!(index, 'totalAmount', event.target.value)} className="h-8 min-w-32 text-right text-xs tabular-nums" /></TableCell>
-                    <TableCell><Input type="number" required min="0" step="0.01" currencyPrecision aria-label={`Interés del abono ${index + 1}`} value={manualInstallments![index]?.interestAmount ?? ''} onChange={(event) => onManualInstallmentChange!(index, 'interestAmount', event.target.value)} className="h-8 min-w-32 text-right text-xs tabular-nums" /></TableCell>
+                    <TableCell><Input type="number" required={manualInterestEditable} min="0" step="0.01" currencyPrecision aria-label={`Interés del abono ${index + 1}`} value={manualInterestEditable ? (manualInstallments![index]?.interestAmount ?? '') : '0'} onChange={(event) => onManualInstallmentChange!(index, 'interestAmount', event.target.value)} disabled={!manualInterestEditable} className="h-8 min-w-32 text-right text-xs tabular-nums" /></TableCell>
                     <TableCell className="whitespace-nowrap text-right font-semibold tabular-nums">{formatAmount(Number(row.principalAmount || 0))}</TableCell>
                     <TableCell className="text-right"><Button type="button" size="icon" variant="ghost" aria-label={`Quitar abono ${index + 1}`} title={`Quitar abono ${index + 1}`} disabled={installments.length <= 1} onClick={() => onRemoveManualInstallment?.(index)} className="size-8"><Trash2 className="size-4" /></Button></TableCell>
                   </> : <>
@@ -142,7 +144,7 @@ export function CustomerCreditInstallmentSchedule({
         <ul className="mt-1 list-disc space-y-0.5 pl-4">{manualValidation.validationErrors.map((error) => <li key={error}>{error}</li>)}</ul>
       </div>}
       <p className="text-[10px] leading-relaxed text-muted-foreground">{manualEditor
-        ? `Montos en ${currency}. El capital de cada abono se calcula restando el interés al monto ingresado; los totales deben coincidir con el contrato.`
+        ? `Montos en ${currency}. ${manualInterestEditable ? 'El capital se calcula restando el interés al monto ingresado; ' : 'Cada abono se aplica íntegramente a capital; '}los totales deben coincidir con el contrato.`
         : `Los montos están expresados en ${currency}. Las cuotas se distribuyen según la frecuencia y el último abono se ajusta al saldo exacto del plan.`}</p>
     </section>
   );

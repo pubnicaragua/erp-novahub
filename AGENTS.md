@@ -9,6 +9,7 @@ Estas reglas complementan el [`AGENTS.md`](../AGENTS.md) del workspace cuando es
 - Leer `../docs/ai/README.md` y [`novahub-frontend/DESIGN_GUIDE.md`](novahub-frontend/DESIGN_GUIDE.md) antes de crear o renovar una vista.
 - Leer `novahub-frontend/DESIGN_GUIDE.md` antes de crear o renovar una vista. Conserva la intención visual, pero sus ejemplos de Framer Motion, hex y radios no siempre coinciden con el código; en caso de conflicto, mandan `src/styles/theme.css`, `src/styles/index.css`, los componentes compartidos y los módulos operativos vecinos.
 - `../docs/ai/` no existe en este checkout: no asumir sus reglas ni inventarlas; marcar cualquier dependencia documental como `NO CONFIRMADO`. Usar `novahub-frontend/TEST_RULES.md`, `novahub-frontend/e2e/README.md` y `novahub-frontend/e2e/COVERAGE_MATRIX.md` como autoridades de pruebas y cobertura.
+- Si este repositorio está abierto dentro del workspace ERP-NovaHub y existe el repositorio hermano `../Backend`, al trabajar en funciones opcionales por giro de negocio leer `../Backend/docs/ai/funciones-especificas-por-giro.md`. Si Frontend está aislado y ese archivo no existe, marcar esa dependencia como `NO CONFIRMADO` y no inventar sus reglas.
 - Cuando el usuario solicite cambiar fuentes, consultar `docs/ai/guia-tipografia-interfaz.md` y usar sus clases semánticas sin cambiar la tipografía global por una petición local.
 
 ## Entorno y verificación estática

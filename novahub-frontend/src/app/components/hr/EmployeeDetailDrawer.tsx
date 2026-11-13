@@ -21,6 +21,7 @@ import { EmployeeAccessAssetsPanel } from './employee/EmployeeAccessAssetsPanel'
 import { EmployeeDocumentsPanel } from './employee/EmployeeDocumentsPanel';
 import { EmployeeCardDialog } from './employee/EmployeeCardDialog';
 import { getCurrencyDecimalPlaces } from '../../utils/currency';
+import { translateAuditDetailKey, translateAuditDetailValue } from '../ui/AuditHistoryModal';
 
 type EmployeeDetailDrawerProps = {
   employeeId: string | null;
@@ -77,12 +78,12 @@ const payFrequencyLabel = (frequency?: string) => ({
 
 const contractLabel = (value?: string) => ({
   FULL_TIME: 'Tiempo completo', PART_TIME: 'Medio tiempo', CONTRACTOR: 'Contratista', INTERN: 'Pasante', TEMPORARY: 'Temporal',
-} as Record<string, string>)[String(value || '').toUpperCase()] || value || '—';
+} as Record<string, string>)[String(value || '').toUpperCase()] || translateAuditDetailValue(value, 'contractType');
 
 const fieldLabel = (value?: string) => ({
   salary: 'Salario', positionId: 'Puesto', departmentId: 'Departamento', managerId: 'Jefe directo', contractType: 'Tipo de contrato', isSeller: 'Vendedor',
   employmentStatus: 'Estado laboral', nationalId: 'Cédula', email: 'Correo', phone: 'Teléfono', hireDate: 'Fecha de contratación',
-} as Record<string, string>)[String(value || '')] || value || 'Cambio';
+} as Record<string, string>)[String(value || '')] || translateAuditDetailKey(value || 'Campo');
 
 const changeValueLabel = (field?: string, value?: string) => {
   if (!value || value === 'null' || value === '') return 'Vacío';
@@ -95,7 +96,7 @@ const changeValueLabel = (field?: string, value?: string) => {
     if (!Number.isNaN(amount)) return `C$ ${amount.toLocaleString('es-NI', { maximumFractionDigits: getCurrencyDecimalPlaces() })}`;
   }
   if (field === 'isSeller') return value === 'true' ? 'Sí' : value === 'false' ? 'No' : value;
-  return value;
+  return translateAuditDetailValue(value, field);
 };
 
 function InfoItem({ label, value, icon: Icon = FileText, mono = false }: { label: string; value?: any; icon?: any; mono?: boolean }) {

@@ -158,7 +158,7 @@ export function IntlPackageDetailSheet({
 
   const customerDisplayName = getCustomerName(packageData);
   const supplierDisplayName = getSupplierName(packageData);
-  const statusLabel = INTL_PACKAGE_STATUS_LABELS[packageData.status] || packageData.status;
+  const statusLabel = INTL_PACKAGE_STATUS_LABELS[packageData.status] || 'Estado registrado';
   const statusColorClass = statusBadgeColors[packageData.status] || 'bg-primary/10 text-primary border-primary/20';
 
   const handleAddEvent = async (e: React.FormEvent) => {
@@ -586,7 +586,7 @@ export function IntlPackageDetailSheet({
                                 variant="outline"
                                 className={`text-[9px] font-black uppercase tracking-widest border ${getEventBadgeColor(evt.status)}`}
                               >
-                                {INTL_PACKAGE_STATUS_LABELS[evt.status] || evt.status}
+                                {INTL_PACKAGE_STATUS_LABELS[evt.status] || 'Estado registrado'}
                               </Badge>
 
                               <div className="flex items-center gap-1.5 text-[10px] font-bold text-muted-foreground font-mono">

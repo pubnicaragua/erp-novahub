@@ -631,10 +631,10 @@ export function TrackingPage({ activeSubModule, onSubModuleChange, isSidebarColl
                         </span>
                         <div className="min-w-0 flex-1">
                           <div className="flex flex-wrap items-center justify-between gap-2">
-                            <p className="text-xs font-black">{event.label || TRACKING_STATUS_LABELS[event.status]}</p>
+                            <p className="text-xs font-black">{event.label || TRACKING_STATUS_LABELS[event.status] || 'Estado registrado'}</p>
                             <p className="text-[10px] text-muted-foreground">{formatDate(event.occurredAt)}</p>
                           </div>
-                          <p className="mt-0.5 text-[11px] text-muted-foreground">{TRACKING_STATUS_LABELS[event.status]}{event.location ? ` · ${event.location}` : ''}</p>
+                          <p className="mt-0.5 text-[11px] text-muted-foreground">{TRACKING_STATUS_LABELS[event.status] || 'Estado registrado'}{event.location ? ` · ${event.location}` : ''}</p>
                           {event.description && event.description !== event.label && <p className="mt-0.5 text-[11px] text-muted-foreground">{event.description}</p>}
                         </div>
                       </div>

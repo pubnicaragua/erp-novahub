@@ -34,6 +34,7 @@ import { parseSpreadsheetInWorker } from '../../utils/import-spreadsheet';
 import { useLocalStorageState } from '../../hooks/useLocalStorageState';
 import { beginNotificationAction, completeNotificationAction, failNotificationAction } from '../../services/notification-action-coordinator';
 import { formatCurrencyNumber } from '../../utils/currency';
+import { translateAuditDetailKey, translateAuditDetailValue } from '../ui/AuditHistoryModal';
 
 /** Valor del elemento «Sin …» de los selectores (Radix Select no admite un valor vacío). */
 const NO_SELECTION = '__none__';
@@ -1545,7 +1546,7 @@ export function EmpleadosView({ employees, departments, positions, onRefresh, is
               <div key={i} className="flex items-start gap-3 p-3 rounded-xl bg-muted/20 text-xs">
                 <History className="size-3.5 mt-0.5 text-muted-foreground shrink-0" />
                 <div>
-                  <p className="font-bold capitalize">{log.field}: <span className="text-muted-foreground font-normal">{log.oldValue || '(vacío)'}</span> → <span className="text-primary">{log.newValue || '(vacío)'}</span></p>
+                  <p className="font-bold">{translateAuditDetailKey(String(log.field || 'Campo'))}: <span className="text-muted-foreground font-normal">{log.oldValue === null || log.oldValue === undefined || log.oldValue === '' || log.oldValue === 'null' ? '(vacío)' : translateAuditDetailValue(log.oldValue, log.field)}</span> → <span className="text-primary">{log.newValue === null || log.newValue === undefined || log.newValue === '' || log.newValue === 'null' ? '(vacío)' : translateAuditDetailValue(log.newValue, log.field)}</span></p>
                   <p className="text-[10px] text-muted-foreground/60">{new Date(log.createdAt).toLocaleString()}</p>
                 </div>
               </div>

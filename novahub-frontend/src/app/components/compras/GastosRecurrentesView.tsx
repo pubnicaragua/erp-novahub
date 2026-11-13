@@ -33,7 +33,16 @@ import { formatDecimalInput, normalizeDecimalInput } from '../../utils/decimalIn
 import { fetchAllPaginatedRows } from '../../utils/export-utils';
 import { createReportWorkbook } from '../../utils/reportWorkbook';
 
-interface Props { data: RecurringExpense[]; summaryData?: RecurringExpenseSummary; summaryLoading?: boolean; summaryError?: boolean; loading: boolean; onRefresh: () => void; supplierCatalog?: Supplier[]; pagination?: SalesPaginationControls; onSearchChange?: (value: string) => void; }
+interface ExpenseCategoryOption { id: string; name: string; isActive?: boolean; }
+interface Props { data: RecurringExpense[]; summaryData?: RecurringExpenseSummary; summaryLoading?: boolean; summaryError?: boolean; loading: boolean; onRefresh: () => void; supplierCatalog?: Supplier[]; expenseCategoryCatalog?: ExpenseCategoryOption[]; pagination?: SalesPaginationControls; onSearchChange?: (value: string) => void; }
+
+const standardExpenseCategories = [
+  { value: 'OPERATIVO', label: 'Operativo' },
+  { value: 'ADMINISTRATIVO', label: 'Administrativo' },
+  { value: 'VENTAS', label: 'Ventas / Marketing' },
+  { value: 'FINANCIERO', label: 'Financiero' },
+  { value: 'OTRO', label: 'Otro' },
+];
 
 const freqOpts = [
   { label: 'Semanal',    value: 'weekly' },  
@@ -48,7 +57,7 @@ const statusOpts = [
   { label: 'Anulado',    value: 'CANCELLED', color: 'bg-primary/10 text-primary' },
 ];
 
-export function GastosRecurrentesView({ data, summaryData, summaryLoading, summaryError, loading, onRefresh, supplierCatalog = [], pagination, onSearchChange }: Props) {
+export function GastosRecurrentesView({ data, summaryData, summaryLoading, summaryError, loading, onRefresh, supplierCatalog = [], expenseCategoryCatalog = [], pagination, onSearchChange }: Props) {
   const { canPerform, user } = useAuth();
   const { exchangeRate: globalRate, displayCurrency, displayCurrencyLabel, baseCurrency, displayMode, valuationMode, valuationModeSuffix, formatConvertedAmount, formatCurrentAmount, formatExplicitAmount, convertAmount, convertCurrentAmount, convertDisplayAmount } = useCurrency();
   const [searchTerm, setSearchTerm] = useState('');
@@ -79,7 +88,8 @@ export function GastosRecurrentesView({ data, summaryData, summaryLoading, summa
         currency: displayCurrency,
         exchangeRate: globalRate,
         status: 'active',
-        category: 'OPERACIONAL',
+        category: 'OPERATIVO',
+        expenseCategoryId: null,
       });
     } else if (id) {
       const found = data.find(x => x.id === id);
@@ -251,10 +261,21 @@ export function GastosRecurrentesView({ data, summaryData, summaryLoading, summa
   const handleSaveDoc = async () => {
     if (!localDoc?.description) return toast.error('La descripción es obligatoria');
     if (!localDoc?.amount || localDoc.amount <= 0) return toast.error('El monto debe ser mayor a 0');
+    if (!String(localDoc.category || '').trim()) return toast.error('Selecciona una categoría');
+
+    const linkedCategory = expenseCategoryCatalog.find((category) => category.id === localDoc.expenseCategoryId);
+    const categoryCode = String(localDoc.category || '').trim().toLocaleUpperCase();
+    const isStandardCategory = standardExpenseCategories.some((category) => category.value === categoryCode);
+    const matchingCatalogCategory = !localDoc.expenseCategoryId && !isStandardCategory
+      ? expenseCategoryCatalog.find((category) => category.isActive !== false && category.name.trim().toLocaleUpperCase() === String(localDoc.category || '').trim().toLocaleUpperCase())
+      : undefined;
+    const selectedCategory = linkedCategory || matchingCatalogCategory;
     
     // Clean data
     const cleanedDoc = {
       ...localDoc,
+      category: selectedCategory?.name || localDoc.category,
+      expenseCategoryId: selectedCategory?.id || localDoc.expenseCategoryId || null,
       amount: Number(localDoc.amount),
       exchangeRate: Number(localDoc.exchangeRate),
       baseAmount: Number(localDoc.baseAmount),
@@ -282,9 +303,32 @@ export function GastosRecurrentesView({ data, summaryData, summaryLoading, summa
   if (editingId && localDoc) {
     const isNew = editingId === 'NEW';
     const currentStatus = statusOpts.find(s => s.value === (localDoc.status||'').toUpperCase());
+    const currentCategoryId = localDoc.expenseCategoryId || '';
+    const selectableCategories = expenseCategoryCatalog.filter((category) =>
+      (category.isActive !== false || category.id === currentCategoryId)
+      && (!standardExpenseCategories.some((standard) => standard.value === category.name.trim().toLocaleUpperCase()) || category.id === currentCategoryId),
+    );
+    const currentCategory = currentCategoryId && !selectableCategories.some((category) => category.id === currentCategoryId)
+      ? { id: currentCategoryId, name: localDoc.category || 'Categoría vinculada' }
+      : null;
+    const categoryByName = selectableCategories.find((category) => category.name.trim().toLocaleUpperCase() === String(localDoc.category || '').trim().toLocaleUpperCase());
+    const standardCategory = standardExpenseCategories.find((category) => category.value === String(localDoc.category || '').trim().toLocaleUpperCase());
+    const categorySelectValue = currentCategoryId
+      ? `catalog:${currentCategoryId}`
+      : categoryByName
+        ? `catalog:${categoryByName.id}`
+        : standardCategory
+          ? `standard:${standardCategory.value}`
+          : String(localDoc.category || '').trim()
+            ? `legacy:${String(localDoc.category).trim()}`
+            : '';
+    const legacyCategories = Array.from(new Set(data.map((expense) => String(expense.category || '').trim()).filter((category) =>
+      category && !standardExpenseCategories.some((standard) => standard.value === category.toLocaleUpperCase())
+      && !selectableCategories.some((catalogCategory) => catalogCategory.name.trim().toLocaleUpperCase() === category.toLocaleUpperCase()),
+    )));
 
     return (
-      <div className="space-y-6 animate-in slide-in-from-right duration-300" data-tour="purchases-form-title">
+      <div className="min-w-0 max-w-full space-y-6 animate-in slide-in-from-right duration-300" data-tour="purchases-form-title">
         <div className="flex items-center justify-between flex-wrap gap-4">
           <div className="flex items-center gap-4">
             <Button variant="ghost" size="icon" onClick={() => openEditor(null)} className="rounded-full">
@@ -312,7 +356,7 @@ export function GastosRecurrentesView({ data, summaryData, summaryLoading, summa
         </div>
 
 
-        <div className="grid md:grid-cols-2 gap-4">
+        <div className="grid min-w-0 gap-4 md:grid-cols-2">
           <Card className="rounded-2xl border-border/50 col-span-2" data-tour="purchases-form-data">
             <CardContent className="p-6 space-y-3">
               <p className="text-xs font-black uppercase tracking-widest text-muted-foreground">Detalles del Servicio/Concepto</p>
@@ -361,13 +405,38 @@ export function GastosRecurrentesView({ data, summaryData, summaryLoading, summa
                 </div>
                 <div>
                   <p className="text-[10px] text-muted-foreground mb-1">Categoría</p>
-                  <Input 
+                  <Select
                     disabled={isNew ? !canPerform('PURCHASES_EXPENSES_REC', 'create') : !canPerform('PURCHASES_EXPENSES_REC', 'edit')}
-                    value={localDoc.category || ''} 
-                    onChange={(e) => setLocalDoc({ ...localDoc, category: e.target.value })} 
-                    className="h-8 text-xs uppercase" 
-                    placeholder="OPERACIONAL" 
-                  />
+                    value={categorySelectValue}
+                    onValueChange={(value) => {
+                      if (value.startsWith('standard:')) {
+                        setLocalDoc({ ...localDoc, category: value.slice('standard:'.length), expenseCategoryId: null });
+                        return;
+                      }
+                      if (value.startsWith('catalog:')) {
+                        const categoryId = value.slice('catalog:'.length);
+                        const category = [...selectableCategories, ...(currentCategory ? [currentCategory] : [])].find((option) => option.id === categoryId);
+                        if (category) setLocalDoc({ ...localDoc, category: category.name, expenseCategoryId: category.id });
+                        return;
+                      }
+                      if (value.startsWith('legacy:')) {
+                        setLocalDoc({ ...localDoc, category: value.slice('legacy:'.length), expenseCategoryId: null });
+                      }
+                    }}
+                  >
+                    <SelectTrigger className="h-8 text-xs uppercase"><SelectValue placeholder="Seleccionar categoría" /></SelectTrigger>
+                    <SelectContent>
+                      {standardExpenseCategories.map((category) => <SelectItem key={category.value} value={`standard:${category.value}`}>{category.label}</SelectItem>)}
+                      {selectableCategories.map((category) => <SelectItem key={category.id} value={`catalog:${category.id}`}>{category.name}</SelectItem>)}
+                      {currentCategory && <SelectItem value={`catalog:${currentCategory.id}`}>{currentCategory.name}</SelectItem>}
+                      {legacyCategories.map((category) => <SelectItem key={category} value={`legacy:${category}`}>{category} · registrada</SelectItem>)}
+                    </SelectContent>
+                  </Select>
+                  <p className="mt-1 text-[10px] text-muted-foreground">
+                    {canPerform('ACCOUNTING_EXPENSE_CATEGORIES', 'create')
+                      ? 'Para agregar categorías reutilizables, usa Contabilidad > Categorías de gastos.'
+                      : 'Puedes elegir una categoría registrada o una categoría usada anteriormente.'}
+                  </p>
                 </div>
 
                 <div>
@@ -393,20 +462,21 @@ export function GastosRecurrentesView({ data, summaryData, summaryLoading, summa
              <CardContent className="p-6">
                 <p className="text-xs font-black uppercase tracking-widest text-muted-foreground mb-4">Monto Automático Promedio</p>
                 <div className="space-y-4">
-                  <div className="flex justify-between items-center text-sm border-b border-border/50 pb-4">
-                     <div className="w-1/2 min-w-0">
+                  <div className="grid min-w-0 grid-cols-1 gap-3 border-b border-border/50 pb-4 sm:grid-cols-2">
+                     <div className="min-w-0">
+                        <p className="mb-1 text-[10px] font-black uppercase tracking-widest text-muted-foreground">Moneda</p>
                         <CurrencySelector
                           value={localDoc.currency || baseCurrency}
                           baseCurrency={baseCurrency}
                           exchangeRate={globalRate}
-                          label="Moneda"
+                          hideLabel
                           rateDecimals={2}
                           disabled={isNew ? !canPerform('PURCHASES_EXPENSES_REC', 'create') : !canPerform('PURCHASES_EXPENSES_REC', 'edit')}
                           onChange={(nextCurrency) => setLocalDoc({ ...localDoc, currency: nextCurrency, exchangeRate: nextCurrency === baseCurrency ? 1 : globalRate } as any)}
                         />
                      </div>
-                     <div className="w-1/2 flex flex-col items-end">
-                        <p className="text-[10px] text-muted-foreground mb-1">Monto Fijo Estimado</p>
+                     <div className="min-w-0">
+                        <p className="mb-1 text-[10px] font-black uppercase tracking-widest text-muted-foreground">Monto Fijo Estimado</p>
                         <Input 
                           disabled={isNew ? !canPerform('PURCHASES_EXPENSES_REC', 'create') : !canPerform('PURCHASES_EXPENSES_REC', 'edit')}
                           type="text"
@@ -414,7 +484,7 @@ export function GastosRecurrentesView({ data, summaryData, summaryLoading, summa
                           min="0" 
                           value={Number(localDoc.amount || 0) === 0 ? '' : formatDecimalInput(localDoc.amount)}
                           onChange={(e) => setLocalDoc({ ...localDoc, amount: normalizeDecimalInput(e.target.value) as any })}
-                          className="h-10 text-xl font-black text-rose-500 text-right w-full max-w-[150px]" 
+                          className="h-9 w-full text-right text-lg font-black text-rose-500"
                           placeholder="0.00" currencyPrecision />
                      </div>
                   </div>

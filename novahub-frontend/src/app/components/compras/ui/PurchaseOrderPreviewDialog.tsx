@@ -12,6 +12,7 @@ import { api } from '../../../services/api';
 import type { PurchaseOrder, Supplier } from '../../../types';
 import { getPurchaseOrderStatusOption, normalizePurchaseOrderStatus, PURCHASE_ORDER_ACTIONABLE_STATUSES } from '../../../utils/purchaseOrderStatus';
 import { getCurrencyDecimalPlaces } from '../../../utils/currency';
+import { translateAuditAction, translateAuditDetailKey, translateAuditDetailValue } from '../../ui/AuditHistoryModal';
 
 const ACTION_LABELS: Record<string, string> = {
   CREATE: 'Creación',
@@ -233,11 +234,11 @@ export function PurchaseOrderPreviewDialog({
                           <span className="absolute -left-[5px] top-1 size-2 rounded-full bg-primary ring-4 ring-background" />
                           <div className="rounded-xl border border-border/50 bg-card p-3">
                             <div className="flex flex-wrap items-center justify-between gap-2">
-                              <Badge variant="outline" className="border-primary/20 bg-primary/5 text-[9px] font-black uppercase text-primary">{ACTION_LABELS[entry.action] || 'Actividad'}</Badge>
+                              <Badge variant="outline" className="border-primary/20 bg-primary/5 text-[9px] font-black uppercase text-primary">{ACTION_LABELS[entry.action] || translateAuditAction(entry.action)}</Badge>
                               <span className="flex items-center gap-1 text-[10px] text-muted-foreground"><CalendarDays className="size-3" /> {formatDate(entry.createdAt)}</span>
                             </div>
                             <p className="mt-2 flex items-center gap-1.5 text-xs font-semibold"><UserRound className="size-3.5 text-muted-foreground" /> {entry.user?.name || 'Sistema'}</p>
-                            {details && <p className="mt-2 flex items-start gap-1.5 break-words text-[11px] text-muted-foreground"><Info className="mt-0.5 size-3 shrink-0" /> {Object.entries(details).map(([key, value]) => `${HISTORY_KEY_LABELS[key] || key}: ${HISTORY_VALUE_LABELS[String(value)] || String(value)}`).join(' · ')}</p>}
+                            {details && <p className="mt-2 flex items-start gap-1.5 break-words text-[11px] text-muted-foreground"><Info className="mt-0.5 size-3 shrink-0" /> {Object.entries(details).map(([key, value]) => `${HISTORY_KEY_LABELS[key] || translateAuditDetailKey(key)}: ${HISTORY_VALUE_LABELS[String(value)] || translateAuditDetailValue(value, key)}`).join(' · ')}</p>}
                           </div>
                         </div>
                       );

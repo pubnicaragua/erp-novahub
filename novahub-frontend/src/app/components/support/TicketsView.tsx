@@ -126,11 +126,11 @@ const translateAuditMessage = (event: TicketAudit, agentCatalog: any[]) => {
   const message = String(event.message || '');
   if (event.action === 'STATUS_CHANGED') {
     const match = message.match(/Estado:\s*([^\s]+)\s*->\s*([^\s]+)/i);
-    if (match) return `Estado: ${auditStatusLabels[match[1].toUpperCase()] || match[1]} → ${auditStatusLabels[match[2].toUpperCase()] || match[2]}`;
+    if (match) return `Estado: ${auditStatusLabels[match[1].toUpperCase()] || 'Estado registrado'} → ${auditStatusLabels[match[2].toUpperCase()] || 'Estado registrado'}`;
   }
   if (event.action === 'PRIORITY_CHANGED') {
     const match = message.match(/Prioridad:\s*([^\s]+)\s*->\s*([^\s]+)/i);
-    if (match) return `Prioridad: ${auditPriorityLabels[match[1].toUpperCase()] || match[1]} → ${auditPriorityLabels[match[2].toUpperCase()] || match[2]}`;
+    if (match) return `Prioridad: ${auditPriorityLabels[match[1].toUpperCase()] || 'Prioridad registrada'} → ${auditPriorityLabels[match[2].toUpperCase()] || 'Prioridad registrada'}`;
   }
   if (event.action === 'ASSIGNED_CHANGED') {
     const match = message.match(/Asignación:\s*(.*?)\s*->\s*(.*)$/i);
@@ -144,7 +144,7 @@ const translateAuditMessage = (event: TicketAudit, agentCatalog: any[]) => {
   }
   if (event.action === 'TICKET_CREATED') {
     const match = message.match(/prioridad\s+(.+)$/i);
-    if (match) return `Ticket creado con prioridad ${auditPriorityLabels[match[1].toUpperCase()] || match[1]}`;
+    if (match) return `Ticket creado con prioridad ${auditPriorityLabels[match[1].toUpperCase()] || 'registrada'}`;
   }
   return message;
 };

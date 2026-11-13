@@ -9,6 +9,7 @@ import { ScrollArea } from '../ui/scroll-area';
 import { Sheet, SheetContent, SheetDescription, SheetFooter, SheetHeader, SheetTitle } from '../ui/sheet';
 import { cn } from '../ui/utils';
 import { AuditHistoryDisclosure } from '../ui/AuditHistoryDisclosure';
+import { translateAuditAction } from '../ui/AuditHistoryModal';
 import { SubtasksManager } from './SubtasksManager';
 import { TaskReportsPanel } from './TaskReportsPanel';
 import { TaskCommentsPanel } from './TaskCommentsPanel';
@@ -128,7 +129,7 @@ function StatusBadge({ value, kind }: { value: any; kind: ActivityDetailKind }) 
         : normalized === 'WAITING_APPROVAL'
           ? 'border-purple-500/20 bg-purple-500/10 text-purple-600 dark:text-purple-400'
           : (kind === 'event' || kind === 'meeting') ? 'border-emerald-500/20 bg-emerald-500/10 text-emerald-600 dark:text-emerald-400' : 'border-primary/20 bg-primary/10 text-primary';
-  return <Badge variant="outline" className={cn('border px-2.5 py-1 text-[10px] font-black uppercase tracking-widest', tone)}>{formatLabel(value)}</Badge>;
+  return <Badge variant="outline" className={cn('border px-2.5 py-1 text-[10px] font-black uppercase tracking-widest', tone)}>{kind === 'log' ? translateAuditAction(String(value || '')) : formatLabel(value)}</Badge>;
 }
 
 function formatHistoryDate(value: string | null | undefined): string {

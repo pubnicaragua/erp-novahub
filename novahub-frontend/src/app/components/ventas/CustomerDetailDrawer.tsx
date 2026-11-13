@@ -95,6 +95,7 @@ import { GoogleMap, buildMapQuery } from '../ui/GoogleMap';
 import { CustomerLoansPanel } from './CustomerLoansPanel';
 import { countryCodeFromLegacy, formatCustomerPhoneForDisplay } from '../../utils/customer-data';
 import { getAuditOperationMethodLabel } from '../ui/audit-operation-method';
+import { formatAuditChangedFields, translateAuditDetailKey, translateAuditDetailValue } from '../ui/AuditHistoryModal';
 import { getCurrencyDecimalPlaces } from '../../utils/currency';
 
 interface CustomerDetailDrawerProps {
@@ -138,7 +139,7 @@ const getInvoiceStatusInfo = (status?: string) => {
     OVERDUE: 'Vencida',
     CANCELLED: 'Anulada',
   };
-  return { label: labels[normalized] || 'Emitida', normalized };
+  return { label: labels[normalized] || 'Estado registrado', normalized };
 };
 
 const getTransactionStatus = (status?: string) => {
@@ -161,7 +162,7 @@ const getTransactionStatus = (status?: string) => {
     CANCELLED: 'Anulada',
     REJECTED: 'Rechazada',
   };
-  return labels[normalized] || status || 'Registrado';
+  return labels[normalized] || 'Estado registrado';
 };
 
 const getStatusBadge = (status?: string) => {
@@ -1020,13 +1021,22 @@ export function CustomerDetailDrawer({
                   </div>
                   <div className="space-y-4 pl-2 border-l-2 border-border/40 ml-2 pt-1">
                     {historyQuery.isError ? <div className="flex items-center justify-between gap-3 rounded-xl border border-destructive/20 bg-destructive/5 p-4 text-xs text-destructive"><span>No se pudo cargar la auditoría.</span><Button type="button" variant="outline" size="sm" onClick={() => historyQuery.refetch()}>Reintentar</Button></div> : historyLoading ? <div className="space-y-3"><Skeleton className="h-14 w-full rounded-xl" /><Skeleton className="h-14 w-full rounded-xl" /></div> : history.length > 0 ? history.map((event: any) => {
-                      let details: any = {};
+                      let details: any;
                       try { details = event.details ? JSON.parse(event.details) : {}; } catch { details = {}; }
-                      const changes = details.commercial_changes ? Object.entries(details.commercial_changes).map(([field, values]: any) => `${field}: ${values.before ?? '—'} → ${values.after ?? '—'}`).join(' · ') : '';
+                      const changes = details.commercial_changes && typeof details.commercial_changes === 'object'
+                        ? Object.entries(details.commercial_changes).map(([field, values]: any) => {
+                            const before = values?.before ?? values?.oldValue ?? '—';
+                            const after = values?.after ?? values?.newValue ?? '—';
+                            return `${translateAuditDetailKey(field)}: ${translateAuditDetailValue(before, field)} → ${translateAuditDetailValue(after, field)}`;
+                          }).join(' · ')
+                        : '';
+                      const changedFields = formatAuditChangedFields(
+                        details.fields_updated ?? details.fieldsUpdated ?? details.changedFields ?? details.updatedFields,
+                      );
                       const action = String(event.action || '').toUpperCase();
                       const title = action === 'CREATE' ? 'Cliente registrado' : action === 'UPDATE' ? 'Datos del cliente modificados' : action === 'DELETE' ? 'Cliente eliminado' : 'Cambio del registro';
                       const actorLabel = action === 'CREATE' ? 'Agregado por' : 'Modificado por';
-                      return <div key={event.id} className="relative space-y-1 pl-4"><div className="absolute -left-[21px] top-1 size-3 rounded-full border-2 border-background bg-primary" /><p className="text-xs font-bold text-foreground">{title}</p><p className="text-[11px] text-muted-foreground">{changes || details.fields_updated || 'Actualización registrada'}</p><p className="flex items-center gap-1 text-[11px] text-muted-foreground"><User className="size-3" />{actorLabel}: <span className="font-bold text-foreground">{auditActor(event)}</span></p><p className="flex items-center gap-1 font-mono text-[11px] text-muted-foreground"><Clock className="size-3" />{event.createdAt ? format(new Date(event.createdAt), 'PPP p', { locale: es }) : '—'}</p><p className="text-[10px] font-semibold text-muted-foreground">Vía: {getAuditOperationMethodLabel(event)}</p></div>;
+                      return <div key={event.id} className="relative space-y-1 pl-4"><div className="absolute -left-[21px] top-1 size-3 rounded-full border-2 border-background bg-primary" /><p className="text-xs font-bold text-foreground">{title}</p><p className="text-[11px] text-muted-foreground">{changes || changedFields || 'Actualización registrada'}</p><p className="flex items-center gap-1 text-[11px] text-muted-foreground"><User className="size-3" />{actorLabel}: <span className="font-bold text-foreground">{auditActor(event)}</span></p><p className="flex items-center gap-1 font-mono text-[11px] text-muted-foreground"><Clock className="size-3" />{event.createdAt ? format(new Date(event.createdAt), 'PPP p', { locale: es }) : '—'}</p><p className="text-[10px] font-semibold text-muted-foreground">Vía: {getAuditOperationMethodLabel(event)}</p></div>;
                     }) : <>
                     {customer?.createdAt && (
                       <div className="relative pl-4 space-y-1">

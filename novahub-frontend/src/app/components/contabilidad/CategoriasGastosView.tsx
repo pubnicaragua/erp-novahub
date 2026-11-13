@@ -89,6 +89,7 @@ export function CategoriasGastosView() {
       completeNotificationAction(actionToken);
       setDialogOpen(false);
       await queryClient.invalidateQueries({ queryKey: ['accounting'] });
+      await queryClient.invalidateQueries({ queryKey: ['purchases', 'expense-categories-catalog'] });
     } catch (e: any) {
       toast.error(e?.response?.data?.message || 'Error al guardar');
       failNotificationAction(actionToken);
@@ -109,6 +110,7 @@ export function CategoriasGastosView() {
       completeNotificationAction(actionToken);
       setPendingDeleteId(null);
       await queryClient.invalidateQueries({ queryKey: ['accounting'] });
+      await queryClient.invalidateQueries({ queryKey: ['purchases', 'expense-categories-catalog'] });
     } catch (e: any) {
       toast.error(e?.response?.data?.message || 'Error al eliminar');
       failNotificationAction(actionToken);

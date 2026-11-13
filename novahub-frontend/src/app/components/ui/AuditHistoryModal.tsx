@@ -57,6 +57,20 @@ const actionLabels: Record<string, string> = {
   MILESTONE_COMPLETED: 'Hito Completado',
   STAGE_CREATED: 'Etapa Creada',
   STAGE_UPDATED: 'Etapa Actualizada',
+  IMPORT: 'Importación',
+  APPROVE: 'Aprobación',
+  REJECT: 'Rechazo',
+  SUBMIT: 'Envío',
+  LOGIN: 'Inicio de sesión',
+  LOGOUT: 'Cierre de sesión',
+  STATUS_CHANGED: 'Cambio de estado',
+  PRIORITY_CHANGED: 'Cambio de prioridad',
+  ASSIGNED_CHANGED: 'Cambio de responsable',
+  TICKET_CREATED: 'Ticket creado',
+  UPLOAD: 'Archivo adjunto',
+  DOWNLOAD: 'Descarga',
+  COMMENT_ADDED: 'Comentario agregado',
+  ATTACHMENT_ADDED: 'Archivo adjunto',
 };
 
 const detailKeyLabels: Record<string, string> = {
@@ -117,15 +131,43 @@ const detailKeyLabels: Record<string, string> = {
   type: 'Tipo',
   email: 'Correo electrónico',
   phone: 'Teléfono',
+  contactPhone: 'Teléfono de contacto',
+  phoneNumber: 'Número de teléfono',
+  phoneCountryCode: 'Código de país del teléfono',
+  countryCode: 'Código de país',
+  country: 'País',
+  city: 'Ciudad',
+  state: 'Departamento o estado',
+  postalCode: 'Código postal',
+  firstName: 'Nombre',
+  lastName: 'Apellido',
+  companyName: 'Nombre de la empresa',
+  businessName: 'Nombre comercial',
+  legalName: 'Razón social',
+  contactName: 'Persona de contacto',
+  contactEmail: 'Correo de contacto',
+  mobile: 'Teléfono móvil',
+  website: 'Sitio web',
+  websiteUrl: 'Sitio web',
+  delivery: 'Delivery',
+  deliveryType: 'Tipo de delivery',
+  deliveryMethod: 'Método de delivery',
+  deliveryAddress: 'Dirección de entrega',
+  deliveryDate: 'Fecha de entrega',
+  deliveryInstructions: 'Instrucciones de entrega',
   address: 'Dirección',
   taxId: 'Identificación fiscal',
   ruc: 'RUC',
   fiscalRegime: 'Régimen fiscal',
   creditLimit: 'Límite de crédito',
+  creditDays: 'Días de crédito',
+  creditTerms: 'Condiciones de crédito',
+  paymentTerms: 'Condiciones de pago',
   previousStatus: 'Estado anterior',
   newStatus: 'Estado nuevo',
   source: 'Origen',
   origin: 'Origen',
+  flow: 'Flujo',
   from: 'Estado anterior',
   to: 'Estado nuevo',
   price_list: 'Lista de precios',
@@ -173,6 +215,29 @@ const detailKeyLabels: Record<string, string> = {
   unitPrice: 'Precio unitario',
   taxRate: 'Tasa de impuesto',
   discount: 'Descuento',
+  customerType: 'Tipo de cliente',
+  identificationType: 'Tipo de identificación',
+  nationalId: 'Identificación nacional',
+  documentType: 'Tipo de documento',
+  operationMethod: 'Método de operación',
+  branchId: 'Sucursal',
+  branchName: 'Nombre de la sucursal',
+  companyId: 'Empresa',
+  categoryId: 'Categoría',
+  categoryName: 'Nombre de la categoría',
+  isActive: 'Activo',
+  isEnabled: 'Habilitado',
+  startDate: 'Fecha de inicio',
+  endDate: 'Fecha de finalización',
+  effectiveDate: 'Fecha de vigencia',
+  expirationDate: 'Fecha de vencimiento',
+  validUntil: 'Válido hasta',
+  paymentDate: 'Fecha de pago',
+  reference: 'Referencia',
+  referenceNumber: 'Número de referencia',
+  bankAccountId: 'Cuenta bancaria',
+  branch: 'Sucursal',
+  countryIsoCode: 'Código de país',
 };
 
 const detailValueLabels: Record<string, string> = {
@@ -181,6 +246,7 @@ const detailValueLabels: Record<string, string> = {
   DELETE: 'Eliminación',
   ARCHIVE: 'Archivado',
   PENDING: 'Pendiente',
+  READY: 'Listo',
   WITH_INCIDENTS: 'Recibida con incidencias',
   PAID: 'Pagada',
   PARTIAL: 'Parcial',
@@ -206,6 +272,7 @@ const detailValueLabels: Record<string, string> = {
   EXPIRED: 'Finalizada',
   COMPLETED: 'Completada',
   PURCHASE_ORDER: 'Orden de compra',
+  PURCHASE_REQUEST_APPROVAL: 'Aprobación de solicitud de compra',
   PURCHASE_RECEIPT: 'Recepción de compra',
   DIRECT: 'Registro directo',
   OPEN: 'Abierto',
@@ -227,12 +294,106 @@ const detailValueLabels: Record<string, string> = {
   true: 'Sí',
   false: 'No',
   BULK_IMPORT: 'Importación masiva',
+  MANUAL: 'Manual',
+  IMPORT: 'Importación',
+  SYSTEM: 'Sistema',
+  WEB: 'Web',
+  POS: 'POS',
+  DELIVERY: 'Delivery',
+  NO_PAYMENT: 'Sin cobro',
+  USD: 'USD',
+  NIO: 'NIO',
+  ENABLED: 'Habilitado',
+  DISABLED: 'Deshabilitado',
+  COMPANY: 'Empresa',
+  INDIVIDUAL: 'Particular',
+  MANAGER: 'Gerente',
+  ADMIN: 'Administrador',
+  FULL_TIME: 'Tiempo completo',
+  PART_TIME: 'Medio tiempo',
+  CONTRACTOR: 'Contratista',
+  INTERN: 'Pasante',
+  TEMPORARY: 'Temporal',
+  MONTHLY: 'Mensual',
+  WEEKLY: 'Semanal',
+  BIWEEKLY: 'Quincenal',
+  DAILY: 'Diario',
+  HOURLY: 'Por hora',
+  MALE: 'Masculino',
+  FEMALE: 'Femenino',
+  OTHER: 'Otro',
+  SUCCESS: 'Correcto',
+  FAILURE: 'Fallido',
 };
 
-const formatAction = (action?: string): string => {
-  if (!action) return 'Acción';
-  if (actionLabels[action]) return actionLabels[action];
-  return action.toLowerCase().replace(/_/g, ' ').replace(/^./, (c) => c.toUpperCase());
+const normalizeAuditToken = (value: string) => String(value || '').replace(/[^a-z0-9]/gi, '').toLowerCase();
+const normalizedDetailKeyLabels = new Map(Object.entries(detailKeyLabels).map(([key, label]) => [normalizeAuditToken(key), label]));
+const normalizedDetailValueLabels = new Map(Object.entries(detailValueLabels).map(([key, label]) => [normalizeAuditToken(key), label]));
+
+const isInternalDetail = (key: string, value?: unknown) => {
+  const normalizedKey = String(key || '');
+  if (normalizedKey === 'operationMethod') return true;
+  // Los identificadores internos sirven para trazabilidad técnica, pero no
+  // deben llenar la auditoría visible con UUID largos.
+  if (normalizedKey === 'id' || normalizedKey === 'clientTenantId' || /(?:Id|ID)$/.test(normalizedKey)) return true;
+  return typeof value === 'string' && /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(value);
+};
+
+const isDateDetail = (key?: string) => Boolean(key && /(?:date|at)$/i.test(key));
+const isStatusDetail = (key?: string) => Boolean(key && /(?:status|state|estado|^from$|^to$)/i.test(key));
+
+/** Traduce claves de auditoría; las claves técnicas desconocidas se ocultan como dato actualizado. */
+export function translateAuditDetailKey(key: string): string {
+  const readableKey = String(key || '').trim();
+  const normalized = normalizeAuditToken(key);
+  return normalizedDetailKeyLabels.get(normalized)
+    || normalizedDetailValueLabels.get(normalized)
+    || (/^[a-z][a-z0-9_.-]*$/i.test(readableKey) ? 'Campo actualizado' : readableKey || 'Campo actualizado');
+}
+
+/** Convierte listas de campos cambiados en etiquetas legibles y separadas. */
+export function formatAuditChangedFields(value: unknown): string {
+  const fields = Array.isArray(value)
+    ? value.map((field) => String(field || '').trim()).filter(Boolean)
+    : typeof value === 'string'
+      ? value.split(/[,|;\n]+/).map((field) => field.trim()).filter(Boolean)
+      : [];
+  if (!fields.length) return '';
+  if (fields.length === 1 && fields[0] === value && translateAuditDetailKey(fields[0]) === 'Campo actualizado') return 'Campos actualizados';
+  return [...new Set(fields.map(translateAuditDetailKey))].join(', ');
+}
+
+/** Traduce valores de auditoría y evita exponer enums desconocidos de la base de datos. */
+export function translateAuditDetailValue(value: unknown, contextKey?: string, timeZone = 'UTC'): string {
+  if (value === null || value === undefined || value === '') return '—';
+  if (contextKey && /^(?:fieldsUpdated|fields_updated|changedFields|updatedFields)$/i.test(contextKey)) {
+    return formatAuditChangedFields(value) || 'Campos actualizados';
+  }
+  if (Array.isArray(value)) return value.map((item) => translateAuditDetailValue(item, contextKey, timeZone)).join(', ');
+  if (typeof value === 'object') {
+    return Object.entries(value as Record<string, unknown>)
+      .filter(([key, nestedValue]) => !isInternalDetail(key, nestedValue))
+      .map(([key, nestedValue]) => `${translateAuditDetailKey(key)}: ${translateAuditDetailValue(nestedValue, key, timeZone)}`)
+      .join(' · ');
+  }
+  const stringValue = String(value);
+  if (isDateDetail(contextKey) && !Number.isNaN(new Date(stringValue).getTime())) {
+    return /At$/i.test(String(contextKey || ''))
+      ? formatInstant(stringValue, timeZone)
+      : formatDateOnly(stringValue);
+  }
+  const normalizedValue = normalizeAuditToken(stringValue);
+  const translated = normalizedDetailValueLabels.get(normalizedValue) || normalizedDetailKeyLabels.get(normalizedValue);
+  if (translated) return translated;
+  if (isStatusDetail(contextKey)) return 'Estado registrado';
+  if (/^[A-Z][A-Z0-9_]*$/.test(stringValue)) return 'Valor registrado';
+  return stringValue;
+}
+
+export const translateAuditAction = (action?: string): string => {
+  if (!action) return 'Actividad registrada';
+  const normalizedAction = String(action).trim().toUpperCase();
+  return actionLabels[normalizedAction] || 'Actividad registrada';
 };
 
 export function AuditHistoryModal({ isOpen, onClose, entity, entityId, title = 'Historial de Cambios', presentation = 'dialog', logs: providedLogs }: AuditHistoryModalProps) {
@@ -275,39 +436,8 @@ export function AuditHistoryModal({ isOpen, onClose, entity, entityId, title = '
     }
   };
 
-  const translateKey = (key: string) => detailKeyLabels[key] || detailValueLabels[key] || key.replace(/([A-Z])/g, ' $1').replace(/_/g, ' ').replace(/^./, (letter) => letter.toUpperCase());
-
-  const isInternalDetail = (key: string, value?: unknown) => {
-    const normalizedKey = String(key || '');
-    if (normalizedKey === 'operationMethod') return true;
-    // Los identificadores internos sirven para trazabilidad técnica, pero no
-    // deben llenar la auditoría visible con UUID largos.
-    if (normalizedKey === 'id' || normalizedKey === 'clientTenantId' || /(?:Id|ID)$/.test(normalizedKey)) return true;
-    return typeof value === 'string' && /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(value);
-  };
-
-  const isDateDetail = (key?: string) => Boolean(key && /(?:date|at)$/i.test(key));
-
-  const translateValue = (value: unknown, contextKey?: string, timeZone = 'UTC'): string => {
-    if (value === null || value === undefined || value === '') return '—';
-    if (Array.isArray(value)) return value.map((item) => translateValue(item, contextKey, timeZone)).join(', ');
-    if (typeof value === 'object') {
-      return Object.entries(value as Record<string, unknown>)
-        .filter(([key, nestedValue]) => !isInternalDetail(key, nestedValue))
-        .map(([key, nestedValue]) => `${translateKey(key)}: ${translateValue(nestedValue, key, timeZone)}`)
-        .join(' · ');
-    }
-    const stringValue = String(value);
-    if (contextKey === 'fields_updated' || contextKey === 'fieldsUpdated') {
-      return stringValue.split(',').map((field) => translateKey(field.trim())).join(', ');
-    }
-    if (isDateDetail(contextKey) && !Number.isNaN(new Date(stringValue).getTime())) {
-      return /At$/i.test(String(contextKey || ''))
-        ? formatInstant(stringValue, timeZone)
-        : formatDateOnly(stringValue);
-    }
-    return detailValueLabels[stringValue] || detailKeyLabels[stringValue] || stringValue;
-  };
+  const translateKey = translateAuditDetailKey;
+  const translateValue = translateAuditDetailValue;
 
   const historyEntries = (
     <div className="space-y-4">
@@ -327,7 +457,7 @@ export function AuditHistoryModal({ isOpen, onClose, entity, entityId, title = '
                     "text-[9px] font-black uppercase tracking-widest border",
                     actionColors[log.action] || 'bg-muted/20 text-muted-foreground'
                   )}>
-                    {formatAction(log.action)}
+                    {translateAuditAction(log.action)}
                   </Badge>
                   <div className="flex items-center gap-1.5 text-[10px] font-bold text-muted-foreground">
                     <Calendar className="size-3" />

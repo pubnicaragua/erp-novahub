@@ -1421,6 +1421,7 @@ export interface RecurringExpense {
   exchangeRate?: number;
   baseAmount?: number;
   category: string;
+  expenseCategoryId?: string | null;
   description: string;
   source?: string;
   paymentSource?: string;

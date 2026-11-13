@@ -205,7 +205,9 @@ export function SalesProductPicker({
         const categoryId = String(product.categoryId || (typeof product.category === 'object' ? product.category?.id : '') || getCategoryName(product)).trim();
         return categoryId === categoryFilter;
       })
-      .filter((product) => availabilityFilter === 'all' || stockState(product, warehouseId, String(product.id) === String(value || '') ? selectedVariantId : getSingleSalesVariant(product)?.id) === availabilityFilter);
+      .filter((product) => itemType === 'SERVICE'
+        || availabilityFilter === 'all'
+        || stockState(product, warehouseId, String(product.id) === String(value || '') ? selectedVariantId : getSingleSalesVariant(product)?.id) === availabilityFilter);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [availabilityFilter, brandFilter, categoryFilter, itemType, products, search, value, variantId, warehouseId]);
 
