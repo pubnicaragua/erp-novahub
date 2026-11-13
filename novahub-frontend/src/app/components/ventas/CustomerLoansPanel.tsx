@@ -22,6 +22,7 @@ import { CustomerCreditInstallmentSchedule } from './CustomerCreditInstallmentSc
 import { generateCustomerCreditInstallmentReport } from '../../utils/customerCreditInstallmentReport';
 import { generateCustomerDebtStatementReport } from '../../utils/customerDebtStatementReport';
 import { CustomerCreditCalendarSelector } from './CustomerCreditCalendarSelector';
+import { useDebouncedValue } from '../../hooks/useDebouncedValue';
 
 type MoraType = { id: string; name: string; description: string; isActive: boolean };
 type LoanFrequency = 'DAILY' | 'WEEKLY' | 'BIWEEKLY' | 'MONTHLY';
@@ -139,6 +140,7 @@ export function CustomerLoansPanel({ customerId, customerName, moraTypeId, moraT
     currency: baseCurrency as LoanCurrency, disbursementSource: 'CASH',
     cashRegisterSessionId: '', bankAccountId: '', notes: '',
   });
+  const deferredLoanInstallmentAmount = useDebouncedValue(form.installmentAmount);
 
   const loadLoans = useCallback(async () => {
     await queryClient.invalidateQueries({ queryKey: loansQueryKey });
@@ -213,20 +215,20 @@ export function CustomerLoansPanel({ customerId, customerName, moraTypeId, moraT
   const formInterest = form.interestMode === 'NONE' ? 0 : form.interestMode === 'PERCENTAGE'
     ? roundCurrencyNumber(Number(form.principal || 0) * Number(form.interest || 0) / 100)
     : roundCurrencyNumber(Number(form.interest || 0));
-  const installmentPlanEstimate = form.planEnabled
+  const installmentPlanEstimate = useMemo(() => form.planEnabled
     ? calculateCustomerCreditPlanEstimate({
       principal: Number(form.principal || 0),
       interest: formInterest,
       frequency: form.frequency,
       firstInstallmentDate: form.firstInstallmentDate,
       calculationMode: form.planCalculationMode,
-      installmentAmount: form.installmentAmount,
+      installmentAmount: deferredLoanInstallmentAmount,
       finalDueDate: form.dueDate,
       manualInstallments: form.manualInstallments,
       excludedWeekdays: form.excludedWeekdays,
       excludedDates: (holidaysQuery.data || []).filter((holiday) => form.holidayIds.includes(holiday.id)).map((holiday) => String(holiday.date).slice(0, 10)),
     })
-    : null;
+    : null, [form.planEnabled, form.principal, formInterest, form.frequency, form.firstInstallmentDate, form.planCalculationMode, deferredLoanInstallmentAmount, form.dueDate, form.manualInstallments, form.excludedWeekdays, form.holidayIds, holidaysQuery.data]);
 
   const printInstallmentPlan = async (input: {
     installments: CustomerCreditPlanInstallment[];
@@ -286,7 +288,21 @@ export function CustomerLoansPanel({ customerId, customerName, moraTypeId, moraT
 
   const submitLoan = async (event: React.FormEvent) => {
     event.preventDefault();
-    if (form.planEnabled && (!installmentPlanEstimate || !installmentPlanEstimate.isValid)) { toast.error(installmentPlanEstimate?.validationErrors[0] || 'Completa los datos del plan de abonos para calcular el vencimiento.'); return; }
+    const currentInstallmentPlanEstimate = form.planEnabled
+      ? calculateCustomerCreditPlanEstimate({
+        principal: Number(form.principal || 0),
+        interest: formInterest,
+        frequency: form.frequency,
+        firstInstallmentDate: form.firstInstallmentDate,
+        calculationMode: form.planCalculationMode,
+        installmentAmount: form.installmentAmount,
+        finalDueDate: form.dueDate,
+        manualInstallments: form.manualInstallments,
+        excludedWeekdays: form.excludedWeekdays,
+        excludedDates: (holidaysQuery.data || []).filter((holiday) => form.holidayIds.includes(holiday.id)).map((holiday) => String(holiday.date).slice(0, 10)),
+      })
+      : null;
+    if (form.planEnabled && (!currentInstallmentPlanEstimate || !currentInstallmentPlanEstimate.isValid)) { toast.error(currentInstallmentPlanEstimate?.validationErrors[0] || 'Completa los datos del plan de abonos para calcular el vencimiento.'); return; }
     if (form.disbursementSource === 'CASH' && !selectedCashSessionId) { toast.error('No hay una sesión abierta de Caja seleccionada.'); return; }
     if (form.disbursementSource === 'BANK' && !form.bankAccountId) { toast.error('Selecciona una cuenta bancaria.'); return; }
     setSaving(true);
@@ -296,14 +312,14 @@ export function CustomerLoansPanel({ customerId, customerName, moraTypeId, moraT
         principal: Number(form.principal), interest: Number(form.interest || 0), interestMode: form.interestMode,
         interestValue: Number(form.interest || 0), planEnabled: form.planEnabled,
         planCalculationMode: form.planCalculationMode,
-        ...(form.planCalculationMode !== 'MANUAL' ? { installmentAmount: installmentPlanEstimate?.installmentAmount || Number(form.installmentAmount || 0), frequency: form.frequency } : {}),
-        firstInstallmentDate: form.planEnabled ? installmentPlanEstimate?.firstInstallmentDate : undefined,
+        ...(form.planCalculationMode !== 'MANUAL' ? { installmentAmount: currentInstallmentPlanEstimate?.installmentAmount || Number(form.installmentAmount || 0), frequency: form.frequency } : {}),
+        firstInstallmentDate: form.planEnabled ? currentInstallmentPlanEstimate?.firstInstallmentDate : undefined,
         excludedWeekdays: form.planEnabled && form.planCalculationMode !== 'MANUAL' ? form.excludedWeekdays : [],
         holidayIds: form.planEnabled && form.planCalculationMode !== 'MANUAL' ? form.holidayIds : [],
         manualInstallments: form.planEnabled && form.planCalculationMode === 'MANUAL'
           ? form.manualInstallments.map((item) => ({ dueDate: item.dueDate, totalAmount: Number(item.totalAmount), interestAmount: Number(item.interestAmount) }))
           : undefined,
-        dueDate: form.planEnabled ? installmentPlanEstimate?.finalDueDate : form.dueDate, currency: form.currency,
+        dueDate: form.planEnabled ? currentInstallmentPlanEstimate?.finalDueDate : form.dueDate, currency: form.currency,
         disbursementSource: form.disbursementSource,
         ...(form.disbursementSource === 'CASH' ? { cashRegisterSessionId: selectedCashSessionId } : { bankAccountId: form.bankAccountId }),
         notes: form.notes,
@@ -484,7 +500,13 @@ export function CustomerLoansPanel({ customerId, customerName, moraTypeId, moraT
                 </div>
                 {form.planEnabled && <div className="min-w-0 space-y-1.5">
                   <Label className="text-xs font-semibold">Método de cálculo *</Label>
-                  <Select value={form.planCalculationMode} onValueChange={(value) => setForm({ ...form, planCalculationMode: value as typeof form.planCalculationMode })}>
+                  <Select value={form.planCalculationMode} onValueChange={(value) => setForm((current) => {
+                    const mode = value as typeof current.planCalculationMode;
+                    if (mode !== 'DEADLINE') return { ...current, planCalculationMode: mode };
+                    const firstDate = current.firstInstallmentDate || new Date().toISOString().split('T')[0];
+                    const requestedDate = installmentPlanEstimate?.finalDueDate || current.dueDate || firstDate;
+                    return { ...current, planCalculationMode: mode, dueDate: requestedDate >= firstDate ? requestedDate : firstDate };
+                  })}>
                     <SelectTrigger className="h-9 w-full"><SelectValue /></SelectTrigger>
                     <SelectContent><SelectItem value="AMOUNT">Monto por abono</SelectItem><SelectItem value="DEADLINE">Fecha de vencimiento</SelectItem><SelectItem value="MANUAL">Manual</SelectItem></SelectContent>
                   </Select>
@@ -492,16 +514,17 @@ export function CustomerLoansPanel({ customerId, customerName, moraTypeId, moraT
               </div>
               {form.planEnabled && <div className="grid min-w-0 gap-3 sm:grid-cols-2">
                 {form.planCalculationMode !== 'MANUAL' && <div className="min-w-0 space-y-1.5"><Label className="flex items-end leading-tight sm:min-h-10">Frecuencia de pago *</Label><Select value={form.frequency} onValueChange={(value) => setForm({ ...form, frequency: value as LoanFrequency })}><SelectTrigger className="h-9"><SelectValue /></SelectTrigger><SelectContent><SelectItem value="DAILY">Diaria</SelectItem><SelectItem value="WEEKLY">Semanal</SelectItem><SelectItem value="BIWEEKLY">Quincenal</SelectItem><SelectItem value="MONTHLY">Mensual</SelectItem></SelectContent></Select></div>}
-                {form.planCalculationMode !== 'MANUAL' && <div className="min-w-0 space-y-1.5"><Label htmlFor="loan-first-installment" className="flex items-end leading-tight sm:min-h-10">Fecha del primer abono *</Label><Input id="loan-first-installment" type="date" required value={form.firstInstallmentDate} onChange={(event) => setForm({ ...form, firstInstallmentDate: event.target.value })} /></div>}
+                {form.planCalculationMode !== 'MANUAL' && <div className="min-w-0 space-y-1.5"><Label htmlFor="loan-first-installment" className="flex items-end leading-tight sm:min-h-10">Fecha del primer abono *</Label><Input id="loan-first-installment" type="date" required min={new Date().toISOString().split('T')[0]} value={form.firstInstallmentDate} onChange={(event) => { const firstDate = event.target.value; setForm((current) => ({ ...current, firstInstallmentDate: firstDate, ...(current.planCalculationMode === 'DEADLINE' && firstDate && current.dueDate < firstDate ? { dueDate: firstDate } : {}) })); }} /></div>}
                 {form.planCalculationMode === 'AMOUNT'
                   ? <div className="min-w-0 space-y-1.5"><Label htmlFor="loan-installment-amount" className="flex items-end leading-tight sm:min-h-10">Monto por abono *</Label><Input id="loan-installment-amount" type="number" min="0.01" step="0.01" required value={form.installmentAmount} onChange={(event) => setForm({ ...form, installmentAmount: event.target.value })} currencyPrecision /></div>
-                  : form.planCalculationMode === 'DEADLINE' ? <div className="min-w-0 space-y-1.5"><Label htmlFor="loan-final-due-date" className="flex items-end leading-tight sm:min-h-10">Fecha final de vencimiento *</Label><Input id="loan-final-due-date" type="date" required min={form.firstInstallmentDate || undefined} value={form.dueDate} onChange={(event) => setForm({ ...form, dueDate: event.target.value })} /></div> : null}
+                  : form.planCalculationMode === 'DEADLINE' ? <div className="min-w-0 space-y-1.5"><Label htmlFor="loan-final-due-date" className="flex items-end leading-tight sm:min-h-10">Fecha final de vencimiento *</Label><Input id="loan-final-due-date" type="date" required min={form.firstInstallmentDate || new Date().toISOString().split('T')[0]} value={form.dueDate} onChange={(event) => setForm((current) => ({ ...current, dueDate: event.target.value }))} /><p className="text-[10px] text-muted-foreground">El plan calcula cuántos abonos caben hasta esta fecha.</p></div> : null}
               </div>}
               {form.planEnabled && form.planCalculationMode !== 'MANUAL' && <CustomerCreditCalendarSelector
                 excludedWeekdays={form.excludedWeekdays}
                 holidayIds={form.holidayIds}
                 onChange={(value) => setForm((current) => ({ ...current, excludedWeekdays: value.excludedWeekdays, holidayIds: value.holidayIds }))}
               />}
+              {form.planEnabled && form.planCalculationMode === 'AMOUNT' && form.installmentAmount !== deferredLoanInstallmentAmount && <p className="text-[10px] text-muted-foreground" role="status" aria-live="polite">Actualizando el calendario con el monto nuevo…</p>}
               {form.planEnabled && installmentPlanEstimate && <div className="min-w-0"><CustomerCreditInstallmentSchedule
                 installments={installmentPlanEstimate.schedule}
                 currency={form.currency}
@@ -518,6 +541,7 @@ export function CustomerLoansPanel({ customerId, customerName, moraTypeId, moraT
                 onAddManualInstallment={form.planCalculationMode === 'MANUAL' ? () => setForm((previous) => ({ ...previous, manualInstallments: [...previous.manualInstallments, emptyManualInstallment()] })) : undefined}
                 onRemoveManualInstallment={form.planCalculationMode === 'MANUAL' ? (index) => setForm((previous) => ({ ...previous, manualInstallments: previous.manualInstallments.filter((_, itemIndex) => itemIndex !== index) })) : undefined}
                 onPrint={() => void printInstallmentPlan({ installments: installmentPlanEstimate.schedule, principalAmount: installmentPlanEstimate.principalAmount, interestAmount: installmentPlanEstimate.interestAmount, currency: form.currency, contractNumber: `Préstamo · ${customerName}`, frequency: form.planCalculationMode === 'MANUAL' ? null : form.frequency })}
+                printDisabled={form.planCalculationMode === 'AMOUNT' && form.installmentAmount !== deferredLoanInstallmentAmount}
               /></div>}
               {!form.planEnabled && <div className="space-y-1.5"><Label htmlFor="loan-due-date" className="flex items-end leading-tight sm:min-h-10">Fecha de vencimiento *</Label><Input id="loan-due-date" type="date" required value={form.dueDate} onChange={(event) => setForm({ ...form, dueDate: event.target.value })} /></div>}
             </div>
@@ -527,7 +551,7 @@ export function CustomerLoansPanel({ customerId, customerName, moraTypeId, moraT
             <div className="space-y-1.5 sm:col-span-2"><Label htmlFor="loan-notes">Notas (opcional)</Label><Input id="loan-notes" maxLength={500} value={form.notes} onChange={(event) => setForm({ ...form, notes: event.target.value })} placeholder="Referencia o acuerdo de pago" /></div>
             <p className="text-[11px] leading-relaxed text-muted-foreground sm:col-span-2">El principal más el interés debe caber en el límite de crédito disponible. La clasificación de mora se administra manualmente en la ficha del cliente.</p>
           </form>
-          <DialogFooter className="gap-2 sm:justify-end"><Button type="button" variant="outline" onClick={() => setCreateOpen(false)}>Cancelar</Button><Button type="submit" form="customer-loan-form" disabled={saving || (form.disbursementSource === 'CASH' && cashLoading) || (form.planEnabled && (!installmentPlanEstimate || !installmentPlanEstimate.isValid))}>{saving && <Loader2 className="mr-2 size-4 animate-spin" />} Emitir y desembolsar</Button></DialogFooter>
+          <DialogFooter className="gap-2 sm:justify-end"><Button type="button" variant="outline" onClick={() => setCreateOpen(false)}>Cancelar</Button><Button type="submit" form="customer-loan-form" disabled={saving || (form.disbursementSource === 'CASH' && cashLoading) || (form.planEnabled && (!installmentPlanEstimate || !installmentPlanEstimate.isValid || (form.planCalculationMode === 'AMOUNT' && form.installmentAmount !== deferredLoanInstallmentAmount)))}>{saving && <Loader2 className="mr-2 size-4 animate-spin" />} Emitir y desembolsar</Button></DialogFooter>
         </DialogContent>
       </Dialog>
 

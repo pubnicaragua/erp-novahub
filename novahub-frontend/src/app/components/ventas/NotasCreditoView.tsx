@@ -1,10 +1,11 @@
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { useQueryClient } from '@tanstack/react-query';
 import {
   BadgeDollarSign, Plus, Search, TrendingUp, Clock, CheckCircle2, CircleDollarSign,
   Eye, Trash2, ChevronLeft, Send, CreditCard, AlertTriangle, Ban, Bell, Mail, MessageCircle, CalendarDays, FileText, Settings2,
 } from 'lucide-react';
 import { Card, CardContent } from '../ui/card';
+import { useDebouncedValue } from '../../hooks/useDebouncedValue';
 import { Button } from '../ui/button';
 import { Input } from '../ui/input';
 import { Label } from '../ui/label';
@@ -302,6 +303,7 @@ export function NotasCreditoView({ data, summaryData, summaryLoading, summaryErr
   const [creditReasonAttempted, setCreditReasonAttempted] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [localDoc, setLocalDoc] = useState<any>(null);
+  const deferredPlanInstallmentAmount = useDebouncedValue(localDoc?.installmentAmount);
   const [salesProductPickerItemId, setSalesProductPickerItemId] = useState<string | null>(null);
   const [detailCredit, setDetailCredit] = useState<CreditDocument | null>(null);
   const [isCreating, setIsCreating] = useState(false);
@@ -1214,6 +1216,40 @@ export function NotasCreditoView({ data, summaryData, summaryLoading, summaryErr
   );
   const overdueCount = summaryFilteredData.filter((credit) => Number(credit.balance ?? 0) > 0 && credit.dueDate && new Date(credit.dueDate).getTime() < referenceNow).length;
 
+  const installmentPlanEstimate = useMemo(() => {
+    if (!localDoc?.planEnabled) return null;
+    const interestMode = String(localDoc.interestMode || 'NONE');
+    const interestValue = Number(localDoc.interestValue ?? (interestMode === 'PERCENTAGE' ? localDoc.interestRate : localDoc.interestAmount) ?? 0);
+    const principal = Number(localDoc.total || 0);
+    const interest = interestMode === 'PERCENTAGE'
+      ? principal * interestValue / 100
+      : interestMode === 'FIXED_AMOUNT' ? interestValue : 0;
+    const planCalculationMode = localDoc.planCalculationMode || (localDoc.firstInstallmentDate ? 'DEADLINE' : 'AMOUNT');
+    const firstInstallmentDate = localDoc.firstInstallmentDate || isoDate(localDoc.dueDate);
+    const manualInstallments: CustomerCreditManualInstallmentDraft[] = Array.isArray(localDoc.manualInstallments)
+      ? localDoc.manualInstallments
+      : (localDoc.installments || []).map((item: any) => ({
+        dueDate: isoDate(item.dueDate),
+        totalAmount: String(item.totalAmount ?? ''),
+        interestAmount: String(item.interestAmount ?? ''),
+      }));
+    const excludedDates = creditHolidays
+      .filter((holiday) => (localDoc.holidayIds || []).includes(holiday.id))
+      .map((holiday) => String(holiday.date).slice(0, 10));
+    return calculateCustomerCreditPlanEstimate({
+      principal,
+      interest: roundCurrencyNumber(interest),
+      frequency: localDoc.frequency || 'WEEKLY',
+      firstInstallmentDate,
+      calculationMode: planCalculationMode,
+      installmentAmount: deferredPlanInstallmentAmount,
+      finalDueDate: isoDate(localDoc.dueDate),
+      manualInstallments,
+      excludedWeekdays: localDoc.excludedWeekdays || [],
+      excludedDates,
+    });
+  }, [localDoc?.planEnabled, localDoc?.interestMode, localDoc?.interestValue, localDoc?.interestRate, localDoc?.interestAmount, localDoc?.total, localDoc?.planCalculationMode, localDoc?.firstInstallmentDate, localDoc?.dueDate, localDoc?.manualInstallments, localDoc?.installments, localDoc?.frequency, localDoc?.excludedWeekdays, localDoc?.holidayIds, deferredPlanInstallmentAmount, creditHolidays]);
+
   if ((editingId || isCreating) && localDoc) {
     const statusOption = statusFor(localDoc.status);
     const canIssue = !isCreating && normalizeStatus(localDoc.status) === 'DRAFT';
@@ -1235,20 +1271,6 @@ export function NotasCreditoView({ data, summaryData, summaryLoading, summaryErr
         totalAmount: String(item.totalAmount ?? ''),
         interestAmount: String(item.interestAmount ?? ''),
       }));
-    const installmentPlanEstimate = localDoc.planEnabled
-      ? calculateCustomerCreditPlanEstimate({
-        principal: principalForInterest,
-        interest: roundCurrencyNumber(interestPreview),
-        frequency: localDoc.frequency || 'WEEKLY',
-        firstInstallmentDate,
-        calculationMode: planCalculationMode,
-        installmentAmount: localDoc.installmentAmount,
-        finalDueDate: isoDate(localDoc.dueDate),
-        manualInstallments: manualInstallmentDrafts,
-        excludedWeekdays: localDoc.excludedWeekdays || [],
-        excludedDates: creditHolidays.filter((holiday) => (localDoc.holidayIds || []).includes(holiday.id)).map((holiday) => String(holiday.date).slice(0, 10)),
-      })
-      : null;
     // Mientras el crédito se puede editar, el calendario (y lo que imprime «Imprimir plan») sale del
     // cálculo vigente; usar el guardado mostraba y mandaba a imprimir un plan viejo tras cambiar
     // monto, frecuencia, fechas o interés. Ya emitido, se muestra el guardado con sus pagos aplicados.
@@ -1291,9 +1313,9 @@ export function NotasCreditoView({ data, summaryData, summaryLoading, summaryErr
         {customersError && <div role="alert" className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-rose-500/30 bg-rose-500/10 px-4 py-3 text-xs text-rose-700 dark:text-rose-300"><span>No se pudieron cargar los clientes ni sus límites de crédito.</span><Button type="button" variant="outline" size="sm" onClick={onRefresh}>Reintentar</Button></div>}
         <fieldset disabled={!canEditDocument} className="contents">
         <div className="grid gap-4 lg:grid-cols-[1.3fr_0.7fr]" data-tour="sales-form-data">
-           <Card className="rounded-2xl border-border/50"><CardContent className="space-y-4 p-6"><p className="text-xs font-black uppercase tracking-widest text-muted-foreground">Condiciones del crédito</p><SalesAccountingLegend flow="creditNote" /><div className="grid gap-3 sm:grid-cols-2"><div><Label htmlFor="credit-customer" required className="mb-1 text-[10px] text-muted-foreground">Cliente</Label><Combobox id="credit-customer" required aria-invalid={creditReasonAttempted && !localDoc.customerId} aria-describedby={creditReasonAttempted && !localDoc.customerId ? 'credit-customer-error' : undefined} options={customers.filter((customer) => String(customer.status || '').toUpperCase() === 'ACTIVE' || customer.id === localDoc.customerId).map((customer) => ({ label: customer.name, value: customer.id, description: `${customer.code ? `[${customer.code}] ` : ''}Límite: ${formatConvertedAmount(Number(customer.creditLimit || 0), normalizeCurrency(customer.creditLimitCurrency, baseCurrency), globalRate)}` }))} value={localDoc.customerId || ''} onChange={(value) => { const priceListId = getCustomerPriceListId(value); const items = (localDoc.items || []).map((item: any) => item.productId ? { ...item, priceListId, unitPrice: 0, total: 0, priceMissing: false } : { ...item, priceListId }); if (hasSalesProductPriceListConflicts(items, priceListId)) { toast.error('No se puede aplicar esta lista: hay productos repetidos con la misma lista de precios.'); return; } setLocalDoc({ ...localDoc, customerId: value, priceListId, ...recalculateItems(items) }); }} placeholder="Seleccionar cliente" />{creditReasonAttempted && !localDoc.customerId && <p id="credit-customer-error" role="alert" className="mt-1 text-[10px] text-destructive">Selecciona un cliente para continuar.</p>}</div><SalesWarehouseSelect warehouses={warehouses} value={localDoc.warehouseId} onChange={(warehouseId) => setLocalDoc({ ...localDoc, warehouseId })} required helpText="Se usará al emitir el crédito y devolver productos al inventario." /><div><Label htmlFor="credit-issue-date" required className="mb-1 text-[10px] text-muted-foreground">Fecha del crédito</Label><Input id="credit-issue-date" type="date" required aria-invalid={creditReasonAttempted && !localDoc.date} aria-describedby={creditReasonAttempted && !localDoc.date ? 'credit-issue-date-error' : undefined} value={isoDate(localDoc.date)} onChange={(event) => setLocalDoc({ ...localDoc, date: event.target.value })} className="h-8 text-xs" />{creditReasonAttempted && !localDoc.date && <p id="credit-issue-date-error" role="alert" className="mt-1 text-[10px] text-destructive">Selecciona la fecha del crédito.</p>}</div><div><Label htmlFor="credit-due-date" required={!localDoc.planEnabled || planCalculationMode === 'DEADLINE'} className="mb-1 text-[10px] text-muted-foreground">{localDoc.planEnabled ? (planCalculationMode === 'AMOUNT' ? 'Fecha estimada de cancelación' : 'Fecha final de vencimiento') : 'Fecha límite de pago'}</Label>{localDoc.planEnabled && planCalculationMode !== 'DEADLINE'
-  ? <Input type="text" readOnly aria-readonly="true" value={installmentPlanEstimate?.finalDueDate ? formatDateEs(installmentPlanEstimate.finalDueDate) : ''} className="h-8 bg-muted/30 text-xs" />
-  : <Input id="credit-due-date" type="date" required={!localDoc.planEnabled || planCalculationMode === 'DEADLINE'} aria-invalid={creditReasonAttempted && (!localDoc.planEnabled || planCalculationMode === 'DEADLINE') && !localDoc.dueDate} aria-describedby={creditReasonAttempted && (!localDoc.planEnabled || planCalculationMode === 'DEADLINE') && !localDoc.dueDate ? 'credit-due-date-error' : undefined} value={isoDate(localDoc.dueDate)} onChange={(event) => setLocalDoc({ ...localDoc, dueDate: event.target.value, ...(localDoc.planEnabled ? { planCalculationMode: 'DEADLINE' } : {}) })} className="h-8 text-xs" />}{creditReasonAttempted && (!localDoc.planEnabled || planCalculationMode === 'DEADLINE') && !localDoc.dueDate && <p id="credit-due-date-error" role="alert" className="mt-1 text-[10px] text-destructive">Selecciona la fecha límite de pago.</p>}</div>
+           <Card className="rounded-2xl border-border/50"><CardContent className="space-y-4 p-6"><p className="text-xs font-black uppercase tracking-widest text-muted-foreground">Condiciones del crédito</p><SalesAccountingLegend flow="creditNote" /><div className="grid gap-3 sm:grid-cols-2"><div><Label htmlFor="credit-customer" required className="mb-1 text-[10px] text-muted-foreground">Cliente</Label><Combobox id="credit-customer" required aria-invalid={creditReasonAttempted && !localDoc.customerId} aria-describedby={creditReasonAttempted && !localDoc.customerId ? 'credit-customer-error' : undefined} options={customers.filter((customer) => String(customer.status || '').toUpperCase() === 'ACTIVE' || customer.id === localDoc.customerId).map((customer) => ({ label: customer.name, value: customer.id, description: `${customer.code ? `[${customer.code}] ` : ''}Límite: ${formatConvertedAmount(Number(customer.creditLimit || 0), normalizeCurrency(customer.creditLimitCurrency, baseCurrency), globalRate)}` }))} value={localDoc.customerId || ''} onChange={(value) => { const priceListId = getCustomerPriceListId(value); const items = (localDoc.items || []).map((item: any) => item.productId ? { ...item, priceListId, unitPrice: 0, total: 0, priceMissing: false } : { ...item, priceListId }); if (hasSalesProductPriceListConflicts(items, priceListId)) { toast.error('No se puede aplicar esta lista: hay productos repetidos con la misma lista de precios.'); return; } setLocalDoc({ ...localDoc, customerId: value, priceListId, ...recalculateItems(items) }); }} placeholder="Seleccionar cliente" />{creditReasonAttempted && !localDoc.customerId && <p id="credit-customer-error" role="alert" className="mt-1 text-[10px] text-destructive">Selecciona un cliente para continuar.</p>}</div><SalesWarehouseSelect warehouses={warehouses} value={localDoc.warehouseId} onChange={(warehouseId) => setLocalDoc({ ...localDoc, warehouseId })} required helpText="Se usará al emitir el crédito y devolver productos al inventario." /><div><Label htmlFor="credit-issue-date" required className="mb-1 text-[10px] text-muted-foreground">Fecha del crédito</Label><Input id="credit-issue-date" type="date" required aria-invalid={creditReasonAttempted && !localDoc.date} aria-describedby={creditReasonAttempted && !localDoc.date ? 'credit-issue-date-error' : undefined} value={isoDate(localDoc.date)} onChange={(event) => setLocalDoc({ ...localDoc, date: event.target.value })} className="h-8 text-xs" />{creditReasonAttempted && !localDoc.date && <p id="credit-issue-date-error" role="alert" className="mt-1 text-[10px] text-destructive">Selecciona la fecha del crédito.</p>}</div><div><Label htmlFor="credit-due-date" required={!localDoc.planEnabled || planCalculationMode === 'DEADLINE'} className="mb-1 text-[10px] text-muted-foreground">{localDoc.planEnabled ? (planCalculationMode === 'AMOUNT' ? 'Fecha estimada de cancelación' : 'Fecha final de vencimiento') : 'Fecha límite de pago'}</Label>{localDoc.planEnabled
+  ? <Input type="text" readOnly aria-readonly="true" value={installmentPlanEstimate?.finalDueDate ? formatDateEs(installmentPlanEstimate.finalDueDate) : isoDate(localDoc.dueDate) ? formatDateEs(isoDate(localDoc.dueDate)) : ''} className="h-8 bg-muted/30 text-xs" />
+  : <Input id="credit-due-date" type="date" required aria-invalid={creditReasonAttempted && !localDoc.dueDate} aria-describedby={creditReasonAttempted && !localDoc.dueDate ? 'credit-due-date-error' : undefined} value={isoDate(localDoc.dueDate)} onChange={(event) => setLocalDoc({ ...localDoc, dueDate: event.target.value })} className="h-8 text-xs" />}{creditReasonAttempted && !localDoc.planEnabled && !localDoc.dueDate && <p id="credit-due-date-error" role="alert" className="mt-1 text-[10px] text-destructive">Selecciona la fecha límite de pago.</p>}{localDoc.planEnabled && planCalculationMode === 'DEADLINE' && <p className="mt-1 text-[10px] text-muted-foreground">Puedes modificarla directamente en el plan de abonos.</p>}</div>
                <div className="min-w-0">
                  <p className="mb-1 text-[10px] text-muted-foreground">Vendedor (opcional)</p>
                  <Combobox
@@ -1359,7 +1381,7 @@ export function NotasCreditoView({ data, summaryData, summaryLoading, summaryErr
                 </div>
                 {localDoc.planEnabled && <div className="min-w-0 space-y-1.5">
                   <Label className="text-xs font-semibold">Método de cálculo</Label>
-                  <Select value={planCalculationMode} onValueChange={(value) => { const mode = value as typeof planCalculationMode; const rows = manualInstallmentDrafts.length ? manualInstallmentDrafts : [{ dueDate: isoDate(localDoc.date), totalAmount: '', interestAmount: '' }]; setLocalDoc({ ...localDoc, planCalculationMode: mode, ...(mode === 'DEADLINE' && installmentPlanEstimate ? { dueDate: installmentPlanEstimate.finalDueDate } : {}), ...(mode === 'MANUAL' ? { manualInstallments: rows.map((row, index) => index === 0 && !row.dueDate ? { ...row, dueDate: isoDate(localDoc.date) } : row) } : {}) }); }}>
+                  <Select value={planCalculationMode} onValueChange={(value) => { const mode = value as typeof planCalculationMode; const rows = manualInstallmentDrafts.length ? manualInstallmentDrafts : [{ dueDate: isoDate(localDoc.date), totalAmount: '', interestAmount: '' }]; const firstDate = isoDate(localDoc.firstInstallmentDate || localDoc.date); const requestedDate = installmentPlanEstimate?.finalDueDate || isoDate(localDoc.dueDate) || firstDate; setLocalDoc({ ...localDoc, planCalculationMode: mode, ...(mode === 'DEADLINE' ? { dueDate: requestedDate >= firstDate ? requestedDate : firstDate } : {}), ...(mode === 'MANUAL' ? { manualInstallments: rows.map((row, index) => index === 0 && !row.dueDate ? { ...row, dueDate: isoDate(localDoc.date) } : row) } : {}) }); }}>
                     <SelectTrigger className="h-10 w-full"><SelectValue /></SelectTrigger>
                     <SelectContent><SelectItem value="AMOUNT">Monto por abono</SelectItem><SelectItem value="DEADLINE">Fecha de vencimiento</SelectItem><SelectItem value="MANUAL">Manual</SelectItem></SelectContent>
                   </Select>
@@ -1373,13 +1395,15 @@ export function NotasCreditoView({ data, summaryData, summaryLoading, summaryErr
                     <SelectContent><SelectItem value="DAILY">Diaria</SelectItem><SelectItem value="WEEKLY">Semanal</SelectItem><SelectItem value="BIWEEKLY">Cada 15 días</SelectItem><SelectItem value="MONTHLY">Mensual</SelectItem></SelectContent>
                   </Select>
                 </div>}
-                {planCalculationMode !== 'MANUAL' && <div className="min-w-0 space-y-1.5"><Label htmlFor="credit-first-installment" className="text-xs font-semibold">Fecha del primer abono</Label><Input id="credit-first-installment" type="date" required value={localDoc.firstInstallmentDate || isoDate(localDoc.dueDate)} onChange={(event) => setLocalDoc({ ...localDoc, firstInstallmentDate: event.target.value })} className="h-10" /></div>}
+                {planCalculationMode !== 'MANUAL' && <div className="min-w-0 space-y-1.5"><Label htmlFor="credit-first-installment" className="text-xs font-semibold">Fecha del primer abono</Label><Input id="credit-first-installment" type="date" required value={localDoc.firstInstallmentDate || isoDate(localDoc.dueDate)} onChange={(event) => { const firstDate = event.target.value; setLocalDoc({ ...localDoc, firstInstallmentDate: firstDate, ...(planCalculationMode === 'DEADLINE' && isoDate(localDoc.dueDate) < firstDate ? { dueDate: firstDate } : {}) }); }} className="h-10" /></div>}
+                {planCalculationMode === 'DEADLINE' && <div className="min-w-0 space-y-1.5"><Label htmlFor="credit-final-due-date" className="text-xs font-semibold">Fecha final de vencimiento *</Label><Input id="credit-final-due-date" type="date" required min={isoDate(localDoc.firstInstallmentDate || localDoc.date)} value={isoDate(localDoc.dueDate)} onChange={(event) => setLocalDoc({ ...localDoc, dueDate: event.target.value })} className="h-10" /></div>}
                 {planCalculationMode === 'AMOUNT' && <div className="min-w-0 space-y-1.5"><Label htmlFor="credit-installment-amount" className="text-xs font-semibold">Monto por abono</Label><Input id="credit-installment-amount" type="number" min="0.01" step="0.01" value={localDoc.installmentAmount ?? ''} onChange={(event) => setLocalDoc({ ...localDoc, planCalculationMode: 'AMOUNT', installmentAmount: event.target.value })} currencyPrecision className="h-10" /></div>}
                 {planCalculationMode !== 'MANUAL' && <div className="sm:col-span-2 xl:col-span-3"><CustomerCreditCalendarSelector
                   excludedWeekdays={localDoc.excludedWeekdays || []}
                   holidayIds={localDoc.holidayIds || []}
                   onChange={(value) => setLocalDoc({ ...localDoc, excludedWeekdays: value.excludedWeekdays, holidayIds: value.holidayIds })}
                 /></div>}
+                {planCalculationMode === 'AMOUNT' && String(localDoc.installmentAmount ?? '') !== String(deferredPlanInstallmentAmount ?? '') && <p className="text-[10px] text-muted-foreground sm:col-span-2 xl:col-span-3" role="status" aria-live="polite">Actualizando el calendario con el monto nuevo…</p>}
                 {installmentPlanEstimate && <div className="sm:col-span-2 xl:col-span-3"><CustomerCreditInstallmentSchedule
                 installments={installmentSchedule}
                 currency={localDoc.currency || displayCurrency}
@@ -1396,6 +1420,7 @@ export function NotasCreditoView({ data, summaryData, summaryLoading, summaryErr
                 onAddManualInstallment={planCalculationMode === 'MANUAL' ? () => setLocalDoc({ ...localDoc, manualInstallments: [...manualInstallmentDrafts, { dueDate: '', totalAmount: '', interestAmount: '' }] }) : undefined}
                 onRemoveManualInstallment={planCalculationMode === 'MANUAL' ? (index) => setLocalDoc({ ...localDoc, manualInstallments: manualInstallmentDrafts.filter((_, itemIndex) => itemIndex !== index) }) : undefined}
                 onPrint={() => void printInstallmentPlan()}
+                printDisabled={planCalculationMode === 'AMOUNT' && String(localDoc.installmentAmount ?? '') !== String(deferredPlanInstallmentAmount ?? '')}
               /></div>}
               </div>}
             </div>

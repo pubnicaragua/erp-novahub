@@ -1,3 +1,4 @@
+import { useEffect, useState } from 'react';
 import { Plus, Printer, Trash2 } from 'lucide-react';
 import { Button } from '../ui/button';
 import { Input } from '../ui/input';
@@ -30,6 +31,9 @@ interface CustomerCreditInstallmentScheduleProps {
   className?: string;
 }
 
+const INSTALLMENT_PAGE_THRESHOLD = 100;
+const INSTALLMENT_PAGE_SIZE = 50;
+
 export function CustomerCreditInstallmentSchedule({
   installments,
   currency,
@@ -50,8 +54,17 @@ export function CustomerCreditInstallmentSchedule({
   printDisabled = false,
   className,
 }: CustomerCreditInstallmentScheduleProps) {
+  const [page, setPage] = useState(0);
+  useEffect(() => setPage(0), [installments]);
   if (installments.length === 0) return null;
 
+  const isPaginated = installments.length > INSTALLMENT_PAGE_THRESHOLD;
+  const pageCount = isPaginated ? Math.ceil(installments.length / INSTALLMENT_PAGE_SIZE) : 1;
+  const currentPage = Math.min(page, pageCount - 1);
+  const startIndex = isPaginated ? currentPage * INSTALLMENT_PAGE_SIZE : 0;
+  const visibleInstallments = isPaginated
+    ? installments.slice(startIndex, startIndex + INSTALLMENT_PAGE_SIZE)
+    : installments;
   const principal = principalAmount ?? installments.reduce((sum, row) => sum + Number(row.principalAmount || 0), 0);
   const interest = interestAmount ?? installments.reduce((sum, row) => sum + Number(row.interestAmount || 0), 0);
   const total = totalAmount ?? installments.reduce((sum, row) => sum + Number(row.totalAmount || 0), 0);
@@ -112,7 +125,8 @@ export function CustomerCreditInstallmentSchedule({
             </TableRow>
           </TableHeader>
           <TableBody>
-            {installments.map((row, index) => {
+            {visibleInstallments.map((row, pageIndex) => {
+              const index = startIndex + pageIndex;
               const paid = Number(row.principalPaid || 0) + Number(row.interestPaid || 0);
               const pending = Math.max(0, Number(row.totalAmount || 0) - paid);
               const adjusted = index === installments.length - 1
@@ -141,6 +155,14 @@ export function CustomerCreditInstallmentSchedule({
           </TableBody>
         </Table>
       </div>
+      {isPaginated && <div className="flex min-w-0 flex-wrap items-center justify-between gap-2">
+        <p className="text-xs text-muted-foreground" aria-live="polite">Abonos {startIndex + 1}–{Math.min(startIndex + visibleInstallments.length, installments.length)} de {installments.length}</p>
+        <div className="flex items-center gap-2">
+          <Button type="button" size="sm" variant="outline" onClick={() => setPage(Math.max(0, currentPage - 1))} disabled={currentPage === 0}>Anterior</Button>
+          <span className="whitespace-nowrap text-xs text-muted-foreground">Página {currentPage + 1} de {pageCount}</span>
+          <Button type="button" size="sm" variant="outline" onClick={() => setPage(Math.min(pageCount - 1, currentPage + 1))} disabled={currentPage >= pageCount - 1}>Siguiente</Button>
+        </div>
+      </div>}
       {manualEditor && manualValidation && !manualValidation.isValid && <div role="alert" className="rounded-lg border border-destructive/30 bg-destructive/5 p-3 text-[10px] leading-relaxed text-destructive">
         <p className="font-bold">Revisa el plan manual antes de guardar:</p>
         <ul className="mt-1 list-disc space-y-0.5 pl-4">{manualValidation.validationErrors.map((error) => <li key={error}>{error}</li>)}</ul>

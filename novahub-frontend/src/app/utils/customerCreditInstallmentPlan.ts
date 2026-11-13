@@ -61,9 +61,7 @@ function addDays(value: string, days: number) {
   return new Date(Date.UTC(year, month - 1, day + days)).toISOString().slice(0, 10);
 }
 
-function buildAllowedDate(value: string, exclusions: CustomerCreditCalendarExclusions) {
-  const weekdays = new Set(exclusions.excludedWeekdays || []);
-  const dates = new Set(exclusions.excludedDates || []);
+function buildAllowedDate(value: string, weekdays: Set<number>, dates: Set<string>) {
   let candidate = value;
   for (let checked = 0; checked < 370; checked += 1) {
     const [year, month, day] = candidate.split('-').map(Number);
@@ -83,6 +81,8 @@ function scheduleDates(input: {
   exclusions: CustomerCreditCalendarExclusions;
 }) {
   const dates: string[] = [];
+  const excludedWeekdays = new Set(input.exclusions.excludedWeekdays || []);
+  const excludedDates = new Set(input.exclusions.excludedDates || []);
   for (let index = 0; index < input.count; index += 1) {
     let candidate = input.frequency === 'DAILY'
       ? index === 0 ? input.firstDate : addDays(dates[index - 1], 1)
@@ -90,7 +90,7 @@ function scheduleDates(input: {
         ? input.finalDate
         : dateAt(input.firstDate, input.frequency, index);
     if (dates.length && candidate <= dates[dates.length - 1]) candidate = addDays(dates[dates.length - 1], 1);
-    const allowed = buildAllowedDate(candidate, input.exclusions);
+    const allowed = buildAllowedDate(candidate, excludedWeekdays, excludedDates);
     if (!allowed) return [];
     dates.push(allowed);
   }

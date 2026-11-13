@@ -19,9 +19,12 @@ interface CustomerCreditPlanEditorProps {
   onFrequencyChange: (frequency: CustomerCreditFrequency) => void;
   firstInstallmentDate: string;
   onFirstInstallmentDateChange: (date: string) => void;
+  finalDueDate: string;
+  onFinalDueDateChange: (date: string) => void;
   installmentAmount: string;
   onInstallmentAmountChange: (amount: string) => void;
   estimate: CustomerCreditPlanEstimate | null;
+  isEstimatePending?: boolean;
   currency: string;
   formatAmount: (amount: number) => string;
   manualInstallments: CustomerCreditManualInstallmentDraft[];
@@ -43,9 +46,12 @@ export function CustomerCreditPlanEditor({
   onFrequencyChange,
   firstInstallmentDate,
   onFirstInstallmentDateChange,
+  finalDueDate,
+  onFinalDueDateChange,
   installmentAmount,
   onInstallmentAmountChange,
   estimate,
+  isEstimatePending = false,
   currency,
   formatAmount,
   manualInstallments,
@@ -104,7 +110,11 @@ export function CustomerCreditPlanEditor({
           </div>}
           {calculationMode !== 'MANUAL' && <div className="min-w-0 space-y-1.5">
             <Label htmlFor={`${idPrefix}-first-installment`} className="text-xs font-semibold">Fecha del primer abono</Label>
-            <Input id={`${idPrefix}-first-installment`} type="date" min={minDate} value={firstInstallmentDate} onChange={(event) => onFirstInstallmentDateChange(event.target.value)} className="max-w-full" />
+            <Input id={`${idPrefix}-first-installment`} type="date" required min={minDate} value={firstInstallmentDate} onChange={(event) => onFirstInstallmentDateChange(event.target.value)} className="max-w-full" />
+          </div>}
+          {calculationMode === 'DEADLINE' && <div className="min-w-0 space-y-1.5">
+            <Label htmlFor={`${idPrefix}-final-due-date`} className="text-xs font-semibold">Fecha final de vencimiento *</Label>
+            <Input id={`${idPrefix}-final-due-date`} type="date" required min={firstInstallmentDate || minDate} value={finalDueDate} onChange={(event) => onFinalDueDateChange(event.target.value)} className="max-w-full" />
           </div>}
           {calculationMode === 'AMOUNT' && <div className="min-w-0 space-y-1.5">
             <Label htmlFor={`${idPrefix}-installment-amount`} className="text-xs font-semibold">Monto por abono</Label>
@@ -112,6 +122,7 @@ export function CustomerCreditPlanEditor({
           </div>}
         </div>
 
+        {isEstimatePending && <p className="text-[10px] text-muted-foreground" role="status" aria-live="polite">Actualizando el calendario con el monto nuevo…</p>}
         {estimate && <div className="min-w-0">
           <CustomerCreditInstallmentSchedule
             installments={estimate.schedule}
@@ -130,12 +141,15 @@ export function CustomerCreditPlanEditor({
             onRemoveManualInstallment={calculationMode === 'MANUAL' ? onRemoveManualInstallment : undefined}
             manualInterestEditable={manualInterestEditable}
             onPrint={onPrint}
+            printDisabled={isEstimatePending}
           />
         </div>}
         <p className="text-[10px] leading-relaxed text-muted-foreground">
           {calculationMode === 'MANUAL'
             ? `Define cada fecha y monto en ${currency}. La suma de los abonos debe coincidir con el total del crédito.`
-            : 'El monto y la frecuencia estiman el vencimiento final; si indicas la fecha final, se calcula el monto aproximado por abono.'}
+            : calculationMode === 'DEADLINE'
+              ? 'La fecha final define cuántos abonos se generan. Si coincide con un día excluido, el último abono pasa al siguiente día permitido.'
+              : 'El monto y la frecuencia estiman automáticamente la fecha del último abono.'}
         </p>
       </>}
     </section>
