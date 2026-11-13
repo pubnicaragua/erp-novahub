@@ -71,21 +71,26 @@ export function IntegrityCheckPanel() {
   };
 
   return (
-    <Card className="min-w-0">
-      <CardHeader className="gap-3 sm:flex-row sm:items-center sm:justify-between">
-        <div className="min-w-0">
-          <CardTitle className="nh-section-title flex items-center gap-2"><ShieldCheck className="size-5 text-primary" /> Control de cuadres</CardTitle>
-          <p className="mt-1 text-xs text-muted-foreground">
-            Compara la contabilidad con tus facturas, créditos, saldos iniciales, compras y reportes. Solo revisa; no cambia ningún dato.
-          </p>
+    <Card id="control-de-cuadres" className="min-w-0 border-primary/25 bg-gradient-to-br from-card via-card to-primary/[0.04] shadow-sm">
+      <CardHeader className="border-b border-border/30 px-5 pb-4 pt-5">
+        <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
+          <div className="flex min-w-0 items-start gap-3">
+            <div className="rounded-xl bg-primary/10 p-2.5 text-primary"><ShieldCheck className="size-5" /></div>
+            <div className="min-w-0">
+              <CardTitle className="text-sm font-black uppercase tracking-tight">Control de cuadres</CardTitle>
+              <p className="mt-1 max-w-4xl text-xs leading-relaxed text-muted-foreground">
+                Compara la contabilidad con tus facturas, créditos, saldos iniciales, compras y reportes. Solo revisa; no cambia ningún dato.
+              </p>
+            </div>
+          </div>
+          <Button type="button" onClick={() => void run()} disabled={loading} className="w-fit shrink-0 gap-2 self-end lg:self-start">
+            {loading ? <Loader2 className="size-4 animate-spin" aria-hidden="true" /> : <ShieldCheck className="size-4" aria-hidden="true" />}
+            {report ? 'Volver a verificar' : 'Verificar ahora'}
+          </Button>
         </div>
-        <Button type="button" onClick={() => void run()} disabled={loading} className="shrink-0 gap-2">
-          {loading ? <Loader2 className="size-4 animate-spin" aria-hidden="true" /> : <ShieldCheck className="size-4" aria-hidden="true" />}
-          {report ? 'Volver a verificar' : 'Verificar ahora'}
-        </Button>
       </CardHeader>
       {report && (
-        <CardContent className="space-y-3">
+        <CardContent className="space-y-3 p-5">
           <div className="flex flex-wrap items-center gap-2 text-xs">
             <Badge variant="outline" className={STATUS_STYLE.OK.className}>{report.summary.ok} cuadran</Badge>
             <Badge variant="outline" className={STATUS_STYLE.REVISAR.className}>{report.summary.revisar} por revisar</Badge>
@@ -121,7 +126,7 @@ export function IntegrityCheckPanel() {
                       )}
                       {check.howToFix && <p className="rounded-lg bg-background/60 p-2 text-xs text-foreground"><span className="font-semibold">Qué hacer: </span>{check.howToFix}</p>}
                       {check.details && check.details.length > 0 && (
-                        <div className="max-w-full overflow-x-auto rounded-lg border border-border/50 bg-background/60">
+                        <div data-table-content-sized="true" className="max-w-full overflow-x-auto rounded-lg border border-border/50 bg-background/60">
                           <table className="w-full min-w-[420px] text-xs">
                             <thead><tr className="text-left text-muted-foreground">{columns.map((column) => <th key={column} className="px-2 py-1.5 font-semibold">{COLUMN_LABEL[column] || column}</th>)}</tr></thead>
                             <tbody>

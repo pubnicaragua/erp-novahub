@@ -822,12 +822,18 @@ function AppContent() {
   // Al cerrarse la sesión (contador llega a 0), redirigir solo al login.
   useEffect(() => {
     if (!sessionClosed || !isAuthenticated) return;
-    const logoutDelay = sessionClosed === 'closed' ? 4000 : 0;
+    // Sesión tomada desde otro dispositivo: se cierra sola a los 4 s. Sesión vencida o no válida: el aviso
+    // se queda en pantalla hasta que la persona pulse «Volver a iniciar sesión»; antes se cerraba al instante
+    // y solo veía el login, sin saber por qué.
+    if (sessionClosed !== 'closed') {
+      safeRemoveItem('nh-auth-token');
+      return;
+    }
     const timer = setTimeout(() => {
       safeRemoveItem('nh-auth-token');
       logout?.();
       setSessionClosed(null);
-    }, logoutDelay);
+    }, 4000);
     return () => clearTimeout(timer);
   }, [isAuthenticated, sessionClosed, logout]);
 

@@ -1488,27 +1488,6 @@ export function ClientesView({ data, loading, error, onRefresh, pagination, onSe
               data={filteredData}
               columns={visibleColumns}
               onRowUpdate={handleUpdate}
-              onRowDelete={canPerform('SALES_CLIENTS', 'read') && canPerform('SALES_CLIENTS', 'delete') ? async (id) => {
-                if (!canPerform('SALES_CLIENTS', 'read') || !canPerform('SALES_CLIENTS', 'delete')) return;
-                try {
-                  await customersService.delete(String(id));
-                  toast.success('Cliente eliminado');
-                  if (String(selectedCustomerDetail?.id) === String(id)) setSelectedCustomerDetail(null);
-                  onRefresh();
-                } catch (error: any) {
-                  if (error?.code === 'CUSTOMER_HAS_FORCE_SALES_POINT' && error?.data?.prospect?.id) {
-                    const customer = data.find((item) => String(item.id) === String(id));
-                    setPendingForceSalesDelete({
-                      customerId: String(id),
-                      customerName: customer?.name || 'este cliente',
-                      prospect: error.data.prospect,
-                    });
-                    return;
-                  }
-                  toast.error(error?.response?.data?.message || error?.message || 'No se pudo eliminar el cliente');
-                  throw error;
-                }
-              } : undefined}
               onRowClick={(row) => setSelectedCustomerDetail(row)}
               onRowDoubleClick={canPerform('SALES_CLIENTS', 'edit') ? (row) => openEditCustomer(row) : undefined}
               editOnPencilOnly

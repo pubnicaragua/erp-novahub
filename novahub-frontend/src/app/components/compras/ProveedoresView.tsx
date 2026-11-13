@@ -738,9 +738,6 @@ export function ProveedoresView({ data, loading, onRefresh, pagination, onSearch
               {canPerform('PURCHASES_PROVIDERS', 'deactivate') && (
                 <Button variant="ghost" size="icon" title={isSupplierInactive(row) ? 'Activar proveedor' : 'Inactivar proveedor'} aria-label={isSupplierInactive(row) ? 'Activar proveedor' : 'Inactivar proveedor'} className="size-8 rounded-lg transition-colors hover:bg-primary/10 hover:text-primary" onClick={() => setPendingToggle(row)}><Ban className="size-4" /></Button>
               )}
-              {canPerform('PURCHASES_PROVIDERS', 'delete') && (
-                <Button variant="ghost" size="icon" title="Eliminar proveedor" aria-label="Eliminar proveedor" className="size-8 rounded-lg text-destructive transition-colors hover:bg-destructive/10 hover:text-destructive" onClick={() => setPendingDeleteSupplier(row)}><Trash2 className="size-4" /></Button>
-              )}
             </div>
           )}
         />
@@ -901,7 +898,6 @@ export function ProveedoresView({ data, loading, onRefresh, pagination, onSearch
         extraActions={selectedSupplierDetail ? <>
           {canPerform('PURCHASES_PROVIDERS', 'edit') && <Button type="button" variant="outline" className="h-8 rounded-xl text-xs" onClick={() => { setSelectedSupplierDetail(null); handleOpenEdit(selectedSupplierDetail); }}><Pencil className="mr-1.5 size-3.5" />Editar</Button>}
           {canPerform('PURCHASES_PROVIDERS', 'deactivate') && <Button type="button" variant="outline" className="h-8 rounded-xl text-xs" onClick={() => { setSelectedSupplierDetail(null); setPendingToggle(selectedSupplierDetail); }}><Ban className="mr-1.5 size-3.5" />{isSupplierInactive(selectedSupplierDetail) ? 'Activar' : 'Inactivar'}</Button>}
-          {canPerform('PURCHASES_PROVIDERS', 'delete') && <Button type="button" variant="destructive" className="h-8 rounded-xl text-xs" onClick={() => { setSelectedSupplierDetail(null); setPendingDeleteSupplier(selectedSupplierDetail); }}><Trash2 className="mr-1.5 size-3.5" />Eliminar</Button>}
         </> : undefined}
         onOpenChange={(open) => !open && setSelectedSupplierDetail(null)}
       />

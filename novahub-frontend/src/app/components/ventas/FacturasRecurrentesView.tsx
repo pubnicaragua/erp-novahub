@@ -302,7 +302,7 @@ export function FacturasRecurrentesView({ data, summaryData, summaryLoading, sum
     try {
       const tenantName = user?.sessionBranding?.name || user?.tenantName || 'Mi Empresa';
       await previewSalesTransactionPDF({
-        document: { ...row, number: `REC-${row.id.slice(0, 8)}`, customer: row.customer },
+        document: { ...row, number: row.number || 'Factura recurrente', customer: row.customer },
         tenantName,
         formatAmount: formatConvertedAmount as any,
         tenantLogo: themeConfig?.logo,
@@ -315,7 +315,7 @@ export function FacturasRecurrentesView({ data, summaryData, summaryLoading, sum
 
   const buildRecurringPanel = (row: RecurringInvoice): SalesDocumentPanelData => ({
     id: row.id,
-    number: `REC-${row.id.slice(0, 8)}`,
+    number: row.number || 'Factura recurrente',
     title: 'Factura recurrente',
     customerName: row.customer?.name || customers.find((customer) => customer.id === row.customerId)?.name || 'Varios',
     status: String(row.status || ''),
@@ -493,7 +493,7 @@ export function FacturasRecurrentesView({ data, summaryData, summaryLoading, sum
 
         try {
           const customerName = customers.find(c => c.id === localDoc.customerId)?.name || 'Cliente';
-          const recurrentRef = `REC-${created.id?.slice?.(0, 8) || 'N/A'}`;
+          const recurrentRef = String((created as any)?.number || '').trim() || 'Factura recurrente';
           await recurringExpensesService.create({
             description: `Factura recurrente ${recurrentRef} - ${customerName}`,
             category: 'VENTAS_RECURRENTE',
@@ -538,7 +538,7 @@ export function FacturasRecurrentesView({ data, summaryData, summaryLoading, sum
   };
 
   const columns: ColumnDef<RecurringInvoice>[] = [
-    { key: 'id', header: 'Referencia', width: '180px',
+    { key: 'number', header: 'N° factura recurrente', width: '190px',
       render: (_, row) => (
         <span 
           className={cn(
@@ -547,7 +547,7 @@ export function FacturasRecurrentesView({ data, summaryData, summaryLoading, sum
           )} 
           onClick={() => setDetailRecurring(row)}
         >
-          Factura #{row.id.slice(0, 8)}
+          {row.number || 'Sin número'}
         </span>
       )
     },

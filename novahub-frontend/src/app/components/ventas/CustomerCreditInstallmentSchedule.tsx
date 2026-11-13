@@ -80,7 +80,7 @@ export function CustomerCreditInstallmentSchedule({
         </div>
       </div>
 
-      <div className="grid min-w-0 grid-cols-2 gap-2 sm:grid-cols-3 xl:grid-cols-4">
+      <div className="grid min-w-0 grid-cols-2 gap-2 sm:grid-cols-3 xl:grid-cols-6">
         <SummaryValue label="Capital" value={formatAmount(principal)} />
         <SummaryValue label="Intereses" value={formatAmount(interest)} />
         <SummaryValue label="Total con intereses" value={formatAmount(total)} emphasis />

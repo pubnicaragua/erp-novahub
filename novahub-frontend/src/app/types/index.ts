@@ -578,6 +578,8 @@ export interface InvoiceItem {
 // ---- Recurring Invoices ----
 export interface RecurringInvoice {
   id: string;
+  /** Consecutivo de la empresa (FRC-001). Lo asigna el servidor al crear. */
+  number?: string;
   tenantId: string;
   customerId: string;
   customer?: Customer;

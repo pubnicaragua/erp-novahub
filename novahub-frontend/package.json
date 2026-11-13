@@ -9,6 +9,7 @@
     "test:display-text": "node scripts/test-display-text.mjs",
     "test:accounting-labels": "node scripts/test-accounting-labels.mjs",
     "test:money-rounding": "node scripts/test-money-rounding.mjs",
+    "test:date-format": "node scripts/test-date-format.mjs",
     "check:init": "node scripts/check-use-before-init.mjs",
     "test:check-init": "node scripts/test-check-use-before-init.mjs",
     "check:names": "node scripts/check-undefined-names.mjs",

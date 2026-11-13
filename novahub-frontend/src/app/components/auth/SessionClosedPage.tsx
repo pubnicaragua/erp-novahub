@@ -8,15 +8,18 @@ interface SessionClosedPageProps {
 
 export function SessionClosedPage({ onLogout, mode = 'closed' }: SessionClosedPageProps) {
   const isTakeover = mode === 'closed';
-  const title = isTakeover ? 'Tu sesión se cerró' : 'Tu sesión ya no es válida';
+  const isExpired = mode === 'expired';
+  const title = isTakeover ? 'Tu sesión se cerró' : isExpired ? 'Tu sesión terminó por inactividad' : 'Necesitamos confirmar tu sesión';
   const subtitle = isTakeover
     ? 'Se inició sesión desde otro dispositivo.'
-    : mode === 'expired'
-      ? 'La sesión expiró por seguridad.'
-      : 'Debes iniciar sesión nuevamente para continuar.';
+    : isExpired
+      ? 'Pasó mucho tiempo sin actividad y cerramos tu sesión para proteger tu cuenta.'
+      : 'No pudimos comprobar que sigas conectado.';
   const description = isTakeover
     ? 'Tu sesión se cerró porque se inició sesión con tu cuenta desde otro dispositivo. Por seguridad, solo puede haber una sesión activa por usuario.'
-    : 'El servidor rechazó la sesión actual. Esto no significa que hayas perdido tu rol de administrador; solo necesitas autenticarte de nuevo.';
+    : isExpired
+      ? 'Lo que ya habías guardado sigue en el sistema, y tus permisos no cambiaron. Inicia sesión otra vez para continuar. Si estabas llenando un formulario sin guardar, puede que debas repetirlo.'
+      : 'Lo que ya habías guardado sigue en el sistema y tus permisos no cambiaron. Inicia sesión otra vez para continuar; si el aviso se repite, avisa a soporte.';
   return (
     <div className="fixed inset-0 z-[100] bg-background/95 backdrop-blur-md flex items-center justify-center p-6 overflow-y-auto">
       <div className="w-full max-w-lg bg-card border border-border rounded-3xl shadow-2xl overflow-hidden">

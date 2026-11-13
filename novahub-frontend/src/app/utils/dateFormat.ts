@@ -4,6 +4,17 @@
  */
 export function formatDateEs(value: string | number | Date | null | undefined, withTime = false): string {
   if (value === null || value === undefined || value === '') return '';
+  // «2026-12-03» sin hora es una fecha civil: `new Date()` la toma como medianoche UTC y en Nicaragua (UTC−6)
+  // se mostraba como 02/12. Se lee por partes para que siempre salga el mismo día que se escribió.
+  if (typeof value === 'string') {
+    const civil = /^(\d{4})-(\d{2})-(\d{2})$/.exec(value.trim());
+    if (civil) {
+      const parsed = new Date(Number(civil[1]), Number(civil[2]) - 1, Number(civil[3]));
+      if (!Number.isNaN(parsed.getTime()) && parsed.getMonth() === Number(civil[2]) - 1) {
+        return withTime ? `${civil[3]}/${civil[2]}/${civil[1]} 00:00` : `${civil[3]}/${civil[2]}/${civil[1]}`;
+      }
+    }
+  }
   const date = new Date(value);
   if (Number.isNaN(date.getTime())) return String(value);
   const day = String(date.getDate()).padStart(2, '0');
