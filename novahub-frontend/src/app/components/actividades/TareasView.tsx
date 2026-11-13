@@ -33,7 +33,8 @@ import {
   UserCheck,
   Gauge,
 } from 'lucide-react';
-import { activityFavoritesService, tasksService } from '../../services/actividades.service';
+import { activityCategoriesService, activityFavoritesService, tasksService } from '../../services/actividades.service';
+import { tenantFeaturesService } from '../../services/tenant-features.service';
 import { usersService } from '../../services/users.service';
 import { useAuth } from '../../contexts/AuthContext';
 import { toast } from 'sonner';
@@ -78,6 +79,7 @@ interface TareasViewProps {
 
 /** Valor centinela del selector de categoría del formulario (Radix no admite ''). */
 const CATEGORY_NONE = 'NONE';
+const CUSTOM_ACTIVITY_CATEGORIES_FEATURE = 'CUSTOM_ACTIVITY_CATEGORIES';
 
 /** Subconjunto de `Task` que necesitan los filtros de identidad, responsable y estado. */
 type TaskLike = Pick<Task, 'id' | 'status' | 'assignedToId' | 'categoryId'> & {
@@ -127,6 +129,9 @@ export const TareasView: React.FC<TareasViewProps> = ({ data, loading, summaryEr
   /** Subtareas escritas al crear la tarea: una por línea. */
   const [newSubtasksText, setNewSubtasksText] = useState('');
   const [isCategoryManagerOpen, setIsCategoryManagerOpen] = useState(false);
+  const [isCreateCategoryOpen, setIsCreateCategoryOpen] = useState(false);
+  const [newCategoryName, setNewCategoryName] = useState('');
+  const [isCreatingCategory, setIsCreatingCategory] = useState(false);
   const [togglingFavoriteId, setTogglingFavoriteId] = useState<string | null>(null);
   const [showFilterPanel, setShowFilterPanel] = useState<boolean>(false);
   const [isAddOpen, setIsAddOpen] = useState(false);
@@ -166,6 +171,14 @@ export const TareasView: React.FC<TareasViewProps> = ({ data, loading, summaryEr
   const slaNow = useMemo(() => new Date(currentTime), [currentTime]);
 
   const categoriesApi = useActivityCategories();
+  const tenantFeaturesQuery = useTenantQuery<string[]>(
+    ['tenant-features', 'me'],
+    (signal) => tenantFeaturesService.getMine(signal),
+  );
+  const customActivityCategoriesEnabled = asList(tenantFeaturesQuery.data).includes(CUSTOM_ACTIVITY_CATEGORIES_FEATURE);
+  const canManageTaskCategories = customActivityCategoriesEnabled
+    && canPerform('ACTIVITIES_TASKS', 'create')
+    && canPerform('ACTIVITIES_TASKS', 'edit');
   const favoritesQuery = useTenantQuery<string[]>(['activities', 'favorites'], (signal) => activityFavoritesService.list(signal));
   const favoriteIds = useMemo(() => new Set(asList(favoritesQuery.data).map((id) => String(id))), [favoritesQuery.data]);
   const categoryTaskCounts = useMemo(() => {
@@ -302,6 +315,26 @@ export const TareasView: React.FC<TareasViewProps> = ({ data, loading, summaryEr
       assignedTo: [],
     });
     setNewSubtasksText('');
+  };
+
+  const handleCreateCategory = async () => {
+    const name = newCategoryName.trim();
+    if (!name || !canManageTaskCategories) return;
+
+    try {
+      setIsCreatingCategory(true);
+      const created = await activityCategoriesService.create({ name });
+      await invalidateTenantQueries(queryClient, ['activities', 'categories']);
+      await categoriesApi.refetch();
+      setNewTask((current) => ({ ...current, categoryId: created.key }));
+      setNewCategoryName('');
+      setIsCreateCategoryOpen(false);
+      toast.success('Categoría creada y asignada a la tarea');
+    } catch (error: any) {
+      toast.error(error?.response?.data?.message || error?.message || 'No se pudo crear la categoría');
+    } finally {
+      setIsCreatingCategory(false);
+    }
   };
 
   const resetFilters = () => {
@@ -942,7 +975,7 @@ export const TareasView: React.FC<TareasViewProps> = ({ data, loading, summaryEr
             togglingFavoriteId={togglingFavoriteId}
             onOpenTask={(task) => setDetailTask(task)}
             onCreateInCategory={canPerform('ACTIVITIES_TASKS', 'create') ? openCreateInCategory : undefined}
-            onManageCategories={canPerform('ACTIVITIES_TASKS', 'create') && canPerform('ACTIVITIES_TASKS', 'edit') ? () => setIsCategoryManagerOpen(true) : undefined}
+            onManageCategories={canManageTaskCategories ? () => setIsCategoryManagerOpen(true) : undefined}
             people={employees.map((person: any) => ({ id: String(person.id), name: String(person.name || person.email || 'Usuario') }))}
             now={slaNow}
             loading={loading}
@@ -1398,22 +1431,38 @@ export const TareasView: React.FC<TareasViewProps> = ({ data, loading, summaryEr
                   <Tag className="size-3.5 text-primary" />
                   Categoría / Departamento
                 </Label>
-                <Select value={newTask.categoryId} onValueChange={(val) => setNewTask({ ...newTask, categoryId: val })}>
-                  <SelectTrigger
-                    data-testid="activities-task-category"
-                    className="h-11 w-full min-w-0 text-sm rounded-xl"
-                  >
-                    <SelectValue placeholder="Selecciona categoría" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value={CATEGORY_NONE}>Sin categoría</SelectItem>
-                    {categoriesApi.active.map((category) => (
-                      <SelectItem key={category.key} value={category.key}>
-                        {category.name}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
+                <div className="flex min-w-0 items-center gap-2">
+                  <Select value={newTask.categoryId} onValueChange={(val) => setNewTask({ ...newTask, categoryId: val })}>
+                    <SelectTrigger
+                      data-testid="activities-task-category"
+                      className="h-11 w-full min-w-0 flex-1 text-sm rounded-xl"
+                    >
+                      <SelectValue placeholder="Selecciona categoría" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value={CATEGORY_NONE}>Sin categoría</SelectItem>
+                      {categoriesApi.active.map((category) => (
+                        <SelectItem key={category.key} value={category.key}>
+                          {category.name}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                  {canManageTaskCategories && (
+                    <Button
+                      type="button"
+                      size="icon"
+                      variant="outline"
+                      className="size-10 shrink-0 rounded-xl"
+                      title="Crear categoría"
+                      aria-label="Crear categoría"
+                      data-testid="activities-task-category-create"
+                      onClick={() => { setNewCategoryName(''); setIsCreateCategoryOpen(true); }}
+                    >
+                      <Plus className="size-4" />
+                    </Button>
+                  )}
+                </div>
                 <p className="text-[11px] text-muted-foreground">Agrupa la tarea para filtrar y reportar.</p>
               </div>
               <div className="min-w-0 space-y-2">
@@ -1504,6 +1553,41 @@ export const TareasView: React.FC<TareasViewProps> = ({ data, loading, summaryEr
             </Button>
           </DialogFooter>
         </DialogContent>
+        <Dialog open={isCreateCategoryOpen} onOpenChange={(open) => { if (!isCreatingCategory) setIsCreateCategoryOpen(open); }}>
+          <DialogContent className="w-[calc(100%-2rem)] max-w-md rounded-3xl border-border/60 bg-background p-0 shadow-2xl">
+            <DialogHeader className="px-6 pt-6 text-left">
+              <DialogTitle className="flex items-center gap-2 font-black tracking-tight">
+                <Tag className="size-5 text-primary" /> Nueva categoría
+              </DialogTitle>
+              <p className="text-sm text-muted-foreground">Crea una categoría y selecciónala para esta tarea.</p>
+            </DialogHeader>
+            <div className="px-6 pb-2 pt-3">
+              <Label htmlFor="new-activity-category-name" className="text-[10px] font-black uppercase tracking-widest text-muted-foreground">
+                Nombre de la categoría
+              </Label>
+              <Input
+                id="new-activity-category-name"
+                data-testid="activities-task-category-name"
+                value={newCategoryName}
+                onChange={(event) => setNewCategoryName(event.target.value)}
+                onKeyDown={(event) => { if (event.key === 'Enter') { event.preventDefault(); void handleCreateCategory(); } }}
+                maxLength={60}
+                autoFocus
+                placeholder="Ej. Marketing, Atención a clientes..."
+                className="mt-2 h-10 rounded-xl"
+              />
+            </div>
+            <DialogFooter className="px-6 pb-6 pt-3">
+              <Button type="button" variant="outline" onClick={() => setIsCreateCategoryOpen(false)} disabled={isCreatingCategory}>
+                Cancelar
+              </Button>
+              <Button type="button" onClick={() => void handleCreateCategory()} disabled={isCreatingCategory || !newCategoryName.trim()}>
+                {isCreatingCategory ? <Loader2 className="mr-2 size-4 animate-spin" /> : <Plus className="mr-2 size-4" />}
+                {isCreatingCategory ? 'Creando…' : 'Crear categoría'}
+              </Button>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
       </Dialog>
 
       {/* Dialog: Complete Task (Direct closure) */}
