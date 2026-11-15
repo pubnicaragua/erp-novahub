@@ -29,7 +29,7 @@ import type { PdfDownloadFormat, PdfExportScope } from '../../utils/pdfDownloadF
 import { generatePurchaseListPDF, generatePurchaseRecordPDF } from '../../utils/purchaseExports';
 import { SalesDocumentDetailSheet } from '../ventas/SalesDocumentDetailSheet';
 import { CurrencySelector } from '../ui/CurrencySelector';
-import { formatCurrencyAmount, summarizeAmountsByCurrency } from '../../utils/currency';
+import { equivalentInOtherCurrency, formatCurrencyAmount, summarizeAmountsByCurrency } from '../../utils/currency';
 import { formatDecimalInput, normalizeDecimalInput } from '../../utils/decimalInput';
 import { fetchAllPaginatedRows } from '../../utils/export-utils';
 import { createReportWorkbook } from '../../utils/reportWorkbook';
@@ -107,7 +107,8 @@ export function GastosRecurrentesView({ data, summaryData, summaryLoading, summa
         startDate: new Date().toISOString(),
         amount: 0,
         currency: displayCurrency,
-        exchangeRate: globalRate,
+        // Misma regla que el selector de moneda: en la moneda base la tasa es 1.
+        exchangeRate: displayCurrency === baseCurrency ? 1 : globalRate,
         status: 'active',
         category: 'OPERATIVO',
         expenseCategoryId: null,
@@ -568,9 +569,10 @@ export function GastosRecurrentesView({ data, summaryData, summaryLoading, summa
                   <div className="flex justify-between items-center text-base pt-2">
                     <span className="font-black uppercase text-[10px] tracking-widest">Base Estimada</span>
                     <span className="font-black text-muted-foreground tabular-nums text-xs text-right">
-                       {localDoc.currency === 'USD'
-                         ? formatCurrencyAmount(Number(localDoc.amount || 0) * (localDoc.exchangeRate || globalRate), 'NIO')
-                         : formatCurrencyAmount(Number(localDoc.amount || 0) / (localDoc.exchangeRate || globalRate), 'USD')}
+                       {(() => {
+                         const equivalent = equivalentInOtherCurrency(localDoc.amount, localDoc.currency, localDoc.exchangeRate, globalRate);
+                         return formatCurrencyAmount(equivalent.amount, equivalent.currency);
+                       })()}
                     </span>
                   </div>
                 </div>

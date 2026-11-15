@@ -138,6 +138,33 @@ export function formatCurrencyAmount(
 }
 
 /**
+ * Equivalente de un importe en la OTRA moneda (USD ↔ NIO), para las vistas previas de los formularios
+ * («Base estimada», «Equivalente estimado», «≈ …»).
+ *
+ * Antes cada formulario dividía por `doc.exchangeRate`, pero un documento en moneda base guarda tasa 1: un gasto
+ * de C$ 700 mostraba «$ 700.00» o «$ 19.11» según si el formulario se abría nuevo o después de cambiar la moneda.
+ * Aquí la regla es una sola: dólares → córdobas con la tasa del documento (si es una tasa real, mayor que 1; si no, la
+ * global) y córdobas → dólares siempre con la tasa global vigente.
+ */
+export function equivalentInOtherCurrency(
+  amount: unknown,
+  sourceCurrency: unknown,
+  documentRate: unknown,
+  globalRate: unknown,
+): { amount: number; currency: SupportedCurrency } {
+  const parsedAmount = Number(amount);
+  const safeAmount = Number.isFinite(parsedAmount) ? parsedAmount : 0;
+  const parsedGlobal = Number(globalRate);
+  const global = Number.isFinite(parsedGlobal) && parsedGlobal > 0 ? parsedGlobal : 36.5;
+  if (normalizeCurrency(sourceCurrency) === 'USD') {
+    const parsedDocument = Number(documentRate);
+    const rate = Number.isFinite(parsedDocument) && parsedDocument > 1 ? parsedDocument : global;
+    return { amount: roundCurrencyNumber(safeAmount * rate), currency: 'NIO' };
+  }
+  return { amount: roundCurrencyNumber(safeAmount / global), currency: 'USD' };
+}
+
+/**
  * Formatea una tasa de cambio para lectura humana sin reducir la precisión
  * numérica que se utiliza internamente para convertir importes.
  * `fractionDigits` se conserva por compatibilidad, pero nunca puede exceder 2.

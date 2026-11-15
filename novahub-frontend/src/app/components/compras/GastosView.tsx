@@ -36,7 +36,7 @@ import { CurrencyValuationAmount } from '../ui/CurrencyValuation';
 import { ImportProgressOverlay } from '../ui/ImportProgressOverlay';
 import { PurchaseAlertsButton, type PurchaseAlertDetail } from './PurchaseAlertsButton';
 import { hasPaymentReferenceField, requiresPaymentReference } from '../../utils/paymentMethods';
-import { formatCurrencyAmount, summarizeAmountsByCurrency } from '../../utils/currency';
+import { equivalentInOtherCurrency, formatCurrencyAmount, summarizeAmountsByCurrency } from '../../utils/currency';
 import { PdfDownloadButton } from '../ui/PdfDownloadButton';
 import type { PdfDownloadFormat, PdfExportScope } from '../../utils/pdfDownloadFormats';
 import { generatePurchaseListPDF, generatePurchaseRecordPDF } from '../../utils/purchaseExports';
@@ -205,7 +205,7 @@ export function GastosView({ data, summaryData, summaryLoading, summaryError, lo
              time: new Date().toTimeString().slice(0, 5),
               amount: 0,
                currency: displayCurrency,
-              exchangeRate: globalRate,
+              exchangeRate: displayCurrency === baseCurrency ? 1 : globalRate,
               category: 'OPERACIONAL',
               categoryCustom: '',
               expenseCategoryId: '',
@@ -1228,9 +1228,10 @@ export function GastosView({ data, summaryData, summaryLoading, summaryError, lo
                 {displayMode !== 'ORIGINAL' && <div className="flex justify-between items-center text-base pt-2">
                   <span className="font-black uppercase text-xs tracking-widest">Equivalente Estimado</span>
                   <span className="font-black text-muted-foreground tabular-nums text-right">
-                      {localDoc.currency === 'USD'
-                        ? formatCurrencyAmount(Number(localDoc.amount || 0) * (localDoc.exchangeRate || globalRate), 'NIO')
-                        : formatCurrencyAmount(Number(localDoc.amount || 0) / (localDoc.exchangeRate || globalRate), 'USD')}
+                      {(() => {
+                        const equivalent = equivalentInOtherCurrency(localDoc.amount, localDoc.currency, localDoc.exchangeRate, globalRate);
+                        return formatCurrencyAmount(equivalent.amount, equivalent.currency);
+                      })()}
                   </span>
                 </div>}
               </div>

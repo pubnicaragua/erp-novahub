@@ -33,7 +33,7 @@ import { KpiSummaryNotice } from '../ui/KpiSummaryNotice';
 import { PurchaseViewTutorial } from './PurchaseViewTutorial';
 import { PurchaseAlertsButton, type PurchaseAlertDetail } from './PurchaseAlertsButton';
 import { CurrencySelector } from '../ui/CurrencySelector';
-import { formatCurrencyAmount, summarizeAmountsByCurrency } from '../../utils/currency';
+import { equivalentInOtherCurrency, formatCurrencyAmount, summarizeAmountsByCurrency } from '../../utils/currency';
 import { formatDecimalInput, normalizeDecimalInput } from '../../utils/decimalInput';
 import { getCurrencyDecimalPlaces } from '../../utils/currency';
 
@@ -657,7 +657,7 @@ export function FacturasProveedorView({ data, summaryData, summaryLoading, summa
                   <span className="font-black uppercase text-xs tracking-widest">Neto a pagar</span>
                   <span className="font-black text-xl text-primary tabular-nums text-right">
                      {formatCurrencyAmount(Number(localDoc.total || 0), localDoc.currency)}
-                     {localDoc.currency === 'NIO' && <span className="block text-[9px] text-muted-foreground mt-1">≈ {formatCurrencyAmount(Number(localDoc.total || 0) / (localDoc.exchangeRate || globalRate), 'USD')}</span>}
+                     {localDoc.currency === 'NIO' && <span className="block text-[9px] text-muted-foreground mt-1">≈ {formatCurrencyAmount(equivalentInOtherCurrency(localDoc.total, localDoc.currency, localDoc.exchangeRate, globalRate).amount, 'USD')}</span>}
                   </span>
                 </div>
                 <div className="rounded-xl border border-primary/20 bg-primary/[0.04] p-3">

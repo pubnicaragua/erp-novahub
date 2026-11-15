@@ -44,7 +44,7 @@ import { formatDateEs } from '../../utils/dateFormat';
 import { getSalesStatusColor, SALES_WORKFLOW_STATUS_COLORS } from '../../utils/salesStatus';
 import { SalesDocumentDetailSheet, getSalesLineIdentifiers, type SalesDocumentPanelData } from './SalesDocumentDetailSheet';
 import { getLegacySalesExtraCostFields, getSalesExtraChargesAmount, getSalesExtraChargesPayload, normalizeSalesExtraCharges, type SalesExtraChargeLine } from '../../utils/salesCharges';
-import { summarizeAmountsByCurrency } from '../../utils/currency';
+import { equivalentInOtherCurrency, summarizeAmountsByCurrency } from '../../utils/currency';
 import { SalesWarehouseSelect, getProductStockForSalesWarehouse } from './SalesWarehouseSelect';
 import { SalesWarehouseStockHint } from './SalesWarehouseStockHint';
 import { getSingleSalesVariant } from '../../utils/sales-stock';
@@ -1122,12 +1122,12 @@ export function OrdenesVentaView({ data, summaryData, summaryLoading, summaryErr
                     </div>
                     {localDoc?.currency === 'USD' && (
                       <p className="text-[10px] font-bold text-muted-foreground mt-1 italic">
-                        ≈ C$ {formatNumber2(Number(localDoc?.total || 0) * (localDoc?.exchangeRate || globalRate))}
+                        ≈ C$ {formatNumber2(equivalentInOtherCurrency(localDoc?.total, localDoc?.currency, localDoc?.exchangeRate, globalRate).amount)}
                       </p>
                     )}
                     {localDoc?.currency === 'NIO' && (
                       <p className="text-[10px] font-bold text-muted-foreground mt-1 italic">
-                        ≈ $ {formatNumber2(Number(localDoc?.total || 0) / (localDoc?.exchangeRate || globalRate))}
+                        ≈ $ {formatNumber2(equivalentInOtherCurrency(localDoc?.total, localDoc?.currency, localDoc?.exchangeRate, globalRate).amount)}
                       </p>
                     )}
                   </div>

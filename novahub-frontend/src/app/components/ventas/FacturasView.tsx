@@ -66,7 +66,7 @@ import { SalesVariantSelect } from './SalesVariantSelect';
 import { SalesProductPicker, type SalesCatalogItem } from './SalesProductPicker';
 import { SalesCustomerActionButton } from './SalesCustomerActionButton';
 import { getCustomerDebtAmount, getCustomerFavorAmount, getMaximumCustomerFavorToApply } from '../../utils/customerBalance';
-import { summarizeAmountsByCurrency } from '../../utils/currency';
+import { equivalentInOtherCurrency, summarizeAmountsByCurrency } from '../../utils/currency';
 import { allocatePaymentLinesToBalance, cashCoversPaymentChange, getPaymentCashBase, getPaymentChangeBase } from '../../utils/paymentSettlement';
 import { getLoggedInSellerEmployeeId } from '../../utils/salesSeller';
 import { VoiceSaleComposer } from './VoiceSaleComposer';
@@ -2354,8 +2354,8 @@ export function FacturasView({ data, summaryData, summaryLoading, summaryError, 
                   <span className="font-black">Total</span>
                   <div className="flex flex-col items-end">
                     <span className="flex min-w-[9rem] items-center justify-end gap-2 text-primary font-black text-lg"><span className="w-8 shrink-0 text-right text-xs">{localDoc?.currency === 'USD' ? '$' : 'C$'}</span><span className="min-w-[7.5rem] text-right tabular-nums">{formatSalesAmount(localDoc?.total)}</span></span>
-                    {localDoc?.currency === 'USD' && <p className="text-[10px] font-bold text-muted-foreground mt-1 italic">≈ C$ {formatSalesAmount(Number(localDoc?.total || 0) * (localDoc?.exchangeRate || globalRate))}</p>}
-                    {localDoc?.currency === 'NIO' && <p className="text-[10px] font-bold text-muted-foreground mt-1 italic">≈ $ {formatSalesAmount(Number(localDoc?.total || 0) / (localDoc?.exchangeRate || globalRate))}</p>}
+                    {localDoc?.currency === 'USD' && <p className="text-[10px] font-bold text-muted-foreground mt-1 italic">≈ C$ {formatSalesAmount(equivalentInOtherCurrency(localDoc?.total, localDoc?.currency, localDoc?.exchangeRate, globalRate).amount)}</p>}
+                    {localDoc?.currency === 'NIO' && <p className="text-[10px] font-bold text-muted-foreground mt-1 italic">≈ $ {formatSalesAmount(equivalentInOtherCurrency(localDoc?.total, localDoc?.currency, localDoc?.exchangeRate, globalRate).amount)}</p>}
                   </div>
                 </div>
                 {!isCreating && String(localDoc?.status || '').toUpperCase() !== 'DRAFT' && (

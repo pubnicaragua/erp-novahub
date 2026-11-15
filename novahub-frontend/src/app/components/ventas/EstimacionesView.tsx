@@ -46,7 +46,7 @@ import type { PdfDownloadFormat } from '../../utils/pdfDownloadFormats';
 import type { PdfDownloadExtraOptions } from '../ui/PdfDownloadButton';
 import { EstimacionesKanban } from './EstimacionesKanban';
 import { getLegacySalesExtraCostFields, getSalesExtraChargesAmount, getSalesExtraChargesPayload, normalizeSalesExtraCharges, type SalesExtraChargeLine } from '../../utils/salesCharges';
-import { summarizeAmountsByCurrency } from '../../utils/currency';
+import { equivalentInOtherCurrency, summarizeAmountsByCurrency } from '../../utils/currency';
 import { SalesWarehouseSelect, getDefaultSalesWarehouseId } from './SalesWarehouseSelect';
 import { SalesWarehouseStockHint } from './SalesWarehouseStockHint';
 import { getSingleSalesVariant } from '../../utils/sales-stock';
@@ -1080,12 +1080,12 @@ export function EstimacionesView({ data, summaryData, summaryLoading, summaryErr
                     </div>
                     {localDoc?.currency === 'USD' && (
                       <p className="text-[10px] font-bold text-muted-foreground mt-1 italic">
-                      ≈ C$ {formatSalesAmount(Number(localDoc?.total || 0) * (localDoc?.exchangeRate || globalRate))}
+                      ≈ C$ {formatSalesAmount(equivalentInOtherCurrency(localDoc?.total, localDoc?.currency, localDoc?.exchangeRate, globalRate).amount)}
                       </p>
                     )}
                     {localDoc?.currency === 'NIO' && (
                       <p className="text-[10px] font-bold text-muted-foreground mt-1 italic">
-                        ≈ $ {formatSalesAmount(Number(localDoc?.total || 0) / (localDoc?.exchangeRate || globalRate))}
+                        ≈ $ {formatSalesAmount(equivalentInOtherCurrency(localDoc?.total, localDoc?.currency, localDoc?.exchangeRate, globalRate).amount)}
                       </p>
                     )}
                   </div>
