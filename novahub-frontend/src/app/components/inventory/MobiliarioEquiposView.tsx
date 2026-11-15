@@ -29,7 +29,7 @@ import { generateConfiguredReportSectionsPDF } from '../../utils/pdfGenerator';
 import type { PdfPaperFormat } from '../../utils/pdfDownloadFormats';
 import { ExportMenu } from '../ui/ExportMenu';
 import { buildDatedDownloadFileName } from '../../utils/exportFileNames';
-import { getCurrencyDecimalPlaces } from '../../utils/currency';
+import { DEFAULT_EXCHANGE_RATE, getCurrencyDecimalPlaces } from '../../utils/currency';
 
 const CATEGORIES = [
   { value: 'BUILDING', label: 'Edificios' },
@@ -133,7 +133,7 @@ function buildTemplateRows(): (string | number)[][] {
     '',
     (250 + i * 35),
     i % 2 === 0 ? 'USD' : 'NIO',
-    i % 2 === 0 ? '' : '36.5',
+    i % 2 === 0 ? '' : String(DEFAULT_EXCHANGE_RATE),
     TEMPLATE_STATUSES[i % TEMPLATE_STATUSES.length],
     'Item de ejemplo de la plantilla',
   ]);

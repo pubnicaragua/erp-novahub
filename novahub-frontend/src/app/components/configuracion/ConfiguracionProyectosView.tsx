@@ -40,6 +40,7 @@ import { getApiErrorMessage } from '../../services/api';
 import { projectsService, type ProjectCostTemplate, type ProjectCostTemplateInput, type ProjectCostTemplateLineInput } from '../../services/projects.service';
 import { useAuth } from '../../contexts/AuthContext';
 import { invalidateTenantQueries, useTenantQuery } from '../../hooks/useTenantQuery';
+import { DEFAULT_EXCHANGE_RATE } from '../../utils/currency';
 
 export interface ProjectGlassLadderTier {
   id: string;
@@ -106,7 +107,7 @@ const DEFAULT_GLASS_LADDER: ProjectGlassLadderTier[] = [
 
 const DEFAULT_PROJECT_CONFIG: ProjectTenantConfig = {
   // Pestaña 1: Moneda y Fiscal
-  exchangeRate: 36.6242,
+  exchangeRate: DEFAULT_EXCHANGE_RATE,
   ivaPct: 15,
   retentionIrPct: 2,
   retentionImiPct: 1,

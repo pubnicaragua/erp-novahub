@@ -44,7 +44,7 @@ import {
 } from '../utils/sidebarPermissions';
 import { PERMISSION_SUBMODULES } from '../utils/sidebarPermissions';
 import { getReadableForeground } from '../utils/color-contrast';
-import { formatExchangeRate } from '../utils/currency';
+import { DEFAULT_EXCHANGE_RATE, formatExchangeRate } from '../utils/currency';
 import { optimizeImageFile } from '../utils/image-optimization';
 import { FastColorInput } from './ui/FastColorInput';
 import { AuditoriaPage } from './AuditoriaPage';
@@ -776,7 +776,7 @@ export function ConfiguracionPage({ initialTab = 'branding', onTabChange, isSide
 
   // Currency & Exchange Rate state
   const [exchangeRateAuto, setExchangeRateAuto] = useState(true);
-  const [manualRate, setManualRate] = useState('36.50');
+  const [manualRate, setManualRate] = useState(String(DEFAULT_EXCHANGE_RATE));
   const [currentBackendRate, setCurrentBackendRate] = useState<number | null>(null);
   const [baseCurrencySetting, setBaseCurrencySetting] = useState<'NIO' | 'USD'>('NIO');
   const [displayCurrencySetting, setDisplayCurrencySetting] = useState<'NIO' | 'USD'>('NIO');
@@ -2067,7 +2067,7 @@ export function ConfiguracionPage({ initialTab = 'branding', onTabChange, isSide
                         <div className="flex gap-3">
                           <div className="relative flex-1">
                             <span className="absolute left-3 top-1/2 -translate-y-1/2 text-xs font-bold text-muted-foreground">C$</span>
-                            <Input value={manualRate} onChange={e => setManualRate(e.target.value)} disabled={!canEditCurrency} type="number" step="0.01" className="pl-9 rounded-xl h-11 font-mono" />
+                            <Input value={manualRate} onChange={e => setManualRate(e.target.value)} disabled={!canEditCurrency} type="number" step="0.0001" className="pl-9 rounded-xl h-11 font-mono" />
                           </div>
                         </div>
                         <p className="text-[10px] text-amber-600 font-bold italic">* Esta tasa se aplicará a todas las conversiones manuales del sistema</p>

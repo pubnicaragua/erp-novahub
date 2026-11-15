@@ -4,6 +4,7 @@ import { safeSetItem } from '../services/safe-storage';
 import { resolveDisplayCurrencyAmount } from '../utils/currency-display';
 import { formatCurrencyNumber, roundCurrencyNumber, setCurrencyDecimalPlaces as setGlobalCurrencyDecimalPlaces } from '../utils/currency';
 import { useAuth } from './AuthContext';
+import { DEFAULT_EXCHANGE_RATE } from '../utils/currency';
 
 export type Currency = 'USD' | 'NIO';
 export type ValuationMode = 'HISTORICAL' | 'CURRENT';
@@ -69,7 +70,7 @@ export function CurrencyProvider({ children }: { children: React.ReactNode }) {
     if (saved === 'COR') return 'NIO';
     return saved === 'USD' ? 'USD' : 'NIO';
   });
-  const [exchangeRate, setExchangeRate] = useState<number>(36.5);
+  const [exchangeRate, setExchangeRate] = useState<number>(DEFAULT_EXCHANGE_RATE);
   const [decimalPlaces, setDecimalPlaces] = useState(2);
   const [baseCurrency, setBaseCurrency] = useState<DisplayCurrency>(() => {
     const saved = (localStorage.getItem(STORAGE_BASE_CURRENCY_KEY) || '').toUpperCase();
@@ -109,7 +110,7 @@ export function CurrencyProvider({ children }: { children: React.ReactNode }) {
       const savedDisplayMode = (localStorage.getItem(STORAGE_DISPLAY_MODE_KEY) || '').toUpperCase();
       setDisplayModeState(savedDisplayMode === 'USD' || savedDisplayMode === 'NIO' || savedDisplayMode === 'ORIGINAL' ? savedDisplayMode : 'DEFAULT');
       setShowValuationLegendState(localStorage.getItem(STORAGE_VALUATION_LEGEND_KEY) === 'true');
-      setExchangeRate(36.5);
+      setExchangeRate(DEFAULT_EXCHANGE_RATE);
       setDecimalPlaces(2);
       setGlobalCurrencyDecimalPlaces(2);
     };
@@ -203,7 +204,7 @@ export function CurrencyProvider({ children }: { children: React.ReactNode }) {
       return rate;
     }
 
-    return exchangeRate > 0 ? exchangeRate : 36.5;
+    return exchangeRate > 0 ? exchangeRate : DEFAULT_EXCHANGE_RATE;
   };
 
   // `displayCurrency` remains a concrete currency because transaction forms use
@@ -248,7 +249,7 @@ export function CurrencyProvider({ children }: { children: React.ReactNode }) {
     const from = normalizeCurrency(sourceCurrency);
     if (from === displayCurrency) return roundCurrencyNumber(safeAmount);
 
-    const rate = exchangeRate > 0 ? exchangeRate : 36.5;
+    const rate = exchangeRate > 0 ? exchangeRate : DEFAULT_EXCHANGE_RATE;
     return roundCurrencyNumber(from === 'USD' ? safeAmount * rate : safeAmount / rate);
   };
 
@@ -275,7 +276,7 @@ export function CurrencyProvider({ children }: { children: React.ReactNode }) {
     const from = normalizeCurrency(sourceCurrency);
     if (from === baseCurrency) return roundCurrencyNumber(safeAmount);
 
-    const rate = exchangeRate > 0 ? exchangeRate : 36.5;
+    const rate = exchangeRate > 0 ? exchangeRate : DEFAULT_EXCHANGE_RATE;
     return roundCurrencyNumber(from === 'USD' ? safeAmount * rate : safeAmount / rate);
   };
 

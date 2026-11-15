@@ -571,9 +571,7 @@ export const SalesReportTab = forwardRef<ReportExportRef, ReportProps>(({ dateRa
     fInv.forEach(inv => {
       (inv.items || []).forEach((item: any) => {
         const cat = item.product?.category?.name || item.category || 'Sin categoría';
-        const val = inv.currency === 'USD'
-          ? Number((item.total ?? item.unitPrice * (item.quantity || 1)) || 0) * sourceRate(inv.exchangeRate)
-          : Number((item.total ?? item.unitPrice * (item.quantity || 1)) || 0);
+        const val = toNioAmt(Number((item.total ?? item.unitPrice * (item.quantity || 1)) || 0), inv.currency, inv.exchangeRate);
         if (!catMap[cat]) catMap[cat] = { value: 0, unidades: 0, productos: new Set() };
         catMap[cat].value += val;
         catMap[cat].unidades += Number(item.quantity || 0);
@@ -652,7 +650,7 @@ export const SalesReportTab = forwardRef<ReportExportRef, ReportProps>(({ dateRa
         const q = Number(item.quantity || 0);
         const unitPrice = Number(item.unitPrice || 0);
         const unitCost = isInventorySalesItem(item) ? (getSalesItemCost(item) ?? 0) : 0;
-        const rev = inv.currency === 'USD' ? unitPrice * q * sourceRate(inv.exchangeRate) : unitPrice * q;
+        const rev = toNioAmt(unitPrice * q, inv.currency, inv.exchangeRate);
         // El costo unitario ya está en la moneda base; solo la venta viene en
         // la moneda original de la factura.
         const cost = unitCost * q;
@@ -668,7 +666,7 @@ export const SalesReportTab = forwardRef<ReportExportRef, ReportProps>(({ dateRa
       (inv.items || []).forEach((item: any) => {
         const name = item.product?.name || item.description || 'Producto';
         const q = Number(item.quantity || 0);
-        const rev = inv.currency === 'USD' ? Number(item.unitPrice || 0) * q * sourceRate(inv.exchangeRate) : Number(item.unitPrice || 0) * q;
+        const rev = toNioAmt(Number(item.unitPrice || 0) * q, inv.currency, inv.exchangeRate);
         prevMap.set(name, (prevMap.get(name) || 0) + rev);
       });
     });
@@ -696,9 +694,7 @@ export const SalesReportTab = forwardRef<ReportExportRef, ReportProps>(({ dateRa
         const name = item.product?.name || item.description || 'Producto';
         const row = map.get(name) || { name, qty: 0, revenue: 0 };
         row.qty += Number(item.quantity || 0);
-        row.revenue += inv.currency === 'USD'
-          ? Number((item.total ?? item.unitPrice * (item.quantity || 1)) || 0) * sourceRate(inv.exchangeRate)
-          : Number((item.total ?? item.unitPrice * (item.quantity || 1)) || 0);
+        row.revenue += toNioAmt(Number((item.total ?? item.unitPrice * (item.quantity || 1)) || 0), inv.currency, inv.exchangeRate);
         map.set(name, row);
       });
     });
@@ -714,9 +710,7 @@ export const SalesReportTab = forwardRef<ReportExportRef, ReportProps>(({ dateRa
         const name = item.product?.name || item.description || 'Producto';
         const row = map.get(name) || { name, qty: 0, revenue: 0 };
         row.qty += Number(item.quantity || 0);
-        row.revenue += inv.currency === 'USD'
-          ? Number((item.total ?? item.unitPrice * (item.quantity || 1)) || 0) * sourceRate(inv.exchangeRate)
-          : Number((item.total ?? item.unitPrice * (item.quantity || 1)) || 0);
+        row.revenue += toNioAmt(Number((item.total ?? item.unitPrice * (item.quantity || 1)) || 0), inv.currency, inv.exchangeRate);
         map.set(name, row);
       });
     });
@@ -1714,7 +1708,7 @@ export const SalesReportTab = forwardRef<ReportExportRef, ReportProps>(({ dateRa
                 const name = item.product?.name || item.description || 'Producto';
                 const row = prodMap.get(name) || { name, qty: 0, revenue: 0 };
                 row.qty += Number(item.quantity || 0);
-                row.revenue += inv.currency === 'USD' ? Number((item.total ?? item.unitPrice * (item.quantity || 1)) || 0) * sourceRate(inv.exchangeRate) : Number((item.total ?? item.unitPrice * (item.quantity || 1)) || 0);
+                row.revenue += toNioAmt(Number((item.total ?? item.unitPrice * (item.quantity || 1)) || 0), inv.currency, inv.exchangeRate);
                 prodMap.set(name, row);
               });
             });

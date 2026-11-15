@@ -62,6 +62,8 @@ import { createReportWorkbook } from '../../utils/reportWorkbook';
 import { getCurrencyDecimalPlaces } from '../../utils/currency';
 import { fetchAllReportPages } from '../../hooks/useTenantQuery';
 import { firstReadable } from '../../utils/displayText';
+import { DEFAULT_EXCHANGE_RATE } from '../../utils/currency';
+import { roundDecimal } from '../../utils/currency';
 
 interface Props {
   data: PurchaseOrder[];
@@ -183,7 +185,7 @@ const normalizeSimilarityInputKey = (value: unknown) => String(value ?? '')
 const convertPurchaseAmount = (amount: unknown, fromCurrency: string, toCurrency: string, rate: number) => {
   const value = Number(amount);
   if (!Number.isFinite(value) || normalizePurchaseCurrency(fromCurrency) === normalizePurchaseCurrency(toCurrency)) return Number.isFinite(value) ? value : 0;
-  const safeRate = Number(rate) > 0 ? Number(rate) : 36.5;
+  const safeRate = Number(rate) > 0 ? Number(rate) : DEFAULT_EXCHANGE_RATE;
   return normalizePurchaseCurrency(fromCurrency) === 'USD' ? value * safeRate : value / safeRate;
 };
 
@@ -1912,13 +1914,13 @@ export function OrdenesCompraView({ data, summarySearch, loading, onRefresh, sup
         quantity,
         unitPrice,
         taxType: String(row.taxType || 'GRAVADO').toUpperCase(),
-        taxRate: Number(tax.taxRate.toFixed(2)),
-        taxBase: Number(tax.taxBase.toFixed(getCurrencyDecimalPlaces())),
-        taxAmount: Number(tax.taxAmount.toFixed(getCurrencyDecimalPlaces())),
+        taxRate: roundDecimal(tax.taxRate, 2),
+        taxBase: roundDecimal(tax.taxBase, getCurrencyDecimalPlaces()),
+        taxAmount: roundDecimal(tax.taxAmount, getCurrencyDecimalPlaces()),
         withholdingType: String(row.withholdingType || 'NONE').toUpperCase(),
-        withholdingRate: Number(withholding.withholdingRate.toFixed(2)),
-        withholdingBase: Number(withholding.withholdingBase.toFixed(getCurrencyDecimalPlaces())),
-        withholdingTotal: Number(withholding.withholdingTotal.toFixed(getCurrencyDecimalPlaces())),
+        withholdingRate: roundDecimal(withholding.withholdingRate, 2),
+        withholdingBase: roundDecimal(withholding.withholdingBase, getCurrencyDecimalPlaces()),
+        withholdingTotal: roundDecimal(withholding.withholdingTotal, getCurrencyDecimalPlaces()),
         total: Number((quantity * unitPrice).toFixed(getCurrencyDecimalPlaces())),
         pendingCatalog: row.productId && !(row._advanced && row.variantLabel && !row.variantId)
           ? undefined
@@ -2495,12 +2497,12 @@ export function OrdenesCompraView({ data, summarySearch, loading, onRefresh, sup
         quantity,
         unitPrice,
         taxType,
-        taxRate: Number(tax.taxRate.toFixed(2)),
-        taxBase: Number(tax.taxBase.toFixed(getCurrencyDecimalPlaces())),
-        taxAmount: Number(tax.taxAmount.toFixed(getCurrencyDecimalPlaces())),
+        taxRate: roundDecimal(tax.taxRate, 2),
+        taxBase: roundDecimal(tax.taxBase, getCurrencyDecimalPlaces()),
+        taxAmount: roundDecimal(tax.taxAmount, getCurrencyDecimalPlaces()),
         withholdingType: it.withholdingType || 'NONE',
-        withholdingRate: Number(withholding.withholdingRate.toFixed(2)),
-        withholdingBase: Number(withholding.withholdingBase.toFixed(getCurrencyDecimalPlaces())),
+        withholdingRate: roundDecimal(withholding.withholdingRate, 2),
+        withholdingBase: roundDecimal(withholding.withholdingBase, getCurrencyDecimalPlaces()),
         total: Number((quantity * unitPrice).toFixed(getCurrencyDecimalPlaces())),
       };
     });
@@ -2644,9 +2646,9 @@ export function OrdenesCompraView({ data, summarySearch, loading, onRefresh, sup
           newItems[idx].taxAmount = 0;
         } else {
           const tax = calcItemTax(newItems[idx]);
-          newItems[idx].taxRate = Number(tax.taxRate.toFixed(2));
-          newItems[idx].taxBase = Number(tax.taxBase.toFixed(getCurrencyDecimalPlaces()));
-          newItems[idx].taxAmount = Number(tax.taxAmount.toFixed(getCurrencyDecimalPlaces()));
+          newItems[idx].taxRate = roundDecimal(tax.taxRate, 2);
+          newItems[idx].taxBase = roundDecimal(tax.taxBase, getCurrencyDecimalPlaces());
+          newItems[idx].taxAmount = roundDecimal(tax.taxAmount, getCurrencyDecimalPlaces());
         }
         const wt = (newItems[idx].withholdingType || 'NONE').toUpperCase();
         if (wt === 'NONE') {
@@ -2654,10 +2656,10 @@ export function OrdenesCompraView({ data, summarySearch, loading, onRefresh, sup
           newItems[idx].withholdingBase = 0;
         } else {
           const withholding = calcItemWithholding(newItems[idx]);
-          newItems[idx].withholdingRate = Number(withholding.withholdingRate.toFixed(2));
-          newItems[idx].withholdingBase = Number(withholding.withholdingBase.toFixed(getCurrencyDecimalPlaces()));
+          newItems[idx].withholdingRate = roundDecimal(withholding.withholdingRate, 2);
+          newItems[idx].withholdingBase = roundDecimal(withholding.withholdingBase, getCurrencyDecimalPlaces());
         }
-        newItems[idx].total = Number(sub.toFixed(2));
+        newItems[idx].total = roundDecimal(sub, 2);
       }
       const totals = calculateTotals(newItems);
       return { ...prev, items: newItems, ...totals };
@@ -2857,7 +2859,7 @@ export function OrdenesCompraView({ data, summarySearch, loading, onRefresh, sup
     const orderCurrencySymbol = getCurrencySymbol(orderCurrency);
     const equivalentCurrency = orderCurrency === 'USD' ? 'NIO' : 'USD';
     const equivalentCurrencySymbol = getCurrencySymbol(equivalentCurrency);
-    const conversionRate = Number(globalRate) > 0 ? Number(globalRate) : 36.5;
+    const conversionRate = Number(globalRate) > 0 ? Number(globalRate) : DEFAULT_EXCHANGE_RATE;
     const convertToEquivalent = (amount: number) => orderCurrency === 'USD'
       ? Number(amount || 0) * conversionRate
       : Number(amount || 0) / conversionRate;

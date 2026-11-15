@@ -65,6 +65,7 @@ import { getLegacySalesExtraCostFields, getSalesExtraChargesAmount, getSalesExtr
 import { SalesPaymentReceiptDialog } from './SalesPaymentReceiptDialog';
 import { getCurrencyDecimalPlaces } from '../../utils/currency';
 import { getLoggedInSellerEmployeeId } from '../../utils/salesSeller';
+import { initialDocumentExchangeRate } from '../../utils/currency';
 
 interface NotasCreditoViewProps {
   data: CreditDocument[];
@@ -701,7 +702,7 @@ export function NotasCreditoView({ data, summaryData, summaryLoading, summaryErr
       deliveryAmount: 0,
       priceListId: null,
       currency: displayCurrency,
-      exchangeRate: globalRate,
+      exchangeRate: initialDocumentExchangeRate(displayCurrency, baseCurrency, globalRate),
       sellerEmployeeId: getLoggedInSellerEmployeeId(user) || '',
       warehouseId: getDefaultSalesWarehouseId(warehouses) || null,
     });

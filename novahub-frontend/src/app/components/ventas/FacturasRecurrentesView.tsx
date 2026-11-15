@@ -42,6 +42,7 @@ import { SalesProductPicker, type SalesCatalogItem } from './SalesProductPicker'
 import { SalesCustomerActionButton } from './SalesCustomerActionButton';
 import { normalizeCurrency, type SupportedCurrency } from '../../utils/currency';
 import { normalizeSalesExtraCharges, getSalesExtraChargesPayload, getSalesExtraChargesAmount, getLegacySalesExtraCostFields, type SalesExtraChargeLine } from '../../utils/salesCharges';
+import { initialDocumentExchangeRate } from '../../utils/currency';
 
 interface FacturasRecurrentesViewProps {
   data: RecurringInvoice[];
@@ -279,7 +280,7 @@ export function FacturasRecurrentesView({ data, summaryData, summaryLoading, sum
       endDate: '',
       nextInvoiceDate: calculateNextInvoiceDate('MONTHLY', new Date().toISOString().split('T')[0]),
       currency: displayCurrency === 'USD' ? 'USD' : 'NIO',
-       exchangeRate: globalRate,
+       exchangeRate: initialDocumentExchangeRate(displayCurrency === 'USD' ? 'USD' : 'NIO', baseCurrency, globalRate),
        items: [],
        warehouseId: getDefaultSalesWarehouseId(warehouses) || null,
        subtotal: 0,

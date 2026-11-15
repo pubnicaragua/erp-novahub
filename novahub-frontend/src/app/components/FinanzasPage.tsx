@@ -38,6 +38,7 @@ import { financeCategoryLabel } from './finanzas/financeChartTheme';
 import { fetchAllReportPages } from '../hooks/useTenantQuery';
 import { beginNotificationAction, completeNotificationAction, failNotificationAction } from '../services/notification-action-coordinator';
 import { getCurrencyDecimalPlaces } from '../utils/currency';
+import { initialDocumentExchangeRate } from '../utils/currency';
 
 interface FinanzasPageProps {
   activeSubModule?: string;
@@ -566,7 +567,7 @@ export function FinanzasPage({ activeSubModule, onSubModuleChange, isSidebarColl
         status: 'ACTIVE',
         category: 'OTROS',
         currency: 'NIO' as any,
-        exchangeRate: globalRate,
+        exchangeRate: initialDocumentExchangeRate('NIO', baseCurrency, globalRate),
       };
       if (type === 'INCOME') {
         await recurringIncomesService.create(payload);
@@ -589,7 +590,7 @@ export function FinanzasPage({ activeSubModule, onSubModuleChange, isSidebarColl
     const actionToken = beginNotificationAction();
     try {
       const defaultAccount = await ensureDefaultAccount('EXPENSE');
-      const newItem = { source: 'Manual', description: 'Nuevo Gasto', category: 'OTROS', amount: 0, date: new Date().toISOString(), accountId: defaultAccount.id, currency: 'NIO' as any, exchangeRate: globalRate, status: 'PENDING' as any, notes: '' };
+      const newItem = { source: 'Manual', description: 'Nuevo Gasto', category: 'OTROS', amount: 0, date: new Date().toISOString(), accountId: defaultAccount.id, currency: 'NIO' as any, exchangeRate: initialDocumentExchangeRate('NIO', baseCurrency, globalRate), status: 'PENDING' as any, notes: '' };
       await expensesService.create(newItem);
       await queryClient.invalidateQueries({ queryKey: ['finance', 'expenses'] });
       await invalidateDashboardSummary();

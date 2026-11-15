@@ -29,6 +29,7 @@ import { useTenantQuery, invalidateTenantQueries } from '../../hooks/useTenantQu
 import { projectsService, type ProjectDetail } from '../../services/projects.service';
 import { useQueryClient } from '@tanstack/react-query';
 import { getCurrencyDecimalPlaces } from '../../utils/currency';
+import { DEFAULT_EXCHANGE_RATE } from '../../utils/currency';
 
 interface ProyectoParametrosPanelProps {
   projectId: string;
@@ -54,7 +55,7 @@ const GLASS_TIERS: GlassTierOption[] = [
 function buildInitialFormData(data: Record<string, unknown> | undefined, project: ProjectDetail) {
   const d = data || {};
   return {
-    exchangeRate: d.exchangeRate !== undefined ? Number(d.exchangeRate) : (project.exchangeRate || 36.6243),
+    exchangeRate: d.exchangeRate !== undefined ? Number(d.exchangeRate) : (project.exchangeRate || DEFAULT_EXCHANGE_RATE),
     lockExchangeRate: d.lockExchangeRate !== undefined ? Boolean(d.lockExchangeRate) : false,
     ivaRate: d.ivaRate !== undefined ? Number(d.ivaRate) * (Number(d.ivaRate) <= 1 ? 100 : 1) : 15.00,
     irRetentionRate: d.irRetentionRate !== undefined ? Number(d.irRetentionRate) * (Number(d.irRetentionRate) <= 1 ? 100 : 1) : 2.00,

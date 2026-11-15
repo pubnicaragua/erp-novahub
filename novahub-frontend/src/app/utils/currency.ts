@@ -28,6 +28,59 @@ export function roundDecimal(value: unknown, places = 2): number {
 
 export type SupportedCurrency = 'NIO' | 'USD';
 
+/**
+ * Tasa de respaldo (córdobas por dólar) cuando una empresa todavía no tiene una configurada: la tasa oficial del BCN,
+ * fija durante todo 2026 (deslizamiento 0 %). Es la ÚNICA constante del frontend: no escribir 36.5 ni otra a mano.
+ * El backend tiene la suya (`DEFAULT_EXCHANGE_RATE` en `common/currency-math.ts`) y deben coincidir.
+ */
+export const DEFAULT_EXCHANGE_RATE = 36.6243;
+
+/** Tasa global válida (mayor que cero) o la de respaldo. */
+export function resolveGlobalExchangeRate(globalRate: unknown): number {
+  const parsed = Number(globalRate);
+  return Number.isFinite(parsed) && parsed > 0 ? parsed : DEFAULT_EXCHANGE_RATE;
+}
+
+/**
+ * Tasa con la que arranca un documento nuevo: 1 cuando está en la moneda base de la empresa y la tasa global cuando
+ * está en la otra. Es la misma regla del selector de moneda; usarla en vez de `exchangeRate: globalRate`.
+ */
+export function initialDocumentExchangeRate(documentCurrency: unknown, baseCurrency: unknown, globalRate: unknown): number {
+  return normalizeCurrency(documentCurrency) === normalizeCurrency(baseCurrency) ? 1 : resolveGlobalExchangeRate(globalRate);
+}
+
+/**
+ * Pasa un importe de una moneda a la otra (USD ↔ NIO) con una tasa expresada en córdobas por dólar. No depende de cuál
+ * sea la moneda base: solo de hacia dónde se convierte. Mismas monedas → el mismo importe.
+ */
+export function convertBetweenSupportedCurrencies(amount: unknown, fromCurrency: unknown, toCurrency: unknown, nioPerUsd: unknown): number {
+  const parsed = Number(amount);
+  const safeAmount = Number.isFinite(parsed) ? parsed : 0;
+  const from = normalizeCurrency(fromCurrency);
+  const to = normalizeCurrency(toCurrency);
+  if (from === to) return roundCurrencyNumber(safeAmount);
+  const rate = resolveGlobalExchangeRate(nioPerUsd);
+  return roundCurrencyNumber(from === 'USD' ? safeAmount * rate : safeAmount / rate);
+}
+
+/**
+ * Lleva el importe de un documento a la moneda BASE de la empresa. A diferencia de «si es USD multiplica por la tasa»,
+ * respeta una base en dólares: un documento en córdobas se divide y uno en dólares queda igual.
+ * La tasa del documento solo vale si es real (> 1); si el documento quedó con tasa 1 o vacía se usa la global.
+ */
+export function convertToBaseCurrency(
+  amount: unknown,
+  documentCurrency: unknown,
+  documentRate: unknown,
+  baseCurrency: unknown,
+  globalRate: unknown,
+): number {
+  const base = normalizeCurrency(baseCurrency);
+  const parsedRate = Number(documentRate);
+  const rate = Number.isFinite(parsedRate) && parsedRate > 1 ? parsedRate : resolveGlobalExchangeRate(globalRate);
+  return convertBetweenSupportedCurrencies(amount, documentCurrency, base, rate);
+}
+
 export const CURRENCY_METADATA: Record<SupportedCurrency, {
   code: SupportedCurrency;
   name: string;
@@ -154,8 +207,7 @@ export function equivalentInOtherCurrency(
 ): { amount: number; currency: SupportedCurrency } {
   const parsedAmount = Number(amount);
   const safeAmount = Number.isFinite(parsedAmount) ? parsedAmount : 0;
-  const parsedGlobal = Number(globalRate);
-  const global = Number.isFinite(parsedGlobal) && parsedGlobal > 0 ? parsedGlobal : 36.5;
+  const global = resolveGlobalExchangeRate(globalRate);
   if (normalizeCurrency(sourceCurrency) === 'USD') {
     const parsedDocument = Number(documentRate);
     const rate = Number.isFinite(parsedDocument) && parsedDocument > 1 ? parsedDocument : global;

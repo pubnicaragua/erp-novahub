@@ -56,6 +56,8 @@ import { getSalesOrderOriginBadge } from '../../utils/document-origin-badges';
 import { getLoggedInSellerEmployeeId } from '../../utils/salesSeller';
 import { getCurrencyDecimalPlaces } from '../../utils/currency';
 import { TripCostBlock } from '../flota/TripCostBlock';
+import { initialDocumentExchangeRate } from '../../utils/currency';
+import { roundDecimal } from '../../utils/currency';
 
 const paymentMethodOptions = [
   { label: 'Efectivo', value: 'CASH' },
@@ -632,7 +634,7 @@ export function OrdenesVentaView({ data, summaryData, summaryLoading, summaryErr
     const base = sub - dAmount;
     const tAmount = Number(doc?.taxAmount || 0);
     const tRate = base > 0 ? (tAmount / base) * 100 : 0;
-    return { dRate: Math.round(dRate * 100) / 100, tRate: Math.round(tRate * 100) / 100 };
+    return { dRate: roundDecimal(dRate, 2), tRate: roundDecimal(tRate, 2) };
   };
 
   const additionalChargesTotal = (doc: any = localDoc) => getSalesExtraChargesAmount(doc) + Math.max(0, Number(doc?.deliveryAmount || 0));
@@ -736,7 +738,7 @@ export function OrdenesVentaView({ data, summaryData, summaryLoading, summaryErr
   }, [draftHydrated, editingId, data]);
 
   const handleAddOrder = () => {
-    const draft = { id: `local-${Date.now()}`, number: '', customerId: '', sellerEmployeeId: getLoggedInSellerEmployeeId(user) || undefined, date: new Date().toISOString(), expectedDelivery: new Date(Date.now() + 7 * 86400000).toISOString(), discountAmount: 0, extraCostDescription: null, extraCostAmount: 0, extraCharges: [], deliveryDescription: null, deliveryAmount: 0, total: 0, subtotal: 0, taxAmount: 0, currency: displayCurrency as any, exchangeRate: globalRate, status: 'DRAFT', items: [], warehouseId: undefined } as any as SalesOrder;
+    const draft = { id: `local-${Date.now()}`, number: '', customerId: '', sellerEmployeeId: getLoggedInSellerEmployeeId(user) || undefined, date: new Date().toISOString(), expectedDelivery: new Date(Date.now() + 7 * 86400000).toISOString(), discountAmount: 0, extraCostDescription: null, extraCostAmount: 0, extraCharges: [], deliveryDescription: null, deliveryAmount: 0, total: 0, subtotal: 0, taxAmount: 0, currency: displayCurrency as any, exchangeRate: initialDocumentExchangeRate(displayCurrency as any, baseCurrency, globalRate), status: 'DRAFT', items: [], warehouseId: undefined } as any as SalesOrder;
     commitLocalDoc(draft);
     setLocalRates({ dRate: 0, tRate: 0 });
     setPricingMode('global');

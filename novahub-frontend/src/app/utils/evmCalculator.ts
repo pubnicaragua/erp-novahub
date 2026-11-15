@@ -1,3 +1,4 @@
+import { roundDecimal } from './currency';
 /**
  * Tipos compartidos para el estado financiero de líneas del Costeo 6D.
  * Los cálculos de valor ganado y de curvas planificadas se sirven desde el backend.
@@ -78,5 +79,5 @@ export function calculateBacFrom6DCostMatrix(lines: Cost6DLineItem[]): number {
     const vi = Number(row.viaticos || 0);
     return acc + mat + con + mo + eq + fl + vi;
   }, 0);
-  return Math.round(total * 100) / 100;
+  return roundDecimal(total, 2);
 }

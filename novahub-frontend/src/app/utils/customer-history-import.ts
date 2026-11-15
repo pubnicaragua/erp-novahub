@@ -1,4 +1,5 @@
 import { getCurrencyDecimalPlaces } from './currency';
+import { roundDecimal } from './currency';
 
 export type CustomerHistoryCurrency = 'NIO' | 'USD';
 
@@ -275,9 +276,9 @@ export function aggregateCustomerHistory(
       recordCount: group.recordCount,
       recordCountLabel,
       measureLabel,
-      measureValue: group.hasMeasure ? Number(group.measureValue.toFixed(4)) : null,
+      measureValue: group.hasMeasure ? roundDecimal(group.measureValue, 4) : null,
       measureUnit,
-      amount: Number(group.amount.toFixed(getCurrencyDecimalPlaces())),
+      amount: roundDecimal(group.amount, getCurrencyDecimalPlaces()),
       currency: group.currency,
     });
   }

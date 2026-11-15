@@ -851,7 +851,7 @@ export const PurchasesReportTab = forwardRef<ReportExportRef, ReportProps>(({ da
         const q = Number(item.quantity || 0);
         const unit = Number(item.unitPrice || 0);
         const row = map.get(name) || { name, monto: 0, qty: 0, priceAvg: 0, prevPrice: null, priceTrend: null, proveedor: '', recepciones: 0, pct: 0 };
-        row.monto += inv.currency === 'USD' ? unit * q * sourceRate(inv.exchangeRate) : unit * q;
+        row.monto += toNioAmt(unit * q, inv.currency, inv.exchangeRate);
         row.qty += q;
         if (inv.supplier?.name && !row.proveedor) row.proveedor = inv.supplier.name;
         map.set(name, row);
@@ -864,7 +864,7 @@ export const PurchasesReportTab = forwardRef<ReportExportRef, ReportProps>(({ da
         const q = Number(item.quantity || 0);
         const unit = Number(item.unitPrice || 0);
         const row = prevMap.get(name) || { monto: 0, qty: 0 };
-        row.monto += inv.currency === 'USD' ? unit * q * sourceRate(inv.exchangeRate) : unit * q;
+        row.monto += toNioAmt(unit * q, inv.currency, inv.exchangeRate);
         row.qty += q;
         prevMap.set(name, row);
       });

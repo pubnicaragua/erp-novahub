@@ -16,6 +16,7 @@ import { api } from '../../services/api';
 import { toast } from '@/app/services/toast';
 import { beginNotificationAction, completeNotificationAction, failNotificationAction } from '../../services/notification-action-coordinator';
 import { getCurrencyDecimalPlaces } from '../../utils/currency';
+import { DEFAULT_EXCHANGE_RATE } from '../../utils/currency';
 
 interface ActivoFormDialogProps {
   open: boolean;
@@ -120,7 +121,7 @@ export function ActivoFormDialog({ open, onOpenChange, onCreated }: ActivoFormDi
       const next: ActivoForm = { ...prev, currency: value };
       if (value === 'USD') {
         const tc = Number(prev.exchangeRate) || 0;
-        if (tc <= 0 || tc === 1) next.exchangeRate = String(currentRate > 0 ? currentRate : 36.5);
+        if (tc <= 0 || tc === 1) next.exchangeRate = String(currentRate > 0 ? currentRate : DEFAULT_EXCHANGE_RATE);
       } else {
         next.exchangeRate = '1';
       }

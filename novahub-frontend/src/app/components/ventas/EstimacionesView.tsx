@@ -56,6 +56,8 @@ import { SalesCustomerActionButton } from './SalesCustomerActionButton';
 import { clearSalesEditorDraft, getSalesEditorDraftKey, readSalesEditorDraft, writeSalesEditorDraft } from '../../services/sales-draft-storage';
 import { getLoggedInSellerEmployeeId } from '../../utils/salesSeller';
 import { TripCostBlock } from '../flota/TripCostBlock';
+import { initialDocumentExchangeRate } from '../../utils/currency';
+import { roundDecimal } from '../../utils/currency';
 
 interface EstimacionesViewProps {
   data: Estimate[];
@@ -682,7 +684,7 @@ export function EstimacionesView({ data, summaryData, summaryLoading, summaryErr
       deliveryAmount: 0,
       baseTotal: 0,
       currency: displayCurrency,
-      exchangeRate: globalRate,
+      exchangeRate: initialDocumentExchangeRate(displayCurrency, baseCurrency, globalRate),
       warehouseId: getDefaultSalesWarehouseId(warehouses) || null,
       status: 'DRAFT',
     } as Estimate;
@@ -701,7 +703,7 @@ export function EstimacionesView({ data, summaryData, summaryLoading, summaryErr
     const base = sub - dAmount;
     const tAmount = Number(doc?.taxAmount || 0);
     const tRate = base > 0 ? (tAmount / base) * 100 : 0;
-    return { dRate: Math.round(dRate * 100) / 100, tRate: Math.round(tRate * 100) / 100 };
+    return { dRate: roundDecimal(dRate, 2), tRate: roundDecimal(tRate, 2) };
   };
 
   const additionalChargesTotal = (doc: any = localDoc) => getSalesExtraChargesAmount(doc) + Math.max(0, Number(doc?.deliveryAmount || 0));

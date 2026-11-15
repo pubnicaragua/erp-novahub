@@ -33,6 +33,7 @@ import {
 import { AddExpenseModal } from './modals/AddExpenseModal';
 import { CloseContainerModal } from './modals/CloseContainerModal';
 import { getCurrencyDecimalPlaces } from '../../utils/currency';
+import { roundDecimal } from '../../utils/currency';
 
 interface CustomsProrationTabProps {
   canAddExpense?: boolean;
@@ -263,8 +264,8 @@ export function CustomsProrationTab({
           trackingCode: pkg.trackingCode,
           volumeCbm: vol,
           billableCbm: billable,
-          percentage: Number(pct.toFixed(2)),
-          proratedCost: Number(cost.toFixed(getCurrencyDecimalPlaces())),
+          percentage: roundDecimal(pct, 2),
+          proratedCost: roundDecimal(cost, getCurrencyDecimalPlaces()),
         };
       });
     }

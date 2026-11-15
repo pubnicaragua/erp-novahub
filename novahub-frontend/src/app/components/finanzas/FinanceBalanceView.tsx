@@ -27,6 +27,7 @@ import { getReadableForeground } from '../../utils/color-contrast';
 import type { PdfPaperFormat } from '../../utils/pdfDownloadFormats';
 import { ExportMenu } from '../ui/ExportMenu';
 import { showPdfInBrowserPreview } from '../../utils/pdfBrowserPreview';
+import { roundDecimal } from '../../utils/currency';
 
 interface FinanceBalanceViewProps {
   incomes: any[];
@@ -883,7 +884,7 @@ export function FinanceBalanceView({ incomes, expenses, recurringIncomes, recurr
 
         const catTotal = categoryData.reduce((a, c) => a + c.value, 0);
         [...categoryData].sort((a,b) => b.value - a.value).forEach((cat) => {
-          const r = ws.addRow([cat.name, '', Math.round(cat.value * 100) / 100, Math.round((catTotal>0?(cat.value/catTotal)*100:0) * 10) / 10]);
+          const r = ws.addRow([cat.name, '', roundDecimal(cat.value, 2), Math.round((catTotal>0?(cat.value/catTotal)*100:0) * 10) / 10]);
           ws.mergeCells(`A${currentRow}:B${currentRow}`);
           r.getCell(1).font = { size: 10 };
           r.getCell(3).font = { size: 10, bold: true };
@@ -944,7 +945,7 @@ export function FinanceBalanceView({ incomes, expenses, recurringIncomes, recurr
         currentRow++;
 
         monthlyData.forEach(row => {
-          const r = ws.addRow([row.month, Math.round(row.ingresos*100)/100, Math.round(row.gastos*100)/100, Math.round((row.ingresos-row.gastos)*100)/100]);
+          const r = ws.addRow([row.month, roundDecimal(row.ingresos, 2), roundDecimal(row.gastos, 2), Math.round((row.ingresos-row.gastos)*100)/100]);
           r.getCell(1).font = { size: 10 };
           r.getCell(2).font = { size: 10, color: { argb: 'FF10B981' } }; r.getCell(2).numFmt = '#,##0.00'; r.getCell(2).alignment = { horizontal: 'right' };
           r.getCell(3).font = { size: 10, color: { argb: 'FFF43F5E' } }; r.getCell(3).numFmt = '#,##0.00'; r.getCell(3).alignment = { horizontal: 'right' };
@@ -957,7 +958,7 @@ export function FinanceBalanceView({ incomes, expenses, recurringIncomes, recurr
         const totInc = monthlyData.reduce((a, r) => a + r.ingresos, 0);
         const totExp = monthlyData.reduce((a, r) => a + r.gastos, 0);
         const balTot = totInc - totExp;
-        const totR = ws.addRow(['TOTAL', Math.round(totInc*100)/100, Math.round(totExp*100)/100, Math.round(balTot*100)/100]);
+        const totR = ws.addRow(['TOTAL', roundDecimal(totInc, 2), roundDecimal(totExp, 2), roundDecimal(balTot, 2)]);
         totR.getCell(1).font = { size: 10, bold: true };
         totR.getCell(2).font = { size: 10, bold: true, color: { argb: 'FF10B981' } }; totR.getCell(2).numFmt = '#,##0.00'; totR.getCell(2).alignment = { horizontal: 'right' };
         totR.getCell(3).font = { size: 10, bold: true, color: { argb: 'FFF43F5E' } }; totR.getCell(3).numFmt = '#,##0.00'; totR.getCell(3).alignment = { horizontal: 'right' };

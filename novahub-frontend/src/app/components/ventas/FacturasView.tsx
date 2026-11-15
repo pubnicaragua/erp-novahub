@@ -78,6 +78,8 @@ import { CustomerCreditPlanEditor } from './CustomerCreditPlanEditor';
 import { CustomerCreditCalendarSelector } from './CustomerCreditCalendarSelector';
 import { generateCustomerCreditInstallmentReport } from '../../utils/customerCreditInstallmentReport';
 import { TripCostBlock } from '../flota/TripCostBlock';
+import { initialDocumentExchangeRate } from '../../utils/currency';
+import { roundDecimal } from '../../utils/currency';
 
 interface FacturasViewProps {
   data: Invoice[];
@@ -548,7 +550,7 @@ export function FacturasView({ data, summaryData, summaryLoading, summaryError, 
       const dRate = (Number(invoiceDraft.discountAmount || 0) / sub) * 100;
       const base = sub - Number(invoiceDraft.discountAmount || 0);
       const tRate = base > 0 ? (Number(invoiceDraft.taxAmount || 0) / base) * 100 : 0;
-      setLocalRates({ dRate: Math.round(dRate * 100) / 100, tRate: Math.round(tRate * 100) / 100 });
+      setLocalRates({ dRate: roundDecimal(dRate, 2), tRate: roundDecimal(tRate, 2) });
     } else {
       setLocalRates({ dRate: 0, tRate: 15 });
     }
@@ -579,7 +581,7 @@ export function FacturasView({ data, summaryData, summaryLoading, summaryError, 
             const dRate = (Number(inv.discountAmount || 0) / sub) * 100;
             const base = sub - Number(inv.discountAmount || 0);
             const tRate = base > 0 ? (Number(inv.taxAmount || 0) / base) * 100 : 0;
-            setLocalRates({ dRate: Math.round(dRate * 100) / 100, tRate: Math.round(tRate * 100) / 100 });
+            setLocalRates({ dRate: roundDecimal(dRate, 2), tRate: roundDecimal(tRate, 2) });
           }
         }
       }
@@ -1238,7 +1240,7 @@ export function FacturasView({ data, summaryData, summaryLoading, summaryError, 
       date: new Date().toISOString().split('T')[0],
       dueDate: new Date(Date.now() + 30 * 86400000).toISOString().split('T')[0],
       currency: displayCurrency as any,
-      exchangeRate: globalRate,
+      exchangeRate: initialDocumentExchangeRate(displayCurrency, baseCurrency, globalRate),
       warehouseId: getDefaultWarehouseId(),
       items: [],
       subtotal: 0,

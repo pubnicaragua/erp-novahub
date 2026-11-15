@@ -38,6 +38,7 @@ import { SalesWarehouseSelect, getDefaultSalesWarehouseId } from './SalesWarehou
 import { clearSalesEditorDraft, getSalesEditorDraftKey, readSalesEditorDraft, writeSalesEditorDraft } from '../../services/sales-draft-storage';
 import { normalizeCurrency, roundCurrencyNumber, summarizeAmountsByCurrency, type SupportedCurrency } from '../../utils/currency';
 import { normalizeSalesExtraCharges } from '../../utils/salesCharges';
+import { initialDocumentExchangeRate } from '../../utils/currency';
 
 const toWholeQuantity = (value: string | number, max?: number) => {
   const parsed = Number(value);
@@ -330,7 +331,7 @@ export function DevolucionesView({ data, summaryData, summaryLoading, summaryErr
       selectedCharges: [],
       total: 0,
       currency: displayCurrency,
-      exchangeRate: globalRate,
+      exchangeRate: initialDocumentExchangeRate(displayCurrency, baseCurrency, globalRate),
       warehouseId: getDefaultSalesWarehouseId(warehouses) || null,
     });
   };

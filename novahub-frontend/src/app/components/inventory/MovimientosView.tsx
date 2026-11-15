@@ -19,6 +19,7 @@ import { buildDateFilteredDownloadFileName } from '../../utils/exportFileNames';
 import { CurrencyValuationAmount } from '../ui/CurrencyValuation';
 import { useAuth } from '../../contexts/AuthContext';
 import { generateConfiguredReportSectionsPDF } from '../../utils/pdfGenerator';
+import { roundDecimal } from '../../utils/currency';
 
 export type MovementExportOptions = {
   amount: number | 'all';
@@ -102,7 +103,7 @@ function formatMovementReferenceForExport(reference: string | null | undefined) 
 function formatMovementNumberForExport(value: unknown) {
   const number = Number(value);
   if (!Number.isFinite(number)) return '';
-  return Number(number.toFixed(4));
+  return roundDecimal(number, 4);
 }
 
 const MOVEMENTS_TOUR_STEPS: GuidedTourStep[] = [

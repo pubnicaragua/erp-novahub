@@ -1,3 +1,4 @@
+import { roundDecimal } from './currency';
 /**
  * Fórmulas de precio a partir del costo.
  *
@@ -30,7 +31,7 @@ export function priceFromCost(cost: number, percent: number, mode: MarginMode = 
 export function percentFromPrice(cost: number, price: number, mode: MarginMode = 'margin'): number | null {
   if (!Number.isFinite(cost) || cost <= 0 || !Number.isFinite(price) || price <= 0) return null;
   const percent = mode === 'margin' ? ((price - cost) / price) * 100 : ((price - cost) / cost) * 100;
-  return Math.round(percent * 100) / 100;
+  return roundDecimal(percent, 2);
 }
 
 export const MARGIN_MODE_LABEL: Record<MarginMode, string> = {

@@ -36,6 +36,7 @@ import { PurchaseVariantPickerModal } from './PurchaseVariantPickerModal';
 import { buildVariantDisplayName } from '../../types/variants';
 import { createReportWorkbook } from '../../utils/reportWorkbook';
 import { getCurrencyDecimalPlaces } from '../../utils/currency';
+import { initialDocumentExchangeRate } from '../../utils/currency';
 
 interface Props { data: RecurringSupplierInvoice[]; summaryData?: RecurringSupplierInvoiceSummary; summaryLoading?: boolean; summaryError?: boolean; loading: boolean; onRefresh: () => void; supplierCatalog?: Supplier[]; productCatalog?: any[]; warehouseCatalog?: any[]; pagination?: SalesPaginationControls; onSearchChange?: (value: string) => void; }
 
@@ -170,7 +171,7 @@ export function FacturasProveedorRecView({ data, summaryData, summaryLoading, su
         address: '',
         notes: '',
         currency: displayCurrency,
-        exchangeRate: globalRate,
+        exchangeRate: initialDocumentExchangeRate(displayCurrency, baseCurrency, globalRate),
         status: 'ACTIVE',
         warehouseId: null,
         items: [],
