@@ -8,6 +8,7 @@ import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, D
 import { Input } from '../ui/input';
 import { Label } from '../ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../ui/select';
+import { Combobox } from '../ui/Combobox';
 import { BankAccountSelect } from '../ui/BankAccountSelect';
 import { cajaService } from '../../services/caja.service';
 import { customerCreditCalendarService, customerLoansService, customersService } from '../../services/ventas.service';
@@ -81,6 +82,13 @@ const localDate = (value?: string | null) => {
 interface CustomerLoansPanelProps {
   customerId: string;
   customerName: string;
+  customerCode?: string | null;
+  customerOptions?: Array<{ label: string; value: string; description?: string }>;
+  customerSearchPending?: boolean;
+  customerSearchError?: boolean;
+  customerSearchEmpty?: boolean;
+  onCustomerChange?: (customerId: string) => void;
+  onCustomerSearchChange?: (search: string) => void;
   moraTypeId?: string | null;
   moraType?: MoraType | null;
   enabled: boolean;
@@ -98,7 +106,7 @@ interface CustomerLoansPanelProps {
   onRequestCreatePage?: () => void;
 }
 
-export function CustomerLoansPanel({ customerId, customerName, moraTypeId, moraType, enabled, canCreateLoan, canCreateMora, canEditMora, onUpdated, onMoraTypeUpdated, onReady, initialCreateOpen = false, dialogOnly = false, focusLoanId, fullPageCreate = false, onCreateCancel, onRequestCreatePage }: CustomerLoansPanelProps) {
+export function CustomerLoansPanel({ customerId, customerName, customerCode, customerOptions = [], customerSearchPending = false, customerSearchError = false, customerSearchEmpty = false, onCustomerChange, onCustomerSearchChange, moraTypeId, moraType, enabled, canCreateLoan, canCreateMora, canEditMora, onUpdated, onMoraTypeUpdated, onReady, initialCreateOpen = false, dialogOnly = false, focusLoanId, fullPageCreate = false, onCreateCancel, onRequestCreatePage }: CustomerLoansPanelProps) {
   const { baseCurrency } = useCurrency();
   const { user, selectedBranchId } = useAuth();
   const { themeConfig } = useTheme();
@@ -309,6 +317,7 @@ export function CustomerLoansPanel({ customerId, customerName, moraTypeId, moraT
 
   const submitLoan = async (event: React.FormEvent) => {
     event.preventDefault();
+    if (!customerId) { toast.error('Selecciona un cliente activo para continuar.'); return; }
     const currentInstallmentPlanEstimate = form.planEnabled
       ? calculateCustomerCreditPlanEstimate({
         principal: Number(form.principal || 0),
@@ -400,9 +409,9 @@ export function CustomerLoansPanel({ customerId, customerName, moraTypeId, moraT
 
   const loanCreateForm = (
     <form id="customer-loan-form" onSubmit={submitLoan} className="grid min-w-0 grid-cols-1 gap-4 sm:grid-cols-2">
-      <div className="space-y-1.5"><Label htmlFor="loan-principal" className="flex items-end leading-tight sm:min-h-10">Principal a prestar *</Label><Input id="loan-principal" type="number" min="0.01" step="0.01" required value={form.principal} onChange={(event) => setForm({ ...form, principal: event.target.value })} currencyPrecision /></div>
-      <div className="space-y-1.5"><Label className="flex items-end leading-tight sm:min-h-10">Interés opcional</Label><Select value={form.interestMode} onValueChange={(value) => setForm({ ...form, interestMode: value as typeof form.interestMode, interest: value === 'NONE' ? '' : form.interest })}><SelectTrigger className="h-9"><SelectValue /></SelectTrigger><SelectContent><SelectItem value="NONE">Sin interés</SelectItem><SelectItem value="FIXED_AMOUNT">Monto fijo</SelectItem><SelectItem value="PERCENTAGE">Porcentaje único</SelectItem></SelectContent></Select></div>
-      {form.interestMode !== 'NONE' && <div className="space-y-1.5"><Label htmlFor="loan-interest" className="flex items-end leading-tight sm:min-h-10">{form.interestMode === 'PERCENTAGE' ? 'Porcentaje sobre el principal (%)' : 'Interés fijo'}</Label><Input id="loan-interest" type="number" min="0" max={form.interestMode === 'PERCENTAGE' ? 100 : undefined} step="0.01" required value={form.interest} onChange={(event) => setForm({ ...form, interest: event.target.value })} currencyPrecision /></div>}
+      <div className="min-w-0 space-y-1.5"><Label htmlFor="loan-principal" className="text-xs">Principal a prestar *</Label><Input id="loan-principal" type="number" min="0.01" step="0.01" required value={form.principal} onChange={(event) => setForm({ ...form, principal: event.target.value })} className="h-8 max-w-72 text-xs" currencyPrecision /></div>
+      <div className="min-w-0 space-y-1.5"><Label className="text-xs">Interés opcional</Label><Select value={form.interestMode} onValueChange={(value) => setForm({ ...form, interestMode: value as typeof form.interestMode, interest: value === 'NONE' ? '' : form.interest })}><SelectTrigger className="h-8 max-w-72 text-xs"><SelectValue /></SelectTrigger><SelectContent><SelectItem value="NONE">Sin interés</SelectItem><SelectItem value="FIXED_AMOUNT">Monto fijo</SelectItem><SelectItem value="PERCENTAGE">Porcentaje único</SelectItem></SelectContent></Select></div>
+      {form.interestMode !== 'NONE' && <div className="min-w-0 space-y-1.5"><Label htmlFor="loan-interest" className="text-xs">{form.interestMode === 'PERCENTAGE' ? 'Porcentaje sobre el principal (%)' : 'Interés fijo'}</Label><Input id="loan-interest" type="number" min="0" max={form.interestMode === 'PERCENTAGE' ? 100 : undefined} step="0.01" required value={form.interest} onChange={(event) => setForm({ ...form, interest: event.target.value })} className="h-8 max-w-56 text-xs" currencyPrecision /></div>}
       <div className="min-w-0 space-y-3 rounded-xl border border-border/50 bg-muted/10 p-3 sm:col-span-2 sm:p-4">
         <div className="grid min-w-0 gap-3 sm:grid-cols-[minmax(0,1fr)_minmax(210px,260px)] sm:items-center">
           <div className="flex min-w-0 items-start gap-2">
@@ -412,7 +421,7 @@ export function CustomerLoansPanel({ customerId, customerName, moraTypeId, moraT
               <p className="mt-1 text-[10px] leading-relaxed text-muted-foreground">{form.planCalculationMode === 'MANUAL' ? 'Define las fechas, montos e intereses de cada abono.' : 'Calcula las cuotas automáticamente según el monto o la fecha final.'}</p>
             </div>
           </div>
-          {form.planEnabled && <div className="min-w-0 space-y-1.5">
+          {form.planEnabled && <div className="min-w-0 space-y-1.5 sm:max-w-sm">
             <Label className="text-xs font-semibold">Método de cálculo *</Label>
             <Select value={form.planCalculationMode} onValueChange={(value) => setForm((current) => {
               const mode = value as typeof current.planCalculationMode;
@@ -421,17 +430,17 @@ export function CustomerLoansPanel({ customerId, customerName, moraTypeId, moraT
               const requestedDate = installmentPlanEstimate?.finalDueDate || current.dueDate || firstDate;
               return { ...current, planCalculationMode: mode, dueDate: requestedDate >= firstDate ? requestedDate : firstDate };
             })}>
-              <SelectTrigger className="h-9 w-full"><SelectValue /></SelectTrigger>
+              <SelectTrigger className="h-8 w-full text-xs"><SelectValue /></SelectTrigger>
               <SelectContent><SelectItem value="AMOUNT">Monto por abono</SelectItem><SelectItem value="DEADLINE">Fecha de vencimiento</SelectItem><SelectItem value="MANUAL">Manual</SelectItem></SelectContent>
             </Select>
           </div>}
         </div>
         {form.planEnabled && <div className="grid min-w-0 gap-3 sm:grid-cols-2">
-          {form.planCalculationMode !== 'MANUAL' && <div className="min-w-0 space-y-1.5"><Label className="flex items-end leading-tight sm:min-h-10">Frecuencia de pago *</Label><Select value={form.frequency} onValueChange={(value) => setForm({ ...form, frequency: value as LoanFrequency })}><SelectTrigger className="h-9"><SelectValue /></SelectTrigger><SelectContent><SelectItem value="DAILY">Diaria</SelectItem><SelectItem value="WEEKLY">Semanal</SelectItem><SelectItem value="BIWEEKLY">Quincenal</SelectItem><SelectItem value="MONTHLY">Mensual</SelectItem></SelectContent></Select></div>}
-          {form.planCalculationMode !== 'MANUAL' && <div className="min-w-0 space-y-1.5"><Label htmlFor="loan-first-installment" className="flex items-end leading-tight sm:min-h-10">Fecha del primer abono *</Label><Input id="loan-first-installment" type="date" required min={new Date().toISOString().split('T')[0]} value={form.firstInstallmentDate} onChange={(event) => { const firstDate = event.target.value; setForm((current) => ({ ...current, firstInstallmentDate: firstDate, ...(current.planCalculationMode === 'DEADLINE' && firstDate && current.dueDate < firstDate ? { dueDate: firstDate } : {}) })); }} /></div>}
+          {form.planCalculationMode !== 'MANUAL' && <div className="min-w-0 space-y-1.5"><Label className="text-xs">Frecuencia de pago *</Label><Select value={form.frequency} onValueChange={(value) => setForm({ ...form, frequency: value as LoanFrequency })}><SelectTrigger className="h-8 max-w-56 text-xs"><SelectValue /></SelectTrigger><SelectContent><SelectItem value="DAILY">Diaria</SelectItem><SelectItem value="WEEKLY">Semanal</SelectItem><SelectItem value="BIWEEKLY">Quincenal</SelectItem><SelectItem value="MONTHLY">Mensual</SelectItem></SelectContent></Select></div>}
+          {form.planCalculationMode !== 'MANUAL' && <div className="min-w-0 space-y-1.5"><Label htmlFor="loan-first-installment" className="text-xs">Fecha del primer abono *</Label><Input id="loan-first-installment" type="date" required min={new Date().toISOString().split('T')[0]} value={form.firstInstallmentDate} onChange={(event) => { const firstDate = event.target.value; setForm((current) => ({ ...current, firstInstallmentDate: firstDate, ...(current.planCalculationMode === 'DEADLINE' && firstDate && current.dueDate < firstDate ? { dueDate: firstDate } : {}) })); }} className="h-8 max-w-56 text-xs" /></div>}
           {form.planCalculationMode === 'AMOUNT'
-            ? <div className="min-w-0 space-y-1.5"><Label htmlFor="loan-installment-amount" className="flex items-end leading-tight sm:min-h-10">Monto por abono *</Label><Input id="loan-installment-amount" type="number" min="0.01" step="0.01" required value={form.installmentAmount} onChange={(event) => setForm({ ...form, installmentAmount: event.target.value })} currencyPrecision /></div>
-            : form.planCalculationMode === 'DEADLINE' ? <div className="min-w-0 space-y-1.5"><Label htmlFor="loan-final-due-date" className="flex items-end leading-tight sm:min-h-10">Fecha final de vencimiento *</Label><Input id="loan-final-due-date" type="date" required min={form.firstInstallmentDate || new Date().toISOString().split('T')[0]} value={form.dueDate} onChange={(event) => setForm((current) => ({ ...current, dueDate: event.target.value }))} /><p className="text-[10px] text-muted-foreground">El plan calcula cuántos abonos caben hasta esta fecha.</p></div> : null}
+            ? <div className="min-w-0 space-y-1.5"><Label htmlFor="loan-installment-amount" className="text-xs">Monto por abono *</Label><Input id="loan-installment-amount" type="number" min="0.01" step="0.01" required value={form.installmentAmount} onChange={(event) => setForm({ ...form, installmentAmount: event.target.value })} className="h-8 max-w-64 text-xs" currencyPrecision /></div>
+            : form.planCalculationMode === 'DEADLINE' ? <div className="min-w-0 space-y-1.5"><Label htmlFor="loan-final-due-date" className="text-xs">Fecha final de vencimiento *</Label><Input id="loan-final-due-date" type="date" required min={form.firstInstallmentDate || new Date().toISOString().split('T')[0]} value={form.dueDate} onChange={(event) => setForm((current) => ({ ...current, dueDate: event.target.value }))} className="h-8 max-w-56 text-xs" /><p className="text-[10px] text-muted-foreground">El plan calcula cuántos abonos caben hasta esta fecha.</p></div> : null}
         </div>}
         {form.planEnabled && form.planCalculationMode !== 'MANUAL' && <CustomerCreditCalendarSelector
           excludedWeekdays={form.excludedWeekdays}
@@ -457,23 +466,23 @@ export function CustomerLoansPanel({ customerId, customerName, moraTypeId, moraT
           onPrint={() => void printInstallmentPlan({ installments: installmentPlanEstimate.schedule, principalAmount: installmentPlanEstimate.principalAmount, interestAmount: installmentPlanEstimate.interestAmount, currency: form.currency, contractNumber: `Préstamo · ${customerName}`, frequency: form.planCalculationMode === 'MANUAL' ? null : form.frequency })}
           printDisabled={form.planCalculationMode === 'AMOUNT' && form.installmentAmount !== deferredLoanInstallmentAmount}
         /></div>}
-        {!form.planEnabled && <div className="space-y-1.5"><Label htmlFor="loan-due-date" className="flex items-end leading-tight sm:min-h-10">Fecha de vencimiento *</Label><Input id="loan-due-date" type="date" required value={form.dueDate} onChange={(event) => setForm({ ...form, dueDate: event.target.value })} /></div>}
+        {!form.planEnabled && <div className="min-w-0 space-y-1.5"><Label htmlFor="loan-due-date" className="text-xs">Fecha de vencimiento *</Label><Input id="loan-due-date" type="date" required value={form.dueDate} onChange={(event) => setForm({ ...form, dueDate: event.target.value })} className="h-8 max-w-56 text-xs" /></div>}
       </div>
-       <div className="space-y-1.5"><Label className="flex items-end leading-tight sm:min-h-10">Moneda *</Label><Select value={form.currency} onValueChange={(value) => setForm({ ...form, currency: value as LoanCurrency, bankAccountId: '' })}><SelectTrigger className="h-9"><SelectValue /></SelectTrigger><SelectContent><SelectItem value="NIO">Córdoba (NIO)</SelectItem><SelectItem value="USD">Dólar (USD)</SelectItem></SelectContent></Select></div>
-       <div className="space-y-1.5 sm:col-span-2"><Label className="flex items-end leading-tight sm:min-h-10">Desembolso desde *</Label><Select value={form.disbursementSource} onValueChange={(value) => setForm({ ...form, disbursementSource: value as 'CASH' | 'BANK', cashRegisterSessionId: '', bankAccountId: '' })}><SelectTrigger className="h-9"><SelectValue /></SelectTrigger><SelectContent><SelectItem value="CASH">Caja</SelectItem><SelectItem value="BANK">Banco</SelectItem></SelectContent></Select></div>
-       {form.disbursementSource === 'CASH' ? <div className="space-y-1.5 sm:col-span-2"><Label className="flex items-end leading-tight sm:min-h-10">Sesión abierta de Caja *</Label><Select value={selectedCashSessionId} onValueChange={(value) => setForm({ ...form, cashRegisterSessionId: value })} disabled={cashLoading || cashSessions.length === 0}><SelectTrigger className="h-9"><SelectValue placeholder={cashLoading ? 'Buscando sesiones abiertas…' : 'Seleccionar sesión'} /></SelectTrigger><SelectContent>{cashSessions.map((item) => <SelectItem key={item.id} value={item.id}>{item.registerName}{item.sessionName ? ` · ${item.sessionName}` : ''}</SelectItem>)}</SelectContent></Select>{!cashLoading && cashSessions.length === 0 && <p className="text-[11px] text-destructive">No hay cajas con sesión abierta disponible.</p>}</div> : <BankAccountSelect className="sm:col-span-2" currency={form.currency} endpoint="/bank-accounts/payment-options" value={form.bankAccountId} onChange={(value) => setForm({ ...form, bankAccountId: value })} label="Cuenta bancaria de salida" showCommissionPercent={false} />}
-      <div className="space-y-1.5 sm:col-span-2"><Label htmlFor="loan-notes">Notas (opcional)</Label><Input id="loan-notes" maxLength={500} value={form.notes} onChange={(event) => setForm({ ...form, notes: event.target.value })} placeholder="Referencia o acuerdo de pago" /></div>
+       <div className="min-w-0 space-y-1.5"><Label className="text-xs">Moneda *</Label><Select value={form.currency} onValueChange={(value) => setForm({ ...form, currency: value as LoanCurrency, bankAccountId: '' })}><SelectTrigger className="h-8 max-w-48 text-xs"><SelectValue /></SelectTrigger><SelectContent><SelectItem value="NIO">Córdoba (NIO)</SelectItem><SelectItem value="USD">Dólar (USD)</SelectItem></SelectContent></Select></div>
+       <div className="min-w-0 space-y-1.5 sm:col-span-2"><Label className="text-xs">Desembolso desde *</Label><Select value={form.disbursementSource} onValueChange={(value) => setForm({ ...form, disbursementSource: value as 'CASH' | 'BANK', cashRegisterSessionId: '', bankAccountId: '' })}><SelectTrigger className="h-8 max-w-56 text-xs"><SelectValue /></SelectTrigger><SelectContent><SelectItem value="CASH">Caja</SelectItem><SelectItem value="BANK">Banco</SelectItem></SelectContent></Select></div>
+       {form.disbursementSource === 'CASH' ? <div className="min-w-0 space-y-1.5 sm:col-span-2"><Label className="text-xs">Sesión abierta de Caja *</Label><Select value={selectedCashSessionId} onValueChange={(value) => setForm({ ...form, cashRegisterSessionId: value })} disabled={cashLoading || cashSessions.length === 0}><SelectTrigger className="h-8 max-w-lg text-xs"><SelectValue placeholder={cashLoading ? 'Buscando sesiones abiertas…' : 'Seleccionar sesión'} /></SelectTrigger><SelectContent>{cashSessions.map((item) => <SelectItem key={item.id} value={item.id}>{item.registerName}{item.sessionName ? ` · ${item.sessionName}` : ''}</SelectItem>)}</SelectContent></Select>{!cashLoading && cashSessions.length === 0 && <p className="text-[11px] text-destructive">No hay cajas con sesión abierta disponible.</p>}</div> : <BankAccountSelect className="min-w-0 max-w-lg sm:col-span-2" currency={form.currency} endpoint="/bank-accounts/payment-options" value={form.bankAccountId} onChange={(value) => setForm({ ...form, bankAccountId: value })} label="Cuenta bancaria de salida" showCommissionPercent={false} />}
+      <div className="min-w-0 space-y-1.5 sm:col-span-2"><Label htmlFor="loan-notes" className="text-xs">Notas (opcional)</Label><Input id="loan-notes" maxLength={500} value={form.notes} onChange={(event) => setForm({ ...form, notes: event.target.value })} placeholder="Referencia o acuerdo de pago" className="h-8 text-xs" /></div>
       <p className="text-[11px] leading-relaxed text-muted-foreground sm:col-span-2">El principal más el interés debe caber en el límite de crédito disponible. La clasificación de mora se administra manualmente en la ficha del cliente.</p>
     </form>
   );
-  const loanSubmitDisabled = saving || (form.disbursementSource === 'CASH' && cashLoading) || (form.planEnabled && (!installmentPlanEstimate || !installmentPlanEstimate.isValid || (form.planCalculationMode === 'AMOUNT' && form.installmentAmount !== deferredLoanInstallmentAmount)));
+  const loanSubmitDisabled = !customerId || saving || (form.disbursementSource === 'CASH' && cashLoading) || (form.planEnabled && (!installmentPlanEstimate || !installmentPlanEstimate.isValid || (form.planCalculationMode === 'AMOUNT' && form.installmentAmount !== deferredLoanInstallmentAmount)));
 
   return (
     <section className={fullPageCreate ? 'sales-document-editor min-w-0 max-w-full space-y-6 overflow-x-hidden animate-in slide-in-from-right duration-300' : dialogOnly ? 'hidden' : 'min-w-0 space-y-4'} aria-label={fullPageCreate ? 'Nuevo préstamo' : 'Préstamos del cliente'}>
       {fullPageCreate ? <>
         <header className="sales-document-header flex min-w-0 flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
           <div className="flex min-w-0 items-start gap-3 sm:items-center sm:gap-4">
-            <Button type="button" variant="ghost" size="icon" aria-label="Volver a seleccionar cliente" onClick={() => { setCreateOpen(false); onCreateCancel?.(); }} className="shrink-0 rounded-full"><ChevronLeft className="size-5" /></Button>
+            <Button type="button" variant="ghost" size="icon" aria-label="Volver a préstamos" onClick={() => { setCreateOpen(false); onCreateCancel?.(); }} className="shrink-0 rounded-full"><ChevronLeft className="size-5" /></Button>
             <div className="min-w-0"><h1 className="nh-module-title">Nuevo Préstamo</h1><p className="text-[10px] font-black uppercase tracking-widest text-muted-foreground/60">Detalle del préstamo y desembolso</p></div>
           </div>
           <div className="sales-document-actions flex w-full min-w-0 flex-col gap-2 sm:w-auto sm:flex-row sm:justify-end">
@@ -481,14 +490,42 @@ export function CustomerLoansPanel({ customerId, customerName, moraTypeId, moraT
             <Button type="submit" form="customer-loan-form" disabled={loanSubmitDisabled} className="w-full rounded-xl px-6 sm:w-auto">{saving && <Loader2 className="mr-2 size-4 animate-spin" />} Emitir y desembolsar</Button>
           </div>
         </header>
-        <div className="grid min-w-0 grid-cols-1 gap-4 lg:grid-cols-[minmax(0,1.35fr)_minmax(280px,0.65fr)]">
-          <Card className="min-w-0 rounded-2xl border-border/50" data-tour="sales-form-data">
-            <div className="border-b border-border/50 p-4 sm:p-6"><p className="text-xs font-black uppercase tracking-widest text-muted-foreground">Información general</p><div className="mt-4 flex min-w-0 flex-col gap-3 rounded-xl border border-border/50 bg-muted/20 p-3 sm:flex-row sm:items-center sm:justify-between"><div className="min-w-0"><p className="text-[10px] text-muted-foreground">Cliente</p><p className="break-words text-sm font-bold text-foreground">{customerName}</p><p className="mt-0.5 break-all font-mono text-[10px] text-muted-foreground">{customerId}</p></div><Badge variant="outline" className="w-fit shrink-0">Préstamo a cliente</Badge></div></div>
+        <div className={cn('grid min-w-0 grid-cols-1 gap-4', form.planEnabled ? 'lg:grid-cols-1' : 'lg:grid-cols-[minmax(0,1.35fr)_minmax(280px,0.65fr)]')}>
+          <Card className={cn('min-w-0 rounded-2xl border-border/50', form.planEnabled && 'order-2')} data-tour="sales-form-data">
+            <div className="border-b border-border/50 p-4 sm:p-6">
+              <p className="text-xs font-black uppercase tracking-widest text-muted-foreground">Información general</p>
+              <div className="mt-3 grid min-w-0 gap-3 rounded-xl border border-border/50 bg-muted/20 p-3 sm:grid-cols-[minmax(0,1fr)_minmax(150px,220px)_auto] sm:items-end">
+                <div className="min-w-0 space-y-1.5 sm:max-w-lg">
+                  <Label htmlFor="loan-customer-selector" className="text-xs">Cliente activo *</Label>
+                  <Combobox
+                    id="loan-customer-selector"
+                    ariaLabel="Cliente del préstamo"
+                    required
+                    options={customerOptions}
+                    value={customerId}
+                    onChange={(value) => onCustomerChange?.(value)}
+                    onSearchChange={onCustomerSearchChange}
+                    placeholder={customerSearchPending ? 'Cargando clientes…' : 'Buscar o seleccionar cliente'}
+                    searchPlaceholder="Nombre, código o teléfono…"
+                    className="h-8 text-xs"
+                  />
+                  {customerSearchError && <p role="alert" className="text-[10px] text-destructive">No se pudieron cargar los clientes.</p>}
+                  {customerSearchEmpty && <p className="text-[10px] text-muted-foreground">No hay clientes activos que coincidan con la búsqueda.</p>}
+                </div>
+                <div className="min-w-0 rounded-lg border border-border/50 bg-background/70 px-3 py-2">
+                  <p className="text-[10px] text-muted-foreground">Código del cliente</p>
+                  <p className="truncate font-mono text-xs font-semibold text-foreground">{customerCode || 'Sin código disponible'}</p>
+                </div>
+                <Badge variant="outline" className="w-fit shrink-0 sm:mb-1">Préstamo a cliente</Badge>
+              </div>
+              {customerName && <p className="mt-2 break-words text-xs font-semibold text-foreground">{customerName}</p>}
+              {!customerId && <p className="mt-2 text-[11px] text-muted-foreground">Selecciona un cliente para habilitar el desembolso.</p>}
+            </div>
             <div className="min-w-0 p-4 sm:p-6"><p className="mb-4 text-xs font-black uppercase tracking-widest text-muted-foreground">Condiciones del préstamo</p>{loanCreateForm}</div>
           </Card>
-          <Card className="min-w-0 rounded-2xl border-border/50 p-4 sm:p-6">
+          <Card className={cn('h-fit min-w-0 self-start rounded-2xl border-border/50 p-4 sm:p-5', form.planEnabled && 'order-1 w-full max-w-2xl')}>
             <p className="text-xs font-black uppercase tracking-widest text-muted-foreground">Resumen financiero</p>
-            <div className="mt-5 space-y-4">
+            <div className="mt-4 space-y-3">
               <div className="flex min-w-0 items-center justify-between gap-3 text-sm"><span className="text-muted-foreground">Principal</span><span className="shrink-0 font-semibold tabular-nums">{money(Number(form.principal || 0), form.currency)}</span></div>
               <div className="flex min-w-0 items-center justify-between gap-3 text-sm"><span className="text-muted-foreground">Interés</span><span className="shrink-0 font-semibold tabular-nums">{money(formInterest, form.currency)}</span></div>
               <div className="flex min-w-0 items-center justify-between gap-3 border-t border-border/50 pt-4 text-base"><span className="font-bold">Total del contrato</span><span className="shrink-0 font-black tabular-nums text-primary">{money(roundCurrencyNumber(Number(form.principal || 0) + formInterest), form.currency)}</span></div>
