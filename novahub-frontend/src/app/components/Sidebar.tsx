@@ -94,6 +94,7 @@ import { BrandLogo } from './BrandLogo';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from './ui/tooltip';
 import { useTenantQuery } from '../hooks/useTenantQuery';
 import { businessLeadsService } from '../services/business-leads.service';
+import { customerLoansService } from '../services/ventas.service';
 import { HIDDEN_DEFERRED_SALES_VIEW_IDS, SIDEBAR_SUBMENU_MODULE_REQUIREMENTS, SIDEBAR_SUBMENU_PERMISSION_MODULES } from '../utils/sidebarPermissions';
 import { canAccessModuleView } from '../utils/moduleViewAccess';
 
@@ -184,6 +185,7 @@ const menuItems: MenuItem[] = [
       { id: 'pagos-recibidos', label: 'Pagos recibidos', icon: <CreditCard className="size-4" /> },
       { id: 'devoluciones-venta', label: 'Notas de crédito', icon: <FileOutput className="size-4" /> },
       { id: 'notas-credito', label: 'Créditos', icon: <FileMinus className="size-4" /> },
+      { id: 'prestamos', label: 'Préstamos', icon: <Banknote className="size-4" /> },
       { id: 'listas-precios', label: 'Listas de precios', icon: <Tags className="size-4" /> },
       { id: 'facturacion-caja', label: 'Facturación por caja', icon: <Calculator className="size-4" /> },
       { id: 'control-caja', label: 'Control de Caja', icon: <Coins className="size-4" /> },
@@ -661,6 +663,8 @@ export function Sidebar({ activeModule, activeSubModule, onModuleChange, isOpen,
   // «Leads y red» es una función por empresa: el acceso del sidebar la respeta.
   const leadCapabilities = useTenantQuery(['sales', 'business-leads-capabilities'], (signal) => businessLeadsService.getCapabilities(signal), { staleTime: 5 * 60_000, retry: 0, enabled: canPerform('SALES_LEADS', 'view') });
   const leadsEnabled = Boolean(leadCapabilities.data?.enabled);
+  const customerLoansCapability = useTenantQuery<{ enabled: boolean }>(['sales', 'customer-loans-sidebar-capability'], (signal) => customerLoansService.getConfig(signal), { staleTime: 60_000, retry: 0, enabled: canPerform('SALES_CUSTOMER_LOANS', 'view') });
+  const customerLoansEnabled = customerLoansCapability.data?.enabled === true;
   const workspaceName = user?.isPlatformAdmin
     ? 'NovaHub Platform'
     : (user?.sessionBranding?.name || user?.clientTenant?.name || themeConfig.tenantName || 'ERP Platform');
@@ -887,12 +891,18 @@ export function Sidebar({ activeModule, activeSubModule, onModuleChange, isOpen,
       : SUPPORT_CUSTOMER_SUBMODULE_IDS.has(subId);
   };
 
-  const canShowSubmenuItem = (parentId: Module | 'overview', subItem: SubMenuItem) => (parentId === 'ventas' && subItem.id === 'leads' ? leadsEnabled : true) && (
-    !subItem.hidden
-    && !HIDDEN_DEFERRED_SALES_VIEW_IDS.has(subItem.id)
-    && isSubmenuVisibleForCurrentRole(parentId, subItem.id)
-    && hasSubmenuAccess(parentId, subItem.id)
-  );
+  const canShowSubmenuItem = (parentId: Module | 'overview', subItem: SubMenuItem) => {
+    const tenantFeatureEnabled = parentId !== 'ventas' || (
+      subItem.id === 'leads' ? leadsEnabled
+        : subItem.id === 'prestamos' ? customerLoansEnabled
+          : true
+    );
+    return tenantFeatureEnabled
+      && !subItem.hidden
+      && !HIDDEN_DEFERRED_SALES_VIEW_IDS.has(subItem.id)
+      && isSubmenuVisibleForCurrentRole(parentId, subItem.id)
+      && hasSubmenuAccess(parentId, subItem.id);
+  };
 
   const sectionHeaderIds = (() => {
     const headers = new Set<string>();

@@ -60,6 +60,7 @@ export function CustomerLoansView({ enabled, selectedBranchId, onRefresh }: { en
   const [customerSearchDebounced] = useDebouncedValue(customerSearch, 250);
   const [createCustomer, setCreateCustomer] = useState<Customer | null>(null);
   const pageSize = 25;
+  const normalizedSearch = String(debouncedSearch ?? '').trim();
   const canRead = canPerform('SALES_CUSTOMER_LOANS', 'view');
   const canPay = canPerform('SALES_CREDIT_NOTES', 'pay');
   const canCreateLoan = canPerform('SALES_INVOICES', 'create') && canPerform('SALES_INVOICES', 'submit');
@@ -68,9 +69,9 @@ export function CustomerLoansView({ enabled, selectedBranchId, onRefresh }: { en
   const canEditConfiguration = canPerform('SALES_CREDIT_NOTES', 'edit');
 
   const loansQuery = useTenantQuery<any>(
-    ['sales', 'customer-loans', tenantId, selectedBranchId || 'all-branches', debouncedSearch, status, page, pageSize],
+    ['sales', 'customer-loans', tenantId, selectedBranchId || 'all-branches', normalizedSearch, status, page, pageSize],
     (signal) => customerLoansService.getAll({
-      ...(debouncedSearch.trim() ? { search: debouncedSearch.trim() } : {}),
+      ...(normalizedSearch ? { search: normalizedSearch } : {}),
       ...(status !== 'ALL' ? { status } : {}),
       ...(selectedBranchId ? { branchId: selectedBranchId } : {}),
       page,
