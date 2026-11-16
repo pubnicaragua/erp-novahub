@@ -9,7 +9,6 @@ import { Label } from '../ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../ui/select';
 import { Combobox } from '../ui/Combobox';
 import { Sheet, SheetContent, SheetHeader, SheetTitle } from '../ui/sheet';
-import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '../ui/dialog';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '../ui/table';
 import { SalesKpiCard } from './SalesKpiCard';
 import { CustomerLoansPanel } from './CustomerLoansPanel';
@@ -59,6 +58,7 @@ export function CustomerLoansView({ enabled, selectedBranchId, onRefresh }: { en
   const [customerSearch, setCustomerSearch] = useState('');
   const [customerSearchDebounced] = useDebouncedValue(customerSearch, 250);
   const [createCustomer, setCreateCustomer] = useState<Customer | null>(null);
+  const isCreatingLoan = createCustomerOpen || Boolean(createCustomer);
   const pageSize = 25;
   const normalizedSearch = String(debouncedSearch ?? '').trim();
   const canRead = canPerform('SALES_CUSTOMER_LOANS', 'view');
@@ -77,7 +77,7 @@ export function CustomerLoansView({ enabled, selectedBranchId, onRefresh }: { en
       page,
       pageSize,
     }, signal),
-    { enabled: Boolean(enabled && canRead && tenantId), onError: (error) => toast.error(error.message || 'No se pudieron cargar los préstamos.') },
+    { enabled: Boolean(!isCreatingLoan && enabled && canRead && tenantId), onError: (error) => toast.error(error.message || 'No se pudieron cargar los préstamos.') },
   );
   const loanData = loansQuery.data || {};
   const loans = readList(loanData) as CustomerLoan[];
@@ -92,7 +92,7 @@ export function CustomerLoansView({ enabled, selectedBranchId, onRefresh }: { en
   const detailQuery = useTenantQuery<any>(
     ['sales', 'customer-loan-detail', tenantId, selectedLoanRow?.id],
     async (signal) => customerLoansService.getById(String(selectedLoanRow?.id || ''), signal),
-    { enabled: Boolean(enabled && selectedLoanRow?.id), onError: (error) => toast.error(error.message || 'No se pudo cargar el préstamo.') },
+    { enabled: Boolean(!isCreatingLoan && enabled && selectedLoanRow?.id), onError: (error) => toast.error(error.message || 'No se pudo cargar el préstamo.') },
   );
   const detail = detailQuery.data || selectedLoanRow;
   const customer = detail?.customer || selectedLoanRow?.customer;
@@ -128,14 +128,60 @@ export function CustomerLoansView({ enabled, selectedBranchId, onRefresh }: { en
     });
   };
 
+  const selectCustomerForLoan = (customerId: string) => {
+    const selected = (customerLookup.data || []).find((item: any) => String(item.id) === customerId);
+    if (!selected) return;
+    setCreateCustomer(selected as Customer);
+    setCreateCustomerOpen(false);
+    void customersService.getById(String(selected.id)).then((fullCustomer) => setCreateCustomer((current) => current?.id === selected.id ? fullCustomer as Customer : current)).catch(() => undefined);
+  };
+
+  const closeLoanCreation = () => {
+    setCreateCustomer(null);
+    setCreateCustomerOpen(false);
+    setCustomerSearch('');
+  };
+
   if (!enabled || !canRead) return null;
+
+  if (createCustomerOpen) return <section className="sales-document-editor min-w-0 max-w-full space-y-6 overflow-x-hidden" aria-label="Seleccionar cliente para préstamo">
+    <header className="sales-document-header flex min-w-0 flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
+      <div className="flex min-w-0 items-start gap-3 sm:items-center sm:gap-4">
+        <Button type="button" variant="ghost" size="icon" aria-label="Volver a préstamos" onClick={closeLoanCreation} className="shrink-0 rounded-full"><ChevronLeft className="size-5" /></Button>
+        <div className="min-w-0"><h1 className="nh-module-title">Nuevo Préstamo</h1><p className="text-[10px] font-black uppercase tracking-widest text-muted-foreground/60">Selecciona el cliente del contrato</p></div>
+      </div>
+      <Button type="button" variant="outline" className="w-full rounded-xl sm:w-auto" onClick={closeLoanCreation}>Cancelar</Button>
+    </header>
+    <Card className="min-w-0 rounded-2xl border-border/50 p-4 sm:p-6" data-tour="sales-form-data">
+      <div className="mb-5"><p className="text-xs font-black uppercase tracking-widest text-muted-foreground">Información general</p><p className="mt-1 text-xs text-muted-foreground">Busca un cliente activo para continuar con las condiciones del préstamo y su desembolso.</p></div>
+      <div className="grid min-w-0 gap-4 sm:grid-cols-2">
+        <div className="min-w-0 space-y-1.5 sm:col-span-2"><Label htmlFor="loan-customer-search">Buscar cliente</Label><Input id="loan-customer-search" value={customerSearch} onChange={(event) => setCustomerSearch(event.target.value)} placeholder="Buscar por nombre, código o teléfono…" className="max-w-full" /><Combobox options={customerOptions} value="" onChange={selectCustomerForLoan} placeholder={customerLookup.isPending ? 'Cargando clientes…' : 'Seleccionar cliente'} /></div>
+        {customerLookup.isError && <p role="alert" className="text-xs text-destructive sm:col-span-2">No se pudieron cargar los clientes. Revisa la conexión e inténtalo de nuevo.</p>}
+        {!customerLookup.isPending && !customerLookup.isError && customerOptions.length === 0 && <p className="text-xs text-muted-foreground sm:col-span-2">No hay clientes activos que coincidan con la búsqueda.</p>}
+      </div>
+    </Card>
+  </section>;
+
+  if (createCustomer && canCreateLoan) return <CustomerLoansPanel
+    customerId={createCustomer.id}
+    customerName={createCustomer.name}
+    moraTypeId={createCustomer.moraTypeId}
+    moraType={createCustomer.moraType as any}
+    enabled={enabled}
+    canCreateLoan
+    canCreateMora={canCreateMora}
+    canEditMora={canEditMora}
+    fullPageCreate
+    onCreateCancel={() => { setCreateCustomer(null); setCreateCustomerOpen(true); setCustomerSearch(''); }}
+    onUpdated={() => { closeLoanCreation(); void invalidate(); }}
+  />;
 
   return <section className="min-w-0 max-w-full space-y-5 overflow-x-hidden" aria-label="Préstamos a clientes">
     <header className="flex min-w-0 flex-col gap-3 md:flex-row md:items-center md:justify-between">
       <div className="flex min-w-0 items-center gap-3"><div className="flex size-11 shrink-0 items-center justify-center rounded-2xl bg-primary/10 text-primary"><Banknote className="size-6" /></div><div className="min-w-0"><h1 className="break-words text-lg font-black uppercase italic tracking-tight text-foreground sm:text-xl">Préstamos a clientes</h1><p className="text-xs text-muted-foreground">Cartera, cuotas, mora y desembolsos por sucursal.</p></div></div>
       <div className="flex min-w-0 flex-wrap items-center gap-2">
         <CustomerCreditSettingsButton canEdit={canEditConfiguration} />
-        {canCreateLoan && <Button type="button" onClick={() => { setCustomerSearch(''); setCreateCustomerOpen(true); }} className="h-10 rounded-xl px-4"><Plus className="mr-2 size-4" /> Nuevo préstamo</Button>}
+        {canCreateLoan && <Button type="button" onClick={() => { setCreateCustomer(null); setCustomerSearch(''); setCreateCustomerOpen(true); }} className="h-10 rounded-xl px-4"><Plus className="mr-2 size-4" /> Nuevo préstamo</Button>}
       </div>
     </header>
 
@@ -183,26 +229,16 @@ export function CustomerLoansView({ enabled, selectedBranchId, onRefresh }: { en
         <div className="min-h-0 flex-1 overflow-y-auto p-4 sm:p-6">
           {detailQuery.isPending ? <p role="status" className="p-8 text-center text-sm text-muted-foreground">Cargando detalle…</p> : detailQuery.isError ? <p role="alert" className="p-8 text-center text-sm text-destructive">No se pudo cargar el detalle del préstamo.</p> : detail && <div className="min-w-0 space-y-4">
             <div className="flex min-w-0 flex-col gap-3 rounded-2xl border border-primary/20 bg-primary/5 p-4 sm:flex-row sm:items-center sm:justify-between"><div className="min-w-0"><p className="break-all text-lg font-black text-foreground">{detail.invoice?.number || detail.number || 'Préstamo'}</p><p className="mt-1 text-sm text-muted-foreground">{customer?.name || 'Cliente'} · {localDate(detail.invoice?.date || detail.disbursedAt)}</p><p className="mt-2 text-xl font-black text-primary">Saldo: {formatCurrencyAmount(detail.invoice?.balance ?? detail.balance ?? 0, detail.currency || baseCurrency)}</p></div>{canPay && isPayable && <Button type="button" onClick={openPayment} className="shrink-0"><CircleDollarSign className="mr-2 size-4" /> Registrar abono</Button>}</div>
-            <CustomerLoansPanel customerId={detail.customerId} customerName={customer?.name || 'Cliente'} moraTypeId={customer?.moraTypeId} moraType={customer?.moraType} enabled={enabled && Boolean(detail.customerId)} canCreateLoan={canCreateLoan} canCreateMora={canCreateMora} canEditMora={canEditMora} onUpdated={() => void invalidate()} focusLoanId={detail.id} />
+            <CustomerLoansPanel customerId={detail.customerId} customerName={customer?.name || 'Cliente'} moraTypeId={customer?.moraTypeId} moraType={customer?.moraType} enabled={enabled && Boolean(detail.customerId)} canCreateLoan={canCreateLoan} canCreateMora={canCreateMora} canEditMora={canEditMora} onUpdated={() => void invalidate()} onRequestCreatePage={() => {
+              setCreateCustomer({ ...(customer || {}), id: detail.customerId, name: customer?.name || 'Cliente' } as Customer);
+              setCreateCustomerOpen(false);
+              setSelectedLoanRow(null);
+            }} focusLoanId={detail.id} />
           </div>}
         </div>
       </SheetContent>
     </Sheet>
 
-    <Dialog open={createCustomerOpen} onOpenChange={setCreateCustomerOpen}>
-      <DialogContent className="w-[calc(100%-1rem)] rounded-2xl sm:max-w-lg">
-        <DialogHeader><DialogTitle>Seleccionar cliente</DialogTitle><DialogDescription>El nuevo préstamo se registrará para este cliente y conservará el flujo de desembolso actual.</DialogDescription></DialogHeader>
-        <div className="space-y-1.5"><Label htmlFor="loan-customer-search">Cliente</Label><Input id="loan-customer-search" value={customerSearch} onChange={(event) => setCustomerSearch(event.target.value)} placeholder="Buscar cliente…" /><Combobox options={customerOptions} value="" onChange={(id) => {
-          const selected = (customerLookup.data || []).find((item: any) => String(item.id) === id);
-          if (!selected) return;
-          setCreateCustomerOpen(false);
-          void customersService.getById(String(selected.id)).then((fullCustomer) => setCreateCustomer(fullCustomer as Customer)).catch(() => setCreateCustomer(selected as Customer));
-        }} placeholder={customerLookup.isPending ? 'Cargando clientes…' : 'Seleccionar cliente'} /></div>
-        {customerLookup.isError && <p role="alert" className="text-xs text-destructive">No se pudieron cargar los clientes.</p>}
-        <DialogFooter><Button type="button" variant="outline" onClick={() => setCreateCustomerOpen(false)}>Cancelar</Button></DialogFooter>
-      </DialogContent>
-    </Dialog>
-    {createCustomer && canCreateLoan && <CustomerLoansPanel customerId={createCustomer.id} customerName={createCustomer.name} moraTypeId={createCustomer.moraTypeId} moraType={createCustomer.moraType as any} enabled={enabled} canCreateLoan canCreateMora={canCreateMora} canEditMora={canEditMora} dialogOnly initialCreateOpen onUpdated={() => { setCreateCustomer(null); void invalidate(); }} />}
     <CustomerCreditPaymentDialog target={paymentTarget} open={Boolean(paymentTarget)} onOpenChange={(open) => !open && setPaymentTarget(null)} onPaid={() => { setPaymentTarget(null); void invalidate(); }} />
   </section>;
 }
