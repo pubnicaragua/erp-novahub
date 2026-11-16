@@ -800,12 +800,16 @@ main.module-overview [data-slot="card-description"] {
   font-family: inherit !important;
 }
 
-[data-slot="table-cell"][data-table-cell-copyable="true"] {
-  padding-right: 2.75rem !important;
-}
-
 .table-cell-copy-action {
   opacity: 1;
+}
+
+/* En tablas de ancho fijo, el botón superpuesto no debe reservar espacio en
+   cada celda: esa suma recorta códigos, nombres e identificadores fiscales. */
+@media (hover: none), (pointer: coarse) {
+  [data-slot="table-cell"][data-table-cell-copyable="true"] {
+    padding-right: 2.75rem !important;
+  }
 }
 
 @media (hover: hover) and (pointer: fine) {
