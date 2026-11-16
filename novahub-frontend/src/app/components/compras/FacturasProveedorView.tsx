@@ -24,8 +24,12 @@ import { cn } from '../ui/utils';
 import { useCurrency } from '../../contexts/CurrencyContext';
 import { useAuth } from '../../contexts/AuthContext';
 import { usePurchasesIntegrationPolicy } from '../../hooks/usePurchasesIntegrationPolicy';
-import { generatePurchaseRecordPDF } from '../../utils/purchaseExports';
-import type { PdfDownloadFormat } from '../../utils/pdfDownloadFormats';
+import { generatePurchaseListPDF, generatePurchaseRecordPDF } from '../../utils/purchaseExports';
+import type { PdfDownloadFormat, PdfExportScope } from '../../utils/pdfDownloadFormats';
+import { fetchAllPaginatedRows } from '../../utils/export-utils';
+import { createReportWorkbook } from '../../utils/reportWorkbook';
+import { buildDatedDownloadFileName } from '../../utils/exportFileNames';
+import { formatDateEs } from '../../utils/dateFormat';
 import { PurchaseAuditButton } from './PurchaseAuditButton';
 import { getPurchaseInvoiceOriginBadge } from '../../utils/document-origin-badges';
 import { PurchaseKpiCard } from './PurchaseKpiCard';
@@ -54,6 +58,7 @@ interface Props {
   purchaseAlert?: PurchaseAlertDetail;
   targetId?: string | null;
   onClearTargetId?: () => void;
+  selectedBranchId?: string;
 }
 
 const statusOpts = [
@@ -74,7 +79,7 @@ function calcItemTax(item: any): { taxBase: number; taxRate: number; taxAmount: 
   return { taxRate, taxBase, taxAmount: (taxBase * taxRate) / 100 };
 }
 
-export function FacturasProveedorView({ data, summaryData, summaryLoading, summaryError, loading, onRefresh, draftInvoiceFromOrder, onDraftConsumed, onRegisterPaymentFromInvoice, supplierCatalog = [], pagination, onSearchChange, onStatusChange, purchaseAlert, targetId, onClearTargetId }: Props) {
+export function FacturasProveedorView({ data, summaryData, summaryLoading, summaryError, loading, onRefresh, draftInvoiceFromOrder, onDraftConsumed, onRegisterPaymentFromInvoice, supplierCatalog = [], pagination, onSearchChange, onStatusChange, purchaseAlert, targetId, onClearTargetId, selectedBranchId }: Props) {
   const { canPerform, user } = useAuth();
   const integrationPolicyQuery = usePurchasesIntegrationPolicy();
   const integrationPolicyReady = !integrationPolicyQuery.isFetching && !integrationPolicyQuery.isError && Boolean(integrationPolicyQuery.data);
@@ -97,6 +102,7 @@ export function FacturasProveedorView({ data, summaryData, summaryLoading, summa
     convertBetweenCurrencies,
   } = useCurrency();
   const [searchTerm, setSearchTerm] = useState('');
+  const [exportingInvoiceList, setExportingInvoiceList] = useState(false);
   const [layoutMode, setLayoutMode] = useLocalStorageState<'table' | 'cards'>('purchases-supplier-invoices-layout', 'table', 24 * 365);
   const [highlightedAlertId, setHighlightedAlertId] = useState<string | null>(null);
 
@@ -153,7 +159,7 @@ export function FacturasProveedorView({ data, summaryData, summaryLoading, summa
   };
 
   const normalizedSearchTerm = searchTerm.trim().toLowerCase();
-  const filtered = data.filter((b) => {
+  const matchesInvoiceFilters = (b: SupplierInvoice) => {
     const st = (b.status || '').toUpperCase();
     if (statusFilter === 'PENDING') { if (!['PENDING', 'PARTIAL', 'CREDIT', 'OVERDUE'].includes(st)) return false; }
     else if (statusFilter === 'CREDIT') { if (st !== 'CREDIT') return false; }
@@ -179,7 +185,8 @@ export function FacturasProveedorView({ data, summaryData, summaryLoading, summa
       .join(' ')
       .toLowerCase();
     return haystack.includes(normalizedSearchTerm);
-  });
+  };
+  const filtered = data.filter(matchesInvoiceFilters);
   const summaryReady = summaryData !== undefined && !summaryError;
 
   const isSupplierActive = (supplierId?: string) =>
@@ -486,6 +493,100 @@ export function FacturasProveedorView({ data, summaryData, summaryLoading, summa
       toast.success('Previsualización abierta. Descarga o imprime el PDF desde el visor del navegador.', { id: exportToastId });
     } catch (error: any) {
       toast.error(error?.message || 'No se pudo generar el PDF de la factura de proveedor', { id: exportToastId });
+    }
+  };
+
+  const getSupplierInvoiceExportRows = async (scope: PdfExportScope) => {
+    if (scope !== 'all') return filtered;
+    const serverStatus = statusFilter === 'ALL' ? undefined : statusFilter === 'PENDING' ? 'OPEN' : statusFilter;
+    const rows = await fetchAllPaginatedRows<SupplierInvoice>((page, pageSize) => billsService.getAll({
+      page,
+      pageSize,
+      search: searchTerm.trim() || undefined,
+      status: serverStatus,
+      branchId: selectedBranchId || undefined,
+      report: true,
+      light: true,
+      export: true,
+    }));
+    return rows.filter(matchesInvoiceFilters);
+  };
+
+  const handleExportInvoiceListPdf = async (format: PdfDownloadFormat, scope: PdfExportScope = 'page') => {
+    setExportingInvoiceList(true);
+    const exportToastId = toast.loading('Generando reporte de créditos del proveedor...');
+    try {
+      const rows = await getSupplierInvoiceExportRows(scope);
+      if (!rows.length) {
+        toast.error('No hay facturas para exportar con los filtros actuales.', { id: exportToastId });
+        return;
+      }
+      const amountLabel = (amount: number, invoice: SupplierInvoice) => valuationMode === 'CURRENT'
+        ? formatCurrentAmount(amount, invoice.currency)
+        : formatHistoricalAmount(amount, invoice.currency, invoice.exchangeRate);
+      await generatePurchaseListPDF({
+        title: 'Créditos del proveedor',
+        rows,
+        subtitle: [`Búsqueda: ${searchTerm.trim() || 'Todas'}`, `Estado: ${statusOpts.find((option) => option.value === statusFilter)?.label || 'Todos'}`, selectedBranchId ? 'Sucursal seleccionada' : 'Todas las sucursales'].join(' · '),
+        tenantName: user?.tenantName || '',
+        tenantLogo: user?.sessionBranding?.logo || null,
+        format,
+        targetKey: 'compras.supplier-invoice',
+        columns: [
+          { label: 'Factura', value: (invoice) => invoice.number || '—' },
+          { label: 'Proveedor', value: (invoice) => invoice.supplier?.name || 'Sin proveedor' },
+          { label: 'Emisión', align: 'center', value: (invoice) => formatDateEs(invoice.date) || '—' },
+          { label: 'Vencimiento', align: 'center', value: (invoice) => formatDateEs(invoice.dueDate) || '—' },
+          { label: 'Total', align: 'right', value: (invoice) => amountLabel(Number(invoice.total || 0), invoice) },
+          { label: 'Pagado', align: 'right', value: (invoice) => amountLabel(Number(invoice.amountPaid || 0), invoice) },
+          { label: 'Saldo', align: 'right', value: (invoice) => amountLabel(Number(invoice.balance || 0), invoice) },
+          { label: 'Estado', align: 'center', value: (invoice) => statusOpts.find((option) => option.value === String(invoice.status || '').toUpperCase())?.label || invoice.status || '—' },
+        ],
+      });
+      toast.success('Previsualización abierta. Descarga o imprime el PDF desde el visor del navegador.', { id: exportToastId });
+    } catch (error: unknown) {
+      toast.error(error instanceof Error ? error.message : 'No se pudo generar el reporte de créditos del proveedor.', { id: exportToastId });
+    } finally {
+      setExportingInvoiceList(false);
+    }
+  };
+
+  const handleExportInvoiceListExcel = async (scope: PdfExportScope = 'page') => {
+    setExportingInvoiceList(true);
+    try {
+      const rows = await getSupplierInvoiceExportRows(scope);
+      if (!rows.length) {
+        toast.error('No hay facturas para exportar con los filtros actuales.');
+        return;
+      }
+      const filters = {
+        Búsqueda: searchTerm.trim() || 'Todas',
+        Estado: statusOpts.find((option) => option.value === statusFilter)?.label || 'Todos',
+        Sucursal: selectedBranchId ? 'Sucursal seleccionada' : 'Todas las sucursales',
+        Alcance: scope === 'all' ? 'Todos los registros filtrados' : 'Página actual',
+      };
+      createReportWorkbook({
+        fileName: buildDatedDownloadFileName(['creditos_proveedor'], 'xlsx'),
+        sheets: [{
+          name: 'Créditos del proveedor',
+          rows: rows.map((invoice) => ({
+            Factura: invoice.number || '—',
+            Proveedor: invoice.supplier?.name || 'Sin proveedor',
+            Emisión: formatDateEs(invoice.date) || '—',
+            Vencimiento: formatDateEs(invoice.dueDate) || '—',
+            Total: Number(invoice.total || 0),
+            Pagado: Number(invoice.amountPaid || 0),
+            Saldo: Number(invoice.balance || 0),
+            Moneda: invoice.currency || baseCurrency,
+            Estado: statusOpts.find((option) => option.value === String(invoice.status || '').toUpperCase())?.label || invoice.status || '—',
+          })),
+        }],
+        filters,
+      });
+    } catch (error: unknown) {
+      toast.error(error instanceof Error ? error.message : 'No se pudo generar el Excel de créditos del proveedor.');
+    } finally {
+      setExportingInvoiceList(false);
     }
   };
 
@@ -855,6 +956,15 @@ export function FacturasProveedorView({ data, summaryData, summaryLoading, summa
       <div className="flex flex-col gap-4">
         <div className="flex items-center justify-between flex-wrap gap-4">
           <div className="erp-list-toolbar flex flex-wrap items-center justify-end gap-3 w-full sm:w-auto" data-tour="purchases-list-actions">
+            {canPerform('PURCHASES_RECEIPTS', 'export') && <PdfDownloadButton
+              label="Exportar"
+              includePageSizes
+              includeRoll={false}
+              disabled={loading || exportingInvoiceList || (!filtered.length && !Number(pagination?.total || 0))}
+              scopeSelector={{ pageCount: filtered.length, totalCount: pagination?.total ?? filtered.length }}
+              onDownload={(format, scope) => void handleExportInvoiceListPdf(format, scope)}
+              onExcel={(scope) => void handleExportInvoiceListExcel(scope || 'all')}
+            />}
             <ViewLayoutSelect value={layoutMode} onChange={(value) => setLayoutMode(value === 'kanban' ? 'table' : value)} ariaLabel="Elegir distribución de facturas de proveedor" />
             <div className="relative flex-1 min-w-0"><Search className="absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground/40" /><Input placeholder="Buscar..." className="pl-9 h-10 w-full bg-background/50 border-border/50 rounded-xl text-xs sm:w-80" value={searchTerm} onChange={e => { setSearchTerm(e.target.value); onSearchChange?.(e.target.value); }} /></div>
             {purchaseAlert && <PurchaseAlertsButton alert={purchaseAlert} onItemSelect={setHighlightedAlertId} />}

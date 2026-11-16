@@ -611,7 +611,7 @@ export function ComprasPage({ activeSubModule, onSubModuleChange, isSidebarColla
                       onDraftConsumed={() => setDraftPaymentFromInvoice(null)}
                     />
                   )}
-                   {section.id === 'creditos'      && <FacturasProveedorView {...commonProps} summaryData={creditInvoicesSummaryQuery.data} summaryLoading={creditInvoicesSummaryQuery.isPending || creditInvoicesSummaryQuery.isFetching} summaryError={creditInvoicesSummaryQuery.isError} supplierCatalog={supplierCatalog} data={filteredData.creditos} pagination={pagination.creditos} onSearchChange={(value) => updateSearch('creditos', value)} onStatusChange={(value) => updateStatus('creditos', value)} onRegisterPaymentFromInvoice={handleRegisterPaymentFromInvoice} />}
+                   {section.id === 'creditos'      && <FacturasProveedorView {...commonProps} summaryData={creditInvoicesSummaryQuery.data} summaryLoading={creditInvoicesSummaryQuery.isPending || creditInvoicesSummaryQuery.isFetching} summaryError={creditInvoicesSummaryQuery.isError} supplierCatalog={supplierCatalog} selectedBranchId={selectedBranchId || ''} data={filteredData.creditos} pagination={pagination.creditos} onSearchChange={(value) => updateSearch('creditos', value)} onStatusChange={(value) => updateStatus('creditos', value)} onRegisterPaymentFromInvoice={handleRegisterPaymentFromInvoice} />}
                  </motion.div>
                );
             })}
