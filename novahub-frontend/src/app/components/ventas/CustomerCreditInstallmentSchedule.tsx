@@ -56,23 +56,37 @@ export function CustomerCreditInstallmentSchedule({
 }: CustomerCreditInstallmentScheduleProps) {
   const [page, setPage] = useState(0);
   useEffect(() => setPage(0), [installments]);
-  if (installments.length === 0) return null;
+  const manualEditor = Boolean(onManualInstallmentChange && manualInstallments);
+  const emptyManualDraft = { dueDate: '', totalAmount: '', interestAmount: '' };
+  const scheduleRows = installments.length > 0 || !manualEditor
+    ? installments
+    : (manualInstallments!.length ? manualInstallments! : [emptyManualDraft]).map((item, index) => {
+      const totalAmount = Number(item.totalAmount || 0);
+      const interestAmount = Number(item.interestAmount || 0);
+      return {
+        installmentNumber: index + 1,
+        dueDate: item.dueDate,
+        totalAmount,
+        principalAmount: Math.max(0, totalAmount - interestAmount),
+        interestAmount,
+      };
+    });
+  if (scheduleRows.length === 0) return null;
 
-  const isPaginated = installments.length > INSTALLMENT_PAGE_THRESHOLD;
-  const pageCount = isPaginated ? Math.ceil(installments.length / INSTALLMENT_PAGE_SIZE) : 1;
+  const isPaginated = scheduleRows.length > INSTALLMENT_PAGE_THRESHOLD;
+  const pageCount = isPaginated ? Math.ceil(scheduleRows.length / INSTALLMENT_PAGE_SIZE) : 1;
   const currentPage = Math.min(page, pageCount - 1);
   const startIndex = isPaginated ? currentPage * INSTALLMENT_PAGE_SIZE : 0;
   const visibleInstallments = isPaginated
-    ? installments.slice(startIndex, startIndex + INSTALLMENT_PAGE_SIZE)
-    : installments;
-  const principal = principalAmount ?? installments.reduce((sum, row) => sum + Number(row.principalAmount || 0), 0);
-  const interest = interestAmount ?? installments.reduce((sum, row) => sum + Number(row.interestAmount || 0), 0);
-  const total = totalAmount ?? installments.reduce((sum, row) => sum + Number(row.totalAmount || 0), 0);
-  const endingDate = finalDueDate || installments[installments.length - 1]?.dueDate || '';
-  const lastInstallment = installments[installments.length - 1];
+    ? scheduleRows.slice(startIndex, startIndex + INSTALLMENT_PAGE_SIZE)
+    : scheduleRows;
+  const principal = principalAmount ?? scheduleRows.reduce((sum, row) => sum + Number(row.principalAmount || 0), 0);
+  const interest = interestAmount ?? scheduleRows.reduce((sum, row) => sum + Number(row.interestAmount || 0), 0);
+  const total = totalAmount ?? scheduleRows.reduce((sum, row) => sum + Number(row.totalAmount || 0), 0);
+  const endingDate = finalDueDate || scheduleRows[scheduleRows.length - 1]?.dueDate || '';
+  const lastInstallment = scheduleRows[scheduleRows.length - 1];
   const lastWasAdjusted = installmentAmount != null
     && Math.abs(Number(lastInstallment.totalAmount) - installmentAmount) > 0.000001;
-  const manualEditor = Boolean(onManualInstallmentChange && manualInstallments);
 
   return (
     <section className={`min-w-0 space-y-3 rounded-xl border border-border/50 bg-card p-3 sm:p-4 ${className || ''}`} aria-label="Calendario de abonos">
@@ -81,7 +95,9 @@ export function CustomerCreditInstallmentSchedule({
           <h3 className="text-xs font-black uppercase tracking-widest text-foreground">Calendario detallado de abonos</h3>
           <p className="mt-1 text-[11px] leading-relaxed text-muted-foreground">
             {frequencyLabel ? `Frecuencia ${frequencyLabel.toLowerCase()} · ` : ''}
-            {installments.length} {installments.length === 1 ? 'abono programado' : 'abonos programados'}.
+            {manualEditor
+              ? `${scheduleRows.length} ${scheduleRows.length === 1 ? 'abono en edición' : 'abonos en edición'}.`
+              : `${scheduleRows.length} ${scheduleRows.length === 1 ? 'abono programado' : 'abonos programados'}.`}
             {lastWasAdjusted ? ' El último abono cubre el saldo restante.' : ''}
           </p>
         </div>
@@ -99,7 +115,7 @@ export function CustomerCreditInstallmentSchedule({
         <SummaryValue label="Capital" value={formatAmount(principal)} />
         <SummaryValue label="Intereses" value={formatAmount(interest)} />
         <SummaryValue label="Total con intereses" value={formatAmount(total)} emphasis />
-        <SummaryValue label="Cantidad de abonos" value={String(installments.length)} />
+        <SummaryValue label="Cantidad de abonos" value={String(scheduleRows.length)} />
         <SummaryValue label="Último abono" value={formatAmount(Number(lastInstallment.totalAmount || 0))} />
         <SummaryValue label="Vencimiento final" value={endingDate ? formatDateEs(endingDate) : 'Sin fecha'} />
       </div>
@@ -129,7 +145,7 @@ export function CustomerCreditInstallmentSchedule({
               const index = startIndex + pageIndex;
               const paid = Number(row.principalPaid || 0) + Number(row.interestPaid || 0);
               const pending = Math.max(0, Number(row.totalAmount || 0) - paid);
-              const adjusted = index === installments.length - 1
+              const adjusted = index === scheduleRows.length - 1
                 && installmentAmount != null
                 && Math.abs(Number(row.totalAmount) - installmentAmount) > 0.000001;
               return (
@@ -140,7 +156,7 @@ export function CustomerCreditInstallmentSchedule({
                     <TableCell><Input type="number" required min="0.01" step="0.01" currencyPrecision aria-label={`Monto total del abono ${index + 1}`} value={manualInstallments![index]?.totalAmount ?? ''} onChange={(event) => onManualInstallmentChange!(index, 'totalAmount', event.target.value)} className="h-8 min-w-32 text-right text-xs tabular-nums" /></TableCell>
                     <TableCell><Input type="number" required={manualInterestEditable} min="0" step="0.01" currencyPrecision aria-label={`Interés del abono ${index + 1}`} value={manualInterestEditable ? (manualInstallments![index]?.interestAmount ?? '') : '0'} onChange={(event) => onManualInstallmentChange!(index, 'interestAmount', event.target.value)} disabled={!manualInterestEditable} className="h-8 min-w-32 text-right text-xs tabular-nums" /></TableCell>
                     <TableCell className="whitespace-nowrap text-right font-semibold tabular-nums">{formatAmount(Number(row.principalAmount || 0))}</TableCell>
-                    <TableCell className="text-right"><Button type="button" size="icon" variant="ghost" aria-label={`Quitar abono ${index + 1}`} title={`Quitar abono ${index + 1}`} disabled={installments.length <= 1} onClick={() => onRemoveManualInstallment?.(index)} className="size-8"><Trash2 className="size-4" /></Button></TableCell>
+                    <TableCell className="text-right"><Button type="button" size="icon" variant="ghost" aria-label={`Quitar abono ${index + 1}`} title={`Quitar abono ${index + 1}`} disabled={scheduleRows.length <= 1} onClick={() => onRemoveManualInstallment?.(index)} className="size-8"><Trash2 className="size-4" /></Button></TableCell>
                   </> : <>
                     <TableCell className="whitespace-nowrap">{formatDateEs(row.dueDate)}</TableCell>
                     <TableCell className="whitespace-nowrap text-right tabular-nums">{formatAmount(Number(row.principalAmount || 0))}</TableCell>
@@ -156,7 +172,7 @@ export function CustomerCreditInstallmentSchedule({
         </Table>
       </div>
       {isPaginated && <div className="flex min-w-0 flex-wrap items-center justify-between gap-2">
-        <p className="text-xs text-muted-foreground" aria-live="polite">Abonos {startIndex + 1}–{Math.min(startIndex + visibleInstallments.length, installments.length)} de {installments.length}</p>
+        <p className="text-xs text-muted-foreground" aria-live="polite">Abonos {startIndex + 1}–{Math.min(startIndex + visibleInstallments.length, scheduleRows.length)} de {scheduleRows.length}</p>
         <div className="flex items-center gap-2">
           <Button type="button" size="sm" variant="outline" onClick={() => setPage(Math.max(0, currentPage - 1))} disabled={currentPage === 0}>Anterior</Button>
           <span className="whitespace-nowrap text-xs text-muted-foreground">Página {currentPage + 1} de {pageCount}</span>

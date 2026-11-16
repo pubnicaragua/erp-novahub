@@ -1,5 +1,5 @@
 import { useMemo, useState } from 'react';
-import { Banknote, CalendarClock, CircleDollarSign, Search, Wallet, AlertTriangle, ChevronLeft, ChevronRight, Plus, Eye } from 'lucide-react';
+import { Banknote, CalendarClock, Search, Wallet, AlertTriangle, ChevronLeft, ChevronRight, Plus, Eye } from 'lucide-react';
 import { useQueryClient } from '@tanstack/react-query';
 import { Badge } from '../ui/badge';
 import { Button } from '../ui/button';
@@ -95,18 +95,17 @@ export function CustomerLoansView({ enabled, selectedBranchId, onRefresh }: { en
   );
   const detail = detailQuery.data || selectedLoanRow;
   const customer = detail?.customer || selectedLoanRow?.customer;
-  const isPayable = Boolean(detail && Number(detail.invoice?.balance ?? detail.balance ?? 0) > 0.01);
   const customerOptions = useMemo(() => {
     const options = (customerLookup.data || []).map((item: any) => ({
       value: String(item.id),
       label: String(item.name || 'Cliente'),
-      description: [item.code, item.phone || item.contactPhone].filter(Boolean).join(' · '),
+      description: [item.code ? `[${item.code}]` : '', item.phone || item.contactPhone].filter(Boolean).join(' · '),
     }));
     if (createCustomer && !options.some((option) => option.value === String(createCustomer.id))) {
       options.unshift({
         value: String(createCustomer.id),
         label: String(createCustomer.name || 'Cliente'),
-        description: [createCustomer.code, createCustomer.phone || createCustomer.contactPhone].filter(Boolean).join(' · '),
+        description: [createCustomer.code ? `[${createCustomer.code}]` : '', createCustomer.phone || createCustomer.contactPhone].filter(Boolean).join(' · '),
       });
     }
     return options;
@@ -118,22 +117,22 @@ export function CustomerLoansView({ enabled, selectedBranchId, onRefresh }: { en
     onRefresh?.();
   };
   const openDetail = (row: CustomerLoan) => setSelectedLoanRow(row);
-  const openPayment = () => {
-    if (!detail) return;
+  const openPayment = (loan: any = detail) => {
+    if (!loan) return;
     setPaymentTarget({
-      id: detail.id,
+      id: loan.id,
       kind: 'CUSTOMER_LOAN',
-      number: detail.invoice?.number || detail.number,
-      total: detail.total,
-      balance: detail.invoice?.balance ?? detail.balance,
-      amountPaid: detail.invoice?.amountPaid,
-      currency: detail.currency || detail.invoice?.currency,
-      exchangeRate: detail.exchangeRate || detail.invoice?.exchangeRate,
-      customerId: detail.customerId,
-      customer: detail.customer,
-      invoice: detail.invoice,
-      planEnabled: detail.planEnabled,
-      nextInstallment: detail.nextInstallment,
+      number: loan.invoice?.number || loan.number,
+      total: loan.total,
+      balance: loan.invoice?.balance ?? loan.balance,
+      amountPaid: loan.invoice?.amountPaid,
+      currency: loan.currency || loan.invoice?.currency,
+      exchangeRate: loan.exchangeRate || loan.invoice?.exchangeRate,
+      customerId: loan.customerId,
+      customer: loan.customer || customer,
+      invoice: loan.invoice,
+      planEnabled: loan.planEnabled,
+      nextInstallment: loan.nextInstallment,
     });
   };
 
@@ -163,7 +162,6 @@ export function CustomerLoansView({ enabled, selectedBranchId, onRefresh }: { en
   if ((createCustomerOpen || createCustomer) && canCreateLoan) return <CustomerLoansPanel
     customerId={String(createCustomer?.id || '')}
     customerName={String(createCustomer?.name || '')}
-    customerCode={createCustomer?.code || ''}
     customerOptions={customerOptions}
     customerSearchPending={customerLookup.isPending}
     customerSearchError={customerLookup.isError}
@@ -183,7 +181,7 @@ export function CustomerLoansView({ enabled, selectedBranchId, onRefresh }: { en
 
   return <section className="min-w-0 max-w-full space-y-5 overflow-x-hidden" aria-label="Préstamos a clientes">
     <header className="flex min-w-0 flex-col gap-3 md:flex-row md:items-center md:justify-between">
-      <div className="flex min-w-0 items-center gap-3"><div className="flex size-11 shrink-0 items-center justify-center rounded-2xl bg-primary/10 text-primary"><Banknote className="size-6" /></div><div className="min-w-0"><h1 className="break-words text-lg font-black uppercase italic tracking-tight text-foreground sm:text-xl">Préstamos a clientes</h1><p className="text-xs text-muted-foreground">Cartera, cuotas, mora y desembolsos por sucursal.</p></div></div>
+      <div className="flex min-w-0 items-center gap-3"><div className="flex size-11 shrink-0 items-center justify-center rounded-2xl bg-primary/10 text-primary"><Banknote className="size-6" /></div><div className="min-w-0"><h1 className="nh-module-title break-words">Préstamos a clientes</h1><p className="text-xs text-muted-foreground">Cartera, cuotas, mora y desembolsos por sucursal.</p></div></div>
       <div className="flex min-w-0 flex-wrap items-center gap-2">
         <CustomerCreditSettingsButton canEdit={canEditConfiguration} />
         {canCreateLoan && <Button type="button" onClick={() => { setCreateCustomer(null); setCustomerSearch(''); setCreateCustomerOpen(true); }} className="h-10 rounded-xl px-4"><Plus className="mr-2 size-4" /> Nuevo préstamo</Button>}
@@ -230,16 +228,17 @@ export function CustomerLoansView({ enabled, selectedBranchId, onRefresh }: { en
 
     <Sheet open={Boolean(selectedLoanRow)} onOpenChange={(open) => !open && setSelectedLoanRow(null)}>
       <SheetContent side="right" className="flex h-[100dvh] w-[min(100vw,900px)] max-w-full flex-col overflow-hidden p-0">
-        <SheetHeader className="shrink-0 border-b border-border/50 p-5 pr-12"><SheetTitle className="text-left">Detalle del préstamo</SheetTitle></SheetHeader>
+        <SheetHeader className="shrink-0 border-b border-border/50 p-5 pr-12"><SheetTitle className="nh-section-title text-left">Detalle del préstamo</SheetTitle></SheetHeader>
         <div className="min-h-0 flex-1 overflow-y-auto p-4 sm:p-6">
           {detailQuery.isPending ? <p role="status" className="p-8 text-center text-sm text-muted-foreground">Cargando detalle…</p> : detailQuery.isError ? <p role="alert" className="p-8 text-center text-sm text-destructive">No se pudo cargar el detalle del préstamo.</p> : detail && <div className="min-w-0 space-y-4">
-            <div className="flex min-w-0 flex-col gap-3 rounded-2xl border border-primary/20 bg-primary/5 p-4 sm:flex-row sm:items-center sm:justify-between"><div className="min-w-0"><p className="break-all text-lg font-black text-foreground">{detail.invoice?.number || detail.number || 'Préstamo'}</p><p className="mt-1 text-sm text-muted-foreground">{customer?.name || 'Cliente'} · {localDate(detail.invoice?.date || detail.disbursedAt)}</p><p className="mt-2 text-xl font-black text-primary">Saldo: {formatCurrencyAmount(detail.invoice?.balance ?? detail.balance ?? 0, detail.currency || baseCurrency)}</p></div>{canPay && isPayable && <Button type="button" onClick={openPayment} className="shrink-0"><CircleDollarSign className="mr-2 size-4" /> Registrar abono</Button>}</div>
-            <CustomerLoansPanel customerId={detail.customerId} customerName={customer?.name || 'Cliente'} moraTypeId={customer?.moraTypeId} moraType={customer?.moraType} enabled={enabled && Boolean(detail.customerId)} canCreateLoan={canCreateLoan} canCreateMora={canCreateMora} canEditMora={canEditMora} onUpdated={() => void invalidate()} onRequestCreatePage={() => {
-              setCreateCustomer({ ...(customer || {}), id: detail.customerId, name: customer?.name || 'Cliente' } as Customer);
-              setCustomerSearch('');
-              setCreateCustomerOpen(true);
-              setSelectedLoanRow(null);
-            }} focusLoanId={detail.id} />
+            <Card className="min-w-0 rounded-2xl border-border/60 bg-card p-4 shadow-sm sm:p-5">
+              <p className="text-[10px] font-black uppercase tracking-widest text-muted-foreground">Cliente</p>
+              <div className="mt-2 flex min-w-0 flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+                <div className="min-w-0"><h3 className="break-words text-base font-bold text-foreground">{customer?.name || 'Cliente'}</h3><p className="mt-1 break-words text-xs text-muted-foreground">{customer?.phone || customer?.contactPhone || customer?.email || 'Sin datos de contacto'}</p></div>
+                <Badge variant="outline" className="w-fit shrink-0">Código: {customer?.code || '—'}</Badge>
+              </div>
+            </Card>
+            <CustomerLoansPanel customerId={detail.customerId} customerName={customer?.name || 'Cliente'} moraTypeId={customer?.moraTypeId} moraType={customer?.moraType} enabled={enabled && Boolean(detail.customerId)} canCreateLoan={false} canCreateMora={canCreateMora} canEditMora={canEditMora} canRegisterPayment={canPay} onRegisterPayment={(loan) => openPayment(loan)} detailMode onUpdated={() => void invalidate()} focusLoanId={detail.id} />
           </div>}
         </div>
       </SheetContent>

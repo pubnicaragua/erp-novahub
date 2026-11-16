@@ -183,6 +183,7 @@ export interface CustomerAuditPage {
 
 export interface CustomerLoanPage extends CustomerAuditPage {
   summary?: {
+    totalCount: number;
     activeCount: number;
     outstandingByCurrency: Array<{ currency: string; amount: number }>;
   };
