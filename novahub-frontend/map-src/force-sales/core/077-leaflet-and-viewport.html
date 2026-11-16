@@ -32,7 +32,7 @@ function setupNovaLeafletAdapter(){
   panTo(value){this._map.panTo([Number(value.lat),Number(value.lng)])}
   setZoom(value){this._map.setZoom(Number(value))}
   getBounds(){const bounds=this._map.getBounds();return {getNorthEast:()=>point(bounds.getNorthEast()),getSouthWest:()=>point(bounds.getSouthWest()),contains:(value)=>bounds.contains([Number(value.lat),Number(value.lng)])}}
-  fitBounds(bounds,padding){this._map.fitBounds(bounds._bounds || bounds,{padding:[padding||0,padding||0]})}
+  fitBounds(bounds,padding){const target=bounds._bounds||bounds;if(typeof padding==='number'){this._map.fitBounds(target,{padding:[padding,padding]});return}this._map.fitBounds(target,{paddingTopLeft:[Number(padding?.left)||0,Number(padding?.top)||0],paddingBottomRight:[Number(padding?.right)||0,Number(padding?.bottom)||0]})}
   setTilt(){}
   setHeading(){}
  }

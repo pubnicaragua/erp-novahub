@@ -88,13 +88,18 @@ document.getElementById('routeNew').addEventListener('click',startNewRoute);
 document.getElementById('routeVicinityMode').addEventListener('change',renderRouteVicinityPreview);
 document.getElementById('routeVicinityCount').addEventListener('input',renderRouteVicinityPreview);
 document.getElementById('routeVicinityRadius').addEventListener('input',renderRouteVicinityPreview);
+document.getElementById('routeVicinityRadiusSlider').addEventListener('input',()=>{
+  const slider=document.getElementById('routeVicinityRadiusSlider'),input=document.getElementById('routeVicinityRadius'),unit=document.getElementById('routeVicinityRadiusUnit');
+  const meters=Number(slider.value)*1000,factor=unit.value==='km'?1000:1;
+  input.value=String(Number((meters/factor).toFixed(unit.value==='km'?1:0)));
+  renderRouteVicinityPreview();
+});
 document.getElementById('routeVicinityRadiusUnit').addEventListener('change',()=>{
   const input=document.getElementById('routeVicinityRadius'),unit=document.getElementById('routeVicinityRadiusUnit'),previous=input.dataset.unit||'m',next=unit.value,value=Number(input.value);
   if(Number.isFinite(value)&&value>0){const meters=value*(previous==='km'?1000:1);input.value=String(Number((meters/(next==='km'?1000:1)).toFixed(4)))}
-  input.dataset.unit=next;input.max=next==='km'?'50':'50000';input.step=next==='km'?'0.1':'50';renderRouteVicinityPreview();
+  input.dataset.unit=next;input.min=next==='km'?'0.1':'100';input.max=next==='km'?'50':'50000';input.step=next==='km'?'0.1':'50';renderRouteVicinityPreview();
 });
 document.getElementById('routeVicinityModeButtons')?.addEventListener('click',event=>{const button=event.target?.closest?.('[data-mode]');if(button)setRouteVicinityMode(button.dataset.mode)});
-document.getElementById('routeRadiusChips')?.addEventListener('click',event=>{const chip=event.target?.closest?.('[data-km]');if(chip)setRouteVicinityRadiusKm(Number(chip.dataset.km))});
 document.getElementById('routeVicinityClose').addEventListener('click',clearRouteVicinityPreview);
 document.getElementById('routeVicinityCancel').addEventListener('click',clearRouteVicinityPreview);
 document.getElementById('routeVicinityCandidates').addEventListener('change',event=>{

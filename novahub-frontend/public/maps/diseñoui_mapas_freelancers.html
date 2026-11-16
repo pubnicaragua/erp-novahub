@@ -349,6 +349,18 @@ body.theme-dark .route-transfer-option:has(.route-transfer-checkbox:checked){bac
 .route-vicinity-candidate-copy small{color:var(--nova-ui-muted-foreground,#6c7c77);font-size:9px}
 .route-vicinity-marker{cursor:pointer}
 .route-vicinity-marker-excluded{border-color:var(--nova-ui-border,#dce8e3)!important;background:var(--nova-ui-muted,#edf5f1)!important;color:var(--nova-ui-muted-foreground,#6c7c77)!important;box-shadow:0 0 0 4px color-mix(in srgb,var(--nova-ui-muted-foreground,#6c7c77) 18%,transparent),0 5px 14px rgba(36,55,47,.2)!important;opacity:.76}
+.route-vicinity-controls{grid-template-columns:minmax(0,1fr)}
+.route-vicinity-radius{display:grid;gap:6px;min-width:0}
+.route-vicinity-radius[hidden]{display:none}
+.route-vicinity-radius-heading{display:flex!important;align-items:center;justify-content:space-between;gap:8px;font-size:10px!important}
+.route-vicinity-radius-heading output{color:var(--nova-ui-primary,#08785a);font-size:12px;font-weight:900}
+.route-vicinity-radius input[type="range"]{min-height:24px;padding:0;border:0;background:transparent;accent-color:var(--nova-ui-primary,#08785a);cursor:pointer}
+.route-vicinity-radius input[type="range"]:focus-visible{outline:3px solid #3287e8;outline-offset:3px}
+.route-vicinity-map-hint{color:var(--nova-ui-muted-foreground,#6c7c77);font-size:8px;line-height:1.35}
+.route-vicinity-exact{font-size:9px}
+.route-vicinity-exact summary{width:max-content;max-width:100%;color:var(--nova-ui-primary,#08785a);cursor:pointer;font-weight:700}
+.route-vicinity-exact summary:focus-visible{outline:3px solid #3287e8;outline-offset:2px}
+.route-vicinity-exact>label{margin:6px 0 4px!important;font-size:8px}
 </style>
 <style>
 .route-assignee-actions{display:flex;align-items:center;justify-content:flex-end;gap:5px;flex:none;flex-wrap:wrap}
@@ -513,6 +525,100 @@ body.embedded-view details>summary::-webkit-details-marker{display:none!importan
 @media(max-width:820px){.route-summary{grid-template-columns:repeat(2,minmax(0,1fr))}.route-stat:nth-child(3){grid-column:1/-1}}
 </style>
 <style>
+.business-detail-card{width:min(540px,calc(100vw - var(--sheet,0px) - 32px));max-width:calc(100vw - 24px);max-height:min(82dvh,calc(var(--nova-visible-height,100dvh) - 28px));border:1px solid var(--nova-ui-border,#d6e7df);border-radius:18px;background:var(--nova-ui-card,#fff);color:var(--nova-ui-foreground,#123f35);box-shadow:0 22px 60px rgba(8,42,32,.3)}
+.business-detail-head{position:absolute;top:8px;right:8px;z-index:3;padding:0}
+.business-detail-head button{display:grid;place-items:center;width:36px;height:36px;border:1px solid var(--nova-ui-border,#dce8e3);border-radius:10px;background:var(--nova-ui-card,#fff);color:var(--nova-ui-muted-foreground,#60736d);font-size:23px;line-height:1;box-shadow:0 2px 8px rgba(8,42,32,.06)}
+.business-detail-content{flex:1 1 auto;min-width:0;padding:14px;scrollbar-gutter:stable;scrollbar-width:thin;scrollbar-color:var(--nova-ui-border,#d6e7df) transparent}
+.business-detail-footer{flex:none;padding:10px 14px max(10px,env(safe-area-inset-bottom));border-top:1px solid var(--nova-ui-border,#dce8e3);background:var(--nova-ui-card,#fff);box-shadow:0 -6px 16px rgba(18,53,43,.08)}
+.business-detail-footer[hidden]{display:none}
+.business-detail-footer button{display:block;width:100%;min-width:0;min-height:44px;padding:10px 14px;border:1px solid var(--nova-ui-primary,#08785a);border-radius:11px;background:var(--nova-ui-primary,#08785a);color:#fff;font:800 12px Montserrat,Arial,sans-serif;cursor:pointer}
+.business-detail-footer button:hover{filter:brightness(1.04)}
+.business-detail-footer button:disabled{opacity:.55;cursor:not-allowed}
+.business-detail-footer button:focus-visible{outline:3px solid #3287e8;outline-offset:2px}
+.business-detail-content .popup{display:grid;gap:10px;width:100%;min-width:0;max-width:none;margin:0;color:var(--nova-ui-foreground,#123f35);font-family:Montserrat,Arial,sans-serif;font-size:13px;line-height:1.45}
+.business-detail-summary{display:grid;gap:10px;min-width:0;padding:2px 42px 2px 0}
+.business-detail-title-row{display:flex;align-items:flex-start;gap:11px;min-width:0}
+.business-detail-icon{display:grid;place-items:center;flex:none;width:38px;height:38px;border:1px solid color-mix(in srgb,var(--nova-ui-primary,#08785a) 18%,var(--nova-ui-border,#d6e7df));border-radius:12px;background:var(--nova-ui-muted,#edf5f1);color:var(--nova-ui-primary,#08785a)}
+.business-detail-icon svg{width:20px;height:20px}
+.business-detail-title-copy{display:grid;gap:3px;min-width:0;padding-top:1px}
+.business-detail-title-copy h3{min-width:0;margin:0;color:var(--nova-ui-foreground,#123f35);font-size:19px;font-weight:800;line-height:1.2;overflow-wrap:anywhere}
+.business-detail-title-copy .sub{margin:0;color:var(--nova-ui-muted-foreground,#6c7c77);font-size:11px;line-height:1.4;overflow-wrap:anywhere}
+.business-detail-owner{display:flex;align-items:center;gap:7px;max-width:100%;width:max-content;padding:6px 10px;border:1px solid var(--nova-ui-border,#dce8e3);border-radius:999px;background:var(--nova-ui-muted,#edf5f1);font-size:10px;line-height:1.3}
+.business-detail-owner-dot{width:8px;height:8px;flex:none;border-radius:50%;background:#c58424}
+.business-detail-owner.is-assigned .business-detail-owner-dot{background:var(--nova-ui-primary,#08785a)}
+.business-detail-owner-label{color:var(--nova-ui-muted-foreground,#6c7c77)}
+.business-detail-owner b{min-width:0;color:var(--nova-ui-foreground,#123f35);font-size:10px;overflow-wrap:anywhere}
+.business-detail-facts{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:7px;min-width:0;padding:9px;border:1px solid var(--nova-ui-border,#dce8e3);border-radius:13px;background:var(--nova-ui-muted,#f4f8f6)}
+.business-detail-fact{display:grid;align-content:start;gap:2px;min-width:0;padding:4px 6px}
+.business-detail-fact.is-address,.business-detail-fact.is-route{grid-column:1/-1}
+.business-detail-fact>span{color:var(--nova-ui-muted-foreground,#6c7c77);font-size:9px;font-weight:700;line-height:1.35}
+.business-detail-fact>b{min-width:0;color:var(--nova-ui-foreground,#123f35);font-size:11px;font-weight:650;line-height:1.4;overflow-wrap:anywhere}
+.business-detail-section-title,.business-detail-content .crm .quick-heading{margin:0 0 7px;color:var(--nova-ui-foreground,#123f35);font-size:12px;font-weight:800;line-height:1.35}
+.route-point-memberships,.business-detail-content .crm{display:grid;gap:7px;min-width:0;margin:0;padding:11px;border:1px solid var(--nova-ui-border,#dce8e3);border-radius:13px;background:var(--nova-ui-card,#fff)}
+.route-point-memberships{background:var(--nova-ui-muted,#f7faf8)}
+.route-point-memberships .business-detail-section-title{margin-bottom:0}
+.route-point-memberships>span{color:var(--nova-ui-muted-foreground,#6c7c77);font-size:10px;line-height:1.4;overflow-wrap:anywhere}
+.route-point-membership-row{align-items:center;min-width:0;gap:8px;padding-top:6px;border-top:1px solid var(--nova-ui-border,#dce8e3)}
+.route-point-membership-row span{font-size:10px;line-height:1.4}
+.route-point-open{min-height:36px;font-size:10px}
+.business-detail-content .crm{border-top:1px solid var(--nova-ui-border,#dce8e3);padding-top:11px;margin-top:0;color:var(--nova-ui-foreground,#123f35)}
+.business-detail-content .crm label{margin:1px 0 2px;color:var(--nova-ui-muted-foreground,#61756d);font-size:9px;line-height:1.35}
+.business-detail-content .crm .meta{color:var(--nova-ui-muted-foreground,#61756d);font-size:10px;line-height:1.4;overflow-wrap:anywhere}
+.business-detail-content .crm select,.business-detail-content .crm input:not([type="checkbox"]):not([type="radio"]),.business-detail-content .crm textarea{min-height:42px;margin:0;padding:9px 10px;border:1px solid var(--nova-ui-border,#dce8e3);border-radius:10px;background:var(--nova-ui-card,#fff);color:var(--nova-ui-foreground,#123f35);font:500 12px Montserrat,Arial,sans-serif}
+.business-detail-content .crm select:focus-visible,.business-detail-content .crm input:focus-visible,.business-detail-content .crm textarea:focus-visible{outline:3px solid #3287e8;outline-offset:2px}
+.business-detail-content .crm button{min-height:42px;margin:2px 0 0;padding:9px 11px;border:1px solid var(--nova-ui-primary,#08785a);border-radius:10px;background:var(--nova-ui-primary,#08785a);color:#fff;font-size:11px;font-weight:800;cursor:pointer}
+.business-detail-content .crm button:disabled,.business-detail-content .popquick button:disabled{opacity:.55;cursor:not-allowed}
+.business-detail-content .crm .customer-link-trigger{justify-content:space-between;text-align:left;border-color:var(--nova-ui-border,#dce8e3);background:var(--nova-ui-card,#fff);color:var(--nova-ui-foreground,#123f35)}
+.business-detail-content .customer-link-current{padding:8px 10px;border:1px solid var(--nova-ui-border,#dce8e3);border-radius:10px;background:var(--nova-ui-muted,#f4f8f6);font-size:12px}
+.business-detail-content .customer-link-status,.business-detail-content .customer-link-attribution{color:var(--nova-ui-muted-foreground,#61756d);font-size:10px;line-height:1.4;overflow-wrap:anywhere}
+.business-detail-assignment{border-color:color-mix(in srgb,var(--nova-ui-primary,#08785a) 25%,var(--nova-ui-border,#dce8e3))!important;background:var(--nova-ui-muted,#f3f8f5)!important}
+.business-detail-content .business-detail-assignment .quick-heading{color:var(--nova-ui-primary,#08785a)}
+.business-detail-content .business-detail-assignment .assignee-retry{border-color:var(--nova-ui-border,#dce8e3);background:var(--nova-ui-card,#fff);color:var(--nova-ui-primary,#08785a)}
+.business-detail-content .warn,.business-detail-content .sync-readout,.business-detail-content .visit-readout{margin:0;padding:9px 10px;border-radius:10px;font-size:10px;line-height:1.45;overflow-wrap:anywhere}
+.business-detail-content .warn{border:1px solid #f0dcb4;background:#fff7e8;color:#79551e}
+.business-detail-content .sync-readout{border:1px solid var(--nova-ui-border,#dce8e3);background:var(--nova-ui-muted,#f4f8f6);color:var(--nova-ui-foreground,#123f35)}
+.business-detail-content .evidence-preview{min-width:0;overflow-wrap:anywhere}
+.business-detail-content .popactions{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:7px;margin:0}
+.business-detail-content .popactions a{display:grid;place-items:center;min-width:0;min-height:40px;padding:8px;border:1px solid var(--nova-ui-border,#dce8e3);border-radius:10px;background:var(--nova-ui-muted,#edf5f1);color:var(--nova-ui-primary,#08785a);font-size:10px;font-weight:800;overflow-wrap:anywhere}
+.business-detail-content .popquick{grid-template-columns:repeat(2,minmax(0,1fr));gap:7px;margin:0;padding-top:9px;border-top:1px solid var(--nova-ui-border,#dce8e3)}
+.business-detail-content .popquick button,.business-detail-content .popquick select{min-width:0;min-height:40px;padding:8px;border:1px solid var(--nova-ui-border,#dce8e3);border-radius:10px;background:var(--nova-ui-card,#fff);color:var(--nova-ui-foreground,#123f35);font:700 10px Montserrat,Arial,sans-serif;overflow-wrap:anywhere}
+.business-detail-content .popquick button.primary-action,.business-detail-content .popquick button.visit-action{border-color:var(--nova-ui-primary,#08785a);background:var(--nova-ui-primary,#08785a);color:#fff}
+.business-detail-content button:focus-visible,.business-detail-content a:focus-visible{outline:3px solid #3287e8;outline-offset:2px}
+body.theme-dark .business-detail-content .crm select,body.theme-dark .business-detail-content .crm input,body.theme-dark .business-detail-content .crm textarea,body.theme-dark .business-detail-content .popquick select{color-scheme:dark}
+body.theme-dark .business-detail-content .warn{border-color:#66512b;background:#342b1b;color:#f4d89d}
+body.theme-dark .business-detail-content .evidence-preview{border-color:var(--nova-ui-border,#dce8e3);background:var(--nova-ui-muted,#26342e);color:var(--nova-ui-foreground,#e8f1ed)}
+@media(max-width:820px){
+ .business-detail-card{width:min(520px,calc(100vw - 24px));max-height:calc(var(--nova-visible-height,100dvh) - 24px);border-radius:16px}
+ .business-detail-content{padding:13px}
+ .business-detail-footer{padding:9px 13px max(9px,env(safe-area-inset-bottom))}
+ .business-detail-footer button{min-height:46px;font-size:13px}
+ .business-detail-title-copy h3{font-size:18px}
+ .business-detail-content .crm select,.business-detail-content .crm input:not([type="checkbox"]):not([type="radio"]),.business-detail-content .crm textarea{min-height:46px;font-size:16px}
+ .business-detail-content .crm button,.business-detail-content .route-point-open,.business-detail-content .popactions a,.business-detail-content .popquick button,.business-detail-content .popquick select{min-height:44px;font-size:12px}
+}
+@media(max-width:520px){
+ .business-detail-card{width:calc(100vw - max(16px,env(safe-area-inset-left)) - max(16px,env(safe-area-inset-right)));max-height:calc(var(--nova-visible-height,100dvh) - max(16px,env(safe-area-inset-top)) - max(16px,env(safe-area-inset-bottom)));border-radius:15px}
+ .business-detail-content{padding:12px}
+ .business-detail-footer{padding:8px 12px max(8px,env(safe-area-inset-bottom))}
+ .business-detail-content .popup{gap:8px}
+ .business-detail-summary{gap:8px;padding-right:40px}
+ .business-detail-title-row{gap:9px}
+ .business-detail-icon{width:34px;height:34px}
+ .business-detail-title-copy h3{font-size:17px}
+ .business-detail-title-copy .sub{font-size:10px}
+ .business-detail-facts{grid-template-columns:minmax(0,1fr);gap:4px;padding:8px}
+ .business-detail-fact.is-address,.business-detail-fact.is-route{grid-column:auto}
+ .business-detail-fact{padding:4px}
+ .route-point-membership-row{display:grid;grid-template-columns:minmax(0,1fr)}
+ .business-detail-content .route-point-open{width:100%}
+ .business-detail-owner{flex-wrap:wrap}
+ .business-detail-content .popquick{grid-template-columns:repeat(2,minmax(0,1fr))}
+}
+@media(max-width:360px){
+ .business-detail-content .popquick,.business-detail-content .popactions{grid-template-columns:minmax(0,1fr)}
+}
+</style>
+<style>
 /* Modos del mapa: cada bloque marcado con data-mode-only se muestra solo en los modos listados. */
 [data-mode-hidden],body:not([data-mode]) [data-mode-only]{display:none!important}
 .engine-controls{display:none!important}
@@ -637,16 +743,19 @@ body.embedded-view #sheetHeader{padding-top:6px;padding-bottom:0}
 .route-mode-buttons{display:flex;gap:6px;margin:8px 0}
 .route-mode-buttons button{flex:1;min-height:38px;border:1px solid var(--nova-ui-border,#dce8e3);border-radius:10px;background:var(--nova-ui-card,#fff);font-weight:600;font-size:13px;cursor:pointer}
 .route-mode-buttons button.active{background:var(--nova-ui-primary,#08785a);border-color:transparent;color:#fff}
+.route-mode-buttons button:focus-visible{outline:3px solid #3287e8;outline-offset:2px}
 .route-vicinity-controls>label:first-child{display:none}
-.route-radius-chips{margin:0 0 8px}
-.route-radius-chips button{font-size:12px;min-height:34px}
-.route-radius-chips button.active{background:var(--nova-ui-primary,#08785a);border-color:transparent;color:#fff}
 .route-reassign{display:grid;gap:3px;margin:6px 0 0;font-size:12px;font-weight:600}
 .route-reassign select{min-height:36px;font-size:13px;font-weight:500}
 @media(max-width:820px){#routeModal{inset:auto 0 0 0!important;width:100%!important;height:auto!important;max-height:68dvh!important}#routeModal .route-planner-card{border-radius:16px 16px 0 0;height:auto;max-height:inherit}.route-row{grid-template-columns:1fr}}
+@media(max-width:820px){body.route-vicinity-selecting #routeModal{height:min(54dvh,440px)!important;max-height:min(54dvh,440px)!important}body.route-vicinity-selecting #routeModal .route-planner-card{height:100%;max-height:100%}body.route-vicinity-selecting .route-vicinity-candidates{max-height:min(12dvh,110px)}}
 .route-planner-body .route-transfer-option{display:flex;flex-direction:row;align-items:center;gap:10px;margin:12px 0 0;padding:10px 12px;border-radius:10px}
 .route-planner-body .route-transfer-help,.route-planner-body .route-transfer-copy small{display:none}
-.route-planner-body .route-transfer-title{font-size:13px;font-weight:600}
+.route-planner-body .route-transfer-option{gap:9px;margin-top:8px;padding:8px 10px}
+.route-planner-body .route-transfer-copy{gap:3px}
+.route-planner-body .route-transfer-title{font-size:12px;font-weight:700}
+.route-planner-body .route-transfer-count{padding:3px 6px}
+.route-planner-body .route-transfer-destination{font-size:9px}
 </style>
 </head>
 <body>
@@ -930,25 +1039,30 @@ body.embedded-view #sheetHeader{padding-top:6px;padding-bottom:0}
   <section class="route-assignee-routes" id="routeAssigneeRoutes" aria-live="polite"></section>
   <details class="route-assignee-history" id="routeAssigneeHistory" hidden><summary>Historial</summary><div id="routeAssigneeHistoryList"></div></details>
   <button class="cancel route-new-button" id="routeNew" type="button" hidden>Empezar otra ruta</button>
-  <label class="route-transfer-option" id="routeTransferWrap"><input class="route-transfer-checkbox" id="routeTransferOwnership" type="checkbox" aria-describedby="routeTransferHelp"><span class="route-transfer-copy"><span class="route-transfer-header"><span class="route-transfer-title">Transferir responsable de los puntos</span><span class="route-transfer-count"><b id="routeTransferCount">0</b><span id="routeTransferUnit">puntos</span></span></span><span class="route-transfer-destination">A: <b id="routeTransferAssigneeName">Sin responsable</b></span><small class="route-transfer-help" id="routeTransferHelp">Si no activas esta opción, cada punto conserva su responsable actual.</small></span></label>
+  <label class="route-transfer-option" id="routeTransferWrap"><input class="route-transfer-checkbox" id="routeTransferOwnership" type="checkbox" aria-describedby="routeTransferHelp"><span class="route-transfer-copy"><span class="route-transfer-header"><span class="route-transfer-title">Cambiar responsable de puntos</span><span class="route-transfer-count"><b id="routeTransferCount">0</b><span id="routeTransferUnit">puntos</span></span></span><span class="route-transfer-destination">A: <b id="routeTransferAssigneeName">Sin responsable</b></span><small class="route-transfer-help" id="routeTransferHelp">Los puntos conservan su responsable actual.</small></span></label>
   <div class="route-offline-status" id="routeOfflineStatus" hidden>El borrador se conserva en este dispositivo. Conéctate a internet para guardar y asignar.</div>
   <div class="meta" id="routeImportStatus">El orden inicial será el de selección. “Ordenar por cercanía” usa una aproximación desde la primera parada.</div>
   <p class="route-order-note" id="routeOrderLockHint" role="status" aria-live="polite"></p>
-  <p class="route-vicinity-hint" id="routeVicinityHint" hidden>En cada parada puedes elegir sus puntos cercanos por cantidad o por radio.</p>
+  <p class="route-vicinity-hint" id="routeVicinityHint" hidden>Agrega puntos cercanos por cantidad o por radio.</p>
   <section id="routeVicinityTools" class="route-vicinity-tools" hidden aria-label="Selección de puntos cercanos">
    <div class="route-vicinity-head"><b id="routeVicinityTitle">Seleccionar puntos cercanos</b><button id="routeVicinityClose" type="button" aria-label="Cerrar selección cercana">×</button></div>
-   <p class="route-vicinity-intro">La parada elegida será el centro. Los resultados respetan los filtros y capas activos, se resaltan en el mapa y se agregan al final de la ruta.</p>
-   <div class="route-mode-buttons" id="routeVicinityModeButtons" role="group" aria-label="Cómo elegir los puntos cercanos"><button type="button" data-mode="count">Por cantidad</button><button type="button" data-mode="radius">Por radio</button></div>
-   <div class="radius-chips route-radius-chips" id="routeRadiusChips" role="group" aria-label="Radios rápidos" hidden><button type="button" data-km="0.5">500 m</button><button type="button" data-km="1">1 km</button><button type="button" data-km="5">5 km</button><button type="button" data-km="10">10 km</button><button type="button" data-km="20">20 km</button></div>
+   <p class="route-vicinity-intro">Elige puntos por cantidad o mueve el radio en el mapa.</p>
+   <div class="route-mode-buttons" id="routeVicinityModeButtons" role="group" aria-label="Cómo elegir los puntos cercanos"><button type="button" data-mode="count" aria-pressed="true">Cantidad</button><button type="button" data-mode="radius" aria-pressed="false">Radio</button></div>
    <div class="route-vicinity-controls">
     <label>Criterio<select id="routeVicinityMode"><option value="count">Cantidad de puntos</option><option value="radius">Radio de distancia</option></select></label>
     <label id="routeVicinityCountWrap">Puntos<input id="routeVicinityCount" type="number" min="1" max="500" step="1" value="10" aria-label="Cantidad de puntos cercanos"></label>
-    <label id="routeVicinityRadiusWrap" hidden>Radio
-     <span class="route-vicinity-distance-input"><input id="routeVicinityRadius" type="number" min="1" max="50000" step="50" value="500" data-unit="m" aria-label="Distancia del radio"><select id="routeVicinityRadiusUnit" aria-label="Unidad del radio"><option value="m" selected>m</option><option value="km">km</option></select></span>
-    </label>
+    <div id="routeVicinityRadiusWrap" class="route-vicinity-radius" hidden>
+     <label class="route-vicinity-radius-heading" for="routeVicinityRadiusSlider">Alcance <output id="routeVicinityRadiusValue" for="routeVicinityRadiusSlider">500 m</output></label>
+     <input id="routeVicinityRadiusSlider" type="range" min="0.1" max="50" step="0.1" value="0.5" aria-label="Alcance del radio en kilómetros">
+     <small class="route-vicinity-map-hint">El círculo se ajusta en el mapa.</small>
+     <details class="route-vicinity-exact"><summary>Editar distancia exacta</summary>
+      <label for="routeVicinityRadius">Distancia</label>
+      <span class="route-vicinity-distance-input"><input id="routeVicinityRadius" type="number" min="100" max="50000" step="50" value="500" data-unit="m" aria-label="Distancia exacta del radio"><select id="routeVicinityRadiusUnit" aria-label="Unidad del radio"><option value="m" selected>m</option><option value="km">km</option></select></span>
+     </details>
+    </div>
    </div>
    <p id="routeVicinitySummary" class="route-vicinity-summary" role="status" aria-live="polite"></p>
-  <p id="routeVicinityAdjustHint" class="route-vicinity-adjust-hint" hidden>Desmarca candidatos en la lista o pulsa su marcador en el mapa. Cambia cantidad o radio para recalcular los candidatos.</p>
+  <p id="routeVicinityAdjustHint" class="route-vicinity-adjust-hint" hidden>Marca o quita puntos en la lista o en el mapa.</p>
   <div id="routeVicinityCandidates" class="route-vicinity-candidates" role="group" aria-label="Puntos candidatos para la ruta" hidden></div>
    <div class="route-vicinity-actions"><button id="routeVicinityCancel" type="button">Cancelar</button><button id="routeVicinityAdd" type="button">Agregar puntos</button></div>
   </section>
@@ -968,6 +1082,7 @@ body.embedded-view #sheetHeader{padding-top:6px;padding-bottom:0}
  <section class="business-detail-card" id="businessDetailCard" role="dialog" aria-modal="false" aria-label="Detalle del punto comercial">
   <div class="business-detail-head"><button id="businessDetailClose" type="button" aria-label="Cerrar detalle del punto" title="Cerrar detalle">×</button></div>
   <div class="business-detail-content" id="businessDetailContent"></div>
+  <div class="business-detail-footer" id="businessDetailFooter" hidden></div>
  </section>
 </div>
 <div class="modal-backdrop" id="zoneModal" hidden>
@@ -1738,7 +1853,7 @@ function setupNovaLeafletAdapter(){
   panTo(value){this._map.panTo([Number(value.lat),Number(value.lng)])}
   setZoom(value){this._map.setZoom(Number(value))}
   getBounds(){const bounds=this._map.getBounds();return {getNorthEast:()=>point(bounds.getNorthEast()),getSouthWest:()=>point(bounds.getSouthWest()),contains:(value)=>bounds.contains([Number(value.lat),Number(value.lng)])}}
-  fitBounds(bounds,padding){this._map.fitBounds(bounds._bounds || bounds,{padding:[padding||0,padding||0]})}
+  fitBounds(bounds,padding){const target=bounds._bounds||bounds;if(typeof padding==='number'){this._map.fitBounds(target,{padding:[padding,padding]});return}this._map.fitBounds(target,{paddingTopLeft:[Number(padding?.left)||0,Number(padding?.top)||0],paddingBottomRight:[Number(padding?.right)||0,Number(padding?.bottom)||0]})}
   setTilt(){}
   setHeading(){}
  }
@@ -2440,16 +2555,31 @@ function refreshBusinessDetailOverlay(){
   const business=activeBusinessDetail();
   const overlay=document.getElementById('businessDetailOverlay');
   const content=document.getElementById('businessDetailContent');
+  const footer=document.getElementById('businessDetailFooter');
   if(!business||!overlay||!content){closeBusinessDetailPopup();return}
   overlay.hidden=false;
   ensurePointExtras(business);
-  const html=popupHtml(business);
+  const html=popupHtml(business,{includeAssignmentAction:false});
   const active=document.activeElement;
   const editing=content.contains(active)&&/^(INPUT|SELECT|TEXTAREA)$/.test(active?.tagName||'');
   if(!editing&&content.innerHTML!==html){
     const scrollTop=content.scrollTop;
     content.innerHTML=html;
     content.scrollTop=scrollTop;
+  }
+  if(footer){
+    if(!CAN_ASSIGN_PROSPECT_OWNER||!canForceSales('assignProspect')){
+      footer.hidden=true;
+      footer.replaceChildren();
+    }else{
+      footer.hidden=false;
+      let saveButton=footer.querySelector('button');
+      if(!saveButton){saveButton=document.createElement('button');saveButton.type='button';footer.appendChild(saveButton)}
+      saveButton.textContent='Guardar responsable';
+      saveButton.setAttribute('aria-label','Guardar responsable del punto');
+      saveButton.disabled=assigneesLoadState==='loading'&&!assignees.length;
+      saveButton.onclick=()=>{void window.saveProspectAssignee?.(business.id)};
+    }
   }
   scheduleBusinessDetailPosition();
 }
@@ -4397,11 +4527,13 @@ function formatCustomerLinkedAt(value){
   try{return new Intl.DateTimeFormat('es-NI',{dateStyle:'medium',timeStyle:'short',timeZone:'America/Managua'}).format(date)}
   catch{return date.toLocaleString('es-NI')}
 }
-function popupHtml(b){
+function popupHtml(b,{includeAssignmentAction=true}={}){
   const f = followups[b.id] || {};
   const c = stateOf(b);
   const sid = safeId(b.id);
   const assignedUser=assignees.find(item=>String(item.id)===String(c.assignedToId||''));
+  const pointOwner=assignedUser?.name || c.assignedToName || (c.assignedToId?'Responsable asignado':'Sin asignar');
+  const pointOwnerAssigned=Boolean(assignedUser || c.assignedToId || c.assignedToName);
   const isCurrentRouteStop=routeBusinesses.some(item=>keyOf(item)===keyOf(b));
   const routeAssigneeId=routeAssigneeDraftValue()||'';
   const routeAssignee=assignees.find(item=>String(item.id)===String(routeAssigneeId));
@@ -4433,21 +4565,25 @@ function popupHtml(b){
   const evidenceReadout=c.evidencePreviewUrl
     ? `<div class="evidence-preview"><img src="${esc(c.evidencePreviewUrl)}" alt="Vista previa de evidencia"><span>${esc(c.evidenceName || 'Foto lista para guardar')}${c.evidencePending ? ' · pendiente de sincronizar' : ''}</span></div>`
     : c.evidenceName ? `<div class="meta">Evidencia: ${esc(c.evidenceName)}${c.evidencePending ? ' · pendiente de sincronizar' : ''}</div>` : '';
-  return `<div class="popup">
-    <h3>${esc(b.name)}</h3>
-    <div class="sub">${esc(b.category)} · ${esc(b.zone)}</div>
-    <div class="grid">
-      <b>Dirección</b><span>${esc(b.address)}</span>
-      <b>Fuente</b><span>${esc(b.source)}</span>
-      <b>Responsable del punto</b><span>${esc(assignedUser?.name || c.assignedToName || 'Sin asignar')}</span>
-      <b>Responsable de la ruta actual</b><span>${isCurrentRouteStop?esc(routeAssigneeDisplay):'No forma parte de la ruta actual'}</span>
+  return `<div class="popup business-detail-popup">
+    <header class="business-detail-summary">
+      <div class="business-detail-title-row">
+        <span class="business-detail-icon" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none"><path d="M12 21s7-6.1 7-12a7 7 0 1 0-14 0c0 5.9 7 12 7 12Z" stroke="currentColor" stroke-width="1.8"/><circle cx="12" cy="9" r="2.4" stroke="currentColor" stroke-width="1.8"/></svg></span>
+        <div class="business-detail-title-copy"><h3>${esc(b.name)}</h3><div class="sub">${esc(b.category)} · ${esc(b.zone)}</div></div>
+      </div>
+      <div class="business-detail-owner ${pointOwnerAssigned?'is-assigned':'is-unassigned'}"><span class="business-detail-owner-dot" aria-hidden="true"></span><span class="business-detail-owner-label">Responsable</span><b>${esc(pointOwner)}</b></div>
+    </header>
+    <div class="business-detail-facts" aria-label="Información principal del punto">
+      <div class="business-detail-fact is-address"><span>Dirección</span><b>${esc(b.address)}</b></div>
+      <div class="business-detail-fact"><span>Fuente</span><b>${esc(b.source)}</b></div>
+      <div class="business-detail-fact is-route"><span>Responsable de la ruta actual</span><b>${isCurrentRouteStop?esc(routeAssigneeDisplay):'No forma parte de la ruta actual'}</b></div>
     </div>
-    <div class="route-point-memberships"><b>Rutas que incluyen este punto</b>${prospectRoutes.length?prospectRoutes.map(route=>`<div class="route-point-membership-row"><span>${esc(route.name||'Ruta sin nombre')} · ${esc(routeDateLabel(routeDateValue(route)))} · ${esc(route.assignedTo?.name||'Sin asignar')} · ${esc(({PLANNED:'Planificada',IN_PROGRESS:'En curso',COMPLETED:'Completada',CANCELLED:'Cancelada'})[String(route.status||'').toUpperCase()]||'Sin estado')}</span><button class="route-point-open" type="button" data-open-business-route="${esc(route.id)}">${String(route.status||'').toUpperCase()==='PLANNED'&&canForceSales('editRoute')?'Editar ruta':'Abrir ruta'}</button></div>`).join(''):'<span>No aparece en rutas guardadas de tu alcance.</span>'}${forceSalesSyncErrors.has('rutas')?'<span role="status">No se pudieron comprobar todas las rutas.</span>':''}</div>
+    <section class="route-point-memberships business-detail-section" aria-label="Rutas que incluyen este punto"><div class="business-detail-section-title">Rutas que incluyen este punto</div>${prospectRoutes.length?prospectRoutes.map(route=>`<div class="route-point-membership-row"><span>${esc(route.name||'Ruta sin nombre')} · ${esc(routeDateLabel(routeDateValue(route)))} · ${esc(route.assignedTo?.name||'Sin asignar')} · ${esc(({PLANNED:'Planificada',IN_PROGRESS:'En curso',COMPLETED:'Completada',CANCELLED:'Cancelada'})[String(route.status||'').toUpperCase()]||'Sin estado')}</span><button class="route-point-open" type="button" data-open-business-route="${esc(route.id)}">${String(route.status||'').toUpperCase()==='PLANNED'&&canForceSales('editRoute')?'Editar ruta':'Abrir ruta'}</button></div>`).join(''):'<span>No aparece en rutas guardadas de tu alcance.</span>'}${forceSalesSyncErrors.has('rutas')?'<span role="status">No se pudieron comprobar todas las rutas.</span>':''}</section>
     ${customerLinkPanel}
     ${customerDebtHtml(b)}
     ${visitHistoryHtml(b)}
     ${routePlanningMode&&isCurrentRouteStop?`<div class="meta">Parada de la ruta: ${esc(selectedRouteName)}</div>`:''}
-    ${CAN_ASSIGN_PROSPECT_OWNER&&canForceSales('assignProspect') ? `<div class="crm"><div class="quick-heading">Asignación comercial</div><label for="point-assignee-${sid}">Responsable del punto</label><select id="point-assignee-${sid}" ${assigneeLoading?'disabled':''}><option value="">Sin asignar</option>${assignees.map(item=>`<option value="${esc(item.id)}" ${String(item.id)===String(c.assignedToId||'')?'selected':''}>${esc(item.name||'Usuario')}</option>`).join('')}</select>${assigneeNotice?`<div class="meta" role="status" aria-live="polite">${esc(assigneeNotice)}</div>`:''}${assigneesLoadState==='error'?'<button class="assignee-retry" type="button">Reintentar carga de usuarios</button>':''}<button type="button" onclick="saveProspectAssignee('${b.id}')" ${assigneeLoading?'disabled':''}>Guardar responsable</button></div>` : ''}
+    ${CAN_ASSIGN_PROSPECT_OWNER&&canForceSales('assignProspect') ? `<section class="crm business-detail-assignment" aria-label="Asignación comercial"><div class="quick-heading">Asignación comercial</div><label for="point-assignee-${sid}">Responsable del punto</label><select id="point-assignee-${sid}" ${assigneeLoading?'disabled':''}><option value="">Sin asignar</option>${assignees.map(item=>`<option value="${esc(item.id)}" ${String(item.id)===String(c.assignedToId||'')?'selected':''}>${esc(item.name||'Usuario')}</option>`).join('')}</select>${assigneeNotice?`<div class="meta" role="status" aria-live="polite">${esc(assigneeNotice)}</div>`:''}${assigneesLoadState==='error'?'<button class="assignee-retry" type="button">Reintentar carga de usuarios</button>':''}${includeAssignmentAction?`<button type="button" onclick="saveProspectAssignee('${b.id}')" ${assigneeLoading?'disabled':''}>Guardar responsable</button>`:''}</section>` : ''}
     <div class="warn">${esc(b.precision)}. Validar actividad, ubicación y persona de contacto antes de la visita.</div>
     ${syncReadout}
     ${evidenceReadout}
@@ -4928,13 +5064,18 @@ document.getElementById('routeNew').addEventListener('click',startNewRoute);
 document.getElementById('routeVicinityMode').addEventListener('change',renderRouteVicinityPreview);
 document.getElementById('routeVicinityCount').addEventListener('input',renderRouteVicinityPreview);
 document.getElementById('routeVicinityRadius').addEventListener('input',renderRouteVicinityPreview);
+document.getElementById('routeVicinityRadiusSlider').addEventListener('input',()=>{
+  const slider=document.getElementById('routeVicinityRadiusSlider'),input=document.getElementById('routeVicinityRadius'),unit=document.getElementById('routeVicinityRadiusUnit');
+  const meters=Number(slider.value)*1000,factor=unit.value==='km'?1000:1;
+  input.value=String(Number((meters/factor).toFixed(unit.value==='km'?1:0)));
+  renderRouteVicinityPreview();
+});
 document.getElementById('routeVicinityRadiusUnit').addEventListener('change',()=>{
   const input=document.getElementById('routeVicinityRadius'),unit=document.getElementById('routeVicinityRadiusUnit'),previous=input.dataset.unit||'m',next=unit.value,value=Number(input.value);
   if(Number.isFinite(value)&&value>0){const meters=value*(previous==='km'?1000:1);input.value=String(Number((meters/(next==='km'?1000:1)).toFixed(4)))}
-  input.dataset.unit=next;input.max=next==='km'?'50':'50000';input.step=next==='km'?'0.1':'50';renderRouteVicinityPreview();
+  input.dataset.unit=next;input.min=next==='km'?'0.1':'100';input.max=next==='km'?'50':'50000';input.step=next==='km'?'0.1':'50';renderRouteVicinityPreview();
 });
 document.getElementById('routeVicinityModeButtons')?.addEventListener('click',event=>{const button=event.target?.closest?.('[data-mode]');if(button)setRouteVicinityMode(button.dataset.mode)});
-document.getElementById('routeRadiusChips')?.addEventListener('click',event=>{const chip=event.target?.closest?.('[data-km]');if(chip)setRouteVicinityRadiusKm(Number(chip.dataset.km))});
 document.getElementById('routeVicinityClose').addEventListener('click',clearRouteVicinityPreview);
 document.getElementById('routeVicinityCancel').addEventListener('click',clearRouteVicinityPreview);
 document.getElementById('routeVicinityCandidates').addEventListener('change',event=>{
@@ -6901,17 +7042,18 @@ function renderRoutePlanner(){
   const transferAssignee=routeAssigneeDraftValue()??CURRENT_USER_ID??'';
   const transferAssigneeName=document.getElementById('routeTransferAssigneeName');
   const transferHelp=document.getElementById('routeTransferHelp');
-  const transferEnabled=document.getElementById('routeTransferOwnership')?.checked===true;
   const selectedAssignee=assignees.find(item=>String(item.id)===String(transferAssignee));
   const hasRouteAssignee=transferAssignee!==''&&transferAssignee!==ROUTE_UNASSIGNED;
   const transferRecipientName=selectedAssignee?.name||(String(transferAssignee)===String(CURRENT_USER_ID)?CURRENT_USER_NAME:'Sin responsable');
   if(transferAssigneeName)transferAssigneeName.textContent=transferRecipientName;
   const transferCheckbox=document.getElementById('routeTransferOwnership');
   if(transferCheckbox){transferCheckbox.disabled=!hasRouteAssignee;if(!hasRouteAssignee)transferCheckbox.checked=false}
-  const pendingTransferCount=routeBusinesses.filter(b=>String(stateOf(b).assignedToId||'')!==String(transferAssignee)).length;
+  const pendingTransferCount=hasRouteAssignee?routeBusinesses.filter(b=>String(stateOf(b).assignedToId||'')!==String(transferAssignee)).length:0;
   if(transferCount)transferCount.textContent=String(pendingTransferCount);
   if(transferUnit)transferUnit.textContent=pendingTransferCount===1?'punto':'puntos';
-  if(transferHelp)transferHelp.textContent=transferEnabled?(pendingTransferCount?`Se transferirá el responsable de ${pendingTransferCount} ${pendingTransferCount===1?'punto':'puntos'} a ${transferRecipientName}.`:'No hay puntos con un responsable diferente para transferir.'):'Si no activas esta opción, cada punto conserva su responsable actual.';
+  if(transferCheckbox){transferCheckbox.disabled=!hasRouteAssignee||!pendingTransferCount;if(transferCheckbox.disabled)transferCheckbox.checked=false}
+  const transferEnabled=transferCheckbox?.checked===true;
+  if(transferHelp)transferHelp.textContent=transferEnabled?(pendingTransferCount?`Cambiará la asignación de ${pendingTransferCount} ${pendingTransferCount===1?'punto':'puntos'}.`:'Los puntos ya tienen ese responsable.'):!hasRouteAssignee?'Elige un responsable de ruta.':pendingTransferCount?'Los puntos conservan su responsable actual.':'Los puntos ya tienen ese responsable.';
   const offlineStatus=document.getElementById('routeOfflineStatus');
   if(offlineStatus)offlineStatus.hidden=navigator.onLine;
   const saveButton=document.getElementById('routeSave');
@@ -6955,14 +7097,16 @@ function toggleRouteVicinityCandidate(key,restoreFocus=false){
 function clearRouteVicinityPreview(){
   routeVicinityMarkers.forEach(marker=>setNovaMarkerMap(marker,null));routeVicinityMarkers=[];
   routeVicinityCircle?.setMap(null);routeVicinityCircle=null;routeVicinityPreview=null;
-  document.getElementById('routeVicinityTools').hidden=true;document.getElementById('routeVicinityCandidates').innerHTML='';document.getElementById('routeVicinityCandidates').hidden=true;document.getElementById('routeVicinityAdjustHint').hidden=true;
+  document.body.classList.remove('route-vicinity-selecting');document.getElementById('routeVicinityTools').hidden=true;document.getElementById('routeVicinityCandidates').innerHTML='';document.getElementById('routeVicinityCandidates').hidden=true;document.getElementById('routeVicinityAdjustHint').hidden=true;
 }
 function renderRouteVicinityPreview(){
   if(!routeVicinityPreview)return;
   routeVicinityMarkers.forEach(marker=>setNovaMarkerMap(marker,null));routeVicinityMarkers=[];
   routeVicinityCircle?.setMap(null);routeVicinityCircle=null;
   const center=routeVicinityPreview.center;
-  const mode=document.getElementById('routeVicinityMode').value,radiusInput=document.getElementById('routeVicinityRadius'),rawRadius=Number(radiusInput.value),radiusUnit=document.getElementById('routeVicinityRadiusUnit').value,radiusFactor=radiusUnit==='km'?1000:1,validRadius=Number.isFinite(rawRadius)&&rawRadius>0&&rawRadius*radiusFactor<=50000,radiusMeters=validRadius?rawRadius*radiusFactor:0,rawCount=Number(document.getElementById('routeVicinityCount').value),validCount=Number.isInteger(rawCount)&&rawCount>=1&&rawCount<=500,count=validCount?rawCount:0;
+  const mode=document.getElementById('routeVicinityMode').value,radiusInput=document.getElementById('routeVicinityRadius'),radiusSlider=document.getElementById('routeVicinityRadiusSlider'),radiusValue=document.getElementById('routeVicinityRadiusValue'),rawRadius=Number(radiusInput.value),radiusUnit=document.getElementById('routeVicinityRadiusUnit').value,radiusFactor=radiusUnit==='km'?1000:1,validRadius=Number.isFinite(rawRadius)&&rawRadius>0&&rawRadius*radiusFactor>=100&&rawRadius*radiusFactor<=50000,radiusMeters=validRadius?rawRadius*radiusFactor:0,rawCount=Number(document.getElementById('routeVicinityCount').value),validCount=Number.isInteger(rawCount)&&rawCount>=1&&rawCount<=500,count=validCount?rawCount:0;
+  if(validRadius){const radiusKm=Number((radiusMeters/1000).toFixed(1));if(radiusSlider)radiusSlider.value=String(radiusKm);if(radiusValue)radiusValue.textContent=radiusMeters<1000?`${radiusMeters} m`:`${Number((radiusMeters/1000).toFixed(1))} km`}
+  else if(radiusValue)radiusValue.textContent='—';
   const matches=mode==='count'&&!validCount?[]:selectRouteVicinityMatches(center,Array.isArray(filtered)?filtered:[],routeBusinesses.map(keyOf),mode,count,radiusMeters);
   const excludedKeys=routeVicinityPreview.excludedKeys||new Set(),includedMatches=routeVicinityIncludedMatches(matches,excludedKeys),includedKeys=new Set(includedMatches.map(item=>String(keyOf(item.business))));
   routeVicinityPreview.candidates=matches;routeVicinityPreview.items=includedMatches.map(item=>item.business);
@@ -6974,12 +7118,11 @@ function renderRouteVicinityPreview(){
     const checkAttributes=included?'checked':'',statusLabel=included?'Se agregará':'No se agregará';
     return '<label class="route-vicinity-candidate"><input type="checkbox" data-vicinity-key="'+esc(key)+'" aria-label="'+(included?'Quitar':'Incluir')+' '+esc(business.name||'punto')+' '+(included?'de':'en')+' la selección" '+checkAttributes+'><span class="route-vicinity-candidate-copy"><b>'+esc(business.name||'Punto sin nombre')+'</b><small>'+distanceLabel+' del centro · '+statusLabel+'</small></span></label>';
   }).join('');
-  const summary=document.getElementById('routeVicinitySummary'),addButton=document.getElementById('routeVicinityAdd'),radiusLabel=radiusMeters<1000?`${radiusMeters} m`:`${Number((radiusMeters/1000).toFixed(2))} km`;
-  summary.textContent=mode==='count'?(!validCount?'Ingresa una cantidad de 1 a 500 puntos.':!matches.length?'No hay más puntos disponibles con los filtros y capas actuales.':includedMatches.length?'Se agregarán '+includedMatches.length+' de '+matches.length+' puntos elegibles más cercanos a '+center.name+'.':'Hay '+matches.length+' candidatos, pero ninguno está marcado para agregar.'):!validRadius?'Ingresa un radio mayor que 0 y de hasta 50 km.':!matches.length?'No hay puntos elegibles dentro de '+radiusLabel+'. Prueba con un radio mayor.':includedMatches.length?'Se agregarán '+includedMatches.length+' de '+matches.length+' puntos dentro de '+radiusLabel+' de '+center.name+'.':'Hay '+matches.length+' candidatos dentro de '+radiusLabel+', pero ninguno está marcado para agregar.';
-  if(mode==='radius'&&validRadius&&window.google?.maps?.Circle&&googleMap)routeVicinityCircle=new google.maps.Circle({map:googleMap,center:{lat:Number(center.lat),lng:Number(center.lng)},radius:radiusMeters,fillColor:'#08785a',fillOpacity:.12,strokeColor:'#08785a',strokeOpacity:.95,strokeWeight:3,clickable:false,zIndex:1090});
+  const summary=document.getElementById('routeVicinitySummary'),addButton=document.getElementById('routeVicinityAdd'),radiusLabel=radiusMeters<1000?`${radiusMeters} m`:`${Number((radiusMeters/1000).toFixed(1))} km`;
+  summary.textContent=mode==='count'?(!validCount?'Indica de 1 a 500 puntos.':!matches.length?'No hay puntos disponibles con los filtros activos.':includedMatches.length?`${includedMatches.length} seleccionados de ${matches.length}.`:`${matches.length} encontrados; marca alguno para agregar.`):!validRadius?'Elige un radio entre 100 m y 50 km.':!matches.length?`0 puntos dentro de ${radiusLabel}. Amplía el radio o cambia filtros.`:includedMatches.length?`${includedMatches.length} seleccionados de ${matches.length} dentro de ${radiusLabel}.`:`${matches.length} encontrados dentro de ${radiusLabel}. Marca los que quieras agregar.`;
+  if(mode==='radius'&&validRadius&&window.google?.maps?.Circle&&googleMap)routeVicinityCircle=new google.maps.Circle({map:googleMap,center:{lat:Number(center.lat),lng:Number(center.lng)},radius:radiusMeters,fillColor:'#f59e0b',fillOpacity:.12,strokeColor:'#d97706',strokeOpacity:1,strokeWeight:4,clickable:false,zIndex:1180});
   if(mode==='radius'&&validRadius&&routeVicinityPreview.fittedRadius!==radiusMeters){routeVicinityPreview.fittedRadius=radiusMeters;fitMapToRadius(center,radiusMeters)}
-  document.querySelectorAll('#routeVicinityModeButtons [data-mode]').forEach(button=>button.classList.toggle('active',button.dataset.mode===mode));
-  const radiusChips=document.getElementById('routeRadiusChips');if(radiusChips){radiusChips.hidden=mode!=='radius';radiusChips.querySelectorAll('[data-km]').forEach(chip=>chip.classList.toggle('active',Math.abs(Number(chip.dataset.km)*1000-radiusMeters)<1))}
+  document.querySelectorAll('#routeVicinityModeButtons [data-mode]').forEach(button=>{const active=button.dataset.mode===mode;button.classList.toggle('active',active);button.setAttribute('aria-pressed',String(active))});
   addButton.disabled=!includedMatches.length;addButton.textContent=includedMatches.length?'Agregar '+includedMatches.length+' punto'+(includedMatches.length===1?'':'s'):'Selecciona puntos';
   matches.forEach(({business})=>{
     const key=String(keyOf(business)),included=includedKeys.has(key),el=document.createElement('div');el.className='nova-route-marker route-vicinity-marker'+(included?'':' route-vicinity-marker-excluded');el.textContent=included?'✓':'×';
@@ -6996,7 +7139,11 @@ function fitMapToRadius(center,radiusMeters){
   const dLat=radiusMeters/111320,dLng=radiusMeters/(111320*Math.max(.2,Math.cos(lat*Math.PI/180)));
   const bounds=new google.maps.LatLngBounds();
   bounds.extend({lat:lat-dLat,lng:lng-dLng});bounds.extend({lat:lat+dLat,lng:lng+dLng});
-  googleMap.fitBounds(bounds,48);
+  const mapRect=document.getElementById('map')?.getBoundingClientRect(),routeModal=document.getElementById('routeModal'),modalRect=routeModal?.getBoundingClientRect(),mobile=window.matchMedia?.('(max-width: 820px)').matches===true;
+  const coveredBottom=mobile&&routeModal&&!routeModal.hidden&&mapRect&&modalRect?Math.max(0,mapRect.bottom-Math.max(mapRect.top,modalRect.top)):0;
+  const coveredRight=!mobile&&routeModal&&!routeModal.hidden&&mapRect&&modalRect?Math.max(0,mapRect.right-Math.max(mapRect.left,modalRect.left)):0;
+  const bottom=Math.min(mapRect?.height?Math.round(mapRect.height*.72):48,Math.round(coveredBottom+24)),right=Math.min(mapRect?.width?Math.round(mapRect.width*.72):48,Math.round(coveredRight+24));
+  googleMap.fitBounds(bounds,{top:24,right,bottom,left:24});
 }
 function setRouteVicinityMode(mode){
   const select=document.getElementById('routeVicinityMode');if(!select)return;
@@ -7004,17 +7151,12 @@ function setRouteVicinityMode(mode){
   if(routeVicinityPreview)routeVicinityPreview.fittedRadius=null;
   renderRouteVicinityPreview();
 }
-function setRouteVicinityRadiusKm(km){
-  const input=document.getElementById('routeVicinityRadius'),unit=document.getElementById('routeVicinityRadiusUnit');if(!input||!unit)return;
-  unit.value='km';input.dataset.unit='km';input.max='50';input.step='0.1';input.value=String(km);
-  renderRouteVicinityPreview();
-}
 function beginRouteVicinity(index){
   if(!canEditRouteComposition())return;
   const center=routeBusinesses[index];if(!center||!routePointCoordinates(center))return;
-  routeVicinityPreview={center,items:[],fittedRadius:null};document.getElementById('routeVicinityTitle').textContent=`Seleccionar puntos cercanos a ${center.name||'esta parada'}`;const tools=document.getElementById('routeVicinityTools');tools.hidden=false;renderRouteVicinityPreview();
+  routeVicinityPreview={center,items:[],fittedRadius:null,excludedKeys:new Set()};document.getElementById('routeVicinityTitle').textContent=`Puntos cerca de ${center.name||'esta parada'}`;const tools=document.getElementById('routeVicinityTools');tools.hidden=false;document.body.classList.add('route-vicinity-selecting');
   if(googleMap){googleMap.panTo({lat:Number(center.lat),lng:Number(center.lng)});if((googleMap.getZoom()||0)<14)googleMap.setZoom(14)}
-  tools.scrollIntoView?.({behavior:'smooth',block:'nearest'});document.getElementById('routeVicinityMode').focus({preventScroll:true});
+  renderRouteVicinityPreview();tools.scrollIntoView?.({behavior:'smooth',block:'nearest'});document.querySelector('#routeVicinityModeButtons [data-mode]')?.focus({preventScroll:true});
 }
 function addRouteVicinityPoints(){
   if(!canEditRouteComposition()||!routeVicinityPreview||!routeVicinityPreview.items.length||!requireForceSales(routeManageAction()))return;
@@ -7324,6 +7466,7 @@ function removeRouteStop(index){
   toast('Parada retirada de la ruta');
 }
 function closeRoutePanel(){
+  clearRouteVicinityPreview();
   document.getElementById('routeModal').hidden=true;
   setRoutePlanningMode(false);
   renderRouteMarkers();

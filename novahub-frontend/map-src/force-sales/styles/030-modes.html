@@ -123,14 +123,17 @@ body.embedded-view #sheetHeader{padding-top:6px;padding-bottom:0}
 .route-mode-buttons{display:flex;gap:6px;margin:8px 0}
 .route-mode-buttons button{flex:1;min-height:38px;border:1px solid var(--nova-ui-border,#dce8e3);border-radius:10px;background:var(--nova-ui-card,#fff);font-weight:600;font-size:13px;cursor:pointer}
 .route-mode-buttons button.active{background:var(--nova-ui-primary,#08785a);border-color:transparent;color:#fff}
+.route-mode-buttons button:focus-visible{outline:3px solid #3287e8;outline-offset:2px}
 .route-vicinity-controls>label:first-child{display:none}
-.route-radius-chips{margin:0 0 8px}
-.route-radius-chips button{font-size:12px;min-height:34px}
-.route-radius-chips button.active{background:var(--nova-ui-primary,#08785a);border-color:transparent;color:#fff}
 .route-reassign{display:grid;gap:3px;margin:6px 0 0;font-size:12px;font-weight:600}
 .route-reassign select{min-height:36px;font-size:13px;font-weight:500}
 @media(max-width:820px){#routeModal{inset:auto 0 0 0!important;width:100%!important;height:auto!important;max-height:68dvh!important}#routeModal .route-planner-card{border-radius:16px 16px 0 0;height:auto;max-height:inherit}.route-row{grid-template-columns:1fr}}
+@media(max-width:820px){body.route-vicinity-selecting #routeModal{height:min(54dvh,440px)!important;max-height:min(54dvh,440px)!important}body.route-vicinity-selecting #routeModal .route-planner-card{height:100%;max-height:100%}body.route-vicinity-selecting .route-vicinity-candidates{max-height:min(12dvh,110px)}}
 .route-planner-body .route-transfer-option{display:flex;flex-direction:row;align-items:center;gap:10px;margin:12px 0 0;padding:10px 12px;border-radius:10px}
 .route-planner-body .route-transfer-help,.route-planner-body .route-transfer-copy small{display:none}
-.route-planner-body .route-transfer-title{font-size:13px;font-weight:600}
+.route-planner-body .route-transfer-option{gap:9px;margin-top:8px;padding:8px 10px}
+.route-planner-body .route-transfer-copy{gap:3px}
+.route-planner-body .route-transfer-title{font-size:12px;font-weight:700}
+.route-planner-body .route-transfer-count{padding:3px 6px}
+.route-planner-body .route-transfer-destination{font-size:9px}
 </style>

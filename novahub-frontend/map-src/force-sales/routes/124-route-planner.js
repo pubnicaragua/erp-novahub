@@ -202,17 +202,18 @@ function renderRoutePlanner(){
   const transferAssignee=routeAssigneeDraftValue()??CURRENT_USER_ID??'';
   const transferAssigneeName=document.getElementById('routeTransferAssigneeName');
   const transferHelp=document.getElementById('routeTransferHelp');
-  const transferEnabled=document.getElementById('routeTransferOwnership')?.checked===true;
   const selectedAssignee=assignees.find(item=>String(item.id)===String(transferAssignee));
   const hasRouteAssignee=transferAssignee!==''&&transferAssignee!==ROUTE_UNASSIGNED;
   const transferRecipientName=selectedAssignee?.name||(String(transferAssignee)===String(CURRENT_USER_ID)?CURRENT_USER_NAME:'Sin responsable');
   if(transferAssigneeName)transferAssigneeName.textContent=transferRecipientName;
   const transferCheckbox=document.getElementById('routeTransferOwnership');
   if(transferCheckbox){transferCheckbox.disabled=!hasRouteAssignee;if(!hasRouteAssignee)transferCheckbox.checked=false}
-  const pendingTransferCount=routeBusinesses.filter(b=>String(stateOf(b).assignedToId||'')!==String(transferAssignee)).length;
+  const pendingTransferCount=hasRouteAssignee?routeBusinesses.filter(b=>String(stateOf(b).assignedToId||'')!==String(transferAssignee)).length:0;
   if(transferCount)transferCount.textContent=String(pendingTransferCount);
   if(transferUnit)transferUnit.textContent=pendingTransferCount===1?'punto':'puntos';
-  if(transferHelp)transferHelp.textContent=transferEnabled?(pendingTransferCount?`Se transferirá el responsable de ${pendingTransferCount} ${pendingTransferCount===1?'punto':'puntos'} a ${transferRecipientName}.`:'No hay puntos con un responsable diferente para transferir.'):'Si no activas esta opción, cada punto conserva su responsable actual.';
+  if(transferCheckbox){transferCheckbox.disabled=!hasRouteAssignee||!pendingTransferCount;if(transferCheckbox.disabled)transferCheckbox.checked=false}
+  const transferEnabled=transferCheckbox?.checked===true;
+  if(transferHelp)transferHelp.textContent=transferEnabled?(pendingTransferCount?`Cambiará la asignación de ${pendingTransferCount} ${pendingTransferCount===1?'punto':'puntos'}.`:'Los puntos ya tienen ese responsable.'):!hasRouteAssignee?'Elige un responsable de ruta.':pendingTransferCount?'Los puntos conservan su responsable actual.':'Los puntos ya tienen ese responsable.';
   const offlineStatus=document.getElementById('routeOfflineStatus');
   if(offlineStatus)offlineStatus.hidden=navigator.onLine;
   const saveButton=document.getElementById('routeSave');
@@ -256,14 +257,16 @@ function toggleRouteVicinityCandidate(key,restoreFocus=false){
 function clearRouteVicinityPreview(){
   routeVicinityMarkers.forEach(marker=>setNovaMarkerMap(marker,null));routeVicinityMarkers=[];
   routeVicinityCircle?.setMap(null);routeVicinityCircle=null;routeVicinityPreview=null;
-  document.getElementById('routeVicinityTools').hidden=true;document.getElementById('routeVicinityCandidates').innerHTML='';document.getElementById('routeVicinityCandidates').hidden=true;document.getElementById('routeVicinityAdjustHint').hidden=true;
+  document.body.classList.remove('route-vicinity-selecting');document.getElementById('routeVicinityTools').hidden=true;document.getElementById('routeVicinityCandidates').innerHTML='';document.getElementById('routeVicinityCandidates').hidden=true;document.getElementById('routeVicinityAdjustHint').hidden=true;
 }
 function renderRouteVicinityPreview(){
   if(!routeVicinityPreview)return;
   routeVicinityMarkers.forEach(marker=>setNovaMarkerMap(marker,null));routeVicinityMarkers=[];
   routeVicinityCircle?.setMap(null);routeVicinityCircle=null;
   const center=routeVicinityPreview.center;
-  const mode=document.getElementById('routeVicinityMode').value,radiusInput=document.getElementById('routeVicinityRadius'),rawRadius=Number(radiusInput.value),radiusUnit=document.getElementById('routeVicinityRadiusUnit').value,radiusFactor=radiusUnit==='km'?1000:1,validRadius=Number.isFinite(rawRadius)&&rawRadius>0&&rawRadius*radiusFactor<=50000,radiusMeters=validRadius?rawRadius*radiusFactor:0,rawCount=Number(document.getElementById('routeVicinityCount').value),validCount=Number.isInteger(rawCount)&&rawCount>=1&&rawCount<=500,count=validCount?rawCount:0;
+  const mode=document.getElementById('routeVicinityMode').value,radiusInput=document.getElementById('routeVicinityRadius'),radiusSlider=document.getElementById('routeVicinityRadiusSlider'),radiusValue=document.getElementById('routeVicinityRadiusValue'),rawRadius=Number(radiusInput.value),radiusUnit=document.getElementById('routeVicinityRadiusUnit').value,radiusFactor=radiusUnit==='km'?1000:1,validRadius=Number.isFinite(rawRadius)&&rawRadius>0&&rawRadius*radiusFactor>=100&&rawRadius*radiusFactor<=50000,radiusMeters=validRadius?rawRadius*radiusFactor:0,rawCount=Number(document.getElementById('routeVicinityCount').value),validCount=Number.isInteger(rawCount)&&rawCount>=1&&rawCount<=500,count=validCount?rawCount:0;
+  if(validRadius){const radiusKm=Number((radiusMeters/1000).toFixed(1));if(radiusSlider)radiusSlider.value=String(radiusKm);if(radiusValue)radiusValue.textContent=radiusMeters<1000?`${radiusMeters} m`:`${Number((radiusMeters/1000).toFixed(1))} km`}
+  else if(radiusValue)radiusValue.textContent='—';
   const matches=mode==='count'&&!validCount?[]:selectRouteVicinityMatches(center,Array.isArray(filtered)?filtered:[],routeBusinesses.map(keyOf),mode,count,radiusMeters);
   const excludedKeys=routeVicinityPreview.excludedKeys||new Set(),includedMatches=routeVicinityIncludedMatches(matches,excludedKeys),includedKeys=new Set(includedMatches.map(item=>String(keyOf(item.business))));
   routeVicinityPreview.candidates=matches;routeVicinityPreview.items=includedMatches.map(item=>item.business);
@@ -275,12 +278,11 @@ function renderRouteVicinityPreview(){
     const checkAttributes=included?'checked':'',statusLabel=included?'Se agregará':'No se agregará';
     return '<label class="route-vicinity-candidate"><input type="checkbox" data-vicinity-key="'+esc(key)+'" aria-label="'+(included?'Quitar':'Incluir')+' '+esc(business.name||'punto')+' '+(included?'de':'en')+' la selección" '+checkAttributes+'><span class="route-vicinity-candidate-copy"><b>'+esc(business.name||'Punto sin nombre')+'</b><small>'+distanceLabel+' del centro · '+statusLabel+'</small></span></label>';
   }).join('');
-  const summary=document.getElementById('routeVicinitySummary'),addButton=document.getElementById('routeVicinityAdd'),radiusLabel=radiusMeters<1000?`${radiusMeters} m`:`${Number((radiusMeters/1000).toFixed(2))} km`;
-  summary.textContent=mode==='count'?(!validCount?'Ingresa una cantidad de 1 a 500 puntos.':!matches.length?'No hay más puntos disponibles con los filtros y capas actuales.':includedMatches.length?'Se agregarán '+includedMatches.length+' de '+matches.length+' puntos elegibles más cercanos a '+center.name+'.':'Hay '+matches.length+' candidatos, pero ninguno está marcado para agregar.'):!validRadius?'Ingresa un radio mayor que 0 y de hasta 50 km.':!matches.length?'No hay puntos elegibles dentro de '+radiusLabel+'. Prueba con un radio mayor.':includedMatches.length?'Se agregarán '+includedMatches.length+' de '+matches.length+' puntos dentro de '+radiusLabel+' de '+center.name+'.':'Hay '+matches.length+' candidatos dentro de '+radiusLabel+', pero ninguno está marcado para agregar.';
-  if(mode==='radius'&&validRadius&&window.google?.maps?.Circle&&googleMap)routeVicinityCircle=new google.maps.Circle({map:googleMap,center:{lat:Number(center.lat),lng:Number(center.lng)},radius:radiusMeters,fillColor:'#08785a',fillOpacity:.12,strokeColor:'#08785a',strokeOpacity:.95,strokeWeight:3,clickable:false,zIndex:1090});
+  const summary=document.getElementById('routeVicinitySummary'),addButton=document.getElementById('routeVicinityAdd'),radiusLabel=radiusMeters<1000?`${radiusMeters} m`:`${Number((radiusMeters/1000).toFixed(1))} km`;
+  summary.textContent=mode==='count'?(!validCount?'Indica de 1 a 500 puntos.':!matches.length?'No hay puntos disponibles con los filtros activos.':includedMatches.length?`${includedMatches.length} seleccionados de ${matches.length}.`:`${matches.length} encontrados; marca alguno para agregar.`):!validRadius?'Elige un radio entre 100 m y 50 km.':!matches.length?`0 puntos dentro de ${radiusLabel}. Amplía el radio o cambia filtros.`:includedMatches.length?`${includedMatches.length} seleccionados de ${matches.length} dentro de ${radiusLabel}.`:`${matches.length} encontrados dentro de ${radiusLabel}. Marca los que quieras agregar.`;
+  if(mode==='radius'&&validRadius&&window.google?.maps?.Circle&&googleMap)routeVicinityCircle=new google.maps.Circle({map:googleMap,center:{lat:Number(center.lat),lng:Number(center.lng)},radius:radiusMeters,fillColor:'#f59e0b',fillOpacity:.12,strokeColor:'#d97706',strokeOpacity:1,strokeWeight:4,clickable:false,zIndex:1180});
   if(mode==='radius'&&validRadius&&routeVicinityPreview.fittedRadius!==radiusMeters){routeVicinityPreview.fittedRadius=radiusMeters;fitMapToRadius(center,radiusMeters)}
-  document.querySelectorAll('#routeVicinityModeButtons [data-mode]').forEach(button=>button.classList.toggle('active',button.dataset.mode===mode));
-  const radiusChips=document.getElementById('routeRadiusChips');if(radiusChips){radiusChips.hidden=mode!=='radius';radiusChips.querySelectorAll('[data-km]').forEach(chip=>chip.classList.toggle('active',Math.abs(Number(chip.dataset.km)*1000-radiusMeters)<1))}
+  document.querySelectorAll('#routeVicinityModeButtons [data-mode]').forEach(button=>{const active=button.dataset.mode===mode;button.classList.toggle('active',active);button.setAttribute('aria-pressed',String(active))});
   addButton.disabled=!includedMatches.length;addButton.textContent=includedMatches.length?'Agregar '+includedMatches.length+' punto'+(includedMatches.length===1?'':'s'):'Selecciona puntos';
   matches.forEach(({business})=>{
     const key=String(keyOf(business)),included=includedKeys.has(key),el=document.createElement('div');el.className='nova-route-marker route-vicinity-marker'+(included?'':' route-vicinity-marker-excluded');el.textContent=included?'✓':'×';
@@ -297,7 +299,11 @@ function fitMapToRadius(center,radiusMeters){
   const dLat=radiusMeters/111320,dLng=radiusMeters/(111320*Math.max(.2,Math.cos(lat*Math.PI/180)));
   const bounds=new google.maps.LatLngBounds();
   bounds.extend({lat:lat-dLat,lng:lng-dLng});bounds.extend({lat:lat+dLat,lng:lng+dLng});
-  googleMap.fitBounds(bounds,48);
+  const mapRect=document.getElementById('map')?.getBoundingClientRect(),routeModal=document.getElementById('routeModal'),modalRect=routeModal?.getBoundingClientRect(),mobile=window.matchMedia?.('(max-width: 820px)').matches===true;
+  const coveredBottom=mobile&&routeModal&&!routeModal.hidden&&mapRect&&modalRect?Math.max(0,mapRect.bottom-Math.max(mapRect.top,modalRect.top)):0;
+  const coveredRight=!mobile&&routeModal&&!routeModal.hidden&&mapRect&&modalRect?Math.max(0,mapRect.right-Math.max(mapRect.left,modalRect.left)):0;
+  const bottom=Math.min(mapRect?.height?Math.round(mapRect.height*.72):48,Math.round(coveredBottom+24)),right=Math.min(mapRect?.width?Math.round(mapRect.width*.72):48,Math.round(coveredRight+24));
+  googleMap.fitBounds(bounds,{top:24,right,bottom,left:24});
 }
 function setRouteVicinityMode(mode){
   const select=document.getElementById('routeVicinityMode');if(!select)return;
@@ -305,17 +311,12 @@ function setRouteVicinityMode(mode){
   if(routeVicinityPreview)routeVicinityPreview.fittedRadius=null;
   renderRouteVicinityPreview();
 }
-function setRouteVicinityRadiusKm(km){
-  const input=document.getElementById('routeVicinityRadius'),unit=document.getElementById('routeVicinityRadiusUnit');if(!input||!unit)return;
-  unit.value='km';input.dataset.unit='km';input.max='50';input.step='0.1';input.value=String(km);
-  renderRouteVicinityPreview();
-}
 function beginRouteVicinity(index){
   if(!canEditRouteComposition())return;
   const center=routeBusinesses[index];if(!center||!routePointCoordinates(center))return;
-  routeVicinityPreview={center,items:[],fittedRadius:null};document.getElementById('routeVicinityTitle').textContent=`Seleccionar puntos cercanos a ${center.name||'esta parada'}`;const tools=document.getElementById('routeVicinityTools');tools.hidden=false;renderRouteVicinityPreview();
+  routeVicinityPreview={center,items:[],fittedRadius:null,excludedKeys:new Set()};document.getElementById('routeVicinityTitle').textContent=`Puntos cerca de ${center.name||'esta parada'}`;const tools=document.getElementById('routeVicinityTools');tools.hidden=false;document.body.classList.add('route-vicinity-selecting');
   if(googleMap){googleMap.panTo({lat:Number(center.lat),lng:Number(center.lng)});if((googleMap.getZoom()||0)<14)googleMap.setZoom(14)}
-  tools.scrollIntoView?.({behavior:'smooth',block:'nearest'});document.getElementById('routeVicinityMode').focus({preventScroll:true});
+  renderRouteVicinityPreview();tools.scrollIntoView?.({behavior:'smooth',block:'nearest'});document.querySelector('#routeVicinityModeButtons [data-mode]')?.focus({preventScroll:true});
 }
 function addRouteVicinityPoints(){
   if(!canEditRouteComposition()||!routeVicinityPreview||!routeVicinityPreview.items.length||!requireForceSales(routeManageAction()))return;

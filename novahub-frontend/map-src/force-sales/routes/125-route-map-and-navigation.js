@@ -291,6 +291,7 @@ function removeRouteStop(index){
   toast('Parada retirada de la ruta');
 }
 function closeRoutePanel(){
+  clearRouteVicinityPreview();
   document.getElementById('routeModal').hidden=true;
   setRoutePlanningMode(false);
   renderRouteMarkers();

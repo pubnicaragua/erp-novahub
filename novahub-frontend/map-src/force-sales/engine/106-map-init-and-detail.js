@@ -123,16 +123,31 @@ function refreshBusinessDetailOverlay(){
   const business=activeBusinessDetail();
   const overlay=document.getElementById('businessDetailOverlay');
   const content=document.getElementById('businessDetailContent');
+  const footer=document.getElementById('businessDetailFooter');
   if(!business||!overlay||!content){closeBusinessDetailPopup();return}
   overlay.hidden=false;
   ensurePointExtras(business);
-  const html=popupHtml(business);
+  const html=popupHtml(business,{includeAssignmentAction:false});
   const active=document.activeElement;
   const editing=content.contains(active)&&/^(INPUT|SELECT|TEXTAREA)$/.test(active?.tagName||'');
   if(!editing&&content.innerHTML!==html){
     const scrollTop=content.scrollTop;
     content.innerHTML=html;
     content.scrollTop=scrollTop;
+  }
+  if(footer){
+    if(!CAN_ASSIGN_PROSPECT_OWNER||!canForceSales('assignProspect')){
+      footer.hidden=true;
+      footer.replaceChildren();
+    }else{
+      footer.hidden=false;
+      let saveButton=footer.querySelector('button');
+      if(!saveButton){saveButton=document.createElement('button');saveButton.type='button';footer.appendChild(saveButton)}
+      saveButton.textContent='Guardar responsable';
+      saveButton.setAttribute('aria-label','Guardar responsable del punto');
+      saveButton.disabled=assigneesLoadState==='loading'&&!assignees.length;
+      saveButton.onclick=()=>{void window.saveProspectAssignee?.(business.id)};
+    }
   }
   scheduleBusinessDetailPosition();
 }

@@ -4,6 +4,7 @@
     "shell/000-document-head.html",
     "styles/010-base.html",
     "styles/020-panel-and-controls.html",
+    "styles/025-business-detail.html",
     "styles/030-modes.html",
     "shell/030-body-open.html",
     "panel/040-sidebar.html",

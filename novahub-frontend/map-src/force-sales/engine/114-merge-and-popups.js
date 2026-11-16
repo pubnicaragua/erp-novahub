@@ -85,11 +85,13 @@ function formatCustomerLinkedAt(value){
   try{return new Intl.DateTimeFormat('es-NI',{dateStyle:'medium',timeStyle:'short',timeZone:'America/Managua'}).format(date)}
   catch{return date.toLocaleString('es-NI')}
 }
-function popupHtml(b){
+function popupHtml(b,{includeAssignmentAction=true}={}){
   const f = followups[b.id] || {};
   const c = stateOf(b);
   const sid = safeId(b.id);
   const assignedUser=assignees.find(item=>String(item.id)===String(c.assignedToId||''));
+  const pointOwner=assignedUser?.name || c.assignedToName || (c.assignedToId?'Responsable asignado':'Sin asignar');
+  const pointOwnerAssigned=Boolean(assignedUser || c.assignedToId || c.assignedToName);
   const isCurrentRouteStop=routeBusinesses.some(item=>keyOf(item)===keyOf(b));
   const routeAssigneeId=routeAssigneeDraftValue()||'';
   const routeAssignee=assignees.find(item=>String(item.id)===String(routeAssigneeId));
@@ -121,21 +123,25 @@ function popupHtml(b){
   const evidenceReadout=c.evidencePreviewUrl
     ? `<div class="evidence-preview"><img src="${esc(c.evidencePreviewUrl)}" alt="Vista previa de evidencia"><span>${esc(c.evidenceName || 'Foto lista para guardar')}${c.evidencePending ? ' · pendiente de sincronizar' : ''}</span></div>`
     : c.evidenceName ? `<div class="meta">Evidencia: ${esc(c.evidenceName)}${c.evidencePending ? ' · pendiente de sincronizar' : ''}</div>` : '';
-  return `<div class="popup">
-    <h3>${esc(b.name)}</h3>
-    <div class="sub">${esc(b.category)} · ${esc(b.zone)}</div>
-    <div class="grid">
-      <b>Dirección</b><span>${esc(b.address)}</span>
-      <b>Fuente</b><span>${esc(b.source)}</span>
-      <b>Responsable del punto</b><span>${esc(assignedUser?.name || c.assignedToName || 'Sin asignar')}</span>
-      <b>Responsable de la ruta actual</b><span>${isCurrentRouteStop?esc(routeAssigneeDisplay):'No forma parte de la ruta actual'}</span>
+  return `<div class="popup business-detail-popup">
+    <header class="business-detail-summary">
+      <div class="business-detail-title-row">
+        <span class="business-detail-icon" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none"><path d="M12 21s7-6.1 7-12a7 7 0 1 0-14 0c0 5.9 7 12 7 12Z" stroke="currentColor" stroke-width="1.8"/><circle cx="12" cy="9" r="2.4" stroke="currentColor" stroke-width="1.8"/></svg></span>
+        <div class="business-detail-title-copy"><h3>${esc(b.name)}</h3><div class="sub">${esc(b.category)} · ${esc(b.zone)}</div></div>
+      </div>
+      <div class="business-detail-owner ${pointOwnerAssigned?'is-assigned':'is-unassigned'}"><span class="business-detail-owner-dot" aria-hidden="true"></span><span class="business-detail-owner-label">Responsable</span><b>${esc(pointOwner)}</b></div>
+    </header>
+    <div class="business-detail-facts" aria-label="Información principal del punto">
+      <div class="business-detail-fact is-address"><span>Dirección</span><b>${esc(b.address)}</b></div>
+      <div class="business-detail-fact"><span>Fuente</span><b>${esc(b.source)}</b></div>
+      <div class="business-detail-fact is-route"><span>Responsable de la ruta actual</span><b>${isCurrentRouteStop?esc(routeAssigneeDisplay):'No forma parte de la ruta actual'}</b></div>
     </div>
-    <div class="route-point-memberships"><b>Rutas que incluyen este punto</b>${prospectRoutes.length?prospectRoutes.map(route=>`<div class="route-point-membership-row"><span>${esc(route.name||'Ruta sin nombre')} · ${esc(routeDateLabel(routeDateValue(route)))} · ${esc(route.assignedTo?.name||'Sin asignar')} · ${esc(({PLANNED:'Planificada',IN_PROGRESS:'En curso',COMPLETED:'Completada',CANCELLED:'Cancelada'})[String(route.status||'').toUpperCase()]||'Sin estado')}</span><button class="route-point-open" type="button" data-open-business-route="${esc(route.id)}">${String(route.status||'').toUpperCase()==='PLANNED'&&canForceSales('editRoute')?'Editar ruta':'Abrir ruta'}</button></div>`).join(''):'<span>No aparece en rutas guardadas de tu alcance.</span>'}${forceSalesSyncErrors.has('rutas')?'<span role="status">No se pudieron comprobar todas las rutas.</span>':''}</div>
+    <section class="route-point-memberships business-detail-section" aria-label="Rutas que incluyen este punto"><div class="business-detail-section-title">Rutas que incluyen este punto</div>${prospectRoutes.length?prospectRoutes.map(route=>`<div class="route-point-membership-row"><span>${esc(route.name||'Ruta sin nombre')} · ${esc(routeDateLabel(routeDateValue(route)))} · ${esc(route.assignedTo?.name||'Sin asignar')} · ${esc(({PLANNED:'Planificada',IN_PROGRESS:'En curso',COMPLETED:'Completada',CANCELLED:'Cancelada'})[String(route.status||'').toUpperCase()]||'Sin estado')}</span><button class="route-point-open" type="button" data-open-business-route="${esc(route.id)}">${String(route.status||'').toUpperCase()==='PLANNED'&&canForceSales('editRoute')?'Editar ruta':'Abrir ruta'}</button></div>`).join(''):'<span>No aparece en rutas guardadas de tu alcance.</span>'}${forceSalesSyncErrors.has('rutas')?'<span role="status">No se pudieron comprobar todas las rutas.</span>':''}</section>
     ${customerLinkPanel}
     ${customerDebtHtml(b)}
     ${visitHistoryHtml(b)}
     ${routePlanningMode&&isCurrentRouteStop?`<div class="meta">Parada de la ruta: ${esc(selectedRouteName)}</div>`:''}
-    ${CAN_ASSIGN_PROSPECT_OWNER&&canForceSales('assignProspect') ? `<div class="crm"><div class="quick-heading">Asignación comercial</div><label for="point-assignee-${sid}">Responsable del punto</label><select id="point-assignee-${sid}" ${assigneeLoading?'disabled':''}><option value="">Sin asignar</option>${assignees.map(item=>`<option value="${esc(item.id)}" ${String(item.id)===String(c.assignedToId||'')?'selected':''}>${esc(item.name||'Usuario')}</option>`).join('')}</select>${assigneeNotice?`<div class="meta" role="status" aria-live="polite">${esc(assigneeNotice)}</div>`:''}${assigneesLoadState==='error'?'<button class="assignee-retry" type="button">Reintentar carga de usuarios</button>':''}<button type="button" onclick="saveProspectAssignee('${b.id}')" ${assigneeLoading?'disabled':''}>Guardar responsable</button></div>` : ''}
+    ${CAN_ASSIGN_PROSPECT_OWNER&&canForceSales('assignProspect') ? `<section class="crm business-detail-assignment" aria-label="Asignación comercial"><div class="quick-heading">Asignación comercial</div><label for="point-assignee-${sid}">Responsable del punto</label><select id="point-assignee-${sid}" ${assigneeLoading?'disabled':''}><option value="">Sin asignar</option>${assignees.map(item=>`<option value="${esc(item.id)}" ${String(item.id)===String(c.assignedToId||'')?'selected':''}>${esc(item.name||'Usuario')}</option>`).join('')}</select>${assigneeNotice?`<div class="meta" role="status" aria-live="polite">${esc(assigneeNotice)}</div>`:''}${assigneesLoadState==='error'?'<button class="assignee-retry" type="button">Reintentar carga de usuarios</button>':''}${includeAssignmentAction?`<button type="button" onclick="saveProspectAssignee('${b.id}')" ${assigneeLoading?'disabled':''}>Guardar responsable</button>`:''}</section>` : ''}
     <div class="warn">${esc(b.precision)}. Validar actividad, ubicación y persona de contacto antes de la visita.</div>
     ${syncReadout}
     ${evidenceReadout}

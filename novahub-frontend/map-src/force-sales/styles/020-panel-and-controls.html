@@ -73,6 +73,18 @@ body.theme-dark .route-transfer-option:has(.route-transfer-checkbox:checked){bac
 .route-vicinity-candidate-copy small{color:var(--nova-ui-muted-foreground,#6c7c77);font-size:9px}
 .route-vicinity-marker{cursor:pointer}
 .route-vicinity-marker-excluded{border-color:var(--nova-ui-border,#dce8e3)!important;background:var(--nova-ui-muted,#edf5f1)!important;color:var(--nova-ui-muted-foreground,#6c7c77)!important;box-shadow:0 0 0 4px color-mix(in srgb,var(--nova-ui-muted-foreground,#6c7c77) 18%,transparent),0 5px 14px rgba(36,55,47,.2)!important;opacity:.76}
+.route-vicinity-controls{grid-template-columns:minmax(0,1fr)}
+.route-vicinity-radius{display:grid;gap:6px;min-width:0}
+.route-vicinity-radius[hidden]{display:none}
+.route-vicinity-radius-heading{display:flex!important;align-items:center;justify-content:space-between;gap:8px;font-size:10px!important}
+.route-vicinity-radius-heading output{color:var(--nova-ui-primary,#08785a);font-size:12px;font-weight:900}
+.route-vicinity-radius input[type="range"]{min-height:24px;padding:0;border:0;background:transparent;accent-color:var(--nova-ui-primary,#08785a);cursor:pointer}
+.route-vicinity-radius input[type="range"]:focus-visible{outline:3px solid #3287e8;outline-offset:3px}
+.route-vicinity-map-hint{color:var(--nova-ui-muted-foreground,#6c7c77);font-size:8px;line-height:1.35}
+.route-vicinity-exact{font-size:9px}
+.route-vicinity-exact summary{width:max-content;max-width:100%;color:var(--nova-ui-primary,#08785a);cursor:pointer;font-weight:700}
+.route-vicinity-exact summary:focus-visible{outline:3px solid #3287e8;outline-offset:2px}
+.route-vicinity-exact>label{margin:6px 0 4px!important;font-size:8px}
 </style>
 <style>
 .route-assignee-actions{display:flex;align-items:center;justify-content:flex-end;gap:5px;flex:none;flex-wrap:wrap}
