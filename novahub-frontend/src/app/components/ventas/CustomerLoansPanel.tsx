@@ -486,8 +486,8 @@ export function CustomerLoansPanel({ customerId, customerName, customerOptions =
         <Card className="h-fit min-w-0 rounded-2xl border-border/50" data-tour="sales-form-data">
           <section className="border-b border-border/50 p-4 sm:p-5">
             <p className="text-xs font-black uppercase tracking-widest text-muted-foreground">Cliente y condiciones</p>
-            <div className="mt-4 grid min-w-0 gap-3 sm:grid-cols-2">
-              <div className="min-w-0 space-y-1.5 sm:col-span-2 sm:max-w-xl">
+            <div className="mt-4 grid min-w-0 gap-3 sm:grid-cols-[minmax(0,1.6fr)_minmax(180px,0.75fr)]">
+              <div className="min-w-0 space-y-1.5">
                 <Label htmlFor="loan-customer-selector" className="text-xs">Cliente *</Label>
                 <Combobox
                   id="loan-customer-selector"
@@ -505,30 +505,30 @@ export function CustomerLoansPanel({ customerId, customerName, customerOptions =
                 {customerSearchEmpty && <p className="text-[10px] text-muted-foreground">No hay clientes activos que coincidan con la búsqueda.</p>}
               </div>
               <div className="min-w-0 space-y-1.5">
+                <Label htmlFor="loan-currency-page" className="text-xs">Moneda *</Label>
+                <Select value={form.currency} onValueChange={(value) => setForm({ ...form, currency: value as LoanCurrency, bankAccountId: '' })}>
+                  <SelectTrigger id="loan-currency-page" className="h-8 w-full text-xs"><SelectValue /></SelectTrigger>
+                  <SelectContent><SelectItem value="NIO">Córdoba (NIO)</SelectItem><SelectItem value="USD">Dólar (USD)</SelectItem></SelectContent>
+                </Select>
+              </div>
+              <div className="min-w-0 space-y-1.5">
                 <Label htmlFor="loan-principal-page" className="text-xs">Monto a prestar *</Label>
-                <Input id="loan-principal-page" type="number" min="0.01" step="0.01" required value={form.principal} onChange={(event) => setForm({ ...form, principal: event.target.value })} className="h-8 max-w-72 text-xs" currencyPrecision />
+                <Input id="loan-principal-page" type="number" min="0.01" step="0.01" required value={form.principal} onChange={(event) => setForm({ ...form, principal: event.target.value })} className="h-8 w-full text-xs" currencyPrecision />
               </div>
               <div className="min-w-0 space-y-1.5">
                 <Label htmlFor="loan-interest-mode-page" className="text-xs">Interés *</Label>
                 <Select value={form.interestMode} onValueChange={(value) => setForm({ ...form, interestMode: value as typeof form.interestMode, interest: value === 'NONE' ? '' : form.interest })}>
-                  <SelectTrigger id="loan-interest-mode-page" className="h-8 max-w-72 text-xs"><SelectValue /></SelectTrigger>
+                  <SelectTrigger id="loan-interest-mode-page" className="h-8 w-full text-xs"><SelectValue /></SelectTrigger>
                   <SelectContent><SelectItem value="NONE">Sin interés</SelectItem><SelectItem value="FIXED_AMOUNT">Monto fijo</SelectItem><SelectItem value="PERCENTAGE">Porcentaje único</SelectItem></SelectContent>
                 </Select>
               </div>
+              <div className={`min-w-0 space-y-1.5 ${form.interestMode === 'NONE' ? 'sm:col-span-2' : ''}`}>
+                <Label htmlFor="loan-notes-page" className="text-xs">Notas (opcional)</Label>
+                <Input id="loan-notes-page" maxLength={500} value={form.notes} onChange={(event) => setForm({ ...form, notes: event.target.value })} placeholder="Referencia o acuerdo de pago" className="h-8 text-xs" />
+              </div>
               {form.interestMode !== 'NONE' && <div className="min-w-0 space-y-1.5">
                 <Label htmlFor="loan-interest-page" className="text-xs">{form.interestMode === 'PERCENTAGE' ? 'Porcentaje (%)' : 'Monto de interés'}</Label>
-                <Input id="loan-interest-page" type="number" min="0" max={form.interestMode === 'PERCENTAGE' ? 100 : undefined} step="0.01" required value={form.interest} onChange={(event) => setForm({ ...form, interest: event.target.value })} className="h-8 max-w-56 text-xs" currencyPrecision />
-              </div>}
-              <div className="min-w-0 space-y-1.5">
-                <Label htmlFor="loan-currency-page" className="text-xs">Moneda *</Label>
-                <Select value={form.currency} onValueChange={(value) => setForm({ ...form, currency: value as LoanCurrency, bankAccountId: '' })}>
-                  <SelectTrigger id="loan-currency-page" className="h-8 max-w-48 text-xs"><SelectValue /></SelectTrigger>
-                  <SelectContent><SelectItem value="NIO">Córdoba (NIO)</SelectItem><SelectItem value="USD">Dólar (USD)</SelectItem></SelectContent>
-                </Select>
-              </div>
-              {!form.planEnabled && <div className="min-w-0 space-y-1.5">
-                <Label htmlFor="loan-due-date-page" className="text-xs">Fecha de vencimiento *</Label>
-                <Input id="loan-due-date-page" type="date" required value={form.dueDate} onChange={(event) => setForm({ ...form, dueDate: event.target.value })} className="h-8 max-w-56 text-xs" />
+                <Input id="loan-interest-page" type="number" min="0" max={form.interestMode === 'PERCENTAGE' ? 100 : undefined} step="0.01" required value={form.interest} onChange={(event) => setForm({ ...form, interest: event.target.value })} className="h-8 w-full text-xs" currencyPrecision />
               </div>}
             </div>
           </section>
@@ -555,14 +555,14 @@ export function CustomerLoansPanel({ customerId, customerName, customerOptions =
           </section>
 
           <section className="space-y-4 p-4 sm:p-5">
-            <div className="min-w-0 space-y-1.5">
-              <Label htmlFor="loan-notes-page" className="text-xs">Notas (opcional)</Label>
-              <Input id="loan-notes-page" maxLength={500} value={form.notes} onChange={(event) => setForm({ ...form, notes: event.target.value })} placeholder="Referencia o acuerdo de pago" className="h-8 text-xs" />
-            </div>
             <label htmlFor="loan-plan-enabled-page" className="flex min-w-0 cursor-pointer items-start gap-2 rounded-xl border border-border/50 bg-muted/10 p-3">
               <input id="loan-plan-enabled-page" type="checkbox" className="mt-0.5 size-4 shrink-0 accent-primary" checked={form.planEnabled} onChange={(event) => setForm({ ...form, planEnabled: event.target.checked })} />
               <span className="min-w-0"><span className="block text-xs font-semibold text-foreground">Definir un plan de abonos</span><span className="mt-1 block text-[10px] leading-relaxed text-muted-foreground">{form.planEnabled ? 'El plan aparecerá en una sección de ancho completo debajo.' : 'Opcional. Puedes configurar cuotas automáticas o definirlas manualmente.'}</span></span>
             </label>
+            {!form.planEnabled && <div className="min-w-0 space-y-1.5">
+              <Label htmlFor="loan-due-date-page" className="text-xs">Fecha de vencimiento *</Label>
+              <Input id="loan-due-date-page" type="date" required value={form.dueDate} onChange={(event) => setForm({ ...form, dueDate: event.target.value })} className="h-8 max-w-56 text-xs" />
+            </div>}
             <p className="text-[11px] leading-relaxed text-muted-foreground">El principal más el interés debe caber en el límite de crédito disponible. La clasificación de mora se administra manualmente en la ficha del cliente.</p>
           </section>
         </Card>
