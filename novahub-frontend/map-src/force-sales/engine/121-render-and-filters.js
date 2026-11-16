@@ -106,7 +106,8 @@ function render(){
   const sourceFilter=document.getElementById('source');
   const stateFilter=document.getElementById('state');
   const searchFilter=document.getElementById('search');
-  const hasActiveFilters=selectedZone!=='Todos'||categoryFilter.value!=='all'||sourceFilter.value!=='all'||stateFilter.value!=='all'||visitFilter!=='all'||Boolean(searchFilter.value.trim())||pipelineFilter!=='all'||Boolean(activeNearbyCenter&&activeNearbyRadius);
+  const markedByFilter=document.getElementById('markedBy');
+  const hasActiveFilters=selectedZone!=='Todos'||categoryFilter.value!=='all'||sourceFilter.value!=='all'||stateFilter.value!=='all'||markedByFilter?.value!=='all'||visitFilter!=='all'||Boolean(searchFilter.value.trim())||pipelineFilter!=='all'||Boolean(activeNearbyCenter&&activeNearbyRadius);
   showAllBusinesses.hidden=!hasActiveFilters;
   const selectedCount=selectedBusinesses().length;
   const routeTop=document.getElementById('routeTop');
@@ -174,12 +175,25 @@ function populateFilters(){
   const cur = sel.value;
   sel.innerHTML = '<option value="all">Todos los rubros</option>' + cats.map(c => `<option>${esc(c)}</option>`).join('');
   if(cats.includes(cur)) sel.value = cur;
+  const markedBy=document.getElementById('markedBy');
+  if(markedBy){
+    const selectedCreator=markedBy.value||'all';
+    const creators=new Map();let hasUnattributed=false;
+    businesses.forEach(business=>{
+      const id=creatorIdOf(business);
+      if(!id){hasUnattributed=true;return}
+      const name=String(business?.createdBy?.name||stateOf(business).createdByName||'Usuario no disponible').trim();
+      if(!creators.has(id)||creators.get(id)==='Usuario no disponible')creators.set(id,name||'Usuario no disponible');
+    });
+    markedBy.innerHTML='<option value="all">Todos los usuarios</option>'+[...creators.entries()].sort((a,b)=>a[1].localeCompare(b[1],'es-NI')).map(([id,name])=>`<option value="${esc(id)}">${esc(name)}</option>`).join('')+(hasUnattributed?'<option value="__without_creator__">Sin atribución</option>':'');
+    markedBy.value=[...creators.keys()].includes(selectedCreator)||selectedCreator==='__without_creator__'&&hasUnattributed?selectedCreator:'all';
+  }
   syncFilterSummary();
 }
 function syncFilterSummary(){
   const summary=document.getElementById('filterSummaryText');
   if(!summary)return;
-  const values=['category','source','state'].map(id=>{
+  const values=['category','source','state','markedBy'].map(id=>{
     const control=document.getElementById(id);
     return control?.selectedOptions?.[0]?.textContent?.trim()||'';
   }).filter(Boolean);

@@ -141,6 +141,14 @@ function openBusinessDetailPopup(marker){
   const id=String(markerBusiness?.id??'');
   const business=findBusiness(id)||businesses.find(item=>String(item.id)===id)||markerBusiness;
   if(!id||!business)return;
+  if(!routePlanningMode){
+    const route=preferredSavedRouteForBusiness(business);
+    if(route&&openSavedRoute(route.id)){
+      setRoutePlannerTab('plan');
+      toast(`Este punto pertenece a la ruta «${route.name||'Ruta comercial'}»`);
+      return;
+    }
+  }
   const overlay=document.getElementById('businessDetailOverlay');
   const wasAlreadyOpen=!overlay?.hidden&&String(currentPopupBusinessId||'')===id;
   if(nativeInfoWindowOpen){

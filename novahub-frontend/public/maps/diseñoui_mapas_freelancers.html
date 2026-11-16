@@ -299,6 +299,7 @@ button:focus-visible,input:focus-visible,select:focus-visible,textarea:focus-vis
 .route-plan-pane>.confirm-modal-actions:last-child{position:sticky;bottom:-16px;z-index:8;margin:10px -17px -16px;padding:10px 17px max(10px,env(safe-area-inset-bottom));border-top:1px solid var(--nova-ui-border,#dce8e3);background:var(--nova-ui-card,#fbfdfc);box-shadow:0 -8px 18px rgba(18,53,43,.1)}
 .route-planner-tabs,.route-catalog-filters{display:flex;gap:6px;margin:8px 0;padding:4px;border:1px solid var(--nova-ui-border,#dce8e3);border-radius:12px;background:var(--nova-ui-muted,#edf5f1)}.route-planner-tabs button,.route-catalog-filters button{flex:1;min-height:36px;border:0;border-radius:9px;background:transparent;color:var(--nova-ui-muted-foreground,#6c7c77);font:700 10px Montserrat,Arial,sans-serif;cursor:pointer}.route-planner-tabs button[aria-selected="true"],.route-catalog-filters button[aria-pressed="true"]{background:var(--nova-ui-card,#fff);color:var(--nova-ui-primary,#08785a);box-shadow:0 2px 8px rgba(18,57,47,.1)}.route-planner-tabs button:focus-visible,.route-catalog-filters button:focus-visible{outline:3px solid #3287e8;outline-offset:2px}.route-field{display:grid;gap:6px;margin:10px 0;color:var(--nova-ui-foreground,#123f35);font-size:10px;font-weight:800}.route-field input{width:100%;min-height:42px;max-width:100%;padding:8px 11px;border:1px solid var(--nova-ui-border,#dce8e3);border-radius:10px;background:var(--nova-ui-card,#fff);color:var(--nova-ui-foreground,#123f35);font:500 12px Montserrat,Arial,sans-serif;accent-color:var(--nova-ui-primary,#08785a);color-scheme:light}.theme-dark .route-field input{color-scheme:dark}.route-field input:focus-visible{outline:3px solid #3287e8;outline-offset:2px}.route-vicinity-tools{margin:8px 0;padding:11px;border:1px solid var(--nova-ui-border,#cfe6dc);border-radius:12px;background:var(--nova-ui-muted,#f2f8f5);color:var(--nova-ui-foreground,#123f35)}.route-vicinity-tools[hidden]{display:none}.route-vicinity-head{display:flex;align-items:center;justify-content:space-between}.route-vicinity-head button{width:32px;height:32px;border:1px solid var(--nova-ui-border,#dce8e3);border-radius:9px;background:var(--nova-ui-card,#fff);color:inherit;font-size:18px}.route-vicinity-controls{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-top:8px}.route-vicinity-controls label{display:grid;gap:4px;font-size:9px;font-weight:700}.route-vicinity-controls input,.route-vicinity-controls select{width:100%;min-width:0;min-height:36px;border:1px solid var(--nova-ui-border,#dce8e3);border-radius:9px;background:var(--nova-ui-card,#fff);color:var(--nova-ui-foreground,#123f35);padding:6px 8px}.route-vicinity-actions{display:flex;justify-content:flex-end;gap:7px}.route-vicinity-actions button{min-height:36px;border:1px solid var(--nova-ui-border,#dce8e3);border-radius:9px;background:var(--nova-ui-card,#fff);color:var(--nova-ui-foreground,#123f35);padding:7px 11px;font-weight:700}.route-vicinity-actions #routeVicinityAdd{background:var(--nova-ui-primary,#08785a);border-color:var(--nova-ui-primary,#08785a);color:#fff}
 .route-point-memberships{display:grid;gap:4px;margin:7px 0;padding:8px;border:1px solid var(--nova-ui-border,#dce8e3);border-radius:9px;background:var(--nova-ui-muted,#f4faf7);font-size:9px}.route-point-memberships b{color:var(--nova-ui-foreground,#123f35)}.route-point-memberships span{color:var(--nova-ui-muted-foreground,#61756d);line-height:1.4}
+.route-point-membership-row{display:flex;align-items:center;justify-content:space-between;gap:8px}.route-point-membership-row span{min-width:0;overflow-wrap:anywhere}.route-point-open{flex:none;min-height:34px;border:1px solid var(--nova-ui-border,#dce8e3);border-radius:7px;background:var(--nova-ui-card,#fff);color:var(--nova-ui-primary,#08785a);padding:5px 8px;font-size:8px;font-weight:800;cursor:pointer}.route-point-open:focus-visible{outline:3px solid #3287e8;outline-offset:2px}
 .route-vicinity-hint,.route-vicinity-intro{margin:7px 0;color:var(--nova-ui-muted-foreground,#6c7c77);font-size:9px;line-height:1.45}.route-stop-nearby{display:inline-flex;flex:1 0 calc(100% - 30px);align-items:center;justify-content:center;gap:6px;min-width:0;min-height:34px;margin:5px 0 0 30px;padding:7px 10px;border:1px solid color-mix(in srgb,var(--nova-ui-primary,#08785a) 32%,var(--nova-ui-border,#dce8e3));border-radius:9px;background:var(--nova-ui-muted,#edf6f1);color:var(--nova-ui-primary,#08785a);font-size:9px;font-weight:800;cursor:pointer}.route-stop-nearby:hover{background:color-mix(in srgb,var(--nova-ui-primary,#08785a) 10%,var(--nova-ui-card,#fff))}.route-stop-nearby:focus-visible{outline:3px solid #3287e8;outline-offset:2px}.route-vicinity-distance-input{display:grid;grid-template-columns:minmax(0,1fr) 74px;gap:6px;min-width:0}.route-vicinity-distance-input input,.route-vicinity-distance-input select{min-width:0}.route-vicinity-summary{margin:8px 0;padding:8px 10px;border-radius:9px;background:var(--nova-ui-card,#fff);font-size:10px;line-height:1.45}.route-vicinity-summary:empty{display:none}
 .route-vicinity-marker{border-color:#fff!important;background:#edaa16!important;color:#173b31!important;box-shadow:0 0 0 5px rgba(237,170,22,.22),0 5px 14px rgba(36,55,47,.32)!important}
 body.theme-dark .route-transfer-option:has(.route-transfer-checkbox:checked){background:var(--nova-ui-muted);box-shadow:0 0 0 1px color-mix(in srgb,var(--nova-ui-primary,#08785a) 24%,transparent)}
@@ -689,13 +690,14 @@ body.embedded-view #sheetHeader{padding-top:6px;padding-bottom:0}
    <details class="sect filter-panel" id="filtersPanel">
     <summary aria-controls="filterControls">
      <span class="filter-panel-title">Filtros comerciales</span>
-     <span class="filter-panel-values" id="filterSummaryText">Todos los rubros · Todas las fuentes · Todo seguimiento</span>
+     <span class="filter-panel-values" id="filterSummaryText">Todos los rubros · Todas las fuentes · Todo seguimiento · Todos los usuarios</span>
      <span class="filter-panel-chevron" aria-hidden="true">⌄</span>
     </summary>
     <div class="filters" id="filterControls">
      <select id="category" aria-label="Rubro"><option value="all">Todos los rubros</option></select>
      <select id="source" aria-label="Fuente"><option value="all">Todas las fuentes</option><option value="Nova">Nova</option><option value="Base inicial">Base inicial</option></select>
      <select id="state" aria-label="Seguimiento"><option value="all">Todo seguimiento</option><option>Nuevo</option><option>Contactado</option><option>Visitado</option><option>Interesado</option><option>Demo</option><option>Cliente</option><option>Descartado</option></select>
+     <select id="markedBy" aria-label="Quién marcó el punto"><option value="all">Todos los usuarios</option></select>
     </div>
    </details>
   </section>
@@ -2456,6 +2458,14 @@ function openBusinessDetailPopup(marker){
   const id=String(markerBusiness?.id??'');
   const business=findBusiness(id)||businesses.find(item=>String(item.id)===id)||markerBusiness;
   if(!id||!business)return;
+  if(!routePlanningMode){
+    const route=preferredSavedRouteForBusiness(business);
+    if(route&&openSavedRoute(route.id)){
+      setRoutePlannerTab('plan');
+      toast(`Este punto pertenece a la ruta «${route.name||'Ruta comercial'}»`);
+      return;
+    }
+  }
   const overlay=document.getElementById('businessDetailOverlay');
   const wasAlreadyOpen=!overlay?.hidden&&String(currentPopupBusinessId||'')===id;
   if(nativeInfoWindowOpen){
@@ -3474,7 +3484,8 @@ function renderSavedRouteOptions(){
     const startPending=routeActionsFor(route.id).some(action=>action.type==='START_ROUTE'&&action.status==='PENDING');
     const startBlocked=routeActionsFor(route.id).some(action=>action.type==='START_ROUTE'&&action.status==='BLOCKED');
     const startButton=startAction?`<button type="button" data-start-route="${esc(route.id)}" ${startPending||startBlocked?'disabled':''}>${startPending?'Inicio pendiente':startBlocked?'Revisar inicio':'Iniciar ruta'}</button>`:'';
-    const openLabel=String(route.status||'').toUpperCase()==='IN_PROGRESS'?'Continuar':'Abrir';
+    const routeStatus=String(route.status||'').toUpperCase();
+    const openLabel=routeStatus==='IN_PROGRESS'?'Continuar':routeStatus==='PLANNED'&&canForceSales('editRoute')?'Editar ruta':'Abrir ruta';
     return `<article class="route-assignee-card"><div><b>${esc(route.name||'Ruta sin nombre')}</b><span>${esc(routeDateLabel(routeDateValue(route)))} · ${status} · ${completed}/${stops.length} visitas${esc(started)}</span>${recurrenceLine}<span>Siguiente parada: ${esc(nextName)}</span>${actionLine}</div><div class="route-assignee-actions">${startButton}<button type="button" data-open-route="${esc(route.id)}">${openLabel}</button></div></article>`;
   }).join(''):'<p class="meta route-empty">Sin rutas activas para este usuario.</p>';
   list?.querySelectorAll('[data-open-route]').forEach(button=>button.addEventListener('click',()=>openSavedRoute(button.dataset.openRoute)));
@@ -3543,7 +3554,8 @@ function renderRouteCatalog(){
     const startButton=startAction?`<button type="button" data-start-route="${esc(route.id)}" ${startPending||startBlocked?'disabled':''}>${startPending?'Inicio pendiente':startBlocked?'Revisar inicio':'Iniciar ruta'}</button>`:'';
     const recurrenceLabel=route.dailyScheduleId?`Ruta diaria · ${route.dailySchedule?.active?'nueva ejecución cada día':'programación detenida'}`:'Ruta de una sola vez';
     const recurrenceAction=route.dailyScheduleId&&canForceSales('editRoute')?`<button type="button" data-toggle-daily-route="${esc(route.dailyScheduleId)}" data-active="${route.dailySchedule?.active?'true':'false'}">${route.dailySchedule?.active?'Detener ruta diaria':'Reanudar ruta diaria'}</button>`:'';
-    const openLabel=String(route.status||'').toUpperCase()==='IN_PROGRESS'?'Continuar':['COMPLETED','CANCELLED'].includes(String(route.status||'').toUpperCase())?'Consultar':'Abrir';
+    const routeStatus=String(route.status||'').toUpperCase();
+    const openLabel=routeStatus==='IN_PROGRESS'?'Continuar':['COMPLETED','CANCELLED'].includes(routeStatus)?'Consultar ruta':routeStatus==='PLANNED'&&canForceSales('editRoute')?'Editar ruta':'Abrir ruta';
     return `<article class="route-assignee-card"><div><b>${esc(route.name||'Ruta sin nombre')}</b><span>${esc(routeDateLabel(routeDateValue(route)))} · ${state} · ${done}/${stops.length} visitas</span><span>${recurrenceLabel}</span><span>Inicio: ${esc(started.replace(/^Inicio: /,''))}</span><span>Siguiente parada: ${esc(nextName)}</span>${routeResponsibleLine(route,assigned)}</div><div class="route-assignee-actions">${startButton}<button type="button" data-open-route="${esc(route.id)}">${openLabel}</button>${recurrenceAction}</div></article>`;
   }).join(''):'<p class="meta route-empty">No hay rutas que coincidan con este filtro.</p>';
   list.querySelectorAll('[data-open-route]').forEach(button=>button.addEventListener('click',()=>{if(openSavedRoute(button.dataset.openRoute))setRoutePlannerTab('plan')}));
@@ -3632,6 +3644,13 @@ function openSavedRoute(routeId){
   void loadPendingRouteActions().then(()=>renderRoutePlanner());
   return true;
 }
+document.addEventListener('click',event=>{
+  const button=event.target instanceof Element?event.target.closest('[data-open-business-route]'):null;
+  if(!button)return;
+  event.preventDefault();
+  const routeId=String(button.dataset.openBusinessRoute||'').trim();
+  if(openSavedRoute(routeId))setRoutePlannerTab('plan');
+});
 async function startSavedRoute(routeId){
   if(!openSavedRoute(routeId))return;
   setRoutePlannerTab('plan');
@@ -4324,15 +4343,33 @@ function mergeBusinesses(){
   });
   businesses = [...m.values()];
 }
+function creatorIdOf(business){return String(business?.createdBy?.id||business?.createdById||stateOf(business).createdById||'').trim()}
+function savedRoutesForBusiness(business){
+  const remoteId=String(stateOf(business).remoteId||business?.remoteId||'').trim();
+  if(!remoteId)return [];
+  return remoteRoutes.filter(route=>(route.stops||[]).some(stop=>String(stop.prospectId||stop.prospect?.id||'')===remoteId));
+}
+function preferredSavedRouteForBusiness(business){
+  const statusPriority={PLANNED:0,IN_PROGRESS:1,COMPLETED:2,CANCELLED:3};
+  return savedRoutesForBusiness(business).sort((a,b)=>{
+    const byStatus=(statusPriority[String(a.status||'').toUpperCase()]??4)-(statusPriority[String(b.status||'').toUpperCase()]??4);
+    if(byStatus)return byStatus;
+    return new Date(b.updatedAt||b.scheduledFor||0).getTime()-new Date(a.updatedAt||a.scheduledFor||0).getTime();
+  })[0]||null;
+}
 function pass(b){
   const q = norm(document.getElementById('search').value);
   const c = document.getElementById('category').value;
   const s = document.getElementById('source').value;
   const st = document.getElementById('state').value;
+  const markedBy=document.getElementById('markedBy')?.value||'all';
+  const creatorId=creatorIdOf(b);
   if(selectedZone !== 'Todos' && b.zone !== selectedZone) return false;
   if(c !== 'all' && b.category !== c) return false;
   if(s !== 'all' && !b.source.includes(s)) return false;
   if(st === 'all' && isDiscarded(b)) return false;
+  if(markedBy==='__without_creator__'&&creatorId)return false;
+  if(markedBy!=='all'&&markedBy!=='__without_creator__'&&creatorId!==markedBy)return false;
   if(activeNearbyCenter && activeNearbyRadius && distanceMetersFromActive(b)>activeNearbyRadius) return false;
   if(st !== 'all' && statusOf(b) !== st) return false;
   if(ACTIVE_MODE==='visits'&&visitFilter!=='all'&&(visitFilter==='visited')!==isVisited(b)) return false;
@@ -4369,7 +4406,7 @@ function popupHtml(b){
   const routeAssigneeId=routeAssigneeDraftValue()||'';
   const routeAssignee=assignees.find(item=>String(item.id)===String(routeAssigneeId));
   const routeAssigneeDisplay=routeAssignee?.name||((routeAssigneeId&&String(routeAssigneeId)===String(CURRENT_USER_ID))?CURRENT_USER_NAME:'')||'Sin responsable de ruta';
-  const prospectRoutes=remoteRoutes.filter(route=>(route.stops||[]).some(stop=>String(stop.prospectId||stop.prospect?.id)===String(c.remoteId||'')));
+  const prospectRoutes=savedRoutesForBusiness(b);
   const assigneeLoading=assigneesLoadState==='loading'&&!assignees.length;
   const assigneeNotice=assigneeStatusMessage();
   const selectedRouteName=document.getElementById('routeName')?.value.trim()||activeRemoteRoute()?.name||'Borrador actual';
@@ -4405,7 +4442,7 @@ function popupHtml(b){
       <b>Responsable del punto</b><span>${esc(assignedUser?.name || c.assignedToName || 'Sin asignar')}</span>
       <b>Responsable de la ruta actual</b><span>${isCurrentRouteStop?esc(routeAssigneeDisplay):'No forma parte de la ruta actual'}</span>
     </div>
-    <div class="route-point-memberships"><b>Rutas que incluyen este punto</b>${prospectRoutes.length?prospectRoutes.map(route=>`<span>${esc(route.name||'Ruta sin nombre')} · ${esc(routeDateLabel(routeDateValue(route)))} · ${esc(route.assignedTo?.name||'Sin asignar')} · ${esc(({PLANNED:'Planificada',IN_PROGRESS:'En curso',COMPLETED:'Completada',CANCELLED:'Cancelada'})[String(route.status||'').toUpperCase()]||'Sin estado')}</span>`).join(''):'<span>No aparece en rutas guardadas de tu alcance.</span>'}${forceSalesSyncErrors.has('rutas')?'<span role="status">No se pudieron comprobar todas las rutas.</span>':''}</div>
+    <div class="route-point-memberships"><b>Rutas que incluyen este punto</b>${prospectRoutes.length?prospectRoutes.map(route=>`<div class="route-point-membership-row"><span>${esc(route.name||'Ruta sin nombre')} · ${esc(routeDateLabel(routeDateValue(route)))} · ${esc(route.assignedTo?.name||'Sin asignar')} · ${esc(({PLANNED:'Planificada',IN_PROGRESS:'En curso',COMPLETED:'Completada',CANCELLED:'Cancelada'})[String(route.status||'').toUpperCase()]||'Sin estado')}</span><button class="route-point-open" type="button" data-open-business-route="${esc(route.id)}">${String(route.status||'').toUpperCase()==='PLANNED'&&canForceSales('editRoute')?'Editar ruta':'Abrir ruta'}</button></div>`).join(''):'<span>No aparece en rutas guardadas de tu alcance.</span>'}${forceSalesSyncErrors.has('rutas')?'<span role="status">No se pudieron comprobar todas las rutas.</span>':''}</div>
     ${customerLinkPanel}
     ${customerDebtHtml(b)}
     ${visitHistoryHtml(b)}
@@ -6079,7 +6116,8 @@ function render(){
   const sourceFilter=document.getElementById('source');
   const stateFilter=document.getElementById('state');
   const searchFilter=document.getElementById('search');
-  const hasActiveFilters=selectedZone!=='Todos'||categoryFilter.value!=='all'||sourceFilter.value!=='all'||stateFilter.value!=='all'||visitFilter!=='all'||Boolean(searchFilter.value.trim())||pipelineFilter!=='all'||Boolean(activeNearbyCenter&&activeNearbyRadius);
+  const markedByFilter=document.getElementById('markedBy');
+  const hasActiveFilters=selectedZone!=='Todos'||categoryFilter.value!=='all'||sourceFilter.value!=='all'||stateFilter.value!=='all'||markedByFilter?.value!=='all'||visitFilter!=='all'||Boolean(searchFilter.value.trim())||pipelineFilter!=='all'||Boolean(activeNearbyCenter&&activeNearbyRadius);
   showAllBusinesses.hidden=!hasActiveFilters;
   const selectedCount=selectedBusinesses().length;
   const routeTop=document.getElementById('routeTop');
@@ -6147,12 +6185,25 @@ function populateFilters(){
   const cur = sel.value;
   sel.innerHTML = '<option value="all">Todos los rubros</option>' + cats.map(c => `<option>${esc(c)}</option>`).join('');
   if(cats.includes(cur)) sel.value = cur;
+  const markedBy=document.getElementById('markedBy');
+  if(markedBy){
+    const selectedCreator=markedBy.value||'all';
+    const creators=new Map();let hasUnattributed=false;
+    businesses.forEach(business=>{
+      const id=creatorIdOf(business);
+      if(!id){hasUnattributed=true;return}
+      const name=String(business?.createdBy?.name||stateOf(business).createdByName||'Usuario no disponible').trim();
+      if(!creators.has(id)||creators.get(id)==='Usuario no disponible')creators.set(id,name||'Usuario no disponible');
+    });
+    markedBy.innerHTML='<option value="all">Todos los usuarios</option>'+[...creators.entries()].sort((a,b)=>a[1].localeCompare(b[1],'es-NI')).map(([id,name])=>`<option value="${esc(id)}">${esc(name)}</option>`).join('')+(hasUnattributed?'<option value="__without_creator__">Sin atribución</option>':'');
+    markedBy.value=[...creators.keys()].includes(selectedCreator)||selectedCreator==='__without_creator__'&&hasUnattributed?selectedCreator:'all';
+  }
   syncFilterSummary();
 }
 function syncFilterSummary(){
   const summary=document.getElementById('filterSummaryText');
   if(!summary)return;
-  const values=['category','source','state'].map(id=>{
+  const values=['category','source','state','markedBy'].map(id=>{
     const control=document.getElementById(id);
     return control?.selectedOptions?.[0]?.textContent?.trim()||'';
   }).filter(Boolean);
@@ -7433,7 +7484,7 @@ async function sendSelectedWhatsApp(){
 
 let renderFrame=0;
 function scheduleRender(){cancelAnimationFrame(renderFrame);renderFrame=requestAnimationFrame(render)}
-['search','category','source','state'].forEach(id => {
+['search','category','source','state','markedBy'].forEach(id => {
   document.getElementById(id).addEventListener(id==='search' ? 'input' : 'change', id==='search' ? () => {clearFocusedQuickPoint();listLimit=140;scheduleRender()} : () => {clearFocusedQuickPoint();listLimit=140;render()});
 });
 document.querySelectorAll('#labels button').forEach(btn => btn.addEventListener('click', () => {
@@ -7519,6 +7570,7 @@ document.getElementById('showAllBusinesses').addEventListener('click',()=>{
   document.getElementById('category').value='all';
   document.getElementById('source').value='all';
   document.getElementById('state').value='all';
+  document.getElementById('markedBy').value='all';
   visitFilter='all';
   syncVisitChips();
   document.getElementById('search').value='';

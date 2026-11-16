@@ -85,7 +85,8 @@ function renderSavedRouteOptions(){
     const startPending=routeActionsFor(route.id).some(action=>action.type==='START_ROUTE'&&action.status==='PENDING');
     const startBlocked=routeActionsFor(route.id).some(action=>action.type==='START_ROUTE'&&action.status==='BLOCKED');
     const startButton=startAction?`<button type="button" data-start-route="${esc(route.id)}" ${startPending||startBlocked?'disabled':''}>${startPending?'Inicio pendiente':startBlocked?'Revisar inicio':'Iniciar ruta'}</button>`:'';
-    const openLabel=String(route.status||'').toUpperCase()==='IN_PROGRESS'?'Continuar':'Abrir';
+    const routeStatus=String(route.status||'').toUpperCase();
+    const openLabel=routeStatus==='IN_PROGRESS'?'Continuar':routeStatus==='PLANNED'&&canForceSales('editRoute')?'Editar ruta':'Abrir ruta';
     return `<article class="route-assignee-card"><div><b>${esc(route.name||'Ruta sin nombre')}</b><span>${esc(routeDateLabel(routeDateValue(route)))} · ${status} · ${completed}/${stops.length} visitas${esc(started)}</span>${recurrenceLine}<span>Siguiente parada: ${esc(nextName)}</span>${actionLine}</div><div class="route-assignee-actions">${startButton}<button type="button" data-open-route="${esc(route.id)}">${openLabel}</button></div></article>`;
   }).join(''):'<p class="meta route-empty">Sin rutas activas para este usuario.</p>';
   list?.querySelectorAll('[data-open-route]').forEach(button=>button.addEventListener('click',()=>openSavedRoute(button.dataset.openRoute)));
@@ -154,7 +155,8 @@ function renderRouteCatalog(){
     const startButton=startAction?`<button type="button" data-start-route="${esc(route.id)}" ${startPending||startBlocked?'disabled':''}>${startPending?'Inicio pendiente':startBlocked?'Revisar inicio':'Iniciar ruta'}</button>`:'';
     const recurrenceLabel=route.dailyScheduleId?`Ruta diaria · ${route.dailySchedule?.active?'nueva ejecución cada día':'programación detenida'}`:'Ruta de una sola vez';
     const recurrenceAction=route.dailyScheduleId&&canForceSales('editRoute')?`<button type="button" data-toggle-daily-route="${esc(route.dailyScheduleId)}" data-active="${route.dailySchedule?.active?'true':'false'}">${route.dailySchedule?.active?'Detener ruta diaria':'Reanudar ruta diaria'}</button>`:'';
-    const openLabel=String(route.status||'').toUpperCase()==='IN_PROGRESS'?'Continuar':['COMPLETED','CANCELLED'].includes(String(route.status||'').toUpperCase())?'Consultar':'Abrir';
+    const routeStatus=String(route.status||'').toUpperCase();
+    const openLabel=routeStatus==='IN_PROGRESS'?'Continuar':['COMPLETED','CANCELLED'].includes(routeStatus)?'Consultar ruta':routeStatus==='PLANNED'&&canForceSales('editRoute')?'Editar ruta':'Abrir ruta';
     return `<article class="route-assignee-card"><div><b>${esc(route.name||'Ruta sin nombre')}</b><span>${esc(routeDateLabel(routeDateValue(route)))} · ${state} · ${done}/${stops.length} visitas</span><span>${recurrenceLabel}</span><span>Inicio: ${esc(started.replace(/^Inicio: /,''))}</span><span>Siguiente parada: ${esc(nextName)}</span>${routeResponsibleLine(route,assigned)}</div><div class="route-assignee-actions">${startButton}<button type="button" data-open-route="${esc(route.id)}">${openLabel}</button>${recurrenceAction}</div></article>`;
   }).join(''):'<p class="meta route-empty">No hay rutas que coincidan con este filtro.</p>';
   list.querySelectorAll('[data-open-route]').forEach(button=>button.addEventListener('click',()=>{if(openSavedRoute(button.dataset.openRoute))setRoutePlannerTab('plan')}));
@@ -243,6 +245,13 @@ function openSavedRoute(routeId){
   void loadPendingRouteActions().then(()=>renderRoutePlanner());
   return true;
 }
+document.addEventListener('click',event=>{
+  const button=event.target instanceof Element?event.target.closest('[data-open-business-route]'):null;
+  if(!button)return;
+  event.preventDefault();
+  const routeId=String(button.dataset.openBusinessRoute||'').trim();
+  if(openSavedRoute(routeId))setRoutePlannerTab('plan');
+});
 async function startSavedRoute(routeId){
   if(!openSavedRoute(routeId))return;
   setRoutePlannerTab('plan');

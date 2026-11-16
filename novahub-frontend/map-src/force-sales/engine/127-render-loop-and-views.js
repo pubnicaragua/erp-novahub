@@ -1,6 +1,6 @@
 let renderFrame=0;
 function scheduleRender(){cancelAnimationFrame(renderFrame);renderFrame=requestAnimationFrame(render)}
-['search','category','source','state'].forEach(id => {
+['search','category','source','state','markedBy'].forEach(id => {
   document.getElementById(id).addEventListener(id==='search' ? 'input' : 'change', id==='search' ? () => {clearFocusedQuickPoint();listLimit=140;scheduleRender()} : () => {clearFocusedQuickPoint();listLimit=140;render()});
 });
 document.querySelectorAll('#labels button').forEach(btn => btn.addEventListener('click', () => {
@@ -86,6 +86,7 @@ document.getElementById('showAllBusinesses').addEventListener('click',()=>{
   document.getElementById('category').value='all';
   document.getElementById('source').value='all';
   document.getElementById('state').value='all';
+  document.getElementById('markedBy').value='all';
   visitFilter='all';
   syncVisitChips();
   document.getElementById('search').value='';

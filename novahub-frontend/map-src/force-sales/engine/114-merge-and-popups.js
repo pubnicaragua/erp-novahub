@@ -31,15 +31,33 @@ function mergeBusinesses(){
   });
   businesses = [...m.values()];
 }
+function creatorIdOf(business){return String(business?.createdBy?.id||business?.createdById||stateOf(business).createdById||'').trim()}
+function savedRoutesForBusiness(business){
+  const remoteId=String(stateOf(business).remoteId||business?.remoteId||'').trim();
+  if(!remoteId)return [];
+  return remoteRoutes.filter(route=>(route.stops||[]).some(stop=>String(stop.prospectId||stop.prospect?.id||'')===remoteId));
+}
+function preferredSavedRouteForBusiness(business){
+  const statusPriority={PLANNED:0,IN_PROGRESS:1,COMPLETED:2,CANCELLED:3};
+  return savedRoutesForBusiness(business).sort((a,b)=>{
+    const byStatus=(statusPriority[String(a.status||'').toUpperCase()]??4)-(statusPriority[String(b.status||'').toUpperCase()]??4);
+    if(byStatus)return byStatus;
+    return new Date(b.updatedAt||b.scheduledFor||0).getTime()-new Date(a.updatedAt||a.scheduledFor||0).getTime();
+  })[0]||null;
+}
 function pass(b){
   const q = norm(document.getElementById('search').value);
   const c = document.getElementById('category').value;
   const s = document.getElementById('source').value;
   const st = document.getElementById('state').value;
+  const markedBy=document.getElementById('markedBy')?.value||'all';
+  const creatorId=creatorIdOf(b);
   if(selectedZone !== 'Todos' && b.zone !== selectedZone) return false;
   if(c !== 'all' && b.category !== c) return false;
   if(s !== 'all' && !b.source.includes(s)) return false;
   if(st === 'all' && isDiscarded(b)) return false;
+  if(markedBy==='__without_creator__'&&creatorId)return false;
+  if(markedBy!=='all'&&markedBy!=='__without_creator__'&&creatorId!==markedBy)return false;
   if(activeNearbyCenter && activeNearbyRadius && distanceMetersFromActive(b)>activeNearbyRadius) return false;
   if(st !== 'all' && statusOf(b) !== st) return false;
   if(ACTIVE_MODE==='visits'&&visitFilter!=='all'&&(visitFilter==='visited')!==isVisited(b)) return false;
@@ -76,7 +94,7 @@ function popupHtml(b){
   const routeAssigneeId=routeAssigneeDraftValue()||'';
   const routeAssignee=assignees.find(item=>String(item.id)===String(routeAssigneeId));
   const routeAssigneeDisplay=routeAssignee?.name||((routeAssigneeId&&String(routeAssigneeId)===String(CURRENT_USER_ID))?CURRENT_USER_NAME:'')||'Sin responsable de ruta';
-  const prospectRoutes=remoteRoutes.filter(route=>(route.stops||[]).some(stop=>String(stop.prospectId||stop.prospect?.id)===String(c.remoteId||'')));
+  const prospectRoutes=savedRoutesForBusiness(b);
   const assigneeLoading=assigneesLoadState==='loading'&&!assignees.length;
   const assigneeNotice=assigneeStatusMessage();
   const selectedRouteName=document.getElementById('routeName')?.value.trim()||activeRemoteRoute()?.name||'Borrador actual';
@@ -112,7 +130,7 @@ function popupHtml(b){
       <b>Responsable del punto</b><span>${esc(assignedUser?.name || c.assignedToName || 'Sin asignar')}</span>
       <b>Responsable de la ruta actual</b><span>${isCurrentRouteStop?esc(routeAssigneeDisplay):'No forma parte de la ruta actual'}</span>
     </div>
-    <div class="route-point-memberships"><b>Rutas que incluyen este punto</b>${prospectRoutes.length?prospectRoutes.map(route=>`<span>${esc(route.name||'Ruta sin nombre')} · ${esc(routeDateLabel(routeDateValue(route)))} · ${esc(route.assignedTo?.name||'Sin asignar')} · ${esc(({PLANNED:'Planificada',IN_PROGRESS:'En curso',COMPLETED:'Completada',CANCELLED:'Cancelada'})[String(route.status||'').toUpperCase()]||'Sin estado')}</span>`).join(''):'<span>No aparece en rutas guardadas de tu alcance.</span>'}${forceSalesSyncErrors.has('rutas')?'<span role="status">No se pudieron comprobar todas las rutas.</span>':''}</div>
+    <div class="route-point-memberships"><b>Rutas que incluyen este punto</b>${prospectRoutes.length?prospectRoutes.map(route=>`<div class="route-point-membership-row"><span>${esc(route.name||'Ruta sin nombre')} · ${esc(routeDateLabel(routeDateValue(route)))} · ${esc(route.assignedTo?.name||'Sin asignar')} · ${esc(({PLANNED:'Planificada',IN_PROGRESS:'En curso',COMPLETED:'Completada',CANCELLED:'Cancelada'})[String(route.status||'').toUpperCase()]||'Sin estado')}</span><button class="route-point-open" type="button" data-open-business-route="${esc(route.id)}">${String(route.status||'').toUpperCase()==='PLANNED'&&canForceSales('editRoute')?'Editar ruta':'Abrir ruta'}</button></div>`).join(''):'<span>No aparece en rutas guardadas de tu alcance.</span>'}${forceSalesSyncErrors.has('rutas')?'<span role="status">No se pudieron comprobar todas las rutas.</span>':''}</div>
     ${customerLinkPanel}
     ${customerDebtHtml(b)}
     ${visitHistoryHtml(b)}
