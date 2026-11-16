@@ -36,6 +36,7 @@ import { ForceSalesTrackingRuntime } from './components/ForceSalesTrackingRuntim
 import { ForceSalesOfflineTrackingFallback } from './components/ForceSalesOfflineTrackingFallback';
 import { getOfflineRouteEligibility } from './services/force-sales-location-queue';
 import { NovaHubLogo } from './components/NovaHubLogo';
+import { AccountSelectionDialogHost } from './components/contabilidad/AccountSelectionDialogHost';
 
 function lazyWithChunkRecovery<T extends { default: React.ComponentType<any> }>(loader: () => Promise<T>, moduleName: string) {
   return lazy(() => loadModuleWithChunkRecovery(loader, moduleName, reportChunkLoadIncident));
@@ -958,6 +959,7 @@ export default function App() {
           <CurrencyProvider>
             <ImpersonationProvider>
               <ActionClickGuard />
+              <AccountSelectionDialogHost />
               <AppContent />
             </ImpersonationProvider>
           </CurrencyProvider>

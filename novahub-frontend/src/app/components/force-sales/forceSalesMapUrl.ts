@@ -14,6 +14,8 @@ export interface ForceSalesMapUrlInput {
   canLinkCustomer: boolean;
   /** El rol puede leer clientes de Ventas: habilita la ficha de deuda en el punto. */
   canViewCustomerSummary: boolean;
+  /** El rol puede registrar pagos o abonos desde la ficha del cliente. */
+  canPayCustomerContracts?: boolean;
   canOperateAssignedRoutes: boolean;
   permissions: Record<string, boolean>;
   /** Map ID completo (con lugares de Google) y Map ID limpio (sin ellos); el limpio es opcional. */
@@ -46,6 +48,7 @@ export function buildForceSalesMapUrl(input: ForceSalesMapUrlInput): string {
   params.set('canAssignProspectOwner', String(input.canAssignProspectOwner));
   params.set('canLinkCustomer', String(input.canLinkCustomer));
   params.set('canViewCustomerSummary', String(input.canViewCustomerSummary));
+  params.set('canPayCustomerContracts', String(input.canPayCustomerContracts === true));
   params.set('canOperateAssignedRoutes', String(input.canOperateAssignedRoutes));
   params.set('durableTracking', 'true');
   params.set('permissions', JSON.stringify(input.permissions));

@@ -463,7 +463,7 @@ export function ProveedoresView({ data, loading, onRefresh, pagination, onSearch
   };
 
   const columns: ColumnDef<Supplier>[] = [
-    { key: 'code',        header: 'ID / Código', width: '110px',
+    { key: 'code',        header: 'ID / Código', width: '110px', copyValue: (row) => row.code || row.id?.slice(0, 8) || null,
       headerExtra: <ColumnFilterMenu label="Código" sort={colFilters.state.code?.sort || null} onSort={(sort) => colFilters.setSort('code', sort)} sortType="number" />,
       render: (val, row) => <span className="text-[13px] font-medium tabular-nums text-muted-foreground">{val || row.id.slice(0, 8)}</span> },
     { key: 'name',        header: 'Nombre',    editable: canPerform('PURCHASES_PROVIDERS', 'edit'),
@@ -477,12 +477,12 @@ export function ProveedoresView({ data, loading, onRefresh, pagination, onSearch
       ],
       render: (val) => <Badge variant="outline" className={cn('text-[9px] font-black uppercase tracking-widest px-2 py-0.5 border-none', String(val || 'COMPANY').toUpperCase() === 'COMPANY' ? 'bg-primary/10 text-primary' : 'bg-muted/20 text-muted-foreground')}>{String(val || 'COMPANY').toUpperCase() === 'COMPANY' ? 'Empresa' : 'Individual'}</Badge>
     },
-    { key: 'ruc',         header: 'RUC',       width: '140px', editable: canPerform('PURCHASES_PROVIDERS', 'edit'),
+    { key: 'ruc',         header: 'RUC',       width: '140px', editable: canPerform('PURCHASES_PROVIDERS', 'edit'), copyValue: (row) => row.ruc || row.taxId || null,
       render: (val, row) => <span className={cn('font-mono text-xs', val || row.taxId ? 'text-foreground' : 'text-muted-foreground/50')}>{val || row.taxId || '—'}</span>
     },
     { key: 'contactName', header: 'Contacto',  editable: canPerform('PURCHASES_PROVIDERS', 'edit') },
-    { key: 'email',       header: 'Email',     editable: canPerform('PURCHASES_PROVIDERS', 'edit') },
-    { key: 'phone',       header: 'Teléfono',  width: '130px', editable: canPerform('PURCHASES_PROVIDERS', 'edit') },
+    { key: 'email',       header: 'Email',     editable: canPerform('PURCHASES_PROVIDERS', 'edit'), copyValue: (row) => row.email || null },
+    { key: 'phone',       header: 'Teléfono',  width: '130px', editable: canPerform('PURCHASES_PROVIDERS', 'edit'), copyValue: (row) => row.phone || null },
     { key: 'balance', header: 'Saldos del proveedor', width: '200px',
       headerExtra: <ColumnFilterMenu label="Saldo del proveedor" sort={colFilters.state.balance?.sort || null} onSort={(sort) => colFilters.setSort('balance', sort)} sortType="number" />,
       render: (_val, row) => {

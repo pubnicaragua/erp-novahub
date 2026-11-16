@@ -5,6 +5,7 @@ export type AccountMappingPatch = { moduleId: string; fieldKey: string; value: s
 export type AccountingConfigUpdate = Record<string, any> & {
   accountMappingPatch?: AccountMappingPatch
   accountMappingPatches?: AccountMappingPatch[]
+  accountMappingOptions?: Record<string, Record<string, string[]>>
 }
 export type SuggestedAccountMatch = {
   accountId: string

@@ -30,6 +30,44 @@ interface RequestOptions {
   signal?: AbortSignal;
 }
 
+export type AccountSelectionOption = { code: string; name: string };
+export type AccountSelectionChoice = {
+  key: string;
+  moduleId: string;
+  fieldKey: string;
+  label: string;
+  accounts: AccountSelectionOption[];
+};
+export const ACCOUNT_SELECTION_REQUIRED_EVENT = 'novahub:account-selection-required';
+
+type AccountSelectionEventDetail = {
+  choices: AccountSelectionChoice[];
+  resolve: (values: Record<string, string>) => void;
+  reject: (error: Error) => void;
+  claimed: boolean;
+};
+
+function requestAccountSelections(choices: AccountSelectionChoice[], signal?: AbortSignal) {
+  return new Promise<Record<string, string>>((resolve, reject) => {
+    if (signal?.aborted) {
+      reject(new DOMException('La solicitud fue cancelada', 'AbortError'));
+      return;
+    }
+    const onAbort = () => reject(new DOMException('La solicitud fue cancelada', 'AbortError'));
+    signal?.addEventListener('abort', onAbort, { once: true });
+    const finish = (callback: (value: any) => void) => (value: any) => {
+      signal?.removeEventListener('abort', onAbort);
+      callback(value);
+    };
+    const detail: AccountSelectionEventDetail = { choices, resolve: finish(resolve), reject: finish(reject), claimed: false };
+    window.dispatchEvent(new CustomEvent<AccountSelectionEventDetail>(ACCOUNT_SELECTION_REQUIRED_EVENT, { detail }));
+    if (!detail.claimed) {
+      signal?.removeEventListener('abort', onAbort);
+      reject(new Error('No se pudo abrir el selector de cuentas contables.'));
+    }
+  });
+}
+
 const idempotentInFlight = new Map<string, Promise<unknown>>();
 // Deduplicate only simultaneous GETs. This is deliberately not a TTL cache:
 // mutations keep their current semantics and no tenant data is retained after
@@ -431,7 +469,7 @@ function createApiRequestError(
   return error;
 }
 
-async function apiRequestInternal<T>(path: string, options: RequestOptions = {}): Promise<T> {
+async function apiRequestInternal<T>(path: string, options: RequestOptions = {}, accountSelectionRound = 0): Promise<T> {
   const { method = 'GET', body, rawBody, params, headers = {}, signal } = options;
   const context = describeRequest(path, method);
   const auditTenantId = path.startsWith('/audit/v1/')
@@ -504,6 +542,25 @@ async function apiRequestInternal<T>(path: string, options: RequestOptions = {})
     const requestId = typeof errorBody?.requestId === 'string'
       ? errorBody.requestId
       : response.headers.get('X-Request-Id') || undefined;
+
+    if (response.status === 409 && errorBody?.code === 'ACCOUNT_SELECTION_REQUIRED') {
+      if (accountSelectionRound >= 4 || rawBody !== undefined || !body || typeof body !== 'object' || Array.isArray(body)) {
+        throw createApiRequestError(response, path, context, errorBody);
+      }
+      const choices = Array.isArray((errorBody as any).selections) ? (errorBody as any).selections as AccountSelectionChoice[] : [];
+      if (!choices.length) throw createApiRequestError(response, path, context, errorBody);
+      const selected = await requestAccountSelections(choices, signal);
+      const previousSelections = (body as any).accountSelections && typeof (body as any).accountSelections === 'object'
+        ? (body as any).accountSelections
+        : {};
+      const nextHeaders = { ...headers };
+      if (nextHeaders['Idempotency-Key']) nextHeaders['Idempotency-Key'] = createIdempotencyKey('account-choice');
+      return apiRequestInternal<T>(path, {
+        ...options,
+        headers: nextHeaders,
+        body: { ...(body as Record<string, unknown>), accountSelections: { ...previousSelections, ...selected } },
+      }, accountSelectionRound + 1);
+    }
 
     if (errorBody?.code === 'TRIAL_EXPIRED' || (errorBody?.message && typeof errorBody.message === 'object' && (errorBody.message as any)?.code === 'TRIAL_EXPIRED')) {
       const innerMsg = typeof errorBody.message === 'object' ? (errorBody.message as any)?.message : errorBody.message;

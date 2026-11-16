@@ -3,11 +3,13 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import * as XLSX from 'xlsx';
 import { useAuth } from '../contexts/AuthContext';
 import { api } from '../services/api';
+import { creditNotesService, customerLoansService } from '../services/ventas.service';
 import { subscribeToNotificationEvents } from '../services/notifications.service';
 import { canAccessModuleView } from '../utils/moduleViewAccess';
 import { ForceSalesNavigation } from './force-sales/ForceSalesNavigation';
 import { ForceSalesMapHeader } from './force-sales/ForceSalesMapHeader';
 import { ForceSalesCustomerLinkDialog, type ForceSalesCustomerOption } from './force-sales/ForceSalesCustomerLinkDialog';
+import { CustomerCreditPaymentDialog, type CustomerPaymentTarget } from './ventas/CustomerCreditPaymentDialog';
 import { useForceSalesFrameBridge } from './force-sales/useForceSalesFrameBridge';
 import { buildForceSalesMapUrl } from './force-sales/forceSalesMapUrl';
 import {
@@ -23,6 +25,7 @@ import {
   type ForceSalesView,
 } from './force-sales/forceSalesModes';
 import isotipoUrl from '../../assets/branding/novahub-isotipo.png';
+import { toast } from '@/app/services/toast';
 
 const mapUrl = `${import.meta.env.BASE_URL}maps/diseñoui_mapas_freelancers.html`;
 
@@ -62,6 +65,8 @@ export function FuerzaComercialPage({ activeSubModule, onSubModuleChange, isSide
   const [mapFrameError, setMapFrameError] = useState(false);
   const [mapFrameLoadVersion, setMapFrameLoadVersion] = useState(0);
   const [customerLinkPoint, setCustomerLinkPoint] = useState<{ id: string; name: string; address: string; phone: string } | null>(null);
+  const [customerPaymentTarget, setCustomerPaymentTarget] = useState<CustomerPaymentTarget | null>(null);
+  const [paymentProspectId, setPaymentProspectId] = useState<string | null>(null);
   const [summary, setSummary] = useState<ForceSalesSummary | null>(null);
   if (previousSubModule !== activeSubModule) {
     setPreviousSubModule(activeSubModule);
@@ -174,6 +179,7 @@ export function FuerzaComercialPage({ activeSubModule, onSubModuleChange, isSide
     canAssignProspectOwner,
     canLinkCustomer,
     canViewCustomerSummary: canPerform('SALES_CLIENTS', 'read'),
+    canPayCustomerContracts: canPerform('SALES_CREDIT_NOTES', 'pay'),
     canOperateAssignedRoutes: canPerform('FORCE_SALES', 'view'),
     permissions: workflowPermissions,
     mapId: googleMapsMapId,
@@ -212,6 +218,35 @@ export function FuerzaComercialPage({ activeSubModule, onSubModuleChange, isSide
         const point = (event.data.point || {}) as Record<string, unknown>;
         setCustomerLinkPoint({ id: pointId, name: String(point.name || ''), address: String(point.address || ''), phone: String(point.phone || '') });
       }
+      if (event.data?.type === 'force-sales-open-payment') {
+        const recordId = String(event.data.recordId || '').trim();
+        const kind = String(event.data.kind || '').toUpperCase();
+        const prospectId = String(event.data.prospectId || '').trim();
+        if (!recordId || !canPerform('SALES_CREDIT_NOTES', 'pay')) return;
+        if (kind === 'CUSTOMER_LOAN' && !canPerform('SALES_CUSTOMER_LOANS', 'view')) return;
+        if (!['CUSTOMER_LOAN', 'CREDIT_NOTE'].includes(kind)) return;
+        const fetchRecord = kind === 'CUSTOMER_LOAN'
+          ? customerLoansService.getById(recordId)
+          : creditNotesService.getById(recordId);
+        void fetchRecord.then((record: any) => {
+          setCustomerPaymentTarget({
+            id: String(record.id || recordId),
+            kind: kind as CustomerPaymentTarget['kind'],
+            number: record.number || record.invoice?.number,
+            total: record.total,
+            balance: record.invoice?.balance ?? record.balance,
+            amountPaid: record.invoice?.amountPaid ?? record.amountPaid,
+            currency: record.currency || record.invoice?.currency,
+            exchangeRate: record.exchangeRate || record.invoice?.exchangeRate,
+            customerId: record.customerId,
+            customer: record.customer || { name: String(event.data.customerName || 'Cliente') },
+            invoice: record.invoice,
+            planEnabled: Boolean(record.planEnabled),
+            nextInstallment: record.nextInstallment,
+          });
+          setPaymentProspectId(prospectId || null);
+        }).catch((error: any) => toast.error(error?.response?.data?.message || error?.message || 'No se pudo abrir el contrato para pago.'));
+      }
       if (event.data?.type === 'force-sales-summary') {
         const next = parseForceSalesSummary(event.data);
         if (next && next.mode === activeModeRef.current) setSummary(next);
@@ -224,7 +259,7 @@ export function FuerzaComercialPage({ activeSubModule, onSubModuleChange, isSide
     };
     window.addEventListener('message', onMapMessage);
     return () => window.removeEventListener('message', onMapMessage);
-  }, [canLinkCustomer]);
+  }, [canLinkCustomer, canPerform]);
 
   useEffect(() => {
     if (!mapFullscreen) return undefined;
@@ -319,6 +354,17 @@ export function FuerzaComercialPage({ activeSubModule, onSubModuleChange, isSide
         canCreate={canPerform('SALES_CLIENTS', 'create')}
         onClose={() => setCustomerLinkPoint(null)}
         onSelect={selectCustomer}
+      />
+      <CustomerCreditPaymentDialog
+        target={customerPaymentTarget}
+        open={Boolean(customerPaymentTarget)}
+        onOpenChange={(open) => { if (!open) { setCustomerPaymentTarget(null); setPaymentProspectId(null); } }}
+        onPaid={() => {
+          const prospectId = paymentProspectId;
+          setCustomerPaymentTarget(null);
+          setPaymentProspectId(null);
+          if (prospectId) sendToMap('force-sales-customer-summary-refresh', { prospectId });
+        }}
       />
       <input
         ref={routeImportInputRef}

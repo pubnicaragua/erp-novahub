@@ -191,9 +191,10 @@ export function Topbar({ onMenuClick, onNavigate, isCollapsed, onToggleCollapse 
     return () => window.clearTimeout(timeout);
   }, [isBranchManagerSession, branch?.id]);
   const hasPosAccess = canPerform('RETAIL_POS', 'view');
-  const { unreadCount, markAsRead, markGroupAsRead, notifications } = useNotifications();
+  const { unreadCount, markAsRead, markGroupAsRead, markAllAsRead, notifications } = useNotifications();
   const [notificationsOpen, setNotificationsOpen] = useState(false);
   const [messagesOpen, setMessagesOpen] = useState(false);
+  const [markingAllNotificationsRead, setMarkingAllNotificationsRead] = useState(false);
   const [markingAllMessagesRead, setMarkingAllMessagesRead] = useState(false);
   const [selectedMessageThread, setSelectedMessageThread] = useState<Message | null>(null);
   const [selectedNotificationGroup, setSelectedNotificationGroup] = useState<Notification | null>(null);
@@ -496,6 +497,20 @@ export function Topbar({ onMenuClick, onNavigate, isCollapsed, onToggleCollapse 
         toast.warning(`${summary} Motivo: ${reason}`);
       }
     } else toast.success('Todos los mensajes quedaron marcados como leídos.');
+  };
+
+  const markAllNotificationsAsRead = async () => {
+    if (!unreadCount || markingAllNotificationsRead) return;
+
+    setMarkingAllNotificationsRead(true);
+    try {
+      await markAllAsRead();
+      toast.success('Todas las notificaciones quedaron marcadas como leídas.');
+    } catch (error: unknown) {
+      toast.apiFailure(error, 'No se pudieron marcar las notificaciones como leídas.');
+    } finally {
+      setMarkingAllNotificationsRead(false);
+    }
   };
 
   const [isDark, setIsDark] = useState(getSavedDarkMode);
@@ -1020,18 +1035,33 @@ export function Topbar({ onMenuClick, onNavigate, isCollapsed, onToggleCollapse 
                 </div>
               )}
             </div>
-            {notifications.length > 5 && (
+            {(unreadCount > 0 || notifications.length > 5) && (
               <div className="border-t border-border/60 bg-muted/10 p-2">
-                <button
-                  type="button"
-                  className="topbar-notifications-more w-full rounded-lg py-2 text-xs font-semibold text-primary transition-colors hover:bg-primary/10 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/50"
-                  onClick={() => {
-                    setNotificationsOpen(false);
-                    onNavigate('notificaciones');
-                  }}
-                >
-                  Ver {notifications.length - 5} más
-                </button>
+                <div className="flex flex-col gap-1">
+                  {unreadCount > 0 && (
+                    <button
+                      type="button"
+                      disabled={markingAllNotificationsRead}
+                      className="topbar-notifications-more flex w-full items-center justify-center gap-2 rounded-lg py-2 text-xs font-semibold text-primary transition-colors hover:bg-primary/10 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/50 disabled:opacity-60"
+                      onClick={() => void markAllNotificationsAsRead()}
+                    >
+                      {markingAllNotificationsRead ? <Loader2 className="size-3.5 animate-spin" /> : <Check className="size-3.5" />}
+                      {markingAllNotificationsRead ? 'Marcando como leídas…' : 'Marcar todas como leídas'}
+                    </button>
+                  )}
+                  {notifications.length > 5 && (
+                    <button
+                      type="button"
+                      className="topbar-notifications-more w-full rounded-lg py-2 text-xs font-semibold text-primary transition-colors hover:bg-primary/10 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/50"
+                      onClick={() => {
+                        setNotificationsOpen(false);
+                        onNavigate('notificaciones');
+                      }}
+                    >
+                      Ver {notifications.length - 5} más
+                    </button>
+                  )}
+                </div>
               </div>
             )}
           </PopoverContent>

@@ -832,10 +832,12 @@ export function NotasCreditoView({ data, summaryData, summaryLoading, summaryErr
     const nextRate = paymentLineRate(nextCurrency);
     const creditCurrency = credit.currency === 'USD' ? 'USD' : 'NIO';
     const creditBalance = Number(credit.balance ?? Number(credit.total || 0) - Number(credit.amountPaid || 0));
-    const initialAmount = convertBetweenCurrencies(creditBalance, creditCurrency, nextCurrency, Number(credit.exchangeRate || globalRate || 1), nextRate);
+    const installmentRemainder = credit.planEnabled ? Number(credit.nextInstallment?.remainingAmount || 0) : 0;
+    const defaultCreditAmount = installmentRemainder > 0 ? Math.min(creditBalance, installmentRemainder) : creditBalance;
+    const initialAmount = convertBetweenCurrencies(defaultCreditAmount, creditCurrency, nextCurrency, Number(credit.exchangeRate || globalRate || 1), nextRate);
     setPaymentLines([{ ...paymentLine('TRANSFER', initialAmount.toFixed(getCurrencyDecimalPlaces()), nextCurrency), reference: credit.number }]);
     setMixedPaymentEnabled(false);
-    setPartialPaymentEnabled(false);
+    setPartialPaymentEnabled(defaultCreditAmount + 0.01 < creditBalance);
   };
 
   const handlePayment = async () => {

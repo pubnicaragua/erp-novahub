@@ -22,6 +22,7 @@ import type { SalesPaginationControls } from '../../types';
 import { TABLE_LAYOUT_BREAKPOINT, useCardsOnlyBelowTableBreakpoint } from './ViewLayoutSelect';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from './select';
 import { cardHeading } from '../../utils/displayText';
+import { getCopyTextFromNode, normalizeCopyText } from '../../utils/table-copy';
 
 const EMPTY_SELECT_VALUE = '__erp_empty_select_value__';
 const toRadixSelectValue = (value: unknown) => value === '' || value === null || value === undefined ? EMPTY_SELECT_VALUE : String(value);
@@ -50,6 +51,8 @@ export interface ColumnDef<T> {
   options?: { label: string; value: string; color?: string }[];
   render?: (value: any, row: T) => React.ReactNode;
   headerExtra?: React.ReactNode;
+  /** Copy the user-facing value from this cell without activating the row. */
+  copyValue?: (row: T) => string | null | undefined;
 }
 
 interface EditableDataTableProps<T> {
@@ -363,6 +366,50 @@ export function EditableDataTable<T extends { [key: string]: any }>({
     setEditingCell({ rowId, colKey });
     // Empty nullable fields must still mount as controlled inputs.
     setEditValue(value ?? '');
+  };
+
+  const handleCopyValue = async (value: string, header: string) => {
+    try {
+      if (!navigator.clipboard?.writeText) throw new Error('Clipboard API unavailable');
+      await navigator.clipboard.writeText(value);
+      toast.success(`${header} copiado`);
+    } catch {
+      toast.error('No se pudo copiar el dato. Comprueba los permisos del navegador.');
+    }
+  };
+
+  const getCopyValue = (column: ColumnDef<T>, row: T, displayedValue: React.ReactNode) => {
+    const sourceValue = column.copyValue
+      ? column.copyValue(row)
+      : column.render
+        ? getCopyTextFromNode(displayedValue)
+        : column.type === 'select'
+          ? null
+          : row[column.key as string];
+    return normalizeCopyText(sourceValue);
+  };
+
+  const renderCopyAction = (column: ColumnDef<T>, value: string | null) => {
+    if (value === null) return null;
+
+    return (
+      <Button
+        type="button"
+        variant="ghost"
+        size="icon"
+        title={`Copiar ${column.header}`}
+        aria-label={`Copiar ${column.header}`}
+        className="size-7 shrink-0 rounded-md text-muted-foreground hover:bg-primary/10 hover:text-primary"
+        onPointerDown={(event) => event.stopPropagation()}
+        onClick={(event) => {
+          event.preventDefault();
+          event.stopPropagation();
+          void handleCopyValue(value, column.header);
+        }}
+      >
+        <Copy className="size-3.5" />
+      </Button>
+    );
   };
 
   const focusGridCell = useCallback((rowIndex: number, colIndex: number) => {
@@ -715,10 +762,23 @@ export function EditableDataTable<T extends { [key: string]: any }>({
                     const colKey = col.key as string;
                     const value = row[colKey];
                     const isEditing = editingCell?.rowId === rowId && editingCell?.colKey === colKey;
+                    const displayedValue = col.render ? col.render(value, row) : (
+                      <span className={cn(
+                        "text-[13px] transition-colors",
+                        isDraft ? "text-primary flex items-center gap-1.5" : "text-foreground font-normal"
+                      )}>
+                        {isDraft && <span title="Borrador">📝</span>}
+                        {value}
+                      </span>
+                    );
+                    const copyValue = isEditing ? null : getCopyValue(col, row, displayedValue);
 
                     return (
                       <TableCell 
                         key={colKey}
+                        data-copy-value={copyValue ?? undefined}
+                        data-copy-label={col.header}
+                        data-copyable={copyValue === null ? 'false' : undefined}
                         data-row-click-exempt={isCellEditable(row, col) ? 'true' : undefined}
                         tabIndex={focusedCell.rowIndex === rowIndex && focusedCell.colIndex === colIndex ? 0 : -1}
                         data-grid-row-index={rowIndex}
@@ -773,16 +833,10 @@ export function EditableDataTable<T extends { [key: string]: any }>({
                             )}
                           </div>
                         ) : (
-                          <div className="flex items-center h-full px-2">
-                            {col.render ? col.render(value, row) : (
-                              <span className={cn(
-                                "text-[13px] transition-colors",
-                                isDraft ? "text-primary flex items-center gap-1.5" : "text-foreground font-normal"
-                              )}>
-                                {isDraft && <span title="Borrador">📝</span>}
-                                {value}
-                              </span>
-                            )}
+                          <div className="flex min-w-0 items-center gap-1 px-2">
+                            <div className="min-w-0 flex-1 overflow-hidden">
+                              {displayedValue}
+                            </div>
                             {isCellEditable(row, col) && <Pencil className="ml-auto size-3 opacity-0 transition-opacity group-hover:opacity-30 text-primary" />}
                           </div>
                         )}
@@ -899,6 +953,12 @@ export function EditableDataTable<T extends { [key: string]: any }>({
                   const colKey = col.key as string;
                   const value = row[col.key as string];
                   const isEditing = editingCell?.rowId === rowId && editingCell?.colKey === colKey;
+                  const displayedValue = isEditing
+                    ? null
+                    : col.render
+                      ? col.render(value, row)
+                      : String(value ?? '—');
+                  const copyValue = isEditing ? null : getCopyValue(col, row, displayedValue);
                   return (
                     <div
                       key={colKey}
@@ -962,8 +1022,11 @@ export function EditableDataTable<T extends { [key: string]: any }>({
                           />
                         )
                       ) : (
-                        <div className="min-w-0 break-words text-sm font-medium text-foreground">
-                          {col.render ? col.render(value, row) : String(value ?? '—')}
+                        <div className="flex min-w-0 items-start gap-2">
+                          <div className="min-w-0 flex-1 break-words text-sm font-medium text-foreground">
+                            {displayedValue}
+                          </div>
+                          {renderCopyAction(col, copyValue)}
                         </div>
                       )}
                     </div>

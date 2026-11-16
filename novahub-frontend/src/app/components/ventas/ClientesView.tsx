@@ -37,7 +37,7 @@ import { getCustomerDebtAmount, getCustomerFavorAmount } from '../../utils/custo
 import { parseSpreadsheetInWorker } from '../../utils/import-spreadsheet';
 import { normalizeCustomerImportDate } from '../../utils/customer-import-date';
 import { normalizeCurrency, preserveCreditLimitCurrency, summarizeAmountsByCurrency, type SupportedCurrency } from '../../utils/currency';
-import { fetchAllReportPages } from '../../hooks/useTenantQuery';
+import { fetchAllReportPages, useTenantQuery } from '../../hooks/useTenantQuery';
 import { CustomerCountrySelect, CustomerIdentifierInput, CustomerPhoneInput, useCustomerFormOptions, countryNameForForm } from './CustomerContactFields';
 import { countryCodeFromLegacy, customerRucRequired, formatCustomerPhoneForDisplay, identifierComparisonKey, isCustomerIdentifierValid, isCustomerImportPhoneValid, isCustomerPhoneValid, normalizeCustomerPhone } from '../../utils/customer-data';
 import { resolveMissingRucCreditDecision } from '../../utils/customer-credit-confirmation';
@@ -179,13 +179,19 @@ const CUSTOMERS_TOUR_STEPS: GuidedTourStep[] = [
 
 export function ClientesView({ data, loading, error, onRefresh, pagination, onSearchChange, dateFrom, dateTo, onDateRangeChange, summaryData, summaryLoading, summaryError, isSidebarCollapsed = true }: ClientesViewProps) {
   const { baseCurrency, displayCurrency, displayMode, formatConvertedAmount, formatCurrentAmount, formatExplicitAmount } = useCurrency();
-  const { canPerform, user } = useAuth();
+  const { canPerform, user, selectedBranchId } = useAuth();
+  const canViewCustomerLoans = canPerform('SALES_CUSTOMER_LOANS', 'view');
   const { countries, defaultCountryCode } = useCustomerFormOptions();
   const tenantKey = user?.tenantId || 'anonymous';
   const activeClientTenantKey = user?.clientTenantId || user?.tenantId || 'anonymous';
   const [searchTerm, setSearchTerm] = useState('');
   const [selectedCustomerDetail, setSelectedCustomerDetail] = useState<Customer | null>(null);
-  const [customerLoansEnabled, setCustomerLoansEnabled] = useState(false);
+  const customerLoansConfigQuery = useTenantQuery<{ enabled: boolean }>(
+    ['sales', 'customer-loans-config', selectedBranchId || 'active-branch'],
+    (signal) => customersService.getCustomerLoansConfig(signal),
+    { enabled: canViewCustomerLoans, retry: 0, staleTime: 60_000 },
+  );
+  const customerLoansEnabled = Boolean(canViewCustomerLoans && customerLoansConfigQuery.data?.enabled);
   const [statusFilter, setStatusFilter] = useState<'ALL' | 'ACTIVE' | 'INACTIVE'>('ACTIVE');
   const [customerTypeFilter, setCustomerTypeFilter] = useState<'ALL' | 'INDIVIDUAL' | 'COMPANY'>('ALL');
   const [pendingStatusChange, setPendingStatusChange] = useState<Customer | null>(null);
@@ -268,14 +274,6 @@ export function ClientesView({ data, loading, error, onRefresh, pagination, onSe
   useEffect(() => {
     priceListsService.getAll().then((response: any) => setPriceLists(Array.isArray(response) ? response : (response?.data || []))).catch(() => setPriceLists([]));
   }, []);
-
-  useEffect(() => {
-    let cancelled = false;
-    customersService.getCustomerLoansConfig()
-      .then((response: any) => { if (!cancelled) setCustomerLoansEnabled(Boolean((response?.data?.data ?? response?.data ?? response)?.enabled)); })
-      .catch(() => { if (!cancelled) setCustomerLoansEnabled(false); });
-    return () => { cancelled = true; };
-  }, [tenantKey]);
 
   useEffect(() => {
     if (!importOpen || !canPerform('SALES_CLIENTS', 'import') || historyProfileBranchKey === activeClientTenantKey) return;
@@ -1178,6 +1176,7 @@ export function ClientesView({ data, loading, error, onRefresh, pagination, onSe
       key: 'code', 
       header: 'ID / Código',
       width: '110px',
+      copyValue: (row) => row.code || row.id?.slice(0, 8) || null,
       headerExtra: <ColumnFilterMenu label="Código" sort={colFilters.state.code?.sort || null} onSort={(sort) => colFilters.setSort('code', sort)} sortType="number" />,
       render: (val, row) => <span className="text-[13px] font-medium tabular-nums text-muted-foreground">{val || row.id.slice(0, 8)}</span>
     },
@@ -1213,6 +1212,7 @@ export function ClientesView({ data, loading, error, onRefresh, pagination, onSe
       key: 'taxId',
       header: 'Cédula',
       width: '130px',
+      copyValue: (row) => row.taxId || null,
       editable: canPerform('SALES_CLIENTS', 'edit'),
       render: (val) => <span className="text-[13px] text-muted-foreground">{val || '—'}</span>,
     },
@@ -1220,6 +1220,7 @@ export function ClientesView({ data, loading, error, onRefresh, pagination, onSe
       key: 'ruc',
       header: 'RUC',
       width: '130px',
+      copyValue: (row) => row.ruc || null,
       editable: canPerform('SALES_CLIENTS', 'edit'),
       render: (val) => <span className="text-[13px] text-muted-foreground">{val || '—'}</span>,
     },
@@ -1244,8 +1245,8 @@ export function ClientesView({ data, loading, error, onRefresh, pagination, onSe
       ],
       render: (_val, row) => <span className="text-[13px] font-medium text-primary">{row.priceList?.name || 'Sin asignar'}</span>,
     },
-    { key: 'email', header: 'Correo', width: '185px', editable: canPerform('SALES_CLIENTS', 'edit') },
-    { key: 'phone', header: 'Teléfono', width: '175px', editable: canPerform('SALES_CLIENTS', 'edit'), render: (val, row) => <span className="whitespace-nowrap text-[13px] text-muted-foreground">{val ? formatCustomerPhoneForDisplay(String(val), row.countryCode || countryCodeFromLegacy(row.country) || 'NI') : '—'}</span> },
+    { key: 'email', header: 'Correo', width: '185px', editable: canPerform('SALES_CLIENTS', 'edit'), copyValue: (row) => row.email || null },
+    { key: 'phone', header: 'Teléfono', width: '175px', editable: canPerform('SALES_CLIENTS', 'edit'), copyValue: (row) => row.phone ? formatCustomerPhoneForDisplay(String(row.phone), row.countryCode || countryCodeFromLegacy(row.country) || 'NI') : null, render: (val, row) => <span className="whitespace-nowrap text-[13px] text-muted-foreground">{val ? formatCustomerPhoneForDisplay(String(val), row.countryCode || countryCodeFromLegacy(row.country) || 'NI') : '—'}</span> },
     { key: 'department', header: 'Departamento', width: '150px', editable: canPerform('SALES_CLIENTS', 'edit') },
     { key: 'creditLimit', header: 'Límite de crédito', width: '160px', editable: canPerform('SALES_CLIENTS', 'edit'), type: 'number', render: (val, row) => <span className="text-xs font-bold tabular-nums">{formatCurrentAmount(Number(val || 0), normalizeCurrency(row.creditLimitCurrency, baseCurrency))}</span> },
     { key: 'creditDays', header: 'Plazo crédito', width: '110px', editable: canPerform('SALES_CLIENTS', 'edit'), type: 'number', render: (val) => <span className="cell-nowrap text-xs font-bold tabular-nums">{val == null ? 'Sin plazo' : Number(val) === 0 ? 'Mismo día' : `${val} días`}</span> },
@@ -1615,11 +1616,6 @@ export function ClientesView({ data, loading, error, onRefresh, pagination, onSe
         customerId={selectedCustomerDetail?.id ?? null}
         onOpenChange={(open) => !open && setSelectedCustomerDetail(null)}
         customerSnapshot={selectedCustomerDetail}
-        customerLoansEnabled={customerLoansEnabled}
-        canCreateLoan={canPerform('SALES_INVOICES', 'create') && canPerform('SALES_INVOICES', 'submit')}
-        canCreateMora={canPerform('SALES_CLIENTS', 'create')}
-        canEditMora={canPerform('SALES_CLIENTS', 'edit')}
-        onLoansUpdated={() => { void onRefresh(); }}
         canExport={canPerform('SALES_CLIENTS', 'export')}
         extraActions={selectedCustomerDetail ? <>
           {canPerform('SALES_CLIENTS', 'edit') && <Button type="button" variant="outline" className="h-8 rounded-xl text-xs" onClick={() => { setSelectedCustomerDetail(null); openEditCustomer(selectedCustomerDetail); }}><Pencil className="mr-1.5 size-3.5" />Editar</Button>}

@@ -4,6 +4,7 @@ import { notificationsService, subscribeToNotificationEvents, type NotificationG
 import type { Notification } from '../types';
 import { useAuth } from '../contexts/AuthContext';
 import { useTenantQuery } from './useTenantQuery';
+import { markNotificationGroupsRead } from '../utils/notification-read-state';
 
 export function useNotifications() {
     const queryClient = useQueryClient();
@@ -98,15 +99,12 @@ export function useNotifications() {
     const markAllAsRead = async () => {
         try {
             await notificationsService.markAllAsRead();
-            queryClient.setQueryData<NotificationGroupPage>(queryKey, previous => previous ? ({
-                ...previous,
-                items: previous.items.map(notification => ({ ...notification, read: true, unreadCount: 0 })),
-                unreadGroupCount: 0,
-                unreadNotificationCount: 0,
-            }) : previous,
-            );
+            queryClient.setQueryData<NotificationGroupPage>(queryKey, previous => previous
+                ? markNotificationGroupsRead(previous)
+                : previous);
         } catch (error) {
             console.error('Error marking all notifications as read:', error);
+            throw error;
         }
     };
 

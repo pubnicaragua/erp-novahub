@@ -2,9 +2,12 @@
 
 import * as React from "react";
 
-import { ChevronLeft, ChevronRight } from "lucide-react";
+import { ChevronLeft, ChevronRight, Copy } from "lucide-react";
 
 import { cn } from "./utils";
+import { Button } from "./button";
+import { toast } from "@/app/services/toast";
+import { getCopyTextFromNode, normalizeCopyText } from "../../utils/table-copy";
 
 /** Lo provee DataTableViewport: dentro de él las flechas de desplazamiento ya existen y no se duplican. */
 export const TableViewportContext = React.createContext(false);
@@ -97,7 +100,55 @@ function addResponsiveCellLabels(children: React.ReactNode, labels: string[]): R
   });
 }
 
-function Table({ className, containerClassName, containerStyle, responsiveCards = true, viewport = false, ...props }: React.ComponentProps<"table"> & { containerClassName?: string; containerStyle?: React.CSSProperties; responsiveCards?: boolean; viewport?: boolean }) {
+function addCopyValuesToTableCells(children: React.ReactNode, labels: string[]): React.ReactNode {
+  return React.Children.map(children, (node) => {
+    if (!React.isValidElement(node)) return node;
+
+    if (node.type === TableRow) {
+      let cellIndex = 0;
+      const rowChildren = React.Children.map(node.props.children, (cell) => {
+        if (!React.isValidElement(cell) || cell.type !== TableCell) return cell;
+        const label = cell.props["data-copy-label"] ?? cell.props["data-label"] ?? labels[cellIndex] ?? "";
+        cellIndex += 1;
+
+        if (
+          cell.props["data-copyable"] === false
+          || cell.props["data-copyable"] === "false"
+          || cell.props["data-actions-column"] === true
+          || cell.props["data-actions-column"] === "true"
+          || cell.props.colSpan
+        ) return cell;
+
+        const explicitValue = cell.props["data-copy-value"];
+        const copyValue = explicitValue !== undefined
+          ? normalizeCopyText(explicitValue)
+          : getCopyTextFromNode(cell.props.children);
+        if (copyValue === null) return cell;
+
+        return React.cloneElement(cell, {
+          "data-copy-value": copyValue,
+          "data-copy-label": label || "dato",
+        });
+      });
+      return React.cloneElement(node, { children: rowChildren });
+    }
+
+    if (node.type === TableBody || node.type === TableFooter || node.type === React.Fragment) {
+      return React.cloneElement(node, { children: addCopyValuesToTableCells(node.props.children, labels) });
+    }
+    return node;
+  });
+}
+
+type TableProps = React.ComponentProps<"table"> & {
+  containerClassName?: string;
+  containerStyle?: React.CSSProperties;
+  responsiveCards?: boolean;
+  viewport?: boolean;
+  copyableCells?: boolean;
+};
+
+function Table({ className, containerClassName, containerStyle, responsiveCards = true, viewport = false, copyableCells = true, ...props }: TableProps) {
   const insideViewport = React.useContext(TableViewportContext);
   const containerRef = React.useRef<HTMLDivElement>(null);
   const scrollState = useHorizontalOverflow(containerRef);
@@ -107,9 +158,11 @@ function Table({ className, containerClassName, containerStyle, responsiveCards 
     if (!element) return;
     element.scrollBy({ left: (direction === "right" ? 1 : -1) * Math.max(240, Math.floor(element.clientWidth * 0.78)), behavior: "smooth" });
   };
+  const headerLabels = getResponsiveHeaderLabels(props.children);
   const responsiveChildren = responsiveCards
-    ? addResponsiveCellLabels(props.children, getResponsiveHeaderLabels(props.children))
+    ? addResponsiveCellLabels(props.children, headerLabels)
     : props.children;
+  const tableChildren = copyableCells ? addCopyValuesToTableCells(responsiveChildren, headerLabels) : responsiveChildren;
 
   const container = (
     <div
@@ -131,7 +184,7 @@ function Table({ className, containerClassName, containerStyle, responsiveCards 
         data-responsive-cards={responsiveCards ? "true" : undefined}
         className={cn("w-full caption-bottom text-sm", className)}
         {...props}
-       >{responsiveChildren}</table>
+       >{tableChildren}</table>
     </div>
   );
 
@@ -211,16 +264,55 @@ function TableHead({ className, ...props }: React.ComponentProps<"th">) {
   );
 }
 
-function TableCell({ className, ...props }: React.ComponentProps<"td">) {
+function TableCell({ className, children, ...props }: React.ComponentProps<"td">) {
+  const { ["data-copy-value"]: copyValueProp, ["data-copy-label"]: copyLabelProp, ...cellProps } = props as React.ComponentProps<"td"> & {
+    "data-copy-value"?: string;
+    "data-copy-label"?: string;
+  };
+  const copyValue = normalizeCopyText(copyValueProp);
+  const copyLabel = normalizeCopyText(copyLabelProp) || "dato";
+
+  const copyCellValue = async (event: React.MouseEvent<HTMLButtonElement>) => {
+    event.preventDefault();
+    event.stopPropagation();
+    if (!copyValue) return;
+    try {
+      if (!navigator.clipboard?.writeText) throw new Error("Clipboard API unavailable");
+      await navigator.clipboard.writeText(copyValue);
+      toast.success(`${copyLabel} copiado`);
+    } catch {
+      toast.error("No se pudo copiar el dato. Comprueba los permisos del navegador.");
+    }
+  };
+
   return (
     <td
       data-slot="table-cell"
+      data-table-cell-copyable={copyValue ? "true" : undefined}
       className={cn(
         "p-2 align-middle whitespace-nowrap [&:has([role=checkbox])]:pr-0 [&>[role=checkbox]]:translate-y-[2px]",
         className,
+        copyValue && "group/table-cell relative",
       )}
-      {...props}
-    />
+      {...cellProps}
+    >
+      {children}
+      {copyValue && (
+        <Button
+          type="button"
+          variant="ghost"
+          size="icon"
+          data-table-cell-copy="true"
+          title={`Copiar ${copyLabel}`}
+          aria-label={`Copiar ${copyLabel}`}
+          className="table-cell-copy-action absolute right-1 top-1/2 z-10 size-7 -translate-y-1/2 rounded-md bg-background/90 text-muted-foreground shadow-sm hover:bg-primary/10 hover:text-primary"
+          onPointerDown={(event) => event.stopPropagation()}
+          onClick={(event) => void copyCellValue(event)}
+        >
+          <Copy className="size-3.5" />
+        </Button>
+      )}
+    </td>
   );
 }
 

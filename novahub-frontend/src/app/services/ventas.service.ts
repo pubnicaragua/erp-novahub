@@ -426,6 +426,8 @@ export const creditDocumentsService = {
 };
 
 export const customerLoansService = {
+  getConfig: (signal?: AbortSignal) => api.get<{ enabled: boolean }>('/sales/customer-loans/config', signal ? { signal } : undefined),
+  getAll: (filters?: ApiFilters, signal?: AbortSignal) => api.get<PaginatedResponse<any> & { summary?: { totalContracts: number; activeContracts: number; outstandingByCurrency: Array<{ currency: string; amount: number }>; overdueByCurrency: Array<{ currency: string; amount: number }> } }>('/sales/customer-loans', { params: filters as any, signal }),
   getById: (id: string, signal?: AbortSignal) => api.get<any>(`/sales/customer-loans/${id}`, signal ? { signal } : undefined),
   applyPayment: (id: string, data: Record<string, unknown>, idempotencyKey?: string) =>
     api.idempotentPost<any>(`/sales/customer-loans/${id}/payments`, data, idempotencyKey),

@@ -23,6 +23,7 @@ import { generateCustomerCreditInstallmentReport } from '../../utils/customerCre
 import { generateCustomerDebtStatementReport } from '../../utils/customerDebtStatementReport';
 import { CustomerCreditCalendarSelector } from './CustomerCreditCalendarSelector';
 import { useDebouncedValue } from '../../hooks/useDebouncedValue';
+import { cn } from '../ui/utils';
 
 type MoraType = { id: string; name: string; description: string; isActive: boolean };
 type LoanFrequency = 'DAILY' | 'WEEKLY' | 'BIWEEKLY' | 'MONTHLY';
@@ -89,9 +90,12 @@ interface CustomerLoansPanelProps {
   onUpdated?: () => void;
   onMoraTypeUpdated?: (moraType: MoraType | null) => void;
   onReady?: () => void;
+  initialCreateOpen?: boolean;
+  dialogOnly?: boolean;
+  focusLoanId?: string | null;
 }
 
-export function CustomerLoansPanel({ customerId, customerName, moraTypeId, moraType, enabled, canCreateLoan, canCreateMora, canEditMora, onUpdated, onMoraTypeUpdated, onReady }: CustomerLoansPanelProps) {
+export function CustomerLoansPanel({ customerId, customerName, moraTypeId, moraType, enabled, canCreateLoan, canCreateMora, canEditMora, onUpdated, onMoraTypeUpdated, onReady, initialCreateOpen = false, dialogOnly = false, focusLoanId }: CustomerLoansPanelProps) {
   const { baseCurrency } = useCurrency();
   const { user, selectedBranchId } = useAuth();
   const { themeConfig } = useTheme();
@@ -128,6 +132,7 @@ export function CustomerLoansPanel({ customerId, customerName, moraTypeId, moraT
   const [assignedMoraTypeId, setAssignedMoraTypeId] = useState(moraTypeId || '');
   const [moraTypeSelection, setMoraTypeSelection] = useState(moraTypeId || '');
   const readyReported = useRef(false);
+  const initialCreateHandled = useRef(false);
   const [form, setForm] = useState<{
     principal: string; interest: string; interestMode: 'NONE' | 'FIXED_AMOUNT' | 'PERCENTAGE'; frequency: LoanFrequency;
     dueDate: string; firstInstallmentDate: string; planCalculationMode: 'AMOUNT' | 'DEADLINE' | 'MANUAL';
@@ -157,6 +162,18 @@ export function CustomerLoansPanel({ customerId, customerName, moraTypeId, moraT
   useEffect(() => {
     readyReported.current = false;
   }, [customerId, enabled]);
+
+  useEffect(() => {
+    if (!enabled || !initialCreateOpen || initialCreateHandled.current) return;
+    initialCreateHandled.current = true;
+    setCreateOpen(true);
+  }, [enabled, initialCreateOpen]);
+
+  useEffect(() => {
+    if (!enabled || !focusLoanId || !loansQuery.isSuccess) return;
+    const timer = window.setTimeout(() => document.getElementById(`customer-loan-${focusLoanId}`)?.scrollIntoView({ behavior: 'smooth', block: 'start' }), 80);
+    return () => window.clearTimeout(timer);
+  }, [enabled, focusLoanId, loansQuery.isSuccess, loansQuery.dataUpdatedAt]);
 
   useEffect(() => {
     if (!enabled || readyReported.current || !loansQuery.isSuccess || !moraTypesQuery.isSuccess) return;
@@ -378,7 +395,7 @@ export function CustomerLoansPanel({ customerId, customerName, moraTypeId, moraT
   };
 
   return (
-    <section className="min-w-0 space-y-4" aria-label="Préstamos del cliente">
+    <section className={dialogOnly ? 'hidden' : 'min-w-0 space-y-4'} aria-label="Préstamos del cliente">
       <Card className="rounded-2xl border-border/60 bg-card p-4 shadow-sm sm:p-5">
         <div className="flex min-w-0 flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
           <div className="min-w-0">
@@ -433,7 +450,7 @@ export function CustomerLoansPanel({ customerId, customerName, moraTypeId, moraT
             const balance = Math.max(0, Number(loan.invoice?.balance || 0));
             const status = String(loan.invoice?.status || '').toUpperCase();
             return (
-              <Card key={loan.id} className="min-w-0 rounded-2xl border-border/60 bg-card p-4 shadow-sm sm:p-5">
+              <Card key={loan.id} id={`customer-loan-${loan.id}`} className={cn('min-w-0 rounded-2xl border-border/60 bg-card p-4 shadow-sm sm:p-5', focusLoanId === loan.id && 'ring-2 ring-primary/40')}>
                 <div className="flex min-w-0 items-start justify-between gap-3">
                   <div className="min-w-0"><p className="flex items-center gap-2 break-all text-sm font-black text-foreground"><FileText className="size-4 shrink-0 text-primary" /> Factura {loan.invoice?.number || '—'}</p><p className="mt-1 text-[10px] text-muted-foreground">Desembolsado {localDate(loan.invoice?.date)}</p></div>
                   <Badge variant="outline" className={balance > 0.01 ? 'shrink-0 border-amber-500/30 bg-amber-500/10 text-amber-700 dark:text-amber-300' : 'shrink-0 border-emerald-500/30 bg-emerald-500/10 text-emerald-700 dark:text-emerald-300'}>{balance > 0.01 ? (status === 'OVERDUE' ? 'Vencido' : 'Pendiente') : 'Liquidado'}</Badge>

@@ -292,6 +292,14 @@ const BUILTIN_MODULES: { id: string; label: string; icon: typeof FileText; descr
     ],
   },
   {
+    id: 'projects', label: 'Costos de Proyectos', icon: Building2,
+    description: 'Costos de proyectos ejecutados → gasto del proyecto + cuenta por pagar configurada',
+    fields: [
+      { key: 'expense', label: 'Gasto del Proyecto', side: 'debit', description: 'Se debita el costo ejecutado del proyecto', defaultCode: '5100', defaultName: 'Gastos de Proyectos', defaultType: 'EXPENSE' },
+      { key: 'payable', label: 'Cuenta por Pagar', side: 'credit', description: 'Se acredita la obligación asociada al costo del proyecto', defaultCode: '2000', defaultName: 'Cuentas por Pagar', defaultType: 'LIABILITY' },
+    ],
+  },
+  {
     id: 'fixedAsset', label: 'Activos Fijos', icon: Building2,
     description: 'Registro de activos y depreciación del período: DEBE gasto de depreciación / HABER depreciación acumulada',
     fields: [
@@ -346,9 +354,9 @@ const ACCOUNTING_MODULE_GROUPS = [
   {
     id: 'operations',
     label: 'Cuentas contables de Inventario y operaciones',
-    description: 'Cuenta control de inventario, ajustes, cierre de caja y diferencias cambiarias.',
+    description: 'Inventario, costos de proyectos, ajustes, cierre de caja y diferencias cambiarias.',
     icon: Link2,
-    moduleIds: ['inventory', 'inventoryAdjustment', 'cashRegister', 'currencyRevaluation', 'openingBalance'],
+    moduleIds: ['projects', 'inventory', 'inventoryAdjustment', 'cashRegister', 'currencyRevaluation', 'openingBalance'],
   },
   {
     id: 'other',
@@ -359,10 +367,17 @@ const ACCOUNTING_MODULE_GROUPS = [
   },
 ]
 
+const getMappingCodes = (value: unknown): string[] => {
+  const candidates = Array.isArray(value) ? value : [value]
+  return [...new Set(candidates.map(code => String(code ?? '').trim()).filter(Boolean))]
+}
+
+const getPrimaryMappingCode = (value: unknown) => getMappingCodes(value)[0] || ''
+
 const getDefaultAccountMappings = () => Object.fromEntries(
   BUILTIN_MODULES
     .filter(module => !OPERATIONAL_ONLY_MODULE_IDS.has(module.id))
-    .map(module => [module.id, Object.fromEntries(module.fields.map(field => [field.key, '']))]),
+    .map(module => [module.id, Object.fromEntries(module.fields.map(field => [field.key, []]))]),
 )
 
 const ACCOUNT_TYPE_LABELS: Record<string, string> = {
@@ -650,6 +665,72 @@ function AccountCodeInput({ code, field, moduleId, account, accountOptions, sugg
   )
 }
 
+function AccountMappingOptionsEditor({ codes, field, moduleId, accountsByCode, accountOptions, suggestions, configuredValid, configuredReason, onChange }: {
+  codes: string[]
+  field: ModuleField
+  moduleId: string
+  accountsByCode: Map<string, AccountInfo>
+  accountOptions: AccountOption[]
+  suggestions: AccountSuggestion[]
+  configuredValid?: boolean | null
+  configuredReason?: string | null
+  onChange: (values: string[]) => void
+}) {
+  const [addingOption, setAddingOption] = useState(false)
+  const displayedCodes = codes.length ? [...codes, ...(addingOption ? [''] : [])] : ['']
+  const updateOption = (index: number, value: string) => {
+    const next = [...codes]
+    if (index >= next.length) next.push(value)
+    else next[index] = value
+    setAddingOption(false)
+    onChange([...new Set(next.filter(Boolean))])
+  }
+
+  return (
+    <div className="min-w-0 space-y-2">
+      {displayedCodes.map((code, index) => (
+        <div key={`${field.key}-${index}`} className="flex min-w-0 items-start gap-2">
+          <div className="min-w-0 flex-1">
+            <AccountCodeInput
+              code={code}
+              field={field}
+              moduleId={moduleId}
+              account={accountsByCode.get(code)}
+              accountOptions={accountOptions}
+              suggestions={suggestions}
+              configuredValid={configuredValid}
+              configuredReason={configuredReason}
+              onChange={value => updateOption(index, value)}
+            />
+          </div>
+          {codes.length > 0 && (
+            <Button
+              type="button"
+              variant="ghost"
+              size="icon"
+              className="mt-1 size-8 shrink-0 text-muted-foreground hover:text-destructive"
+              onClick={() => onChange(codes.filter((_, currentIndex) => currentIndex !== index))}
+              aria-label={`Quitar cuenta alternativa ${code || index + 1} de ${field.label}`}
+              title="Quitar alternativa"
+            >
+              <Trash2 className="size-4" />
+            </Button>
+          )}
+        </div>
+      ))}
+      <Button
+        type="button"
+        variant="outline"
+        size="sm"
+        className="h-8 rounded-lg text-[10px]"
+        onClick={() => setAddingOption(true)}
+      >
+        <Plus className="mr-1.5 size-3.5" /> Agregar alternativa
+      </Button>
+    </div>
+  )
+}
+
 type QuickSetupModule = { id: string; label: string; fields: ModuleField[] }
 
 function AccountMappingQuickSetupDialog({
@@ -667,7 +748,7 @@ function AccountMappingQuickSetupDialog({
   open: boolean
   onOpenChange: (open: boolean) => void
   modules: QuickSetupModule[]
-  accountMappings: Record<string, Record<string, string>>
+  accountMappings: Record<string, Record<string, string | string[]>>
   accountsByCode: Map<string, AccountInfo>
   suggestions: SuggestedAccountsResponse['mappings']
   loading: boolean
@@ -697,7 +778,7 @@ function AccountMappingQuickSetupDialog({
     return matchesFor(moduleId, field.key).find(match => match.autoSelect)?.code || ''
   }
   const hasValidCurrentMapping = (moduleId: string, field: ModuleField) => {
-    const currentCode = accountMappings[moduleId]?.[field.key] || ''
+    const currentCode = getPrimaryMappingCode(accountMappings[moduleId]?.[field.key])
     const currentAccount = accountsByCode.get(currentCode)
     const configuredValid = suggestions?.[moduleId]?.[field.key]?.configuredValid
     return Boolean(currentAccount
@@ -721,7 +802,7 @@ function AccountMappingQuickSetupDialog({
     return fields.filter(({ module, field }) => normalizeText(`${module.label} ${field.label} ${field.key}`).includes(query))
   }, [fields, search])
 
-  const getCurrentCode = (moduleId: string, field: ModuleField) => accountMappings[moduleId]?.[field.key] || ''
+  const getCurrentCode = (moduleId: string, field: ModuleField) => getPrimaryMappingCode(accountMappings[moduleId]?.[field.key])
   const patches = fields.flatMap(({ module, field }) => {
     const id = fieldId(module.id, field.key)
     const currentCode = getCurrentCode(module.id, field)
@@ -994,20 +1075,28 @@ const [mappingsSearch, setMappingsSearch] = useState('')
       setTaxRate(cfg.taxRate ?? 15)
       setIndustry(cfg.industry || 'RETAIL')
       const configuredMappings = cfg.accountMappings || {}
+       const configuredOptions = cfg.accountMappingOptions || {}
       const defaultMappings = getDefaultAccountMappings()
-      const mergedMappings: Record<string, Record<string, string>> = { ...defaultMappings }
-      Object.entries(configuredMappings).forEach(([moduleId, mapping]) => {
-        mergedMappings[moduleId] = { ...(mergedMappings[moduleId] || {}), ...(mapping as Record<string, string>) }
+       const mergedMappings: Record<string, Record<string, string[]>> = { ...defaultMappings }
+       const moduleIds = new Set([...Object.keys(configuredMappings), ...Object.keys(configuredOptions)])
+       moduleIds.forEach(moduleId => {
+         const legacyMapping = configuredMappings[moduleId] || {}
+         const optionsMapping = configuredOptions[moduleId] || {}
+         const fieldKeys = new Set([...Object.keys(legacyMapping), ...Object.keys(optionsMapping)])
+         mergedMappings[moduleId] = { ...(mergedMappings[moduleId] || {}) }
+         fieldKeys.forEach(fieldKey => {
+           mergedMappings[moduleId][fieldKey] = getMappingCodes(optionsMapping[fieldKey] ?? legacyMapping[fieldKey])
+         })
       })
       // Compatibilidad con la configuración anterior, que agrupaba IR y todas
       // las retenciones en `withholdingPayable`. La cuenta histórica se usa
       // como IR hasta que el usuario configure las cuentas separadas.
-      const legacySupplierWithholding = configuredMappings?.supplierInvoice?.withholdingPayable
+       const legacySupplierWithholding = mergedMappings?.supplierInvoice?.withholdingPayable
       if (legacySupplierWithholding && !configuredMappings?.supplierInvoice?.irWithholdingPayable) {
         mergedMappings.supplierInvoice.irWithholdingPayable = legacySupplierWithholding
       }
       if (mergedMappings.supplierInvoice) {
-        const { withholdingPayable: _legacyWithholding, ...supplierInvoiceMapping } = mergedMappings.supplierInvoice
+         const { withholdingPayable: _legacyWithholding, ...supplierInvoiceMapping } = mergedMappings.supplierInvoice
         mergedMappings.supplierInvoice = supplierInvoiceMapping
         // Las configuraciones anteriores usaban `supplierInvoice` para el
         // mismo asiento. Se muestran y editan ahora bajo el evento correcto:
@@ -1086,8 +1175,12 @@ const [mappingsSearch, setMappingsSearch] = useState('')
             defaultCurrency,
             taxRate,
             industry,
-            accountMappings: nextMappings,
-            ...(patch ? { accountMappingPatch: patch } : {}),
+            accountMappings: Object.fromEntries(Object.entries(nextMappings).map(([moduleId, fields]) => [
+              moduleId,
+              Object.fromEntries(Object.entries(fields || {}).map(([fieldKey, values]) => [fieldKey, getPrimaryMappingCode(values)])),
+            ])),
+            accountMappingOptions: nextMappings,
+            ...(patch?.value ? { accountMappingPatch: patch } : {}),
             customModules,
           })
           toast.success('Cuenta contable guardada automáticamente', { id: 'account-mapping-save' })
@@ -1120,27 +1213,29 @@ const [mappingsSearch, setMappingsSearch] = useState('')
     }
   }
 
-  const updateMapping = (moduleId: string, fieldKey: string, value: string) => {
+  const updateMapping = (moduleId: string, fieldKey: string, values: string[]) => {
     if (!canEditAccounting) return
     const module = allModuleDefs.find(item => item.id === moduleId)
     const field = module?.fields.find(item => item.key === fieldKey)
-    const account = allAccounts.find(item => item.code === value)
-    const optionState = field && account ? getAccountOptionState(account, field, moduleId) : undefined
-    if (account && optionState?.disabled) {
-      toast.error(`No se puede seleccionar ${account.code}: ${optionState.label}`)
-      return
+    for (const value of values) {
+      const account = allAccounts.find(item => item.code === value)
+      const optionState = field && account ? getAccountOptionState(account, field, moduleId) : undefined
+      if (account && optionState?.disabled) {
+        toast.error(`No se puede seleccionar ${account.code}: ${optionState.label}`)
+        return
+      }
     }
 
     const next = {
       ...accountMappingsRef.current,
       [moduleId]: {
         ...(accountMappingsRef.current[moduleId] || {}),
-        [fieldKey]: value,
+        [fieldKey]: values,
       },
     }
     accountMappingsRef.current = next
     setAccountMappings(next)
-    void persistAccountMappings(next, { moduleId, fieldKey, value })
+    void persistAccountMappings(next, { moduleId, fieldKey, value: getPrimaryMappingCode(values) })
   }
 
   const toggleGroup = (id: string) => {
@@ -1281,7 +1376,7 @@ const [mappingsSearch, setMappingsSearch] = useState('')
           for (const patch of patches) {
             nextMappings[patch.moduleId] = {
               ...(nextMappings[patch.moduleId] || {}),
-              [patch.fieldKey]: patch.value,
+              [patch.fieldKey]: [patch.value],
             }
           }
           accountMappingsRef.current = nextMappings
@@ -1349,8 +1444,9 @@ const [mappingsSearch, setMappingsSearch] = useState('')
     const mapping = accountMappings[mod.id] || {}
     const total = fields.length
     const defined = fields.filter(f => {
-      const account = accountsByCode.get(mapping[f.key])
-      return Boolean(mapping[f.key] && account)
+      const code = getPrimaryMappingCode(mapping[f.key])
+      const account = accountsByCode.get(code)
+      return Boolean(code && account)
         && (f.key !== 'ivaPayable' || isSalesVatPayableAccount(account!))
     }).length
     const pct = total === 0 ? 100 : Math.round((defined / total) * 100)
@@ -1408,17 +1504,17 @@ const [mappingsSearch, setMappingsSearch] = useState('')
             isPayroll && 'xl:grid-cols-4',
           )}>
             {fields.map(field => (
-              <AccountCodeInput
+              <AccountMappingOptionsEditor
                 key={field.key}
-                code={modMapping[field.key] || ''}
+                codes={getMappingCodes(modMapping[field.key])}
                 field={field}
                 moduleId={mod.id}
-                account={accountsByCode.get(modMapping[field.key] || '')}
+                accountsByCode={accountsByCode}
                 accountOptions={accountOptionsByType[field.defaultType] || []}
                 suggestions={suggestionsForField(mod.id, field.key)}
                 configuredValid={suggestionDetailsForField(mod.id, field.key)?.configuredValid}
                 configuredReason={suggestionDetailsForField(mod.id, field.key)?.configuredReason}
-                onChange={value => updateMapping(mod.id, field.key, value)}
+                onChange={values => updateMapping(mod.id, field.key, values)}
               />
             ))}
           </div>
@@ -1511,8 +1607,8 @@ const [mappingsSearch, setMappingsSearch] = useState('')
         </div>
         <div className="mt-1.5 flex flex-wrap gap-1.5">
           {fields.map(({ module, field }) => {
-            const code = module.id === 'invoice' ? (invoiceMapping[field.key] || '') : (paymentMapping[field.key] || '')
-            const hasAccount = Boolean(invoiceMapping[field.key] || paymentMapping[field.key]) && Boolean(accountsByCode.get(code))
+            const code = module.id === 'invoice' ? getPrimaryMappingCode(invoiceMapping[field.key]) : getPrimaryMappingCode(paymentMapping[field.key])
+            const hasAccount = Boolean(code) && Boolean(accountsByCode.get(code))
             return (
               <span key={`${module.id}-${field.key}`} className={cn(
                 'inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[9px] font-black uppercase tracking-wider',
@@ -1527,19 +1623,19 @@ const [mappingsSearch, setMappingsSearch] = useState('')
         </div>
         <div className="mt-4 grid min-w-0 grid-cols-1 gap-3 md:grid-cols-2">
           {fields.map(({ module, mapping, field }) => {
-            const code = mapping[field.key] || ''
+            const code = getPrimaryMappingCode(mapping[field.key])
             return (
-              <AccountCodeInput
+              <AccountMappingOptionsEditor
                 key={`${module.id}-${field.key}`}
-                code={code}
+                codes={getMappingCodes(mapping[field.key])}
                 field={field}
                 moduleId={module.id}
-                account={accountsByCode.get(code)}
+                accountsByCode={accountsByCode}
                 accountOptions={accountOptionsByType[field.defaultType] || []}
                 suggestions={suggestionsForField(module.id, field.key)}
                 configuredValid={suggestionDetailsForField(module.id, field.key)?.configuredValid}
                 configuredReason={suggestionDetailsForField(module.id, field.key)?.configuredReason}
-                onChange={value => updateMapping(module.id, field.key, value)}
+                onChange={values => updateMapping(module.id, field.key, values)}
               />
             )
           })}
@@ -1567,19 +1663,19 @@ const [mappingsSearch, setMappingsSearch] = useState('')
         </div>
         <div className="mt-4 grid grid-cols-1 gap-3 md:grid-cols-2">
           {mod.fields.map(field => {
-            const code = modMapping[field.key] || ''
+            const code = getPrimaryMappingCode(modMapping[field.key])
             return (
-              <AccountCodeInput
+              <AccountMappingOptionsEditor
                 key={field.key}
-                code={code}
+                codes={getMappingCodes(modMapping[field.key])}
                 field={field}
                 moduleId={mod.id}
-                account={accountsByCode.get(code)}
+                accountsByCode={accountsByCode}
                 accountOptions={accountOptionsByType[field.defaultType] || []}
                 suggestions={suggestionsForField(mod.id, field.key)}
                 configuredValid={suggestionDetailsForField(mod.id, field.key)?.configuredValid}
                 configuredReason={suggestionDetailsForField(mod.id, field.key)?.configuredReason}
-                onChange={value => updateMapping(mod.id, field.key, value)}
+                onChange={values => updateMapping(mod.id, field.key, values)}
               />
             )
           })}

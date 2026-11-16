@@ -800,6 +800,25 @@ main.module-overview [data-slot="card-description"] {
   font-family: inherit !important;
 }
 
+[data-slot="table-cell"][data-table-cell-copyable="true"] {
+  padding-right: 2.75rem !important;
+}
+
+.table-cell-copy-action {
+  opacity: 1;
+}
+
+@media (hover: hover) and (pointer: fine) {
+  .table-cell-copy-action {
+    opacity: 0;
+  }
+
+  [data-slot="table-cell"]:hover > .table-cell-copy-action,
+  [data-slot="table-cell"]:focus-within > .table-cell-copy-action {
+    opacity: 1;
+  }
+}
+
 :is(main[class*="module-"], .manager-shell, .master-console-module) [data-slot="table-cell"] :is(span, p) {
   font-size: 13px !important;
   font-family: inherit !important;

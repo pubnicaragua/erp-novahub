@@ -57,6 +57,7 @@ export const SIDEBAR_PERMISSION_SUBMODULES: SidebarPermissionDefinition[] = [
   { id: 'SALES_PAYMENTS', label: 'Pagos recibidos', parent: 'SALES' },
   { id: 'SALES_RETURNS', label: 'Notas de crédito', parent: 'SALES' },
   { id: 'SALES_CREDIT_NOTES', label: 'Créditos', parent: 'SALES' },
+  { id: 'SALES_CUSTOMER_LOANS', label: 'Préstamos', parent: 'SALES', subscription: false },
   { id: 'SALES_PRICE_LISTS', label: 'Listas de precios', parent: 'SALES' },
   { id: 'RETAIL_POS', label: 'Facturación por caja', parent: 'SALES' },
   { id: 'RETAIL_CASH_CONTROL', label: 'Control de Caja', parent: 'SALES' },
@@ -283,6 +284,7 @@ export const SIDEBAR_SUBMENU_MODULE_REQUIREMENTS: Record<string, string[]> = {
   'pagos-recibidos': ['SALES_PAYMENTS'],
   'devoluciones-venta': ['SALES_RETURNS'],
   'notas-credito': ['SALES_CREDIT_NOTES'],
+  prestamos: ['SALES_CUSTOMER_LOANS'],
   'fuerza-comercial': ['FORCE_SALES'],
   'fuerza-comercial-kanban': ['FORCE_SALES'],
   'fuerza-comercial-historial': ['FORCE_SALES'],
@@ -604,6 +606,7 @@ export const SIDEBAR_PERMISSION_PARENT_ALIASES: Record<string, string[]> = {
 
 /** Alias de lectura para roles guardados antes de separar las vistas. */
 export const LEGACY_VIEW_PERMISSION_ALIASES: Record<string, string[]> = {
+  SALES_CUSTOMER_LOANS: ['SALES_CLIENTS', 'SALES_CREDIT_NOTES'],
   RETAIL_POS: ['SALES_POS', 'SALES', 'CAJA'],
   RETAIL_CASH_CONTROL: ['RETAIL_POS', 'SALES_POS', 'SALES', 'CAJA'],
   FINANCIAL_BANK: ['FINANCIAL_ACCOUNTS'],

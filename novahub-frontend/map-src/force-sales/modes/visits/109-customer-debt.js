@@ -40,7 +40,8 @@ function debtMoney(amount, currency){
   return `${symbol}${Number(amount || 0).toLocaleString('es-NI', {minimumFractionDigits:2, maximumFractionDigits:2})}`;
 }
 function debtDate(value){
-  const date = new Date(value);
+  const match = String(value || '').match(/^(\d{4})-(\d{2})-(\d{2})$/);
+  const date = match ? new Date(Number(match[1]), Number(match[2]) - 1, Number(match[3])) : new Date(value);
   return Number.isNaN(date.getTime()) ? '—' : date.toLocaleDateString('es-NI', {day:'2-digit', month:'short', year:'numeric'});
 }
 function customerDebtHtml(business){
@@ -65,10 +66,45 @@ function customerDebtHtml(business){
     debt.oldestOverdue ? `<div class="meta debt-overdue">Factura ${esc(debt.oldestOverdue.number)} con ${esc(debt.oldestOverdue.daysLate)} ${debt.oldestOverdue.daysLate === 1 ? 'día' : 'días'} de atraso · ${esc(debtMoney(debt.oldestOverdue.balance, debt.oldestOverdue.currency))}</div>` : '',
     debt.nextDue ? `<div class="meta">Próximo vencimiento: factura ${esc(debt.nextDue.number)} el ${esc(debtDate(debt.nextDue.dueDate))} · ${esc(debtMoney(debt.nextDue.balance, debt.nextDue.currency))}</div>` : '',
     debt.lastPayment ? `<div class="meta">Último pago: ${esc(debtMoney(debt.lastPayment.amount, debt.lastPayment.currency))} el ${esc(debtDate(debt.lastPayment.date))}</div>` : '<div class="meta">Sin pagos registrados en el último año.</div>',
-    ...(debt.loans || []).slice(0, 3).map(loan => `<div class="meta">Préstamo ${esc(loan.number)} · ${esc(debtMoney(loan.total, loan.currency))} · pendiente ${esc(debtMoney(loan.pending, loan.currency))}</div>`),
   ].join('');
-  return wrap(`${rows}${facts}`);
+  const obligations = [
+    ...(debt.credits || []).map(item => ({ ...item, kind: 'CREDIT_NOTE', label: 'Crédito' })),
+    ...(debt.loans || []).map(item => ({ ...item, kind: 'CUSTOMER_LOAN', label: 'Préstamo' })),
+  ].filter(item => Number(item.balance || 0) > 0.01);
+  const contracts = obligations.length ? `<div class="debt-contracts"><div class="meta"><b>Contratos por cobrar</b></div>${obligations.map(item => {
+    const overdue = Number(item.overdueBalance || 0);
+    const lateDays = Number(item.overdueDays || 0);
+    const detail = overdue > 0.01
+      ? `Vencido ${debtMoney(overdue, item.currency)}${lateDays ? ` · ${lateDays} ${lateDays === 1 ? 'día' : 'días'} de atraso` : ''}`
+      : item.nextInstallment ? `Próxima cuota: ${debtDate(item.nextInstallment.dueDate)} · ${debtMoney(item.nextInstallment.remainingAmount, item.currency)}` : 'Sin atraso';
+    const button = CAN_PAY_CUSTOMER_CONTRACTS
+      ? `<button type="button" class="visit-action" data-customer-debt-pay="${esc(item.id)}" data-kind="${item.kind}" data-prospect-id="${esc(state.remoteId || '')}" data-customer-name="${esc(debt.customer?.name || '')}">${item.kind === 'CUSTOMER_LOAN' ? 'Registrar abono' : 'Registrar pago'}</button>`
+      : '';
+    return `<div class="debt-contract"><div class="debt-contract-copy"><b>${esc(item.label)} ${esc(item.number || '')}</b><span>Saldo: ${esc(debtMoney(item.balance, item.currency))}</span><span class="${overdue > 0.01 ? 'debt-overdue' : ''}">${esc(detail)}</span></div>${button}</div>`;
+  }).join('')}</div>` : '';
+  return wrap(`${rows}${facts}${contracts}`);
 }
+document.addEventListener('click', event => {
+  const button = event.target?.closest?.('[data-customer-debt-pay]');
+  if (!button || !CAN_PAY_CUSTOMER_CONTRACTS || window.parent === window) return;
+  event.preventDefault();
+  window.parent.postMessage({
+    source: 'novahub-force-sales',
+    type: 'force-sales-open-payment',
+    recordId: String(button.dataset.customerDebtPay || ''),
+    kind: String(button.dataset.kind || ''),
+    prospectId: String(button.dataset.prospectId || ''),
+    customerName: String(button.dataset.customerName || ''),
+  }, location.origin);
+});
+window.addEventListener('message', event => {
+  if (event.source !== window.parent || event.origin !== window.location.origin || event.data?.source !== 'novahub-force-sales' || event.data?.type !== 'force-sales-customer-summary-refresh') return;
+  const prospectId = String(event.data.prospectId || '');
+  if (!prospectId) return;
+  pointExtras.delete(prospectId);
+  const business = businesses.find(item => String(stateOf(item).remoteId || '') === prospectId);
+  if (business) ensurePointExtras(business);
+});
 function visitHistoryHtml(business){
   if(ACTIVE_MODE !== 'visits')return '';
   const extras = pointExtrasFor(business);

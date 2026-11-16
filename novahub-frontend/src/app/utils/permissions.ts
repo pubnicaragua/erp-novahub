@@ -337,6 +337,7 @@ const VIEW_PERMISSION_ACTIONS: Record<string, readonly PermissionMatrixAction[]>
   SALES_PAYMENTS: ['read', 'edit', 'pay', 'cancel', 'export'],
   SALES_RETURNS: ['read', 'create', 'edit', 'approve', 'process', 'reject', 'export'],
   SALES_CREDIT_NOTES: ['read', 'create', 'edit', 'issue', 'send', 'pay', 'cancel', 'export', 'viewOtherLocations'],
+  SALES_CUSTOMER_LOANS: ['read'],
   SALES_PRICE_LISTS: ['read', 'create', 'edit', 'import', 'export'],
   RETAIL_POS: ['read', 'create', 'edit', 'import', 'pay', 'reconcile', 'claim', 'release', 'confirm', 'deliver', 'cancel', 'export', 'viewOtherLocations'],
   RETAIL_CASH_CONTROL: ['read', 'create', 'edit', 'deactivate', 'open', 'movement', 'count', 'close', 'resolve', 'configure', 'export', 'manage'],
