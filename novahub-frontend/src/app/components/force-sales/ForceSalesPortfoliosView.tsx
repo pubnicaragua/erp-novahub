@@ -1,0 +1,394 @@
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import * as XLSX from 'xlsx';
+import { AlertCircle, ArrowLeftRight, Check, ChevronDown, Download, FileSpreadsheet, LocateFixed, MapPin, Plus, RefreshCw, Upload, UserRound, X } from 'lucide-react';
+import { forceSalesPortfoliosService, type ForceSalesPortfolio, type ForceSalesPortfolioImportResult, type UnlinkedForceSalesProspect } from '../../services/force-sales-portfolios.service';
+import { toast } from '../../services/toast';
+import { Badge } from '../ui/badge';
+import { Button } from '../ui/button';
+import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '../ui/dialog';
+import { Input } from '../ui/input';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../ui/select';
+
+type Manager = { id: string; name: string; activeRouteCount: number };
+type ImportRow = Record<string, unknown> & { _rowNumber: number; _managerId: string; _name: string; _signedBalance: string };
+
+const normalizeHeader = (value: unknown) => String(value ?? '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase().replace(/[^a-z0-9]/g, '');
+function errorMessage(error: unknown, fallback: string) {
+  if (error && typeof error === 'object') {
+    const value = error as { response?: { data?: { message?: unknown } }; message?: unknown };
+    const message = value.response?.data?.message;
+    if (typeof message === 'string') return message;
+    if (Array.isArray(message)) return message.map(String).join(' · ');
+    if (typeof value.message === 'string') return value.message;
+  }
+  return fallback;
+}
+function errorList(error: unknown) {
+  if (!error || typeof error !== 'object') return [];
+  const value = error as { response?: { data?: { errors?: unknown; message?: unknown } } };
+  const body = value.response?.data;
+  if (Array.isArray(body?.errors)) return body.errors.map(String);
+  if (Array.isArray(body?.message)) return body.message.map(String);
+  return [];
+}
+const getCell = (row: Record<string, unknown>, aliases: string[]) => {
+  const keys = new Map(Object.entries(row).map(([key, value]) => [normalizeHeader(key), value]));
+  for (const alias of aliases) if (keys.has(normalizeHeader(alias))) return keys.get(normalizeHeader(alias));
+  return '';
+};
+const localDate = () => {
+  const now = new Date();
+  return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`;
+};
+const dateCell = (value: unknown) => {
+  if (value instanceof Date && !Number.isNaN(value.getTime())) {
+    return `${value.getFullYear()}-${String(value.getMonth() + 1).padStart(2, '0')}-${String(value.getDate()).padStart(2, '0')}`;
+  }
+  const raw = String(value ?? '').trim();
+  if (!raw) return '';
+  const match = raw.match(/^(\d{1,2})[-/.](\d{1,2})[-/.](\d{4})$/);
+  if (match) return `${match[3]}-${match[2].padStart(2, '0')}-${match[1].padStart(2, '0')}`;
+  return raw;
+};
+
+function downloadPortfolioTemplate() {
+  const headers = [
+    'Nombre', 'Fecha de ingreso', 'Tipo', 'Nombre de empresa', 'Identificación fiscal', 'RUC', 'Correo', 'Teléfono', 'Teléfono contacto', 'Dirección', 'Ciudad', 'Departamento', 'País', 'Código país', 'Régimen fiscal', 'Límite de crédito', 'Moneda límite de crédito', 'Lista de precios', 'Tipo saldo inicial', 'Saldo inicial', 'Moneda saldo inicial', 'Estado', 'Notas', 'Gestor/Usuario',
+  ];
+  const example = [
+    'Cliente Ejemplo', '', 'PARTICULAR', '', '', '', '', '', '', 'Dirección del cliente', '', '', 'Nicaragua', 'NI', '', 0, 'NIO', '', '', -500, '', 'ACTIVO', '', 'Nombre del gestor',
+  ];
+  const guide = XLSX.utils.aoa_to_sheet([
+    ['GUÍA DE LLENADO · CARTERAS COMERCIALES'],
+    ['La importación crea clientes nuevos en Ventas y una cartera por cada gestor seleccionado. El código de cliente lo genera NovaHub.'],
+    ['Campo', 'Regla'],
+    ['Nombre', 'Obligatorio. Cédula y RUC pueden quedar vacíos.'],
+    ['Gestor/Usuario', 'Obligatorio. Escribe el nombre de un usuario con acceso activo a Fuerza Comercial; podrás corregir la asignación antes de importar.'],
+    ['Saldo inicial', 'Usa valores negativos para deuda pendiente, positivos para saldo a favor y cero o celda vacía cuando no hay saldo.'],
+    ['Moneda y fecha de corte', 'Se seleccionan una sola vez para toda la carga. Las columnas Tipo saldo inicial y Moneda saldo inicial se conservan por compatibilidad con la plantilla de Ventas; en Carteras prevalecen el signo y los datos de la carga.'],
+    ['Datos duplicados', 'La importación no sobrescribe clientes existentes. Revisa los avisos por nombre repetido antes de confirmar.'],
+    ['Ubicación', 'Después de importar, cada gestor puede registrar GPS, escoger un punto sin cliente o marcar una posición en el mapa. Marcar la ubicación no registra una visita.'],
+  ]);
+  guide['!cols'] = [{ wch: 30 }, { wch: 105 }];
+  const sheet = XLSX.utils.aoa_to_sheet([headers, example]);
+  sheet['!cols'] = headers.map((header) => ({ wch: Math.max(16, Math.min(32, header.length + 5)) }));
+  const workbook = XLSX.utils.book_new();
+  XLSX.utils.book_append_sheet(workbook, sheet, 'Clientes');
+  XLSX.utils.book_append_sheet(workbook, guide, 'Guía de llenado');
+  XLSX.writeFile(workbook, 'plantilla_clientes_carteras.xlsx');
+}
+
+function parseImportRows(rawRows: Array<Record<string, unknown>>, managers: Manager[]): ImportRow[] {
+  return rawRows.map((source, index) => {
+    const managerValue = String(getCell(source, ['Gestor/Usuario', 'Gestor', 'Gestores', 'Usuario', 'Responsable', 'Assigned To', 'Manager']) || '').trim();
+    const managerKey = normalizeHeader(managerValue);
+    const managerMatches = managers.filter((manager) => normalizeHeader(manager.name) === managerKey || manager.id === managerValue);
+    const name = String(getCell(source, ['Nombre', 'name', 'Cliente', 'customer']) || '').trim();
+    const signedBalance = getCell(source, ['Saldo inicial', 'Saldo inicial (+favor/-deuda)', 'openingBalanceAmount', 'importe apertura', 'saldo apertura']);
+    const normalizedType = normalizeHeader(getCell(source, ['Tipo', 'type']) || 'particular');
+    const type = normalizedType.includes('empresa') || normalizedType.includes('company') || normalizedType.includes('juridica') ? 'COMPANY' : 'INDIVIDUAL';
+    const country = String(getCell(source, ['País', 'country']) || 'Nicaragua').trim();
+    const countryCode = String(getCell(source, ['Código país', 'countryCode', 'ISO']) || 'NI').trim().toUpperCase();
+    return {
+      _rowNumber: index + 2,
+      _managerId: managerMatches.length === 1 ? managerMatches[0].id : '',
+      _name: name,
+      _signedBalance: signedBalance === undefined || signedBalance === null ? '' : String(signedBalance).trim(),
+      name,
+      type,
+      companyName: String(getCell(source, ['Nombre de empresa', 'companyName', 'nombre empresa']) || '').trim(),
+      fiscalRegime: String(getCell(source, ['Régimen fiscal', 'fiscalRegime']) || '').trim(),
+      taxId: String(getCell(source, ['Cédula', 'Identificación fiscal', 'Identificación', 'taxId']) || '').trim(),
+      ruc: String(getCell(source, ['RUC']) || '').trim(),
+      email: String(getCell(source, ['Correo', 'Email']) || '').trim(),
+      phone: String(getCell(source, ['Teléfono', 'phone']) || '').trim(),
+      contactPhone: String(getCell(source, ['Teléfono contacto', 'contactPhone']) || '').trim(),
+      address: String(getCell(source, ['Dirección', 'address']) || '').trim(),
+      city: String(getCell(source, ['Ciudad', 'city']) || '').trim(),
+      department: String(getCell(source, ['Departamento', 'department']) || '').trim(),
+      country,
+      countryCode,
+      createdAt: dateCell(getCell(source, ['Fecha de ingreso', 'fecha ingreso', 'createdAt'])),
+      creditLimit: getCell(source, ['Límite de crédito', 'creditLimit']) === '' ? 0 : Number(getCell(source, ['Límite de crédito', 'creditLimit'])),
+      creditLimitCurrency: String(getCell(source, ['Moneda límite de crédito', 'creditLimitCurrency']) || 'NIO').toUpperCase(),
+      priceListCode: String(getCell(source, ['Lista de precios', 'priceListCode']) || '').trim(),
+      openingBalanceAmount: signedBalance === '' || signedBalance === undefined ? 0 : Number(signedBalance),
+      notes: String(getCell(source, ['Notas', 'notes', 'observaciones']) || '').trim(),
+      status: normalizeHeader(getCell(source, ['Estado', 'status']) || 'activo').includes('inactiv') ? 'INACTIVE' : 'ACTIVE',
+    };
+  }).filter((row) => row._name || row._managerId || row._signedBalance);
+}
+
+export function ForceSalesPortfoliosView({
+  canImport,
+  canManage,
+  canTransfer,
+  canLocate,
+  onPickLocation,
+}: {
+  canImport: boolean;
+  canManage: boolean;
+  canTransfer: boolean;
+  canLocate: boolean;
+  onPickLocation: (portfolioId: string, customerId: string) => void;
+}) {
+  const [portfolios, setPortfolios] = useState<ForceSalesPortfolio[]>([]);
+  const [managers, setManagers] = useState<Manager[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [importOpen, setImportOpen] = useState(false);
+  const [fileName, setFileName] = useState('');
+  const [rows, setRows] = useState<ImportRow[]>([]);
+  const [importErrors, setImportErrors] = useState<string[]>([]);
+  const [importWarnings, setImportWarnings] = useState<string[]>([]);
+  const [portfolioName, setPortfolioName] = useState('Cartera');
+  const [openingBalanceDate, setOpeningBalanceDate] = useState(localDate);
+  const [openingBalanceCurrency, setOpeningBalanceCurrency] = useState<'NIO' | 'USD'>('NIO');
+  const [importing, setImporting] = useState(false);
+  const [importResult, setImportResult] = useState<ForceSalesPortfolioImportResult | null>(null);
+  const [batchId, setBatchId] = useState('');
+  const [locating, setLocating] = useState<{ portfolioId: string; customerId: string; customerName: string } | null>(null);
+  const [unlinkedProspects, setUnlinkedProspects] = useState<UnlinkedForceSalesProspect[]>([]);
+  const [selectedProspect, setSelectedProspect] = useState('');
+  const [transferTarget, setTransferTarget] = useState<Record<string, string>>({});
+  const [expandedPortfolio, setExpandedPortfolio] = useState<string | null>(null);
+  const fileInput = useRef<HTMLInputElement>(null);
+
+  const reload = useCallback(async () => {
+    setLoading(true);
+    try {
+      const [portfolioResult, managerResult] = await Promise.all([
+        forceSalesPortfoliosService.list(true),
+        canImport || canTransfer ? forceSalesPortfoliosService.assignees() : Promise.resolve([]),
+      ]);
+      setPortfolios(Array.isArray(portfolioResult) ? portfolioResult : []);
+      setManagers(Array.isArray(managerResult) ? managerResult : []);
+    } catch (error: unknown) {
+      toast.error(errorMessage(error, 'No se pudieron cargar las carteras.'));
+    } finally { setLoading(false); }
+  }, [canImport, canTransfer]);
+
+  useEffect(() => {
+    let cancelled = false;
+    const load = async () => {
+      try {
+        const [portfolioResult, managerResult] = await Promise.all([
+          forceSalesPortfoliosService.list(true),
+          canImport || canTransfer ? forceSalesPortfoliosService.assignees() : Promise.resolve([]),
+        ]);
+        if (!cancelled) {
+          setPortfolios(Array.isArray(portfolioResult) ? portfolioResult : []);
+          setManagers(Array.isArray(managerResult) ? managerResult : []);
+        }
+      } catch (error: unknown) {
+        if (!cancelled) toast.error(errorMessage(error, 'No se pudieron cargar las carteras.'));
+      } finally {
+        if (!cancelled) setLoading(false);
+      }
+    };
+    void load();
+    return () => { cancelled = true; };
+  }, [canImport, canTransfer]);
+
+  const activePortfolios = useMemo(() => portfolios.filter((portfolio) => portfolio.status === 'ACTIVE'), [portfolios]);
+  const activeCustomers = useMemo(() => portfolios.reduce((count, portfolio) => count + portfolio.customers.filter((row) => row.assignmentStatus === 'ACTIVE').length, 0), [portfolios]);
+  const openImport = () => {
+    setFileName(''); setRows([]); setImportErrors([]); setImportWarnings([]); setImportResult(null);
+    setPortfolioName('Cartera'); setOpeningBalanceDate(localDate()); setOpeningBalanceCurrency('NIO'); setBatchId(crypto.randomUUID());
+    setImportOpen(true);
+  };
+
+  const onFile = async (file?: File) => {
+    if (!file) return;
+    setImportErrors([]); setImportWarnings([]); setImportResult(null); setFileName(file.name); setPortfolioName(file.name.replace(/\.[^.]+$/, '').slice(0, 120) || 'Cartera'); setBatchId(crypto.randomUUID());
+    try {
+      const workbook = XLSX.read(await file.arrayBuffer(), { type: 'array', cellDates: true });
+      const sheetName = workbook.SheetNames.find((name) => normalizeHeader(name) === 'clientes') || workbook.SheetNames[0];
+      const source = sheetName ? XLSX.utils.sheet_to_json<Record<string, unknown>>(workbook.Sheets[sheetName], { defval: '' }) : [];
+      const parsedRows = parseImportRows(source, managers);
+      if (!parsedRows.length) throw new Error('No se encontraron filas de clientes en la hoja seleccionada.');
+      if (parsedRows.length > 5000) throw new Error('El archivo supera el límite de 5,000 clientes por carga. Divídelo en varios archivos.');
+      setRows(parsedRows);
+    } catch (error: unknown) {
+      setRows([]);
+      toast.error(errorMessage(error, 'No se pudo leer el archivo. Usa XLSX, XLS o CSV.'));
+    }
+  };
+
+  const updateRowManager = (index: number, managerId: string) => setRows((current) => current.map((row, rowIndex) => rowIndex === index ? { ...row, _managerId: managerId } : row));
+  const rowErrors = useMemo(() => rows.flatMap((row) => {
+    const result: string[] = [];
+    if (!row._name) result.push(`Fila ${row._rowNumber}: falta el nombre.`);
+    if (!row._managerId) result.push(`Fila ${row._rowNumber}: asigna un gestor activo.`);
+    if (row._signedBalance && !Number.isFinite(Number(row._signedBalance))) result.push(`Fila ${row._rowNumber}: el saldo inicial no es un número válido.`);
+    return result;
+  }), [rows]);
+
+  const confirmImport = async () => {
+    if (!rows.length || rowErrors.length || !portfolioName.trim() || !openingBalanceDate) return;
+    setImporting(true); setImportErrors([]); setImportWarnings([]); setImportResult(null);
+    try {
+      const response = await forceSalesPortfoliosService.import({
+        batchId,
+        sourceFileName: fileName,
+        portfolioName: portfolioName.trim(),
+        openingBalanceCurrency,
+        openingBalanceDate,
+        rows: rows.map((row) => {
+          const { _rowNumber: _row, _managerId: managerId, _name: _name, _signedBalance: _balance, ...customer } = row;
+          return {
+            ...customer,
+            forceSalesAssignedToId: managerId,
+            type: customer.type === 'COMPANY' ? 'company' : 'individual',
+            openingBalanceAmount: row._signedBalance === '' ? undefined : Number(row._signedBalance),
+            openingBalanceCurrency,
+          };
+        }),
+      });
+      setImportResult(response);
+      setImportWarnings(response.warnings || []);
+      await reload();
+      toast.success(response.idempotentReplay ? 'Se recuperó el resultado de la carga anterior.' : `Se crearon ${response.created} clientes en ${response.portfolios?.length || 0} carteras.`);
+    } catch (error: unknown) {
+      const messages = errorList(error);
+      const message = errorMessage(error, 'No se pudo importar el archivo.');
+      setImportErrors(messages.length ? messages : [message]);
+      if (!messages.length) toast.error(message);
+    } finally { setImporting(false); }
+  };
+
+  const closePortfolio = async (portfolio: ForceSalesPortfolio) => {
+    if (!window.confirm(`¿Cerrar “${portfolio.name}”? Sus clientes conservarán el historial y dejarán de estar asignados activamente.`)) return;
+    try { await forceSalesPortfoliosService.close(portfolio.id); toast.success('Cartera cerrada.'); await reload(); }
+    catch (error: unknown) { toast.error(errorMessage(error, 'No se pudo cerrar la cartera.')); }
+  };
+
+  const transferCustomer = async (portfolio: ForceSalesPortfolio, customerId: string, customerName: string) => {
+    const targetId = transferTarget[customerId];
+    if (!targetId) { toast.error('Selecciona la cartera destino.'); return; }
+    const target = activePortfolios.find((item) => item.id === targetId);
+    if (!target || !window.confirm(`¿Transferir “${customerName}” desde “${portfolio.name}” a “${target.name}”? Se conservará la asignación anterior en el historial.`)) return;
+    try { await forceSalesPortfoliosService.transfer(customerId, targetId); toast.success('Cliente transferido.'); await reload(); }
+    catch (error: unknown) { toast.error(errorMessage(error, 'No se pudo transferir el cliente.')); }
+  };
+
+  const openLocateDialog = async (portfolio: ForceSalesPortfolio, customerId: string, customerName: string) => {
+    setLocating({ portfolioId: portfolio.id, customerId, customerName }); setSelectedProspect('');
+    try { setUnlinkedProspects(await forceSalesPortfoliosService.unlinkedProspects()); }
+    catch (error: unknown) { setUnlinkedProspects([]); toast.error(errorMessage(error, 'No se pudieron cargar los puntos sin cliente.')); }
+  };
+
+  const saveCurrentGps = () => {
+    if (!locating) return;
+    if (!navigator.geolocation) { toast.error('Este dispositivo no permite obtener ubicación GPS.'); return; }
+    navigator.geolocation.getCurrentPosition(async (position) => {
+      try {
+        await forceSalesPortfoliosService.saveLocation(locating.portfolioId, locating.customerId, position.coords.latitude, position.coords.longitude);
+        toast.success('Ubicación guardada en el mapa; no se registró una visita.'); setLocating(null); await reload();
+      } catch (error: unknown) { toast.error(errorMessage(error, 'No se pudo guardar la ubicación.')); }
+    }, (error) => toast.error(error.message || 'No se pudo obtener la ubicación del dispositivo.'), { enableHighAccuracy: true, timeout: 15000, maximumAge: 0 });
+  };
+
+  const linkExistingPoint = async () => {
+    if (!locating || !selectedProspect) return;
+    try {
+      await forceSalesPortfoliosService.linkToProspect(locating.portfolioId, locating.customerId, selectedProspect);
+      toast.success('Cliente vinculado al punto comercial.'); setLocating(null); await reload();
+    } catch (error: unknown) { toast.error(errorMessage(error, 'No se pudo vincular el punto.')); }
+  };
+
+  const formatBalance = (value: number | string | undefined) => {
+    const amount = Number(value);
+    if (!Number.isFinite(amount)) return '—';
+    return `${new Intl.NumberFormat('es-NI', { minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(amount)} · moneda base`;
+  };
+
+  return (
+    <div className="min-w-0 flex-1 overflow-y-auto bg-background px-4 py-5 sm:px-6 md:px-8">
+      <div className="mx-auto max-w-[1500px] space-y-5">
+        <header className="flex min-w-0 flex-col gap-3 md:flex-row md:items-end md:justify-between">
+          <div className="min-w-0">
+            <p className="text-xs font-black uppercase tracking-[0.2em] text-primary">Fuerza Comercial</p>
+            <h1 className="mt-1 text-2xl font-black italic tracking-tight text-foreground sm:text-3xl">Carteras de clientes</h1>
+            <p className="mt-1 max-w-3xl text-sm text-muted-foreground">Listados asignados por gestor. Después de ubicar un cliente, el punto aparece en el mapa para registrar visitas.</p>
+          </div>
+          <div className="flex shrink-0 flex-wrap gap-2">
+            <Button variant="outline" onClick={() => void reload()} disabled={loading} aria-label="Actualizar carteras"><RefreshCw className={`mr-2 size-4 ${loading ? 'animate-spin' : ''}`} />Actualizar</Button>
+            {canImport && <Button onClick={openImport}><Plus className="mr-2 size-4" />Importar cartera</Button>}
+          </div>
+        </header>
+
+        <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3">
+          <div className="rounded-2xl border border-border bg-card p-4 shadow-sm"><p className="text-xs font-bold uppercase tracking-wider text-muted-foreground">Carteras activas</p><p className="mt-2 text-2xl font-black text-foreground">{activePortfolios.length}</p></div>
+          <div className="rounded-2xl border border-border bg-card p-4 shadow-sm"><p className="text-xs font-bold uppercase tracking-wider text-muted-foreground">Clientes asignados</p><p className="mt-2 text-2xl font-black text-foreground">{activeCustomers}</p></div>
+          <div className="rounded-2xl border border-border bg-card p-4 shadow-sm"><p className="text-xs font-bold uppercase tracking-wider text-muted-foreground">Usuarios</p><p className="mt-2 text-2xl font-black text-foreground">{managers.length || '—'}</p></div>
+        </div>
+
+        {loading && <div className="rounded-2xl border border-border bg-card p-8 text-center text-sm text-muted-foreground">Cargando carteras…</div>}
+        {!loading && !portfolios.length && <div className="rounded-2xl border border-dashed border-border bg-card p-10 text-center"><FileSpreadsheet className="mx-auto size-9 text-muted-foreground" /><h2 className="mt-3 font-bold text-foreground">Todavía no hay carteras</h2><p className="mx-auto mt-1 max-w-lg text-sm text-muted-foreground">Importa el Excel de clientes con el gestor indicado en cada fila. Los clientes se crearán en Ventas y quedarán agrupados por gestor.</p>{canImport && <Button className="mt-4" onClick={openImport}><Upload className="mr-2 size-4" />Importar primer listado</Button>}</div>}
+
+        {!loading && portfolios.map((portfolio) => {
+          const isExpanded = expandedPortfolio === portfolio.id;
+          const activeRows = portfolio.customers.filter((row) => row.assignmentStatus === 'ACTIVE');
+          return (
+            <article key={portfolio.id} className="overflow-hidden rounded-2xl border border-border bg-card shadow-sm">
+              <button type="button" onClick={() => setExpandedPortfolio(isExpanded ? null : portfolio.id)} className="flex w-full min-w-0 flex-col gap-3 p-4 text-left sm:flex-row sm:items-center sm:justify-between sm:p-5" aria-expanded={isExpanded}>
+                <div className="flex min-w-0 items-start gap-3">
+                  <span className="mt-0.5 rounded-xl bg-primary/10 p-2 text-primary"><UserRound className="size-5" /></span>
+                  <div className="min-w-0"><div className="flex flex-wrap items-center gap-2"><h2 className="break-words text-base font-black text-foreground sm:text-lg">{portfolio.name}</h2><Badge variant={portfolio.status === 'ACTIVE' ? 'default' : 'secondary'}>{portfolio.status === 'ACTIVE' ? 'Activa' : 'Cerrada'}</Badge></div><p className="mt-1 text-sm text-muted-foreground">Gestor: <span className="font-semibold text-foreground">{portfolio.assignedTo?.name || 'Sin usuario'}</span> · {activeRows.length} clientes activos · carga {new Date(portfolio.createdAt).toLocaleDateString('es-NI')}</p></div>
+                </div>
+                <div className="flex shrink-0 items-center gap-2"><span className="text-xs text-muted-foreground">{portfolio.sourceFileName || 'Importación'}</span><ChevronDown className={`size-4 transition-transform ${isExpanded ? 'rotate-180' : ''}`} /></div>
+              </button>
+              {isExpanded && <div className="border-t border-border p-3 sm:p-5">
+                {!portfolio.customers.length ? <p className="rounded-xl bg-muted/30 p-4 text-sm text-muted-foreground">No hay clientes en esta cartera.</p> : <div className="space-y-2">
+                  {portfolio.customers.map((row) => {
+                    const customer = row.customer;
+                    const active = row.assignmentStatus === 'ACTIVE' && portfolio.status === 'ACTIVE';
+                    const canOfferLocate = canLocate && active;
+                    const targets = activePortfolios.filter((target) => target.id !== portfolio.id);
+                    return <div key={row.assignmentId} className="flex min-w-0 flex-col gap-3 rounded-xl border border-border/70 bg-background/60 p-3 sm:flex-row sm:items-center sm:justify-between">
+                      <div className="min-w-0"><div className="flex flex-wrap items-center gap-2"><p className="break-words font-bold text-foreground">{customer.name}</p>{customer.code && <span className="text-xs text-muted-foreground">{customer.code}</span>}{!active && <Badge variant="secondary">Histórico</Badge>}</div><p className="mt-1 break-words text-xs text-muted-foreground">{[customer.address, customer.city, customer.department].filter(Boolean).join(' · ') || 'Sin dirección'}{customer.phone ? ` · ${customer.phone}` : ''}</p>{customer.balance !== undefined && <p className="mt-1 text-xs text-muted-foreground">Saldo: <span className="font-semibold text-foreground">{formatBalance(customer.balance)}</span></p>}</div>
+                      <div className="flex shrink-0 flex-wrap gap-2">
+                        {canOfferLocate && <Button size="sm" variant="outline" onClick={() => void openLocateDialog(portfolio, customer.id, customer.name)}><MapPin className="mr-1.5 size-4" />Ubicar</Button>}
+                        {canTransfer && active && targets.length > 0 && <div className="flex max-w-full items-center gap-1.5"><select aria-label={`Cartera destino para ${customer.name}`} className="h-9 max-w-[190px] rounded-lg border border-input bg-background px-2 text-xs text-foreground" value={transferTarget[customer.id] || ''} onChange={(event) => setTransferTarget((current) => ({ ...current, [customer.id]: event.target.value }))}><option value="">Mover a…</option>{targets.map((target) => <option key={target.id} value={target.id}>{target.assignedTo?.name} · {target.name}</option>)}</select><Button size="sm" variant="outline" aria-label={`Transferir ${customer.name}`} onClick={() => void transferCustomer(portfolio, customer.id, customer.name)}><ArrowLeftRight className="size-4" /></Button></div>}
+                      </div>
+                    </div>;
+                  })}
+                </div>}
+                {canManage && portfolio.status === 'ACTIVE' && <div className="mt-4 flex justify-end border-t border-border pt-3"><Button size="sm" variant="outline" onClick={() => void closePortfolio(portfolio)}><X className="mr-1.5 size-4" />Cerrar cartera</Button></div>}
+              </div>}
+            </article>
+          );
+        })}
+      </div>
+
+      <Dialog open={importOpen} onOpenChange={(open) => { if (!importing) setImportOpen(open); }}>
+        <DialogContent className="max-h-[92dvh] w-[calc(100vw-1rem)] max-w-5xl overflow-y-auto">
+          <DialogHeader><DialogTitle className="flex items-center gap-2"><FileSpreadsheet className="size-5" />Importar cartera comercial</DialogTitle><DialogDescription>Usa la plantilla normal de clientes con la columna Gestor/Usuario. Se crearán clientes nuevos en Ventas y una cartera por gestor.</DialogDescription></DialogHeader>
+          <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-4">
+            <label className="space-y-1 text-xs font-bold text-muted-foreground">Nombre del lote<Input value={portfolioName} onChange={(event) => setPortfolioName(event.target.value)} maxLength={120} /></label>
+            <label className="space-y-1 text-xs font-bold text-muted-foreground">Fecha de corte<Input type="date" value={openingBalanceDate} onChange={(event) => setOpeningBalanceDate(event.target.value)} /></label>
+            <label className="space-y-1 text-xs font-bold text-muted-foreground">Moneda de saldos<Select value={openingBalanceCurrency} onValueChange={(value) => setOpeningBalanceCurrency(value as 'NIO' | 'USD')}><SelectTrigger><SelectValue /></SelectTrigger><SelectContent><SelectItem value="NIO">NIO · Córdoba</SelectItem><SelectItem value="USD">USD · Dólar</SelectItem></SelectContent></Select></label>
+            <div className="flex items-end"><input ref={fileInput} type="file" accept=".xlsx,.xls,.csv,.tsv" aria-label="Archivo Excel o CSV de cartera" tabIndex={-1} className="sr-only" onChange={(event) => { void onFile(event.target.files?.[0]); event.target.value = ''; }} /><Button type="button" variant="outline" className="w-full" onClick={() => fileInput.current?.click()}><Upload className="mr-2 size-4" />{fileName || 'Elegir Excel/CSV'}</Button></div>
+          </div>
+          <div className="flex flex-wrap items-center justify-between gap-2 rounded-xl border border-primary/15 bg-primary/[0.035] p-3 text-xs text-muted-foreground"><span>Saldo negativo = deuda pendiente · positivo = saldo a favor · cero = sin saldo. El saldo y los datos del cliente no se actualizan si existe un homónimo; revisa los avisos.</span><Button type="button" variant="ghost" size="sm" onClick={downloadPortfolioTemplate}><Download className="mr-1.5 size-4" />Descargar plantilla</Button></div>
+          {!!rows.length && <div className="flex flex-wrap gap-2 text-xs"><Badge variant="secondary">{rows.length} filas</Badge><Badge variant={rowErrors.length ? 'destructive' : 'default'}>{rowErrors.length ? `${rowErrors.length} por corregir` : 'Lista para importar'}</Badge>{fileName && <span className="self-center text-muted-foreground">{fileName}</span>}</div>}
+          {!!rows.length && <div className="max-h-[38dvh] overflow-auto rounded-xl border border-border"><table className="w-full min-w-[740px] text-left text-xs"><thead className="sticky top-0 bg-muted text-muted-foreground"><tr><th className="p-2">Fila</th><th className="p-2">Cliente</th><th className="p-2">Dirección</th><th className="p-2">Saldo</th><th className="min-w-56 p-2">Gestor/Usuario *</th><th className="p-2">Estado</th></tr></thead><tbody>{rows.map((row, index) => { const manager = managers.find((candidate) => candidate.id === row._managerId); const invalid = !row._name || !row._managerId || (row._signedBalance !== '' && !Number.isFinite(Number(row._signedBalance))); return <tr key={`${row._rowNumber}-${index}`} className="border-t border-border/70"><td className="p-2 text-muted-foreground">{row._rowNumber}</td><td className="max-w-[230px] break-words p-2 font-semibold text-foreground">{row._name || 'Falta nombre'}</td><td className="max-w-[220px] break-words p-2 text-muted-foreground">{String(row.address || '—')}</td><td className="p-2 text-foreground">{row._signedBalance || '—'}</td><td className="p-2"><select className="h-9 w-full rounded-lg border border-input bg-background px-2 text-foreground" aria-label={`Gestor de la fila ${row._rowNumber}`} value={row._managerId} onChange={(event) => updateRowManager(index, event.target.value)}><option value="">Selecciona gestor</option>{managers.map((candidate) => <option key={candidate.id} value={candidate.id}>{candidate.name}</option>)}</select></td><td className="p-2">{invalid ? <span className="inline-flex items-center gap-1 text-destructive"><AlertCircle className="size-3.5" />Revisar</span> : <span className="inline-flex items-center gap-1 text-primary"><Check className="size-3.5" />{manager?.name || 'Válida'}</span>}</td></tr>; })}</tbody></table></div>}
+          {!!rowErrors.length && <div role="alert" className="max-h-28 overflow-auto rounded-xl border border-destructive/30 bg-destructive/5 p-3 text-xs text-destructive">{rowErrors.slice(0, 30).map((message) => <p key={message}>{message}</p>)}{rowErrors.length > 30 && <p>Y {rowErrors.length - 30} errores más.</p>}</div>}
+          {!!importErrors.length && <div role="alert" className="max-h-36 overflow-auto rounded-xl border border-destructive/30 bg-destructive/5 p-3 text-xs text-destructive">{importErrors.map((message, index) => <p key={`${index}-${message}`}>{message}</p>)}</div>}
+          {!!importWarnings.length && <div className="max-h-32 overflow-auto rounded-xl border border-amber-500/30 bg-amber-500/5 p-3 text-xs text-amber-800 dark:text-amber-200"><p className="mb-1 font-bold">Avisos para revisar</p>{importWarnings.map((message, index) => <p key={`${index}-${message}`}>{message}</p>)}</div>}
+          {importResult && <div role="status" className="rounded-xl border border-primary/20 bg-primary/5 p-3 text-sm text-foreground">{importResult.idempotentReplay ? 'La carga ya se había completado.' : `Importación completada: ${importResult.created} clientes en ${importResult.portfolios?.length || 0} carteras.`}</div>}
+          <DialogFooter className="flex-col-reverse gap-2 sm:flex-row"><Button type="button" variant="outline" onClick={() => setImportOpen(false)} disabled={importing}>{importResult ? 'Cerrar' : 'Cancelar'}</Button><Button type="button" onClick={() => void confirmImport()} disabled={!rows.length || rowErrors.length > 0 || importing || !portfolioName.trim() || !openingBalanceDate}>{importing ? <><RefreshCw className="mr-2 size-4 animate-spin" />Importando…</> : <><Upload className="mr-2 size-4" />Importar {rows.length || ''} clientes</>}</Button></DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={Boolean(locating)} onOpenChange={(open) => { if (!open) setLocating(null); }}>
+        <DialogContent className="max-w-lg">
+          <DialogHeader><DialogTitle className="flex items-center gap-2"><LocateFixed className="size-5" />Ubicar cliente en el mapa</DialogTitle><DialogDescription>{locating?.customerName}. Guardar una ubicación crea o actualiza el punto comercial, sin registrar una visita.</DialogDescription></DialogHeader>
+          <div className="grid gap-2 sm:grid-cols-2"><Button variant="outline" onClick={saveCurrentGps}><LocateFixed className="mr-2 size-4" />Usar ubicación GPS</Button><Button variant="outline" onClick={() => { if (locating) onPickLocation(locating.portfolioId, locating.customerId); setLocating(null); }}><MapPin className="mr-2 size-4" />Marcar en mapa</Button></div>
+          <div className="space-y-2 rounded-xl border border-border p-3"><p className="text-sm font-bold text-foreground">Vincular punto existente</p><p className="text-xs text-muted-foreground">Escoge un punto que ya tenga ubicación y aún no esté vinculado a un cliente.</p><select className="h-10 w-full rounded-lg border border-input bg-background px-3 text-sm text-foreground" value={selectedProspect} onChange={(event) => setSelectedProspect(event.target.value)}><option value="">{unlinkedProspects.length ? 'Selecciona un punto' : 'No hay puntos disponibles'}</option>{unlinkedProspects.map((prospect) => <option key={prospect.id} value={prospect.id}>{prospect.name}{prospect.address ? ` · ${prospect.address}` : ''}</option>)}</select><Button className="w-full" onClick={() => void linkExistingPoint()} disabled={!selectedProspect}>Vincular cliente al punto</Button></div>
+          <DialogFooter><Button variant="ghost" onClick={() => setLocating(null)}>Cerrar</Button></DialogFooter>
+        </DialogContent>
+      </Dialog>
+    </div>
+  );
+}

@@ -50,7 +50,7 @@ function pass(b){
   const c = document.getElementById('category').value;
   const s = document.getElementById('source').value;
   const st = document.getElementById('state').value;
-  const markedBy=document.getElementById('markedBy')?.value||'all';
+  const markedBy=selectedCreatorFilter();
   const creatorId=creatorIdOf(b);
   if(selectedZone !== 'Todos' && b.zone !== selectedZone) return false;
   if(c !== 'all' && b.category !== c) return false;

@@ -133,6 +133,20 @@ window.addEventListener('online',updateCustomerLookupAvailability);
 window.addEventListener('offline',updateCustomerLookupAvailability);
 window.addEventListener('message',event=>{
   if(event.source!==window.parent||event.origin!==window.location.origin||event.data?.source!=='novahub-force-sales')return;
+  if(event.data?.type==='force-sales-start-portfolio-location'){
+    const portfolioId=String(event.data.portfolioId||'').trim();
+    const customerId=String(event.data.customerId||'').trim();
+    if(!portfolioId||!customerId)return;
+    pendingPortfolioLocationSelection={portfolioId,customerId};
+    activeView='map';
+    closeBusinessDetailPopup();
+    toast('Toca el punto del mapa donde está el cliente. No se registrará una visita.');
+    return;
+  }
+  if(event.data?.type==='force-sales-cancel-portfolio-location'){
+    pendingPortfolioLocationSelection=null;
+    return;
+  }
   if(event.data?.type==='force-sales-refresh')refreshForceSalesData(event.data.event||{});
   if(event.data?.type==='force-sales-customer-link-selected'){
     const pointId=String(event.data.pointId||'').trim();

@@ -7,6 +7,8 @@ import { creditNotesService, customerLoansService } from '../services/ventas.ser
 import { subscribeToNotificationEvents } from '../services/notifications.service';
 import { canAccessModuleView } from '../utils/moduleViewAccess';
 import { ForceSalesNavigation } from './force-sales/ForceSalesNavigation';
+import { ForceSalesPortfoliosView } from './force-sales/ForceSalesPortfoliosView';
+import { forceSalesPortfoliosService } from '../services/force-sales-portfolios.service';
 import { ForceSalesMapHeader } from './force-sales/ForceSalesMapHeader';
 import { ForceSalesCustomerLinkDialog, type ForceSalesCustomerOption } from './force-sales/ForceSalesCustomerLinkDialog';
 import { CustomerCreditPaymentDialog, type CustomerPaymentTarget } from './ventas/CustomerCreditPaymentDialog';
@@ -28,6 +30,17 @@ import isotipoUrl from '../../assets/branding/novahub-isotipo.png';
 import { toast } from '@/app/services/toast';
 
 const mapUrl = `${import.meta.env.BASE_URL}maps/diseñoui_mapas_freelancers.html`;
+
+function forceSalesErrorMessage(error: unknown, fallback: string) {
+  if (error && typeof error === 'object') {
+    const value = error as { response?: { data?: { message?: unknown } }; message?: unknown };
+    const message = value.response?.data?.message;
+    if (typeof message === 'string') return message;
+    if (Array.isArray(message)) return message.map(String).join(' · ');
+    if (typeof value.message === 'string') return value.message;
+  }
+  return fallback;
+}
 
 interface ForceSalesMapConfig extends ForceSalesModeConfig {
   mapProvider?: string;
@@ -58,6 +71,7 @@ export function FuerzaComercialPage({ activeSubModule, onSubModuleChange, isSide
   const routeImportInputRef = useRef<HTMLInputElement>(null);
   const pendingProspectTargetRef = useRef<string | null>(null);
   const pendingRouteTargetRef = useRef<string | null>(null);
+  const pendingPortfolioLocationRef = useRef<{ portfolioId: string; customerId: string } | null>(null);
   const streamStatusRef = useRef<'connected' | 'reconnecting'>('reconnecting');
   const searchQueryRef = useRef('');
   const [previousSubModule, setPreviousSubModule] = useState(activeSubModule);
@@ -205,6 +219,8 @@ export function FuerzaComercialPage({ activeSubModule, onSubModuleChange, isSide
     onFrameError: setMapFrameError,
     onFrameReady: () => {
       if (searchQueryRef.current) sendToMap('force-sales-search', { query: searchQueryRef.current });
+      const pendingLocation = pendingPortfolioLocationRef.current;
+      if (pendingLocation) sendToMap('force-sales-start-portfolio-location', pendingLocation);
     },
   });
 
@@ -218,6 +234,23 @@ export function FuerzaComercialPage({ activeSubModule, onSubModuleChange, isSide
         const point = (event.data.point || {}) as Record<string, unknown>;
         setCustomerLinkPoint({ id: pointId, name: String(point.name || ''), address: String(point.address || ''), phone: String(point.phone || '') });
       }
+      if (event.data?.type === 'force-sales-portfolio-location-picked') {
+        const pendingLocation = pendingPortfolioLocationRef.current;
+        if (!pendingLocation) return;
+        pendingPortfolioLocationRef.current = null;
+        const lat = Number(event.data.lat);
+        const lng = Number(event.data.lng);
+        if (!Number.isFinite(lat) || !Number.isFinite(lng)) {
+          toast.error('El mapa devolvió una ubicación inválida.');
+          return;
+        }
+        void forceSalesPortfoliosService.saveLocation(pendingLocation.portfolioId, pendingLocation.customerId, lat, lng)
+          .then((result) => {
+            toast.success('Ubicación guardada en el mapa; no se registró una visita.');
+            sendToMap('force-sales-focus-prospect', { targetId: result.id });
+          })
+          .catch((error: unknown) => toast.error(forceSalesErrorMessage(error, 'No se pudo guardar la ubicación.')));
+      }
       if (event.data?.type === 'force-sales-open-payment') {
         const recordId = String(event.data.recordId || '').trim();
         const kind = String(event.data.kind || '').toUpperCase();
@@ -228,7 +261,7 @@ export function FuerzaComercialPage({ activeSubModule, onSubModuleChange, isSide
         const fetchRecord = kind === 'CUSTOMER_LOAN'
           ? customerLoansService.getById(recordId)
           : creditNotesService.getById(recordId);
-        void fetchRecord.then((record: any) => {
+        void fetchRecord.then((record) => {
           setCustomerPaymentTarget({
             id: String(record.id || recordId),
             kind: kind as CustomerPaymentTarget['kind'],
@@ -245,7 +278,7 @@ export function FuerzaComercialPage({ activeSubModule, onSubModuleChange, isSide
             nextInstallment: record.nextInstallment,
           });
           setPaymentProspectId(prospectId || null);
-        }).catch((error: any) => toast.error(error?.response?.data?.message || error?.message || 'No se pudo abrir el contrato para pago.'));
+        }).catch((error: unknown) => toast.error(forceSalesErrorMessage(error, 'No se pudo abrir el contrato para pago.')));
       }
       if (event.data?.type === 'force-sales-summary') {
         const next = parseForceSalesSummary(event.data);
@@ -259,7 +292,14 @@ export function FuerzaComercialPage({ activeSubModule, onSubModuleChange, isSide
     };
     window.addEventListener('message', onMapMessage);
     return () => window.removeEventListener('message', onMapMessage);
-  }, [canLinkCustomer, canPerform]);
+  }, [canLinkCustomer, canPerform, sendToMap]);
+
+  useEffect(() => {
+    if (activeSubModule === 'fuerza-comercial' || activeSubModule === 'fuerza-comercial-carteras') return;
+    if (!pendingPortfolioLocationRef.current) return;
+    pendingPortfolioLocationRef.current = null;
+    sendToMap('force-sales-cancel-portfolio-location');
+  }, [activeSubModule, sendToMap]);
 
   useEffect(() => {
     if (!mapFullscreen) return undefined;
@@ -285,6 +325,28 @@ export function FuerzaComercialPage({ activeSubModule, onSubModuleChange, isSide
           </p>
         </div>
       </div>
+    );
+  }
+
+  if (activeSubModule === 'fuerza-comercial-carteras') {
+    const managerContextOwner = (user as { managerContext?: { isOwner?: boolean } } | null)?.managerContext?.isOwner;
+    const isAdmin = Boolean(user?.isPlatformAdmin || user?.isTenantAdmin || managerContextOwner) || ['ADMIN', 'SUPER_ADMIN', 'SUPERADMIN', 'PLATFORM_ADMIN', 'PARTNER'].includes(String(user?.role || '').toUpperCase()) || String(user?.userType || '').toUpperCase() === 'ADMIN';
+    return (
+      <section className="flex min-h-[calc(100dvh-4rem)] min-w-0 flex-col overflow-hidden bg-background">
+        <div className="shrink-0 border-b border-border/70 px-3 py-2 sm:px-4">
+          <ForceSalesNavigation activeSubModule={activeSubModule} onSubModuleChange={onSubModuleChange} isSidebarCollapsed={isSidebarCollapsed} showKanban={!mapConfig || allowedModes.includes('prospecting')} />
+        </div>
+        <ForceSalesPortfoliosView
+          canImport={canPerform('SALES_CLIENTS', 'import') && canPerform('FORCE_SALES', 'assignProspect') && canPerform('FORCE_SALES', 'importProspects')}
+          canManage={isAdmin && canPerform('FORCE_SALES', 'editRoute')}
+          canTransfer={isAdmin && canPerform('FORCE_SALES', 'assignProspect')}
+          canLocate={canPerform('FORCE_SALES', 'updateProspect')}
+          onPickLocation={(portfolioId, customerId) => {
+            pendingPortfolioLocationRef.current = { portfolioId, customerId };
+            onSubModuleChange?.('fuerza-comercial');
+          }}
+        />
+      </section>
     );
   }
 

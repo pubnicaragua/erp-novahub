@@ -218,6 +218,13 @@ googleMap.addListener('bounds_changed',scheduleBusinessDetailPosition);
 googleMap.addListener('dragstart',()=>clearFocusedQuickPoint());
 googleMap.addListener('click', event => {
   if(activeView !== 'map' || !event.latLng)return;
+  if(pendingPortfolioLocationSelection){
+    const selection=pendingPortfolioLocationSelection;
+    pendingPortfolioLocationSelection=null;
+    window.parent?.postMessage({source:'novahub-force-sales',type:'force-sales-portfolio-location-picked',portfolioId:selection.portfolioId,customerId:selection.customerId,lat:event.latLng.lat(),lng:event.latLng.lng()},location.origin);
+    toast('Ubicación enviada para guardar en la cartera.');
+    return;
+  }
   if(handleWorkZoneMapClick(event))return;
   if(routePlanningMode){toast('Pulsa un marcador comercial existente para agregar ese punto a la ruta');return}
   openQuickPointAt(event.latLng.lat(), event.latLng.lng(), 'mapa');

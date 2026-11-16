@@ -1,8 +1,9 @@
-import { BarChart3, History, LayoutDashboard, MapPinned } from 'lucide-react';
+import { BarChart3, FileSpreadsheet, History, LayoutDashboard, MapPinned } from 'lucide-react';
 import { ModuleSubnavigation } from '../ui/ModuleSubnavigation';
 
 const FORCE_SALES_ITEMS = [
   { id: 'fuerza-comercial', label: 'Mapa comercial', icon: MapPinned },
+  { id: 'fuerza-comercial-carteras', label: 'Carteras', icon: FileSpreadsheet },
   { id: 'fuerza-comercial-kanban', label: 'Kanban comercial', icon: LayoutDashboard },
   { id: 'fuerza-comercial-historial', label: 'Historial de visitas', icon: History },
   { id: 'fuerza-comercial-reportes', label: 'Reportes de gestores', icon: BarChart3 },

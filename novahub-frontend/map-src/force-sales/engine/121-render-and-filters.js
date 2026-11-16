@@ -106,8 +106,7 @@ function render(){
   const sourceFilter=document.getElementById('source');
   const stateFilter=document.getElementById('state');
   const searchFilter=document.getElementById('search');
-  const markedByFilter=document.getElementById('markedBy');
-  const hasActiveFilters=selectedZone!=='Todos'||categoryFilter.value!=='all'||sourceFilter.value!=='all'||stateFilter.value!=='all'||markedByFilter?.value!=='all'||visitFilter!=='all'||Boolean(searchFilter.value.trim())||pipelineFilter!=='all'||Boolean(activeNearbyCenter&&activeNearbyRadius);
+  const hasActiveFilters=selectedZone!=='Todos'||categoryFilter.value!=='all'||sourceFilter.value!=='all'||stateFilter.value!=='all'||selectedCreatorFilter()!=='all'||visitFilter!=='all'||Boolean(searchFilter.value.trim())||pipelineFilter!=='all'||Boolean(activeNearbyCenter&&activeNearbyRadius);
   showAllBusinesses.hidden=!hasActiveFilters;
   const selectedCount=selectedBusinesses().length;
   const routeTop=document.getElementById('routeTop');
@@ -175,9 +174,10 @@ function populateFilters(){
   const cur = sel.value;
   sel.innerHTML = '<option value="all">Todos los rubros</option>' + cats.map(c => `<option>${esc(c)}</option>`).join('');
   if(cats.includes(cur)) sel.value = cur;
-  const markedBy=document.getElementById('markedBy');
-  if(markedBy){
-    const selectedCreator=markedBy.value||'all';
+  const creatorFilters=['markedBy','visitMarkedBy'].map(id=>document.getElementById(id)).filter(Boolean);
+  if(creatorFilters.length){
+    const activeCreatorFilter=creatorFilters.find(control=>control.id===(ACTIVE_MODE==='visits'?'visitMarkedBy':'markedBy'))||creatorFilters[0];
+    const selectedCreator=activeCreatorFilter.value||'all';
     const creators=new Map();let hasUnattributed=false;
     businesses.forEach(business=>{
       const id=creatorIdOf(business);
@@ -185,10 +185,15 @@ function populateFilters(){
       const name=String(business?.createdBy?.name||stateOf(business).createdByName||'Usuario no disponible').trim();
       if(!creators.has(id)||creators.get(id)==='Usuario no disponible')creators.set(id,name||'Usuario no disponible');
     });
-    markedBy.innerHTML='<option value="all">Todos los usuarios</option>'+[...creators.entries()].sort((a,b)=>a[1].localeCompare(b[1],'es-NI')).map(([id,name])=>`<option value="${esc(id)}">${esc(name)}</option>`).join('')+(hasUnattributed?'<option value="__without_creator__">Sin atribución</option>':'');
-    markedBy.value=[...creators.keys()].includes(selectedCreator)||selectedCreator==='__without_creator__'&&hasUnattributed?selectedCreator:'all';
+    const creatorOptions='<option value="all">Todos los usuarios</option>'+[...creators.entries()].sort((a,b)=>a[1].localeCompare(b[1],'es-NI')).map(([id,name])=>`<option value="${esc(id)}">${esc(name)}</option>`).join('')+(hasUnattributed?'<option value="__without_creator__">Sin atribución</option>':'');
+    const selectedValue=creators.has(selectedCreator)||selectedCreator==='__without_creator__'&&hasUnattributed?selectedCreator:'all';
+    creatorFilters.forEach(control=>{control.innerHTML=creatorOptions;control.value=selectedValue});
   }
   syncFilterSummary();
+}
+function selectedCreatorFilter(){
+  const preferredId=ACTIVE_MODE==='visits'?'visitMarkedBy':'markedBy';
+  return document.getElementById(preferredId)?.value||'all';
 }
 function syncFilterSummary(){
   const summary=document.getElementById('filterSummaryText');

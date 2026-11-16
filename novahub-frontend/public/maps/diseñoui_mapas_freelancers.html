@@ -667,6 +667,9 @@ body.embedded-view .panel-status #liveStatus,body.embedded-view .panel-status #o
 /* Visitas: filtros, tarjetas de cliente y estado vacío. */
 .visit-chips{display:flex;gap:6px}
 .visit-chips .chip{flex:1;min-height:34px;font-size:12px}
+.visit-creator-filter{display:grid;gap:4px;min-width:0;color:var(--nova-ui-muted-foreground,#6c7c77);font-size:11px;font-weight:700}
+.visit-creator-filter select{width:100%;min-width:0;min-height:38px;padding:7px 9px;border:1px solid var(--nova-ui-border,#dce8e3);border-radius:9px;background:var(--nova-ui-card,#fff);color:var(--nova-ui-foreground,#11241f);font-size:12px}
+.visit-creator-filter select:focus-visible{outline:3px solid #3287e8;outline-offset:2px}
 .visit-item .itemtop{display:flex;justify-content:space-between;align-items:flex-start;gap:8px}
 .visit-item .itemname{font-size:14px;font-weight:800}
 .visit-item .meta{font-size:12px;margin-top:2px}
@@ -819,6 +822,9 @@ body.embedded-view #sheetHeader{padding-top:6px;padding-bottom:0}
     <button class="chip" type="button" data-visit-filter="pending">Por visitar</button>
     <button class="chip" type="button" data-visit-filter="visited">Visitados</button>
    </div>
+   <label class="visit-creator-filter" for="visitMarkedBy">Quién marcó cada punto
+    <select id="visitMarkedBy" aria-label="Filtrar puntos por quién los marcó"><option value="all">Todos los usuarios</option></select>
+   </label>
   </section>
 
   <!-- Modo Entregas: guía corta y acción principal. -->
@@ -2267,6 +2273,7 @@ let pendingPointSource = 'mapa';
 let pendingPointAccuracy = null;
 let pendingPointMarker = null;
 let quickPointLocationRequestId = 0;
+let pendingPortfolioLocationSelection = null;
 let focusedQuickPointMarker = null;
 let focusedQuickPointBusinessId = null;
 let presenceMarkers = new Map();
@@ -2650,6 +2657,13 @@ googleMap.addListener('bounds_changed',scheduleBusinessDetailPosition);
 googleMap.addListener('dragstart',()=>clearFocusedQuickPoint());
 googleMap.addListener('click', event => {
   if(activeView !== 'map' || !event.latLng)return;
+  if(pendingPortfolioLocationSelection){
+    const selection=pendingPortfolioLocationSelection;
+    pendingPortfolioLocationSelection=null;
+    window.parent?.postMessage({source:'novahub-force-sales',type:'force-sales-portfolio-location-picked',portfolioId:selection.portfolioId,customerId:selection.customerId,lat:event.latLng.lat(),lng:event.latLng.lng()},location.origin);
+    toast('Ubicación enviada para guardar en la cartera.');
+    return;
+  }
   if(handleWorkZoneMapClick(event))return;
   if(routePlanningMode){toast('Pulsa un marcador comercial existente para agregar ese punto a la ruta');return}
   openQuickPointAt(event.latLng.lat(), event.latLng.lng(), 'mapa');
@@ -3413,6 +3427,20 @@ window.addEventListener('online',updateCustomerLookupAvailability);
 window.addEventListener('offline',updateCustomerLookupAvailability);
 window.addEventListener('message',event=>{
   if(event.source!==window.parent||event.origin!==window.location.origin||event.data?.source!=='novahub-force-sales')return;
+  if(event.data?.type==='force-sales-start-portfolio-location'){
+    const portfolioId=String(event.data.portfolioId||'').trim();
+    const customerId=String(event.data.customerId||'').trim();
+    if(!portfolioId||!customerId)return;
+    pendingPortfolioLocationSelection={portfolioId,customerId};
+    activeView='map';
+    closeBusinessDetailPopup();
+    toast('Toca el punto del mapa donde está el cliente. No se registrará una visita.');
+    return;
+  }
+  if(event.data?.type==='force-sales-cancel-portfolio-location'){
+    pendingPortfolioLocationSelection=null;
+    return;
+  }
   if(event.data?.type==='force-sales-refresh')refreshForceSalesData(event.data.event||{});
   if(event.data?.type==='force-sales-customer-link-selected'){
     const pointId=String(event.data.pointId||'').trim();
@@ -4492,7 +4520,7 @@ function pass(b){
   const c = document.getElementById('category').value;
   const s = document.getElementById('source').value;
   const st = document.getElementById('state').value;
-  const markedBy=document.getElementById('markedBy')?.value||'all';
+  const markedBy=selectedCreatorFilter();
   const creatorId=creatorIdOf(b);
   if(selectedZone !== 'Todos' && b.zone !== selectedZone) return false;
   if(c !== 'all' && b.category !== c) return false;
@@ -6257,8 +6285,7 @@ function render(){
   const sourceFilter=document.getElementById('source');
   const stateFilter=document.getElementById('state');
   const searchFilter=document.getElementById('search');
-  const markedByFilter=document.getElementById('markedBy');
-  const hasActiveFilters=selectedZone!=='Todos'||categoryFilter.value!=='all'||sourceFilter.value!=='all'||stateFilter.value!=='all'||markedByFilter?.value!=='all'||visitFilter!=='all'||Boolean(searchFilter.value.trim())||pipelineFilter!=='all'||Boolean(activeNearbyCenter&&activeNearbyRadius);
+  const hasActiveFilters=selectedZone!=='Todos'||categoryFilter.value!=='all'||sourceFilter.value!=='all'||stateFilter.value!=='all'||selectedCreatorFilter()!=='all'||visitFilter!=='all'||Boolean(searchFilter.value.trim())||pipelineFilter!=='all'||Boolean(activeNearbyCenter&&activeNearbyRadius);
   showAllBusinesses.hidden=!hasActiveFilters;
   const selectedCount=selectedBusinesses().length;
   const routeTop=document.getElementById('routeTop');
@@ -6326,9 +6353,10 @@ function populateFilters(){
   const cur = sel.value;
   sel.innerHTML = '<option value="all">Todos los rubros</option>' + cats.map(c => `<option>${esc(c)}</option>`).join('');
   if(cats.includes(cur)) sel.value = cur;
-  const markedBy=document.getElementById('markedBy');
-  if(markedBy){
-    const selectedCreator=markedBy.value||'all';
+  const creatorFilters=['markedBy','visitMarkedBy'].map(id=>document.getElementById(id)).filter(Boolean);
+  if(creatorFilters.length){
+    const activeCreatorFilter=creatorFilters.find(control=>control.id===(ACTIVE_MODE==='visits'?'visitMarkedBy':'markedBy'))||creatorFilters[0];
+    const selectedCreator=activeCreatorFilter.value||'all';
     const creators=new Map();let hasUnattributed=false;
     businesses.forEach(business=>{
       const id=creatorIdOf(business);
@@ -6336,10 +6364,15 @@ function populateFilters(){
       const name=String(business?.createdBy?.name||stateOf(business).createdByName||'Usuario no disponible').trim();
       if(!creators.has(id)||creators.get(id)==='Usuario no disponible')creators.set(id,name||'Usuario no disponible');
     });
-    markedBy.innerHTML='<option value="all">Todos los usuarios</option>'+[...creators.entries()].sort((a,b)=>a[1].localeCompare(b[1],'es-NI')).map(([id,name])=>`<option value="${esc(id)}">${esc(name)}</option>`).join('')+(hasUnattributed?'<option value="__without_creator__">Sin atribución</option>':'');
-    markedBy.value=[...creators.keys()].includes(selectedCreator)||selectedCreator==='__without_creator__'&&hasUnattributed?selectedCreator:'all';
+    const creatorOptions='<option value="all">Todos los usuarios</option>'+[...creators.entries()].sort((a,b)=>a[1].localeCompare(b[1],'es-NI')).map(([id,name])=>`<option value="${esc(id)}">${esc(name)}</option>`).join('')+(hasUnattributed?'<option value="__without_creator__">Sin atribución</option>':'');
+    const selectedValue=creators.has(selectedCreator)||selectedCreator==='__without_creator__'&&hasUnattributed?selectedCreator:'all';
+    creatorFilters.forEach(control=>{control.innerHTML=creatorOptions;control.value=selectedValue});
   }
   syncFilterSummary();
+}
+function selectedCreatorFilter(){
+  const preferredId=ACTIVE_MODE==='visits'?'visitMarkedBy':'markedBy';
+  return document.getElementById(preferredId)?.value||'all';
 }
 function syncFilterSummary(){
   const summary=document.getElementById('filterSummaryText');
@@ -7627,8 +7660,19 @@ async function sendSelectedWhatsApp(){
 
 let renderFrame=0;
 function scheduleRender(){cancelAnimationFrame(renderFrame);renderFrame=requestAnimationFrame(render)}
-['search','category','source','state','markedBy'].forEach(id => {
+['search','category','source','state'].forEach(id => {
   document.getElementById(id).addEventListener(id==='search' ? 'input' : 'change', id==='search' ? () => {clearFocusedQuickPoint();listLimit=140;scheduleRender()} : () => {clearFocusedQuickPoint();listLimit=140;render()});
+});
+['markedBy','visitMarkedBy'].forEach(id=>{
+  document.getElementById(id)?.addEventListener('change',event=>{
+    const selected=event.currentTarget.value||'all';
+    ['markedBy','visitMarkedBy'].forEach(otherId=>{
+      const control=document.getElementById(otherId);
+      if(control&&control!==event.currentTarget)control.value=selected;
+    });
+    syncFilterSummary();
+    clearFocusedQuickPoint();listLimit=140;render();
+  });
 });
 document.querySelectorAll('#labels button').forEach(btn => btn.addEventListener('click', () => {
   labelMode = window.NovaForceSalesLocation.normalizeMapLayers({...mapLayers,labelMode:btn.dataset.mode}).labelMode;
@@ -7714,6 +7758,7 @@ document.getElementById('showAllBusinesses').addEventListener('click',()=>{
   document.getElementById('source').value='all';
   document.getElementById('state').value='all';
   document.getElementById('markedBy').value='all';
+  if(document.getElementById('visitMarkedBy'))document.getElementById('visitMarkedBy').value='all';
   visitFilter='all';
   syncVisitChips();
   document.getElementById('search').value='';

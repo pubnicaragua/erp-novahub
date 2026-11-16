@@ -1,7 +1,18 @@
 let renderFrame=0;
 function scheduleRender(){cancelAnimationFrame(renderFrame);renderFrame=requestAnimationFrame(render)}
-['search','category','source','state','markedBy'].forEach(id => {
+['search','category','source','state'].forEach(id => {
   document.getElementById(id).addEventListener(id==='search' ? 'input' : 'change', id==='search' ? () => {clearFocusedQuickPoint();listLimit=140;scheduleRender()} : () => {clearFocusedQuickPoint();listLimit=140;render()});
+});
+['markedBy','visitMarkedBy'].forEach(id=>{
+  document.getElementById(id)?.addEventListener('change',event=>{
+    const selected=event.currentTarget.value||'all';
+    ['markedBy','visitMarkedBy'].forEach(otherId=>{
+      const control=document.getElementById(otherId);
+      if(control&&control!==event.currentTarget)control.value=selected;
+    });
+    syncFilterSummary();
+    clearFocusedQuickPoint();listLimit=140;render();
+  });
 });
 document.querySelectorAll('#labels button').forEach(btn => btn.addEventListener('click', () => {
   labelMode = window.NovaForceSalesLocation.normalizeMapLayers({...mapLayers,labelMode:btn.dataset.mode}).labelMode;
@@ -87,6 +98,7 @@ document.getElementById('showAllBusinesses').addEventListener('click',()=>{
   document.getElementById('source').value='all';
   document.getElementById('state').value='all';
   document.getElementById('markedBy').value='all';
+  if(document.getElementById('visitMarkedBy'))document.getElementById('visitMarkedBy').value='all';
   visitFilter='all';
   syncVisitChips();
   document.getElementById('search').value='';

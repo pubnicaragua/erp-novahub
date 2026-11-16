@@ -241,6 +241,7 @@ const menuItems: MenuItem[] = [
     section: 'Operaciones',
     submenu: [
       { id: 'fuerza-comercial', label: 'Mapa comercial', icon: <MapPinned className="size-4" /> },
+      { id: 'fuerza-comercial-carteras', label: 'Carteras', icon: <FileSpreadsheet className="size-4" /> },
       { id: 'fuerza-comercial-kanban', label: 'Kanban comercial', icon: <LayoutDashboard className="size-4" /> },
       { id: 'fuerza-comercial-historial', label: 'Historial de visitas', icon: <History className="size-4" /> },
       { id: 'fuerza-comercial-reportes', label: 'Reportes de gestores', icon: <BarChart3 className="size-4" /> },
@@ -604,6 +605,7 @@ const platformMenuItems: MenuItem[] = [
     superadminOnly: true,
     submenu: [
       { id: 'fuerza-comercial', label: 'Mapa comercial', icon: <MapPinned className="size-4" /> },
+      { id: 'fuerza-comercial-carteras', label: 'Carteras', icon: <FileSpreadsheet className="size-4" /> },
       { id: 'fuerza-comercial-kanban', label: 'Kanban comercial', icon: <LayoutDashboard className="size-4" /> },
       { id: 'fuerza-comercial-historial', label: 'Historial de visitas', icon: <History className="size-4" /> },
       { id: 'fuerza-comercial-reportes', label: 'Reportes de gestores', icon: <BarChart3 className="size-4" /> },
