@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { Calendar } from './calendar';
 import { Popover, PopoverContent, PopoverTrigger } from './popover';
 import { Button } from './button';
@@ -66,6 +66,21 @@ export function DateTimePickerField({
   const [selectedMinute, setSelectedMinute] = useState<string>(initialMinute);
   const [selectedPeriod, setSelectedPeriod] = useState<'AM' | 'PM'>(initialPeriod);
   const [mobileTab, setMobileTab] = useState<'date' | 'time'>('date');
+
+  // El valor puede llegar después de montar el selector (por ejemplo, al abrir la edición de una tarea).
+  // Sin esto, la ventana se quedaba con la hora y el día por defecto y al elegir un día pisaba la hora real.
+  useEffect(() => {
+    if (!value) return;
+    const parsed = parseISO(value);
+    if (!isValid(parsed)) return;
+    const h24 = parsed.getHours();
+    /* eslint-disable react-hooks/set-state-in-effect */
+    setSelectedDate(parsed);
+    setSelectedPeriod(h24 >= 12 ? 'PM' : 'AM');
+    setSelectedHour(String(h24 % 12 === 0 ? 12 : h24 % 12).padStart(2, '0'));
+    setSelectedMinute(String(parsed.getMinutes()).padStart(2, '0'));
+    /* eslint-enable react-hooks/set-state-in-effect */
+  }, [value]);
 
   const checkLimitViolation = (isoStr: string): 'before-min' | 'after-max' | null => {
     if (minDate && isoStr < minDate) return 'before-min';

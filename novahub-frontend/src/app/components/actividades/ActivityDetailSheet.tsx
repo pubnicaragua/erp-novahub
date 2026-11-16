@@ -517,6 +517,7 @@ function TaskDetails({ item, onUpdate, canEdit, canReassign, canManageSubtasks, 
           canStart={canStartTimeTracking}
           canStop={canStopTimeTracking}
           canAddManual={canAddManualTimeEntry}
+          people={Object.fromEntries(assignments.map((a: any) => [String(a.userId || a.user?.id || ''), String(a.user?.name || '')]).filter(([id, name]: string[]) => id && name))}
         />
       </DetailSection>
 
