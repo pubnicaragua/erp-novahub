@@ -589,32 +589,13 @@ function AccountCodeInput({ code, field, moduleId, account, accountOptions, sugg
   }, [code, effectiveAccountOptions, recommended, recommendedCodes, subtypeFilter])
 
   return (
-    <div className="min-w-0 space-y-1.5 rounded-xl border border-border/40 bg-background/60 p-3">
-      <div className="flex min-w-0 items-start justify-between gap-2">
-        <div className="flex min-w-0 items-center gap-1.5">
-          <span className={`shrink-0 rounded-md px-1.5 py-0.5 text-[9px] font-black uppercase tracking-wider ${field.side === 'debit' ? 'bg-orange-500/10 text-orange-600' : field.side === 'credit' ? 'bg-blue-500/10 text-blue-600' : 'bg-primary/10 text-primary'}`}>
-            {postingSideLabel(field.side)}
-          </span>
-          <span className="min-w-0 truncate text-[11px] font-bold">{field.label}</span>
-        </div>
-        <span className="shrink-0 rounded-md border border-border/40 px-1.5 py-0.5 text-[9px] font-bold text-muted-foreground">
-          Espera: {accountTypeLabel(field.defaultType)}
-        </span>
-      </div>
-      <div className="flex min-w-0 flex-wrap gap-x-2 gap-y-0.5 text-[9px] text-muted-foreground">
-        <span>Referencia: <span className="font-mono font-bold">{field.defaultCode}</span> · {field.defaultName}</span>
-        <span>Este proceso usa varias cuentas a la vez: elegí 1 cuenta por campo (Debe/Haber).</span>
-        <span>{isBankParentMapping(moduleId, field.key)
-          ? 'Esta cuenta es la mayor; cada banco hijo recibirá el asiento y su saldo se consolidará aquí.'
-          : 'Podés elegir cuentas de detalle o auxiliares; las agrupadoras requieren una cuenta hija.'}</span>
-        {recommended.length > 0 && <span className="text-emerald-600">Las opciones ★ Recomendada aparecen primero.</span>}
-      </div>
+    <div className="min-w-0 flex-1 space-y-1.5">
       <div className="flex min-w-0 items-center gap-2">
         {availableSubtypes.length > 0 && (
           <select
             value={subtypeFilter}
             onChange={(e) => setSubtypeFilter(e.target.value)}
-            className="h-9 max-w-[150px] rounded-lg border border-border/50 bg-background px-2 text-[10px] font-bold text-muted-foreground outline-none focus:border-primary/50"
+            className="h-9 w-[40%] max-w-[150px] shrink-0 rounded-lg border border-border/50 bg-background px-2 text-[10px] font-bold text-muted-foreground outline-none focus:border-primary/50"
             aria-label="Filtrar por subtipo de cuenta"
             title="Filtrar por subtipo: auxiliares, detalle, grupos..."
           >
@@ -631,7 +612,7 @@ function AccountCodeInput({ code, field, moduleId, account, accountOptions, sugg
           placeholder={`Seleccionar ${field.label.toLowerCase()}`}
           searchPlaceholder="Buscar por código o nombre..."
           maxVisibleOptions={500}
-          className="h-9 flex-1 text-xs"
+          className="h-9 min-w-0 flex-1 text-xs"
           emptyMessage="No se encontraron cuentas con ese código o nombre."
         />
       </div>
@@ -657,10 +638,9 @@ function AccountCodeInput({ code, field, moduleId, account, accountOptions, sugg
             <span className="min-w-0 truncate">Recomendación: {topRecommendation.code} · {topRecommendation.name}</span>
           </span>
         ) : (
-          <span className="text-[10px] text-muted-foreground">Código de referencia, no asociado: {field.defaultCode} · {accountTypeLabel(field.defaultType)}</span>
+          <span className="text-[10px] text-muted-foreground">Código de referencia, no asociado: {field.defaultCode || '—'} · {accountTypeLabel(field.defaultType)}</span>
         )}
       </div>
-      <p className="text-[9px] leading-tight text-muted-foreground">{field.description}</p>
     </div>
   )
 }
@@ -677,7 +657,9 @@ function AccountMappingOptionsEditor({ codes, field, moduleId, accountsByCode, a
   onChange: (values: string[]) => void
 }) {
   const [addingOption, setAddingOption] = useState(false)
-  const displayedCodes = codes.length ? [...codes, ...(addingOption ? [''] : [])] : ['']
+  const displayedCodes = codes.length
+    ? [...codes, ...(addingOption ? [''] : [])]
+    : addingOption ? ['', ''] : ['']
   const updateOption = (index: number, value: string) => {
     const next = [...codes]
     if (index >= next.length) next.push(value)
@@ -685,12 +667,35 @@ function AccountMappingOptionsEditor({ codes, field, moduleId, accountsByCode, a
     setAddingOption(false)
     onChange([...new Set(next.filter(Boolean))])
   }
+  const removeOption = (index: number) => {
+    setAddingOption(false)
+    onChange(codes.filter((_, currentIndex) => currentIndex !== index))
+  }
 
   return (
-    <div className="min-w-0 space-y-2">
-      {displayedCodes.map((code, index) => (
-        <div key={`${field.key}-${index}`} className="flex min-w-0 items-start gap-2">
-          <div className="min-w-0 flex-1">
+    <div className="min-w-0 space-y-2 rounded-xl border border-border/40 bg-background/60 p-3">
+      <div className="flex min-w-0 items-start justify-between gap-2">
+        <div className="flex min-w-0 items-center gap-1.5">
+          <span className={`shrink-0 rounded-md px-1.5 py-0.5 text-[9px] font-black uppercase tracking-wider ${field.side === 'debit' ? 'bg-orange-500/10 text-orange-600' : field.side === 'credit' ? 'bg-blue-500/10 text-blue-600' : 'bg-primary/10 text-primary'}`}>
+            {postingSideLabel(field.side)}
+          </span>
+          <span className="min-w-0 truncate text-[11px] font-bold">{field.label}</span>
+        </div>
+        <span className="shrink-0 rounded-md border border-border/40 px-1.5 py-0.5 text-[9px] font-bold text-muted-foreground">
+          Espera: {accountTypeLabel(field.defaultType)}
+        </span>
+      </div>
+      <div className="flex min-w-0 flex-wrap gap-x-2 gap-y-0.5 text-[9px] text-muted-foreground">
+        <span>Referencia: <span className="font-mono font-bold">{field.defaultCode || '—'}</span> · {field.defaultName}</span>
+        <span>Podés elegir una cuenta principal y agregar alternativas para este campo.</span>
+        <span>{isBankParentMapping(moduleId, field.key)
+          ? 'Esta cuenta es la mayor; cada banco hijo recibirá el asiento y su saldo se consolidará aquí.'
+          : 'Podés elegir cuentas de detalle o auxiliares; las agrupadoras requieren una cuenta hija.'}</span>
+        {suggestions.length > 0 && <span className="text-emerald-600">Las opciones ★ Recomendada aparecen primero.</span>}
+      </div>
+      <div className="space-y-2">
+        {displayedCodes.map((code, index) => (
+          <div key={`${field.key}-${index}`} className="flex min-w-0 items-start gap-2">
             <AccountCodeInput
               code={code}
               field={field}
@@ -702,28 +707,28 @@ function AccountMappingOptionsEditor({ codes, field, moduleId, accountsByCode, a
               configuredReason={configuredReason}
               onChange={value => updateOption(index, value)}
             />
-          </div>
-          {codes.length > 0 && (
             <Button
               type="button"
               variant="ghost"
               size="icon"
               className="mt-1 size-8 shrink-0 text-muted-foreground hover:text-destructive"
-              onClick={() => onChange(codes.filter((_, currentIndex) => currentIndex !== index))}
+              onClick={() => removeOption(index)}
               aria-label={`Quitar cuenta alternativa ${code || index + 1} de ${field.label}`}
               title="Quitar alternativa"
             >
               <Trash2 className="size-4" />
             </Button>
-          )}
-        </div>
-      ))}
+          </div>
+        ))}
+      </div>
+      <p className="text-[9px] leading-tight text-muted-foreground">{field.description}</p>
       <Button
         type="button"
         variant="outline"
         size="sm"
         className="h-8 rounded-lg text-[10px]"
         onClick={() => setAddingOption(true)}
+        aria-label={`Agregar cuenta alternativa para ${field.label}`}
       >
         <Plus className="mr-1.5 size-3.5" /> Agregar alternativa
       </Button>
