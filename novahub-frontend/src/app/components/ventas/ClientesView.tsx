@@ -43,6 +43,11 @@ import { countryCodeFromLegacy, customerRucRequired, formatCustomerPhoneForDispl
 import { resolveMissingRucCreditDecision } from '../../utils/customer-credit-confirmation';
 import { aggregateCustomerHistory, mergeCustomerHistoryByIdentifier, prepareCustomerHistoryForImport, type CustomerHistoryImportOptions, type CustomerHistorySourceRow } from '../../utils/customer-history-import';
 import { buildCustomerHistoryTemplateHeaders, DEFAULT_CUSTOMER_HISTORY_PROFILE, normalizeCustomerHistoryProfile, type CustomerHistoryProfile } from '../../utils/customer-history-profile';
+import { generateConfiguredReportSectionsPDF } from '../../utils/pdfGenerator';
+import type { PdfPaperFormat } from '../../utils/pdfDownloadFormats';
+import { ExportMenu } from '../ui/ExportMenu';
+import { buildDatedDownloadFileName } from '../../utils/exportFileNames';
+import { createReportWorkbook } from '../../utils/reportWorkbook';
 
 interface ClientesViewProps {
   data: Customer[];
@@ -168,7 +173,7 @@ const FISCAL_REGIMES = ['Régimen Simplificado (Cuota Fija)', 'Régimen General'
 const CUSTOMERS_TOUR_STEPS: GuidedTourStep[] = [
   { target: '[data-tour="customers-title"]', title: 'Directorio de Clientes', description: 'Aquí administras los clientes, sus datos fiscales, ubicación, crédito, estado y lista de precios asignada.', placement: 'bottom' },
   { target: '[data-tour="sales-list-kpis"]', title: 'KPIs de clientes', description: 'Total Clientes, Particulares y Empresas son filtros rápidos. Saldo es un indicador monetario para priorizar la cobranza; la tarjeta activa se refleja en la lista.', placement: 'bottom' },
-  { target: '[data-tour="sales-list-actions"]', title: 'Búsqueda y filtros', description: 'Busca por nombre, identificación o contacto y combina el texto con Activos, Inactivos o Todos. Cambiar el filtro reinicia la paginación.', placement: 'bottom' },
+  { target: '[data-tour="sales-list-actions"]', title: 'Búsqueda y filtros', description: 'Busca por nombre, identificación o contacto y combina el texto con Activos, Inactivos o Todos. Desde aquí también puedes exportar el directorio filtrado.', placement: 'bottom' },
   { target: '[data-tour="customers-columns"]', title: 'Configurar columnas', description: 'Elige qué campos se muestran en la tabla. La vista se ajusta automáticamente a las columnas seleccionadas.', placement: 'bottom' },
   { target: '[data-tour="customers-layout"]', title: 'Lista o tarjetas', description: 'Cambia entre una tabla para revisar muchos registros y tarjetas para consultar cada cliente de forma más visual.', placement: 'bottom' },
   { target: '[data-tour="customers-import"]', title: 'Importar clientes', description: 'Descarga la plantilla, completa los datos sin código de cliente y carga el archivo. La numeración la genera automáticamente el sistema.', tip: 'La importación de clientes puede repetirse. Primero se prepara el archivo y luego puedes abrir una previsualización editable.', placement: 'bottom' },
@@ -227,6 +232,7 @@ export function ClientesView({ data, loading, error, onRefresh, pagination, onSe
   const importFileInputRef = useRef<HTMLInputElement>(null);
   const [importing, setImporting] = useState(false);
   const [importProgress, setImportProgress] = useState(0);
+  const [exportingCustomers, setExportingCustomers] = useState(false);
   const [previewLoading, setPreviewLoading] = useState(false);
   const [previewProgress, setPreviewProgress] = useState(0);
   const [importResult, setImportResult] = useState<CustomerImportResult | null>(null);
@@ -821,6 +827,88 @@ export function ClientesView({ data, loading, error, onRefresh, pagination, onSe
     type: (row: Customer) => String(row.type || '').toUpperCase(),
   };
   const filteredData = colFilters.applyTo(filteredAndSorted, filterGetters);
+  const exportCustomers = async (format: 'pdf' | 'xlsx', paperFormat: PdfPaperFormat = 'letter') => {
+    if (!canPerform('SALES_CLIENTS', 'export')) return;
+    setExportingCustomers(true);
+    try {
+      const exportCustomersRows = await fetchAllReportPages<Customer>(
+        (filters) => customersService.getAll(filters),
+        {
+          pageSize: 5000,
+          report: true,
+          export: true,
+          search: searchTerm.trim() || undefined,
+          status: statusFilter === 'ALL' ? undefined : statusFilter,
+          dateFrom: dateFrom || undefined,
+          dateTo: dateTo || undefined,
+        },
+      );
+      const normalizedSearch = searchTerm.trim().toLocaleLowerCase('es');
+      const matchingRows = exportCustomersRows.filter((customer) => {
+        const customerStatus = String(customer.status || 'ACTIVE').toUpperCase() === 'INACTIVE' ? 'INACTIVE' : 'ACTIVE';
+        const customerType = String(customer.type || '').toUpperCase();
+        const matchesSearch = !normalizedSearch || [customer.name, customer.companyName, customer.email, customer.code, customer.phone]
+          .some((value) => String(value || '').toLocaleLowerCase('es').includes(normalizedSearch));
+        return matchesSearch
+          && (statusFilter === 'ALL' || customerStatus === statusFilter)
+          && (customerTypeFilter === 'ALL' || customerType === customerTypeFilter);
+      }).sort(compareCustomerCodes);
+      const customers = colFilters.applyTo(matchingRows, filterGetters);
+      const activeCount = customers.filter((customer) => String(customer.status || '').toUpperCase() !== 'INACTIVE').length;
+      const inactiveCount = customers.length - activeCount;
+      const individualCount = customers.filter((customer) => String(customer.type || '').toUpperCase() === 'INDIVIDUAL').length;
+      const companyCount = customers.filter((customer) => String(customer.type || '').toUpperCase() === 'COMPANY').length;
+      const rows = customers.map((customer) => ({
+        Código: customer.code || '—',
+        Cliente: customer.name || '—',
+        Tipo: String(customer.type || '').toUpperCase() === 'INDIVIDUAL' ? 'Particular' : 'Empresa',
+        Contacto: customer.contactName || '—',
+        Correo: customer.email || '—',
+        Teléfono: customer.phone || '—',
+        Estado: String(customer.status || '').toUpperCase() === 'INACTIVE' ? 'Inactivo' : 'Activo',
+      }));
+      if (!rows.length) {
+        toast.error('No hay clientes para exportar con los filtros actuales.');
+        return;
+      }
+
+      const filters = {
+        Búsqueda: searchTerm.trim() || 'Todas',
+        Estado: statusFilter === 'ALL' ? 'Todos' : statusFilter === 'ACTIVE' ? 'Activos' : 'Inactivos',
+        Tipo: customerTypeFilter === 'ALL' ? 'Todos' : customerTypeFilter === 'INDIVIDUAL' ? 'Particulares' : 'Empresas',
+        'Fecha de ingreso': dateFrom || dateTo ? `${dateFrom || 'Sin inicio'} – ${dateTo || 'Sin fin'}` : 'Todas',
+      };
+      if (format === 'xlsx') {
+        createReportWorkbook({
+          fileName: buildDatedDownloadFileName(['reporte_clientes'], 'xlsx'),
+          sheets: [{ name: 'Clientes', rows }],
+          filters,
+        });
+      } else {
+        await generateConfiguredReportSectionsPDF({
+          targetKey: 'ventas.customers',
+          title: 'Listado de clientes',
+          tenantName: user?.tenantName || 'Mi Empresa',
+          tenantLogo: user?.sessionBranding?.logo || '',
+          kpis: [
+            { label: 'CLIENTES', value: String(rows.length), detail: 'En este listado' },
+            { label: 'ACTIVOS', value: String(activeCount), detail: 'Estado activo' },
+            { label: 'INACTIVOS', value: String(inactiveCount), detail: 'Estado inactivo' },
+            { label: 'PARTICULARES', value: String(individualCount), detail: 'Personas' },
+            { label: 'EMPRESAS', value: String(companyCount), detail: 'Organizaciones' },
+          ],
+          sections: [{ id: 'sales-customers', title: 'Clientes', headers: Object.keys(rows[0]), widths: [10, 18, 12, 16, 24, 12, 8], rows: rows.map((row) => Object.values(row)) }],
+          fileName: buildDatedDownloadFileName(['reporte_clientes'], 'pdf'),
+          format: paperFormat,
+        });
+      }
+      toast.success(`Reporte de clientes exportado en ${format === 'xlsx' ? 'Excel' : 'PDF'}.`);
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : 'No se pudo exportar el reporte de clientes.');
+    } finally {
+      setExportingCustomers(false);
+    }
+  };
   const hasColumnValueFilters = Object.values(colFilters.state).some((filter) => Boolean(filter.values?.length));
   const columnFilterSummaryQuery = useQuery({
     queryKey: ['sales', 'customers-kpi-filtered-rows', tenantKey, searchTerm, dateFrom, dateTo],
@@ -1449,6 +1537,16 @@ export function ClientesView({ data, loading, error, onRefresh, pagination, onSe
               <Settings2 className="mr-2 size-4" /> Columnas <span className="ml-1 text-muted-foreground">{visibleColumns.length}</span>
             </Button>
             <ViewLayoutSelect value={layoutMode} onChange={(value) => setLayoutMode(value === 'kanban' ? 'table' : value)} ariaLabel="Elegir distribución" dataTour="customers-layout" />
+            {canPerform('SALES_CLIENTS', 'export') && (
+              <ExportMenu
+                label={exportingCustomers ? 'Preparando exportación…' : 'Exportar clientes'}
+                disabled={exportingCustomers || loading}
+                onPdf={(paperFormat) => void exportCustomers('pdf', paperFormat)}
+                onExcel={() => void exportCustomers('xlsx')}
+                pdfDescription="Listado de clientes con los filtros activos"
+                excelDescription="Todos los clientes con los filtros activos"
+              />
+            )}
             {canPerform('SALES_CLIENTS', 'import') && (
               <Button
                 variant="outline"
