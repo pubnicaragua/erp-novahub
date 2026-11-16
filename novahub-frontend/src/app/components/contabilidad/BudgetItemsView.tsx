@@ -153,7 +153,7 @@ export function BudgetItemsView() {
             <Input type="month" className="text-xs mt-1" placeholder="Otro..." onChange={e => { if (e.target.value) setFilterPeriod(e.target.value); }} />
           </SelectContent>
         </Select>
-        <Button variant="outline" size="icon" className="rounded-xl" onClick={loadData}><RefreshCw className="size-4" /></Button>
+        <Button variant="outline" size="icon" className="rounded-xl" aria-label="Actualizar presupuestos" title="Actualizar" onClick={loadData}><RefreshCw className="size-4" /></Button>
       </div>
 
       <div className="grid gap-4 md:grid-cols-3">

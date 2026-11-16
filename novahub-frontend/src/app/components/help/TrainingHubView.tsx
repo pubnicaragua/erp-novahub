@@ -38,6 +38,7 @@ import { useAuth } from '../../contexts/AuthContext';
 import { trainingService } from '../../services/training.service';
 import { cn } from '../ui/utils';
 import { asList, useTenantQuery } from '../../hooks/useTenantQuery';
+import { GuidesLibrary } from '../../guides/GuidesLibrary';
 
 const MODULE_CATEGORIES = [
   { id: 'ALL', label: 'Todos', color: 'bg-primary/10 text-primary border-primary/20', gradient: 'from-primary/20 to-primary/5', icon: GraduationCap },
@@ -302,6 +303,8 @@ export function TrainingHubView({ activeSubModule, onSubModuleChange, isSidebarC
           />
         </Tabs>
       </div>
+
+      <GuidesLibrary category={activeCategory} search={search} />
 
       {PDF_GUIDES.length > 0 && (activeCategory === 'ALL' || PDF_GUIDES.some((guide) => guide.module === activeCategory)) && (
         <section className="space-y-3" aria-labelledby="pdf-guides-title">

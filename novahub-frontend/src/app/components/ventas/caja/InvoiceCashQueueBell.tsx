@@ -93,11 +93,13 @@ export function InvoiceCashQueueBell({ onItemSelect }: InvoiceCashQueueBellProps
           variant="outline"
           size="icon"
           data-toolbar-role="cash-queue-alerts"
-          className="relative size-10 shrink-0 rounded-xl border-border/60 text-muted-foreground hover:border-emerald-500/40 hover:bg-emerald-500/10 hover:text-emerald-600"
+          className="relative h-10 w-auto min-w-10 shrink-0 rounded-xl px-3 sm:size-10 sm:px-0 border-border/60 text-muted-foreground hover:border-emerald-500/40 hover:bg-emerald-500/10 hover:text-emerald-600"
           aria-label={items.length > 0 ? `Cola de caja, ${items.length} activa(s)` : 'Cola de caja'}
           title="Facturas pendientes en cola de caja"
         >
           {loading && items.length === 0 ? <Loader2 className="size-4 animate-spin" /> : <BellRing className="size-4" />}
+          {/* En celular el botón ocupa todo el ancho: sin texto solo se veía una campana. */}
+          <span className="ml-2 text-xs font-bold sm:hidden">Cola de caja</span>
           {items.length > 0 && <Badge className="absolute -right-1 -top-1 h-5 min-w-5 justify-center rounded-full bg-emerald-600 px-1 text-[10px] text-white">{items.length > 99 ? '99+' : items.length}</Badge>}
         </Button>
       </DropdownMenuTrigger>

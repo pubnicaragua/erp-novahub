@@ -1,6 +1,6 @@
 import React, { useState, useCallback, useMemo } from 'react';
 import { motion } from 'motion/react';
-import { GripVertical, Eye, Clock, CheckCircle2, AlertTriangle, ShieldCheck, UserCheck, Pencil, Users } from 'lucide-react';
+import { GripVertical, Eye, Clock, AlertTriangle, Pencil, Users } from 'lucide-react';
 import { cn } from '../ui/utils';
 import { Badge } from '../ui/badge';
 import { Button } from '../ui/button';
@@ -24,6 +24,9 @@ const KANBAN_COLUMNS: TaskKanbanColumn[] = [
   { id: 'col_completed', label: 'Completada', status: 'COMPLETED', color: '#10b981', bgBadge: 'bg-emerald-500/10 text-emerald-600 dark:text-emerald-400' },
 ];
 
+/** Solo aparece si hay tareas canceladas: antes caían en «Pendiente» y parecían abiertas. */
+const CANCELLED_COLUMN: TaskKanbanColumn = { id: 'col_cancelled', label: 'Cancelada', status: 'CANCELLED', color: '#94a3b8', bgBadge: 'bg-muted text-muted-foreground' };
+
 interface TareasKanbanProps {
   data: Task[];
   onViewDetail: (task: Task) => void;
@@ -36,6 +39,8 @@ interface TareasKanbanProps {
   compact?: boolean;
   /** Abre la edición de la tarea (el botón solo aparece si se pasa). */
   onEdit?: (task: Task) => void;
+  /** Por tarea: solo quien la creó o un administrador puede editarla. */
+  canEditTask?: (task: Task) => boolean;
 }
 
 export const TareasKanban: React.FC<TareasKanbanProps> = ({
@@ -48,6 +53,7 @@ export const TareasKanban: React.FC<TareasKanbanProps> = ({
   canMoveToStatus,
   compact = false,
   onEdit,
+  canEditTask,
 }) => {
   const [draggedTaskId, setDraggedTaskId] = useState<string | null>(null);
   const [dragOverColId, setDragOverColId] = useState<string | null>(null);
@@ -122,6 +128,7 @@ export const TareasKanban: React.FC<TareasKanbanProps> = ({
       IN_PROGRESS: [],
       WAITING_APPROVAL: [],
       COMPLETED: [],
+      CANCELLED: [],
     };
 
     data.forEach((task) => {
@@ -135,10 +142,11 @@ export const TareasKanban: React.FC<TareasKanbanProps> = ({
 
     return grouped;
   }, [data]);
+  const columns = columnTasks.CANCELLED.length > 0 ? [...KANBAN_COLUMNS, CANCELLED_COLUMN] : KANBAN_COLUMNS;
 
   return (
-    <div className={cn('grid grid-cols-1 gap-4 md:grid-cols-2 lg:grid-cols-4 p-4 overflow-x-auto', compact ? 'min-h-[16rem]' : 'min-h-[600px]')}>
-      {KANBAN_COLUMNS.map((col) => {
+    <div className={cn('grid grid-cols-1 gap-4 md:grid-cols-2 p-4 overflow-x-auto', columns.length > 4 ? 'lg:grid-cols-3 2xl:grid-cols-5' : 'lg:grid-cols-4', compact ? 'min-h-[16rem]' : 'min-h-[600px]')}>
+      {columns.map((col) => {
         const tasks = columnTasks[col.status] || [];
         const isDragOver = dragOverColId === col.id;
 
@@ -214,7 +222,7 @@ export const TareasKanban: React.FC<TareasKanbanProps> = ({
                         </h4>
                       </div>
                       <div className="flex shrink-0 items-center gap-0.5">
-                        {onEdit && !['COMPLETED', 'CANCELLED'].includes(String(task.status || '').toUpperCase()) && (
+                        {onEdit && (canEditTask ? canEditTask(task) : true) && !['COMPLETED', 'CANCELLED'].includes(String(task.status || '').toUpperCase()) && (
                           <Button
                             variant="ghost"
                             size="icon"

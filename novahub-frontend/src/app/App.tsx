@@ -37,6 +37,7 @@ import { ForceSalesOfflineTrackingFallback } from './components/ForceSalesOfflin
 import { getOfflineRouteEligibility } from './services/force-sales-location-queue';
 import { NovaHubLogo } from './components/NovaHubLogo';
 import { AccountSelectionDialogHost } from './components/contabilidad/AccountSelectionDialogHost';
+import { GuideRunner } from './guides/GuideRunner';
 
 function lazyWithChunkRecovery<T extends { default: React.ComponentType<any> }>(loader: () => Promise<T>, moduleName: string) {
   return lazy(() => loadModuleWithChunkRecovery(loader, moduleName, reportChunkLoadIncident));
@@ -699,6 +700,7 @@ function DashboardLayout() {
           </Suspense>
         </main>
       </div>
+      <GuideRunner />
       {currentModule !== 'fuerza-comercial' && <DeferredFloatingChat key={`${user?.clientTenantId || user?.tenantId || 'current'}.${user?.id || user?.email || 'user'}`} />}
     </div>
   );

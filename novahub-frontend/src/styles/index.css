@@ -3420,3 +3420,29 @@ main.module-notificaciones:has([data-message-scroll-layout="contained"]) {
   font-weight: 600;
   font-variant-numeric: tabular-nums;
 }
+
+/* KPIs en celular: dos por fila y compactos. Antes cada tarjeta ocupaba una fila entera y los KPIs llenaban la
+   primera pantalla, empujando la lista hacia abajo. Aplica a toda grilla cuyos hijos son la tarjeta KPI única. */
+@media (max-width: 639px) {
+  .grid:has(> [data-kpi-card]) {
+    grid-template-columns: repeat(2, minmax(0, 1fr)) !important;
+    gap: 8px !important;
+  }
+  [data-kpi-card] [data-slot="card-content"] {
+    padding: 10px !important;
+  }
+  [data-kpi-card] [data-slot="card-content"] > div {
+    gap: 8px !important;
+  }
+  [data-kpi-card] [data-kpi-icon] {
+    padding: 6px !important;
+  }
+  [data-kpi-card] [data-kpi-icon] svg {
+    width: 14px !important;
+    height: 14px !important;
+  }
+  [data-kpi-card] .text-xl {
+    font-size: 1rem !important;
+    line-height: 1.35rem !important;
+  }
+}

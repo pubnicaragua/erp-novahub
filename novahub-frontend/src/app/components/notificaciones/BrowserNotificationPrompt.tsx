@@ -46,7 +46,7 @@ export function BrowserNotificationPrompt() {
   };
 
   return (
-    <div className="fixed inset-x-3 bottom-3 z-[70] mx-auto flex max-w-xl items-center gap-3 rounded-2xl border border-primary/20 bg-background/95 p-3 shadow-2xl backdrop-blur-xl sm:inset-x-auto sm:right-5 sm:left-auto">
+    <div className="fixed inset-x-3 bottom-20 z-[70] mx-auto flex max-w-xl items-center gap-3 rounded-2xl border border-primary/20 bg-background/95 p-3 shadow-2xl backdrop-blur-xl sm:inset-x-auto sm:bottom-3 sm:right-20 sm:left-auto">
       <div className="flex size-10 shrink-0 items-center justify-center rounded-xl bg-primary/10 text-primary"><BellRing className="size-5" /></div>
       <div className="min-w-0 flex-1">
         <p className="text-xs font-black text-foreground">Activa los avisos de NovaHub</p>

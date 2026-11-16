@@ -4,6 +4,8 @@ export interface ChatGuide {
   title: string;
   module: string;
   description: string;
+  /** Pasos exactos de una guía del catálogo (guides/catalog.ts). */
+  steps?: string[];
 }
 
 export interface ChatOptions {

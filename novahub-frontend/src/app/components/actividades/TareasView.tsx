@@ -26,6 +26,7 @@ import {
   Star,
   Loader2,
   Filter,
+  Play,
   RotateCcw,
   HandHelping,
   UserCog,
@@ -52,7 +53,9 @@ import { TareasCardsView } from './TareasCardsView';
 import { TareasCategoriasView } from './TareasCategoriasView';
 import { CategoryGroupedSections } from './CategoryGroupedSections';
 import { TaskEditDialog, type TaskEditPatch } from './TaskEditDialog';
-import { shortDateTime, truncateText } from './taskTrace';
+import { canEditTaskContent, localDayKey, sortOverdueFirst, truncateText } from './taskTrace';
+import { NO_CATEGORY_KEY } from './taskCategoryStats';
+import { TaskTraceLine } from './TaskTraceLine';
 import { groupTasksByCategory } from './taskCategoryGroups';
 import { CategoryManagerDialog } from './CategoryManagerDialog';
 import { useActivityCategories } from './useActivityCategories';
@@ -182,6 +185,9 @@ export const TareasView: React.FC<TareasViewProps> = ({ data, loading, summaryEr
   const { user, canPerform } = useAuth();
   const queryClient = useQueryClient();
   const currentUserId = user?.id ? String(user.id) : null;
+  // Título, descripción, fechas y subtareas: solo quien creó la tarea o un administrador (igual que el backend).
+  const viewerIsAdmin = Boolean(user?.isTenantAdmin || user?.isPlatformAdmin);
+  const canEditTask = (task?: Task | null): boolean => Boolean(task) && canEditTaskContent(task as never, { id: currentUserId, isAdmin: viewerIsAdmin, canEdit: canPerform('ACTIVITIES_TASKS', 'edit') });
   const slaNow = useMemo(() => new Date(currentTime), [currentTime]);
 
   const categoriesApi = useActivityCategories();
@@ -574,7 +580,7 @@ export const TareasView: React.FC<TareasViewProps> = ({ data, loading, summaryEr
       key: 'title',
       header: 'Título',
       width: '380px',
-      editable: canPerform('ACTIVITIES_TASKS', 'edit'),
+      editable: (row: Task) => canEditTask(row) && !isClosedTaskStatus(row),
       render: (value: unknown) => (
         <span className="block min-w-0 max-w-full whitespace-normal break-words leading-5 [overflow-wrap:anywhere]" title={String(value || '')}>
           {truncateText(value, 100) || '—'}
@@ -602,15 +608,10 @@ export const TareasView: React.FC<TareasViewProps> = ({ data, loading, summaryEr
     },
     {
       key: 'createdAt',
-      header: 'Creada',
-      width: '190px',
+      header: 'Registro',
+      width: '230px',
       editable: false,
-      render: (_val: unknown, row: any) => (
-        <div className="min-w-0 text-xs leading-4" title={`Creada por ${row.createdBy?.name || 'persona no registrada'} el ${shortDateTime(row.createdAt)}`}>
-          <p className="truncate font-semibold text-foreground">{row.createdBy?.name || 'No registrado'}</p>
-          <p className="text-muted-foreground">{shortDateTime(row.createdAt)}</p>
-        </div>
-      ),
+      render: (_val: unknown, row: any) => <TaskTraceLine task={row} />,
     },
     {
       key: 'priority',
@@ -700,16 +701,20 @@ export const TareasView: React.FC<TareasViewProps> = ({ data, loading, summaryEr
 
   const filterTasks = (includeStatusFilter: boolean) => data.filter((t) => {
     // Search filter
+    const term = searchTerm.trim().toLowerCase();
     const matchesSearch =
-      !searchTerm ||
-      t.title?.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      t.description?.toLowerCase().includes(searchTerm.toLowerCase());
+      !term ||
+      t.title?.toLowerCase().includes(term) ||
+      t.description?.toLowerCase().includes(term) ||
+      String((t as any).createdBy?.name || '').toLowerCase().includes(term) ||
+      (t.assignments || []).some((a: any) => String(a?.user?.name || '').toLowerCase().includes(term));
 
     // Status filter
     const displayStatus = getTaskDisplayStatus(t);
     const matchesStatus = !includeStatusFilter ||
       statusFilter === 'ALL' ||
-      (statusFilter === 'OVERDUE' ? displayStatus === 'OVERDUE' : (t.status || '').toUpperCase() === statusFilter);
+      // Pendientes y En progreso cuentan sin las vencidas (esas están en «Vencidas»), igual que sus tarjetas de arriba.
+      (['OVERDUE', 'PENDING', 'IN_PROGRESS'].includes(statusFilter) ? displayStatus === statusFilter : (t.status || '').toUpperCase() === statusFilter);
 
     // Priority filter
     const matchesPriority = priorityFilter === 'ALL' || (t.priority || '').toUpperCase() === priorityFilter;
@@ -717,11 +722,12 @@ export const TareasView: React.FC<TareasViewProps> = ({ data, loading, summaryEr
     // Assigned filter
     const matchesAssigned =
       assignedFilter === 'ALL' ||
+      getTaskAssigneeId(t) === assignedFilter ||
       (t.assignments || []).some((a: any) => a.userId === assignedFilter || a.employeeId === assignedFilter);
 
     // Categoría / Departamento: catálogo cerrado (§4), filtrado en cliente.
     const taskCategory = String(t.categoryId || '').trim().toUpperCase();
-    const matchesCategory = categoryFilter === 'ALL' || taskCategory === categoryFilter;
+    const matchesCategory = categoryFilter === 'ALL' || (categoryFilter === NO_CATEGORY_KEY ? !taskCategory : taskCategory === categoryFilter.toUpperCase());
 
     // «Mis tareas»: solo las que tengo asignadas.
     const matchesMine = !mineOnly || isTaskMine(t);
@@ -730,7 +736,8 @@ export const TareasView: React.FC<TareasViewProps> = ({ data, loading, summaryEr
     const matchesFavorite = !favoritesOnly || favoriteIds.has(String(t.id));
 
     // Date range filter
-    const dueDate = t.dueDate ? new Date(t.dueDate).toISOString().slice(0, 10) : null;
+    // Día local: con toISOString una tarea que vence a las 8 p. m. caía en el día siguiente.
+    const dueDate = localDayKey(t.dueDate);
     const matchesDateFrom = !dateFrom || (dueDate && dueDate >= dateFrom);
     const matchesDateTo = !dateTo || (dueDate && dueDate <= dateTo);
 
@@ -749,7 +756,8 @@ export const TareasView: React.FC<TareasViewProps> = ({ data, loading, summaryEr
   // El detalle abierto toma siempre la versión más reciente de la lista (subtareas, reportes y comentarios cambian sin cerrarlo).
   const liveDetailTask = detailTask ? (data.find((task) => String(task.id) === String(detailTask.id)) ?? detailTask) : null;
   const filteredWithoutStatus = filterTasks(false);
-  const filtered = filterTasks(true);
+  // Vencidas primero (la más atrasada arriba) y el resto en su orden; el agrupado por categoría se conserva.
+  const filtered = sortOverdueFirst(filterTasks(true), currentTime);
 
   // «Todas las categorías» significa mostrar todas, no mezclarlas: cada categoría con su encabezado y sus tareas.
   const groupByCategory = categoryFilter === 'ALL' && filtered.length > 0;
@@ -781,6 +789,7 @@ export const TareasView: React.FC<TareasViewProps> = ({ data, loading, summaryEr
   const kpis = [
     { id: 'ALL', title: 'Total Tareas', value: filteredWithoutStatus.length, icon: ListTodo },
     { id: 'PENDING', title: 'Pendientes', value: filteredWithoutStatus.filter((t) => getTaskDisplayStatus(t) === 'PENDING').length, icon: Clock },
+    { id: 'IN_PROGRESS', title: 'En progreso', value: filteredWithoutStatus.filter((t) => getTaskDisplayStatus(t) === 'IN_PROGRESS').length, icon: Play },
     { id: 'WAITING_APPROVAL', title: 'Por Aprobar', value: filteredWithoutStatus.filter((t) => String(t.status || '').toUpperCase() === 'WAITING_APPROVAL').length, icon: Send },
     { id: 'OVERDUE', title: 'Vencidas', value: overdueCount, icon: AlertTriangle },
     { id: 'COMPLETED', title: 'Completadas', value: filteredWithoutStatus.filter((t) => (t.status || '').toUpperCase() === 'COMPLETED').length, icon: CheckCircle2 },
@@ -814,7 +823,7 @@ export const TareasView: React.FC<TareasViewProps> = ({ data, loading, summaryEr
 
       <div className="space-y-2" data-tour="tareas-tutorial-data" aria-busy={loading}>
         <KpiSummaryNotice loading={loading} error={summaryError} />
-        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3 2xl:grid-cols-6">
+        <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-7">
           {kpis.map((kpi) => (
             <SalesKpiCard
               key={kpi.id}
@@ -827,7 +836,7 @@ export const TareasView: React.FC<TareasViewProps> = ({ data, loading, summaryEr
               onClick={() => setStatusFilter((current) => (current === kpi.id ? 'ALL' : kpi.id))}
             />
           ))}
-          <SalesKpiCard title="Avance promedio" value={loading || summaryError ? '—' : `${averageProgress}%`} icon={Gauge} kind="indicator" sub="Sin contar canceladas" />
+          <SalesKpiCard title="Avance promedio" value={loading || summaryError ? '—' : `${averageProgress}%`} icon={Gauge} kind="indicator" hint="Promedio de avance sin contar las canceladas" />
         </div>
       </div>
 
@@ -973,6 +982,13 @@ export const TareasView: React.FC<TareasViewProps> = ({ data, loading, summaryEr
                       {category.name}
                     </SelectItem>
                   ))}
+                  {/* Las archivadas y «Sin categoría» también se pueden filtrar: si no, sus tareas solo se veían en «Todas». */}
+                  {categoriesApi.categories.filter((category) => category.isArchived && categoryTaskCounts.has(category.key.toUpperCase())).map((category) => (
+                    <SelectItem key={category.key} value={category.key}>
+                      {category.name} (archivada)
+                    </SelectItem>
+                  ))}
+                  <SelectItem value={NO_CATEGORY_KEY}>Sin categoría</SelectItem>
                 </SelectContent>
               </Select>
             </div>
@@ -1013,7 +1029,8 @@ export const TareasView: React.FC<TareasViewProps> = ({ data, loading, summaryEr
           renderGrouped((rows) => <TareasKanban
             data={rows}
             compact={groupByCategory}
-            onEdit={canPerform('ACTIVITIES_TASKS', 'edit') ? (task) => setEditingTask(task) : undefined}
+            onEdit={(task) => setEditingTask(task)}
+            canEditTask={canEditTask}
             onViewDetail={(task) => setDetailTask(task)}
             canMoveToStatus={canMoveTaskToStatus}
             onStatusChange={async (taskId, status) => {
@@ -1080,6 +1097,7 @@ export const TareasView: React.FC<TareasViewProps> = ({ data, loading, summaryEr
             onReassignTask={handleOpenReassign}
             onEdit={(task) => setEditingTask(task)}
             canEditAction={canPerform('ACTIVITIES_TASKS', 'edit')}
+            canEditTask={canEditTask}
           />)
         ) : (
           renderGrouped((rows) => <div className="min-w-0" data-activities-task-table="true">
@@ -1307,7 +1325,7 @@ export const TareasView: React.FC<TareasViewProps> = ({ data, loading, summaryEr
         extraActions={
           detailTask && (
             <div className="flex flex-wrap gap-2">
-              {canPerform('ACTIVITIES_TASKS', 'edit') && !isClosedTaskStatus(detailTask) && (
+              {canEditTask(detailTask as Task) && !isClosedTaskStatus(detailTask) && (
                 <Button
                   type="button"
                   variant="outline"

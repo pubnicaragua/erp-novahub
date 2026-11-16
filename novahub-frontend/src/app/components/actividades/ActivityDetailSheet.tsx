@@ -13,7 +13,7 @@ import { translateAuditAction } from '../ui/AuditHistoryModal';
 import { SubtasksManager } from './SubtasksManager';
 import { TaskReportsPanel } from './TaskReportsPanel';
 import { TaskCommentsPanel } from './TaskCommentsPanel';
-import { assigneeNames, buildTaskTrace } from './taskTrace';
+import { assigneeNames, buildTaskTrace, canEditTaskContent } from './taskTrace';
 import { describeProgressSource, getTaskProgress } from './actividades.progress';
 import { TimeTracker } from './TimeTracker';
 import { SlaBadge } from './SlaBadge';
@@ -505,7 +505,8 @@ function TaskDetails({ item, onUpdate, canEdit, canReassign, canManageSubtasks, 
           taskId={String(item.id)}
           subtasks={subtasks}
           onSubtasksChange={() => onUpdate?.()}
-          canEdit={canManageSubtasks}
+          canEdit={canEdit}
+          canToggle={canManageSubtasks}
         />
       </DetailSection>
 
@@ -908,7 +909,8 @@ export function ActivityDetailSheet({ kind, item, users, accounts, linkedExpense
   const isAssignedToMe = isTask && Boolean(user?.id) && ((item?.assignments || []) as Array<{ userId?: string; user?: { id?: string } }>)
     .some((assignment) => String(assignment.userId || assignment.user?.id || '') === String(user!.id));
   const canRateTask = isTask && canPerform('ACTIVITIES_TASKS', 'approve') && !isAssignedToMe && String(item?.assignedToId || '') !== String(user?.id || 'sin-usuario');
-  const canEditTask = isTask && canPerform('ACTIVITIES_TASKS', 'edit');
+  // Contenido (descripción, campos, subtareas): quien creó la tarea o un administrador; quien la hace solo comenta y marca subtareas.
+  const canEditTask = isTask && canEditTaskContent((item || {}) as never, { id: user?.id ? String(user.id) : null, isAdmin: Boolean(user?.isTenantAdmin || user?.isPlatformAdmin), canEdit: canPerform('ACTIVITIES_TASKS', 'edit') });
   const canManageSubtasks = isTask && canPerform('ACTIVITIES_TASKS', 'manageSubtasks');
   const canStartTimeTracking = isTask && canPerform('ACTIVITIES_TASKS', 'startTimeTracking');
   const canStopTimeTracking = isTask && canPerform('ACTIVITIES_TASKS', 'stopTimeTracking');

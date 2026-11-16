@@ -584,6 +584,7 @@ export function EditableDataTable<T extends { [key: string]: any }>({
             <Checkbox
               checked={allSelectableRowsSelected ? true : selectedIds.size > 0 ? 'indeterminate' : false}
               disabled={selectableIds.length === 0}
+              aria-label="Seleccionar todas las filas"
               onCheckedChange={toggleSelectAll}
             />
           </TableHead>
@@ -793,7 +794,8 @@ export function EditableDataTable<T extends { [key: string]: any }>({
                           isCellEditable(row, col) ? "cursor-cell" : "cursor-default",
                           isCellEditable(row, col) && "hover:bg-primary/5 transition-colors",
                           isEditing && "p-0",
-                          focusedCell.rowIndex === rowIndex && focusedCell.colIndex === colIndex && !isEditing && "ring-1 ring-inset ring-primary/50"
+                          // El recuadro solo cuando la celda tiene el foco del teclado: antes la primera celda de cada tabla salía marcada sin que nadie la tocara.
+                          !isEditing && "outline-none focus-visible:ring-1 focus-visible:ring-inset focus-visible:ring-primary/50"
                         )}
                       >
                         {isEditing ? (

@@ -76,7 +76,8 @@ export function DenominationCounter({
                     <button 
                       type="button"
                       onClick={() => setState(prev => prev.map(p => (p.value === item.value && p.type === 'bill') ? { ...p, quantity: Math.max(0, p.quantity - 1) } : p))}
-                      className="h-full px-1.5 flex items-center justify-center hover:bg-muted text-muted-foreground transition-colors border-r border-border/50"
+                      aria-label={`Quitar un billete de ${item.value}`}
+                      className="h-full min-w-8 px-2 flex items-center justify-center hover:bg-muted text-muted-foreground transition-colors border-r border-border/50"
                     >
                       <Minus className="size-3" />
                     </button>
@@ -93,7 +94,8 @@ export function DenominationCounter({
                     <button 
                       type="button"
                       onClick={() => setState(prev => prev.map(p => (p.value === item.value && p.type === 'bill') ? { ...p, quantity: p.quantity + 1 } : p))}
-                      className="h-full px-1.5 flex items-center justify-center hover:bg-muted text-muted-foreground transition-colors border-l border-border/50"
+                      aria-label={`Agregar un billete de ${item.value}`}
+                      className="h-full min-w-8 px-2 flex items-center justify-center hover:bg-muted text-muted-foreground transition-colors border-l border-border/50"
                     >
                       <Plus className="size-3" />
                     </button>
@@ -113,7 +115,8 @@ export function DenominationCounter({
                     <button 
                       type="button"
                       onClick={() => setState(prev => prev.map(p => (p.value === item.value && p.type === 'coin') ? { ...p, quantity: Math.max(0, p.quantity - 1) } : p))}
-                      className="h-full px-1.5 flex items-center justify-center hover:bg-muted text-muted-foreground transition-colors border-r border-border/50"
+                      aria-label={`Quitar una moneda de ${item.value}`}
+                      className="h-full min-w-8 px-2 flex items-center justify-center hover:bg-muted text-muted-foreground transition-colors border-r border-border/50"
                     >
                       <Minus className="size-3" />
                     </button>
@@ -130,7 +133,8 @@ export function DenominationCounter({
                     <button 
                       type="button"
                       onClick={() => setState(prev => prev.map(p => (p.value === item.value && p.type === 'coin') ? { ...p, quantity: p.quantity + 1 } : p))}
-                      className="h-full px-1.5 flex items-center justify-center hover:bg-muted text-muted-foreground transition-colors border-l border-border/50"
+                      aria-label={`Agregar una moneda de ${item.value}`}
+                      className="h-full min-w-8 px-2 flex items-center justify-center hover:bg-muted text-muted-foreground transition-colors border-l border-border/50"
                     >
                       <Plus className="size-3" />
                     </button>

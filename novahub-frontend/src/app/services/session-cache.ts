@@ -37,6 +37,8 @@ const PERSISTED_COLUMN_KEY_PREFIXES = [
 function shouldPreserveUiStateOnRefresh(key: string) {
   return PERSISTED_UI_KEYS.has(key)
     || PERSISTED_COLUMN_KEY_PREFIXES.some((prefix) => key.startsWith(prefix))
+    // Guía paso a paso en curso (solo id y paso, sin datos de la empresa): sigue al recargar y se borra al cerrar sesión.
+    || key === 'erp-guide-runner'
     || key.startsWith('erp-scroll-position:')
     || key.startsWith('novahub-pos-draft:')
     || key.startsWith('novahub:sales-draft:');

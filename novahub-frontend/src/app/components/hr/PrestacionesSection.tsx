@@ -2,11 +2,13 @@ import { useState, type ReactNode } from 'react';
 import { Card, CardContent } from '../ui/card';
 import { AguinaldoPanel } from './AguinaldoPanel';
 import { LiquidacionPanel } from './LiquidacionPanel';
+import { PayrollProjectionPanel } from './PayrollProjectionPanel';
 
-type PayrollScope = 'nominas' | 'aguinaldo' | 'liquidacion';
+type PayrollScope = 'nominas' | 'proyeccion' | 'aguinaldo' | 'liquidacion';
 
 const SCOPE_OPTIONS: Array<{ value: PayrollScope; label: string }> = [
   { value: 'nominas', label: 'Nóminas' },
+  { value: 'proyeccion', label: 'Proyección de gastos' },
   { value: 'aguinaldo', label: 'Aguinaldo' },
   { value: 'liquidacion', label: 'Liquidación final (baja de empleado)' },
 ];
@@ -31,6 +33,7 @@ export function PrestacionesSection({ employees, children }: { employees: Array<
         </select>
       </div>
       {scope === 'nominas' && children}
+      {scope === 'proyeccion' && <Card className="rounded-2xl border-border/60 bg-card/80 shadow-sm"><CardContent className="p-3 sm:p-4"><PayrollProjectionPanel /></CardContent></Card>}
       {scope === 'aguinaldo' && <Card className="rounded-2xl border-border/60 bg-card/80 shadow-sm"><CardContent className="p-3 sm:p-4"><AguinaldoPanel embedded /></CardContent></Card>}
       {scope === 'liquidacion' && <Card className="rounded-2xl border-border/60 bg-card/80 shadow-sm"><CardContent className="p-3 sm:p-4"><LiquidacionPanel employees={employees} /></CardContent></Card>}
     </div>

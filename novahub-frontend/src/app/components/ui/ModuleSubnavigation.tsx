@@ -1,4 +1,4 @@
-import type { ReactNode, Ref } from 'react';
+import { useEffect, useRef, type ReactNode, type Ref } from 'react';
 import { getSidebarAwareNavigationClass } from '../../utils/sidebarNavigation.mjs';
 import { cn } from './utils';
 
@@ -31,8 +31,15 @@ export function ModuleSubnavigation({
   dataTour,
   listRef,
 }: ModuleSubnavigationProps) {
+  const navRef = useRef<HTMLElement>(null);
+  // En celular solo cabe parte de la barra: la pestaña activa se lleva a la vista para que siempre se vea dónde estás.
+  useEffect(() => {
+    const active = navRef.current?.querySelector<HTMLElement>('[aria-current="page"]');
+    if (active && typeof active.scrollIntoView === 'function') active.scrollIntoView({ block: 'nearest', inline: 'nearest' });
+  }, [value]);
   return (
     <nav
+      ref={navRef}
       aria-label={ariaLabel}
       data-tour={dataTour}
       className={cn(
@@ -61,7 +68,8 @@ export function ModuleSubnavigation({
               )}
             >
               {item.icon}
-              <span className={item.icon ? 'hidden sm:inline' : 'inline'}>{item.label}</span>
+              {/* En celular, las demás pestañas muestran solo su ícono; la activa dice su nombre para que se entienda dónde estás. */}
+              <span className={item.icon && !isActive ? 'hidden sm:inline' : 'inline whitespace-nowrap'}>{item.label}</span>
             </button>
           );
         })}

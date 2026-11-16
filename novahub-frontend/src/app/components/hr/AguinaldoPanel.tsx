@@ -9,6 +9,7 @@ import { hrService } from '../../services/hr.service';
 import { useTenantQuery } from '../../hooks/useTenantQuery';
 import { useCurrency } from '../../contexts/CurrencyContext';
 import { normalizeCurrency } from '../../utils/currency';
+import { AguinaldoPayDateCard } from './AguinaldoPayDateCard';
 
 interface AguinaldoRow {
   employeeId: string;
@@ -84,6 +85,8 @@ export function AguinaldoPanel({ embedded = false }: { embedded?: boolean } = {}
               <span>Período {longDate(report.periodStart)} – {longDate(report.periodEnd)}</span>
               <Badge variant="outline" className="text-[10px] font-bold">Pago límite: {longDate(report.paymentDeadline)}</Badge>
             </div>
+
+            <AguinaldoPayDateCard year={Number(String(report.paymentDeadline).slice(0, 4))} />
 
             <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
               {report.totals.length === 0 && <p className="text-xs text-muted-foreground">No hay empleados activos para calcular.</p>}

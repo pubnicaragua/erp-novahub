@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import { assigneeNames, buildTaskTrace, shortDateTime, truncateText } from '../src/app/components/actividades/taskTrace.ts';
+import { assigneeNames, buildTaskTrace, canEditTaskContent, durationLabel, localDayKey, shortDateTime, sortOverdueFirst, truncateText } from '../src/app/components/actividades/taskTrace.ts';
 
 test('las cuatro etapas salen en orden y las que no pasaron quedan sin hacer', () => {
   const steps = buildTaskTrace({ status: 'PENDING', createdAt: '2026-11-10T15:00:00Z', createdBy: { name: 'Gabriel Tinoco' } });
@@ -62,4 +62,38 @@ test('shortDateTime da día y hora y tolera valores vacíos o inválidos', () =>
   assert.match(shortDateTime('2026-11-13T15:30:00'), /13\/11\/26\s+\d{2}:\d{2}/);
   assert.equal(shortDateTime(null), '—');
   assert.equal(shortDateTime('no es fecha'), '—');
+});
+
+test('solo quien creó la tarea o un administrador cambia su contenido', () => {
+  assert.equal(canEditTaskContent({ createdById: 'u1' }, { id: 'u1' }), true);
+  assert.equal(canEditTaskContent({ createdById: 'u1' }, { id: 'u2', canEdit: true }), false);
+  assert.equal(canEditTaskContent({ createdById: 'u1' }, { id: 'u2', isAdmin: true }), true);
+  assert.equal(canEditTaskContent({ createdBy: { id: 'u1', name: 'Ileana' } }, { id: 'u1' }), true);
+  assert.equal(canEditTaskContent({}, { id: 'u2', canEdit: true }), true);
+  assert.equal(canEditTaskContent({}, { id: 'u2', canEdit: false }), false);
+});
+
+test('la duración se dice en minutos, horas o días', () => {
+  assert.equal(durationLabel('2026-11-10T10:00:00Z', '2026-11-10T10:30:00Z'), '30 min');
+  assert.equal(durationLabel('2026-11-10T10:00:00Z', '2026-11-10T15:10:00Z'), '5 h');
+  assert.equal(durationLabel('2026-11-10T10:00:00Z', '2026-11-13T14:00:00Z'), '3 d 4 h');
+  assert.equal(durationLabel(null, '2026-11-13T14:00:00Z'), '');
+});
+
+test('las vencidas van primero, la más atrasada arriba, y el resto conserva su orden', () => {
+  const now = new Date('2026-11-15T12:00:00Z').getTime();
+  const tasks = [
+    { id: 'a', status: 'PENDING', dueDate: '2026-11-20T12:00:00Z' },
+    { id: 'b', status: 'IN_PROGRESS', dueDate: '2026-11-14T12:00:00Z' },
+    { id: 'c', status: 'COMPLETED', dueDate: '2026-11-01T12:00:00Z' },
+    { id: 'd', status: 'PENDING', dueDate: '2026-11-10T12:00:00Z' },
+    { id: 'e', status: 'PENDING' },
+  ];
+  assert.deepEqual(sortOverdueFirst(tasks, now).map((t) => t.id), ['d', 'b', 'a', 'c', 'e']);
+});
+
+test('el día local de una fecha no se corre por la zona horaria', () => {
+  const local = new Date(2026, 10, 14, 21, 30);
+  assert.equal(localDayKey(local.toISOString()), '2026-11-14');
+  assert.equal(localDayKey(''), null);
 });

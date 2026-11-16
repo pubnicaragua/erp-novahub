@@ -12,6 +12,11 @@ import { aiService, type ChatGuide } from '../../services/ai.service';
 import { trainingService } from '../../services/training.service';
 import { safeGetItem, safeSetItem } from '../../services/safe-storage';
 import { GUIDED_TOUR_STARTED_EVENT, requestGuidedTour } from '../../services/guided-tour.service';
+import { ERP_GUIDES, findGuide } from '../../guides/catalog';
+import { confidentMatch, isHowToQuestion, matchGuides } from '../../guides/match';
+import { startGuide } from '../../guides/events';
+import type { ErpGuide } from '../../guides/types';
+import { ChatGuideBlock } from '../../guides/ChatGuideBlock';
 
 const HISTORY_KEY = 'erp-nova-ai-chat-history';
 const CONVERSATION_KEY = 'erp-nova-ai-conversation';
@@ -22,6 +27,10 @@ interface ChatMessage {
   role: 'user' | 'bot';
   content: string;
   tourEligible?: boolean;
+  /** Guías paso a paso ligadas a la respuesta. */
+  guideIds?: string[];
+  /** answer: la respuesta es la guía; options: hay que elegir una; related: guías sugeridas. */
+  guideMode?: 'answer' | 'options' | 'related';
 }
 
 interface DashboardContext {
@@ -35,15 +44,27 @@ interface FloatingChatProps {
   initialRequest?: { message?: string; context?: DashboardContext } | null;
 }
 
-const WELCOME_MESSAGE = 'Hola. Soy Nova AI, tu asistente empresarial. Puedo revisar ventas, inventario, cartera, caja, clientes y cotizaciones con los datos autorizados de tu empresa.';
+const WELCOME_MESSAGE = 'Hola. Soy Nova AI, tu asistente empresarial. Puedo revisar ventas, inventario, cartera, caja, clientes y cotizaciones con los datos autorizados de tu empresa, y enseñarte paso a paso cómo hacer cualquier tarea en el sistema.';
 const SUGGESTIONS = [
   '¿Cómo va mi negocio hoy?',
   '¿Qué necesita mi atención?',
-  '¿Qué productos debería revisar?',
   '¿Quién me debe?',
-  '¿Qué clientes dejaron de comprar?',
-  '¿Qué producto genera más utilidad?',
+  '¿Cómo hago una factura?',
+  '¿Cómo cambio los precios de una lista?',
+  '¿Dónde veo los reportes?',
 ];
+const GUIDE_MODES = new Set(['answer', 'options', 'related']);
+
+function guideIdsFrom(value: unknown): string[] | undefined {
+  if (!Array.isArray(value)) return undefined;
+  const ids = value.filter((id): id is string => typeof id === 'string' && Boolean(findGuide(id)));
+  return ids.length ? ids : undefined;
+}
+
+/** Texto de una guía para el historial del chat y como respaldo si la IA no responde. */
+function guideAsText(guide: ErpGuide) {
+  return [`Así se hace «${guide.title}»:`, ...guide.steps.map((step, index) => `${index + 1}. ${step.text}`)].join('\n');
+}
 const ACTIVITY_STEPS = ['Consultando tus datos…', 'Revisando ventas e inventario…', 'Preparando el resumen…'];
 
 function makeId() {
@@ -60,13 +81,23 @@ function loadHistory(key: string): ChatMessage[] {
     if (!raw) return [];
     const parsed = JSON.parse(raw);
     if (!Array.isArray(parsed)) return [];
-    return parsed.filter((message) => message && typeof message.content === 'string' && (message.role === 'user' || message.role === 'bot')).map((message) => ({ id: message.id || makeId(), role: message.role, content: message.content, tourEligible: Boolean(message.tourEligible) }));
+    return parsed.filter((message) => message && typeof message.content === 'string' && (message.role === 'user' || message.role === 'bot')).map((message) => ({ id: message.id || makeId(), role: message.role, content: message.content, tourEligible: Boolean(message.tourEligible), guideIds: guideIdsFrom(message.guideIds), guideMode: GUIDE_MODES.has(message.guideMode) ? message.guideMode : undefined }));
   } catch { return []; }
 }
 
 function buildGuides(videos: any[]): ChatGuide[] {
   if (!Array.isArray(videos)) return [];
   return videos.filter((video) => video && video.title).slice(0, 8).map((video) => ({ title: String(video.title), module: video.module ? String(video.module) : 'General', description: video.description ? String(video.description).slice(0, 180) : '' }));
+}
+
+/** Guías paso a paso que se envían a Nova para que conteste con los botones reales del ERP. */
+function stepGuidesForAi(guides: ErpGuide[]): ChatGuide[] {
+  return guides.map((guide) => ({
+    title: guide.title.slice(0, 180),
+    module: guide.area.slice(0, 80),
+    description: guide.summary.slice(0, 220),
+    steps: guide.steps.map((step) => step.text.slice(0, 300)).slice(0, 8),
+  }));
 }
 
 function needsGuidesFor(content: string) {
@@ -170,7 +201,7 @@ function NovaFormattedMessage({ content }: { content: string }) {
 }
 
 export function FloatingChat({ initiallyOpen = false, initialRequest }: FloatingChatProps = {}) {
-  const { user } = useAuth();
+  const { user, hasAccess } = useAuth();
   const userId = user?.id || user?.email;
   const tenantId = user?.clientTenantId || user?.tenantId;
   const historyKey = useMemo(() => scopedKey(HISTORY_KEY, userId, tenantId), [tenantId, userId]);
@@ -233,6 +264,15 @@ export function FloatingChat({ initiallyOpen = false, initialRequest }: Floating
     appendTourResult(result);
   }, [appendTourResult]);
 
+  const runGuide = useCallback((guide: ErpGuide) => {
+    setOpen(false);
+    startGuide(guide.id);
+  }, []);
+
+  const showGuide = useCallback((guide: ErpGuide) => {
+    setMessages((current) => [...current, { id: makeId(), role: 'bot', content: guideAsText(guide), guideIds: [guide.id], guideMode: 'answer' }]);
+  }, []);
+
   const sendMessage = useCallback(async (raw: string) => {
     const content = raw.trim();
     if (!content || typing) return;
@@ -241,6 +281,20 @@ export function FloatingChat({ initiallyOpen = false, initialRequest }: Floating
     setMessages((current) => [...current, userMessage]);
     setInput('');
     setDashboardContext(undefined);
+
+    // Preguntas de «cómo se hace»: se contestan con la guía exacta, sin esperar a la IA,
+    // para que la respuesta use siempre los botones reales del sistema.
+    const howTo = isHowToQuestion(content) || isGuidedTourRequest(content);
+    const matches = howTo ? matchGuides(content, ERP_GUIDES) : [];
+    const best = confidentMatch(matches);
+    if (best) {
+      showGuide(best.guide);
+      return;
+    }
+    if (matches.length > 1 && !contextForMessage) {
+      setMessages((current) => [...current, { id: makeId(), role: 'bot', content: 'Encontré varias guías parecidas. ¿Cuál necesitas?', guideIds: matches.map((match) => match.guide.id), guideMode: 'options' }]);
+      return;
+    }
 
     if (isGuidedTourRequest(content)) {
       setOpen(false);
@@ -255,12 +309,21 @@ export function FloatingChat({ initiallyOpen = false, initialRequest }: Floating
     abortRef.current = controller;
     try {
       if (needsGuidesFor(content)) await loadGuides();
-      const response = await aiService.chat(content, { conversationId, dashboardContext: contextForMessage, guides: needsGuidesFor(content) && guidesRef.current.length ? guidesRef.current : undefined }, controller.signal);
+      const related = matches.map((match) => match.guide);
+      const guides = [...stepGuidesForAi(related), ...(needsGuidesFor(content) ? guidesRef.current : [])];
+      const response = await aiService.chat(content, { conversationId, dashboardContext: contextForMessage, guides: guides.length ? guides : undefined }, controller.signal);
       if (controller.signal.aborted) return;
       if (response.conversationId) { setConversationId(response.conversationId); safeSetItem(conversationStorageKey, response.conversationId); }
-      setMessages((current) => [...current, { id: makeId(), role: 'bot', content: response.reply, tourEligible: shouldOfferGuidedTour(content, response.reply) }]);
+      setMessages((current) => [...current, {
+        id: makeId(), role: 'bot', content: response.reply,
+        tourEligible: !related.length && shouldOfferGuidedTour(content, response.reply),
+        guideIds: related.length ? related.map((guide) => guide.id) : undefined,
+        guideMode: related.length ? 'related' : undefined,
+      }]);
     } catch (error: any) {
       if (controller.signal.aborted || error?.name === 'AbortError') return;
+      // Si la IA no responde pero la pregunta tiene guía, la guía sigue funcionando.
+      if (matches[0]) { showGuide(matches[0].guide); return; }
       const fallback = error?.message || 'No pude consultar Nova AI en este momento. Inténtalo de nuevo.';
       setMessages((current) => [...current, { id: makeId(), role: 'bot', content: fallback }]);
       toast.apiFailure(error, 'No se pudo completar la consulta a Nova AI. Inténtalo de nuevo.');
@@ -268,7 +331,7 @@ export function FloatingChat({ initiallyOpen = false, initialRequest }: Floating
       if (abortRef.current === controller) abortRef.current = null;
       if (!controller.signal.aborted) setTyping(false);
     }
-  }, [appendTourResult, conversationId, conversationStorageKey, dashboardContext, loadGuides, typing]);
+  }, [appendTourResult, conversationId, conversationStorageKey, dashboardContext, loadGuides, showGuide, typing]);
 
   useEffect(() => {
     const handler = (event: Event) => {
@@ -294,9 +357,9 @@ export function FloatingChat({ initiallyOpen = false, initialRequest }: Floating
     </motion.button>
     <AnimatePresence>{open && <motion.div data-nova-ai-chat="true" initial={{ opacity: 0, y: 24, scale: 0.96 }} animate={{ opacity: 1, y: 0, scale: 1 }} exit={{ opacity: 0, y: 24, scale: 0.96 }} transition={{ type: 'spring', stiffness: 300, damping: 28 }} className="fixed right-4 bottom-24 z-[9000] flex h-[70vh] max-h-[640px] w-[min(400px,calc(100vw-2rem))] flex-col overflow-hidden rounded-3xl border border-border/60 bg-background shadow-2xl shadow-black/40">
       <div className="relative shrink-0 overflow-hidden bg-gradient-to-br from-primary via-primary to-emerald-600 p-4 text-primary-foreground"><div className="absolute inset-0 bg-[radial-gradient(circle_at_top_right,rgba(255,255,255,0.15),transparent_55%)]" /><div className="relative flex items-center gap-3"><div className="flex size-10 items-center justify-center rounded-xl bg-white p-1.5 ring-1 ring-white/40"><NovaHubLogo size={28} className="rounded-full" /></div><div className="min-w-0 flex-1"><h3 className="truncate text-sm font-black uppercase tracking-wider">Nova AI</h3><p className="truncate text-[11px] font-medium text-primary-foreground/75">Asistente empresarial con tus datos</p></div><button type="button" onClick={startGuidedTour} className="hidden h-8 items-center gap-1.5 rounded-lg bg-white/10 px-2.5 text-[10px] font-black uppercase tracking-wider text-primary-foreground/90 transition-colors hover:bg-white/25 sm:flex" aria-label="Iniciar tour guiado" title="Iniciar tour guiado"><Route className="size-3.5" /> Tour guiado</button><button type="button" onClick={() => setOpen(false)} className="flex size-8 items-center justify-center rounded-lg bg-white/10 text-primary-foreground/90 transition-colors hover:bg-white/25" aria-label="Cerrar chat"><X className="size-4" /></button></div><button type="button" onClick={startGuidedTour} className="mt-3 flex w-full items-center justify-center gap-2 rounded-xl border border-white/20 bg-white/10 px-3 py-2 text-[11px] font-black uppercase tracking-wider text-primary-foreground transition-colors hover:bg-white/20 sm:hidden" aria-label="Iniciar tour guiado"><Route className="size-3.5" /> Iniciar tour guiado</button></div>
-      <div ref={scrollRef} className="scrollbar-overlay flex-1 space-y-3 overflow-y-auto bg-muted/20 p-4">{messages.map((message) => <div key={message.id} className={cn('flex w-full', message.role === 'user' ? 'justify-end' : 'justify-start')}><div className={cn('max-w-[88%] rounded-2xl px-3.5 py-2.5 text-sm leading-relaxed shadow-sm', message.role === 'user' ? 'whitespace-pre-wrap rounded-br-md bg-primary text-primary-foreground' : 'rounded-bl-md border border-border/50 bg-background text-foreground')}>{message.role === 'bot' ? <><NovaFormattedMessage content={message.content} />{message.tourEligible && <button type="button" onClick={startGuidedTour} className="mt-3 flex w-full items-center justify-center gap-2 rounded-xl border border-primary/30 bg-primary/10 px-3 py-2 text-xs font-black text-primary transition-colors hover:bg-primary/20"><Route className="size-3.5" /> Hacer tour guiado</button>}</> : message.content}</div></div>)}{typing && <div className="flex w-full justify-start"><div className="flex items-center gap-2 rounded-2xl rounded-bl-md border border-border/50 bg-background px-4 py-3 text-xs text-muted-foreground shadow-sm"><span className="size-1.5 animate-pulse rounded-full bg-primary" /><span>{ACTIVITY_STEPS[activityIndex]}</span></div></div>}</div>
+      <div ref={scrollRef} className="scrollbar-overlay flex-1 space-y-3 overflow-y-auto bg-muted/20 p-4">{messages.map((message) => <div key={message.id} className={cn('flex w-full', message.role === 'user' ? 'justify-end' : 'justify-start')}><div className={cn('max-w-[88%] rounded-2xl px-3.5 py-2.5 text-sm leading-relaxed shadow-sm', message.role === 'user' ? 'whitespace-pre-wrap rounded-br-md bg-primary text-primary-foreground' : 'rounded-bl-md border border-border/50 bg-background text-foreground')}>{message.role === 'bot' ? <>{message.guideMode === 'answer' && message.guideIds ? <ChatGuideBlock guideIds={message.guideIds} mode="answer" hasAccess={hasAccess} onRun={runGuide} onShow={showGuide} /> : <NovaFormattedMessage content={message.content} />}{message.guideIds && message.guideMode && message.guideMode !== 'answer' && <ChatGuideBlock guideIds={message.guideIds} mode={message.guideMode} hasAccess={hasAccess} onRun={runGuide} onShow={showGuide} />}{message.tourEligible && <button type="button" onClick={startGuidedTour} className="mt-3 flex w-full items-center justify-center gap-2 rounded-xl border border-primary/30 bg-primary/10 px-3 py-2 text-xs font-black text-primary transition-colors hover:bg-primary/20"><Route className="size-3.5" /> Hacer tour guiado</button>}</> : message.content}</div></div>)}{typing && <div className="flex w-full justify-start"><div className="flex items-center gap-2 rounded-2xl rounded-bl-md border border-border/50 bg-background px-4 py-3 text-xs text-muted-foreground shadow-sm"><span className="size-1.5 animate-pulse rounded-full bg-primary" /><span>{ACTIVITY_STEPS[activityIndex]}</span></div></div>}</div>
       {messages.length <= 1 && !typing && <div className="shrink-0 space-y-1.5 border-t border-border/40 px-3 pt-2.5 pb-1.5"><p className="px-1 text-[10px] font-bold uppercase tracking-wider text-muted-foreground">Pregúntale a Nova</p>{SUGGESTIONS.map((suggestion) => <button key={suggestion} type="button" onClick={() => void sendMessage(suggestion)} className="flex w-full items-center gap-2 rounded-xl border border-border/40 bg-muted/40 px-3 py-1.5 text-left text-xs font-medium text-muted-foreground transition-colors hover:border-primary/40 hover:bg-primary/5 hover:text-primary"><NovaHubLogo size={14} className="shrink-0 rounded-full" />{suggestion}</button>)}</div>}
-      <div className="flex shrink-0 items-center gap-2 border-t border-border/40 bg-background p-3"><Input ref={inputRef} value={input} onChange={(event) => setInput(event.target.value)} onKeyDown={(event) => { if (event.key === 'Enter') { event.preventDefault(); void sendMessage(input); } }} placeholder="Pregunta por tus datos…" className="h-11 rounded-2xl border-border/50 bg-muted/30 focus:bg-background" disabled={typing} /><Button type="button" onClick={() => void sendMessage(input)} disabled={!input.trim() || typing} className="size-11 shrink-0 rounded-2xl bg-gradient-to-br from-primary to-emerald-600 text-primary-foreground shadow-lg shadow-primary/30" aria-label="Enviar pregunta"><Send className="size-4" /></Button></div>
+      <div className="flex shrink-0 items-center gap-2 border-t border-border/40 bg-background p-3"><Input ref={inputRef} value={input} onChange={(event) => setInput(event.target.value)} onKeyDown={(event) => { if (event.key === 'Enter') { event.preventDefault(); void sendMessage(input); } }} placeholder="Pregunta por tus datos o cómo hacer algo…" className="h-11 rounded-2xl border-border/50 bg-muted/30 focus:bg-background" disabled={typing} /><Button type="button" onClick={() => void sendMessage(input)} disabled={!input.trim() || typing} className="size-11 shrink-0 rounded-2xl bg-gradient-to-br from-primary to-emerald-600 text-primary-foreground shadow-lg shadow-primary/30" aria-label="Enviar pregunta"><Send className="size-4" /></Button></div>
     </motion.div>}</AnimatePresence>
   </>;
 

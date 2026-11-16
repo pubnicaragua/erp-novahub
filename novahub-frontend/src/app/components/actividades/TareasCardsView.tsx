@@ -42,6 +42,8 @@ interface TareasCardsViewProps {
   /** Abre la edición de la tarea. */
   onEdit?: (task: Task) => void;
   canEditAction?: boolean;
+  /** Por tarea: solo quien la creó o un administrador puede editarla. */
+  canEditTask?: (task: Task) => boolean;
 }
 
 const statusOpts = [
@@ -85,6 +87,7 @@ export const TareasCardsView: React.FC<TareasCardsViewProps> = ({
   onReassignTask,
   onEdit,
   canEditAction = false,
+  canEditTask,
 }) => {
   const { labelOf: categoryLabelOf } = useActivityCategories();
   if (data.length === 0) {
@@ -123,7 +126,7 @@ export const TareasCardsView: React.FC<TareasCardsViewProps> = ({
         const isMine = Boolean(currentUserId) && Boolean(isTaskMine?.(task));
         const showClaim = canClaimAction && Boolean(onClaimTask) && Boolean(canClaimTask?.(task)) && !isMine;
         const showReassign = canReassignAction && Boolean(onReassignTask) && !isClosed;
-        const showEdit = canEditAction && Boolean(onEdit) && !isClosed;
+        const showEdit = (canEditTask ? canEditTask(task) : canEditAction) && Boolean(onEdit) && !isClosed;
         const people = assigneeNames(task as never);
 
         return (

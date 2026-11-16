@@ -41,6 +41,7 @@ export function SalesKpiCard({ title, value, icon: Icon = Activity, onClick, act
       tabIndex={interactive ? 0 : undefined}
       aria-pressed={interactive ? active : undefined}
       title={hint}
+      data-kpi-card=""
       onClick={onClick}
       onKeyDown={handleKeyDown}
       className={cn(
@@ -52,7 +53,7 @@ export function SalesKpiCard({ title, value, icon: Icon = Activity, onClick, act
     >
       <CardContent className="p-3.5">
         <div className="flex items-center gap-3">
-          <div className="shrink-0 rounded-[10px] bg-[var(--accent)] p-2.5 text-[var(--accent-foreground)]">
+          <div className="shrink-0 rounded-[10px] bg-[var(--accent)] p-2.5 text-[var(--accent-foreground)]" data-kpi-icon="">
             <Icon className="size-[18px]" strokeWidth={2.4} />
           </div>
           <div className="min-w-0">

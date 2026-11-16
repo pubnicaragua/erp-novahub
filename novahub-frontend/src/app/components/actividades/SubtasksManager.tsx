@@ -11,7 +11,10 @@ interface SubtasksManagerProps {
   taskId: string;
   subtasks: ActivitySubtask[];
   onSubtasksChange: () => void;
+  /** Agregar, quitar o renombrar subtareas: quien creó la tarea o un administrador. */
   canEdit?: boolean;
+  /** Marcar una subtarea como hecha: también quien trabaja la tarea. Si no se pasa, sigue a `canEdit`. */
+  canToggle?: boolean;
 }
 
 export const SubtasksManager: React.FC<SubtasksManagerProps> = ({
@@ -19,7 +22,9 @@ export const SubtasksManager: React.FC<SubtasksManagerProps> = ({
   subtasks = [],
   onSubtasksChange,
   canEdit = true,
+  canToggle,
 }) => {
+  const toggleAllowed = canToggle ?? canEdit;
   const [newTitle, setNewTitle] = useState('');
   const [loadingId, setLoadingId] = useState<string | null>(null);
   const [isAdding, setIsAdding] = useState(false);
@@ -44,7 +49,7 @@ export const SubtasksManager: React.FC<SubtasksManagerProps> = ({
   };
 
   const handleToggle = async (subtask: ActivitySubtask) => {
-    if (!canEdit) return;
+    if (!toggleAllowed) return;
     try {
       setLoadingId(subtask.id);
       await tasksService.updateSubtask(taskId, subtask.id, { isCompleted: !subtask.isCompleted });
@@ -107,7 +112,7 @@ export const SubtasksManager: React.FC<SubtasksManagerProps> = ({
           >
             <button
               type="button"
-              disabled={!canEdit || loadingId === st.id}
+              disabled={!toggleAllowed || loadingId === st.id}
               onClick={() => handleToggle(st)}
               className="flex items-center gap-2 text-left min-w-0 flex-1 hover:opacity-80"
             >
@@ -128,7 +133,8 @@ export const SubtasksManager: React.FC<SubtasksManagerProps> = ({
                 type="button"
                 variant="ghost"
                 size="icon"
-                className="size-6 opacity-0 group-hover:opacity-100 text-muted-foreground hover:text-rose-600 rounded-md transition-opacity"
+                aria-label={`Quitar la subtarea ${st.title}`}
+                className="size-6 rounded-md text-muted-foreground transition-opacity hover:text-rose-600 sm:opacity-0 sm:group-hover:opacity-100 sm:focus-visible:opacity-100"
                 onClick={() => handleDelete(st.id)}
                 disabled={loadingId === st.id}
               >

@@ -140,6 +140,9 @@ export const hrService = {
 
   // ─── AGUINALDO ───────────────────────────────────────────────────────
   getAguinaldo: (asOf?: string, signal?: AbortSignal) => api.get('/hr/aguinaldo', withSignal({ asOf }, signal)),
+  getAguinaldoSchedule: (year: number, signal?: AbortSignal) => api.get('/hr/aguinaldo/schedule', withSignal({ year }, signal)),
+  saveAguinaldoSchedule: (data: { year: number; payDate: string; notes?: string | null }) => api.put('/hr/aguinaldo/schedule', data),
+  getPayrollProjection: (params: { months: number; from?: string }, signal?: AbortSignal) => api.get('/hr/payroll-projection', withSignal(params, signal)),
   getEmployeeSettlement: (employeeId: string, params: Record<string, string | undefined>, signal?: AbortSignal) => api.get(`/hr/employees/${employeeId}/settlement`, withSignal(params, signal)),
 
   // ─── VACATION BALANCE ────────────────────────────────────────────────

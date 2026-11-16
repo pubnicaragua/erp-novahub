@@ -3,7 +3,6 @@ import { AlertTriangle, ChevronDown, ChevronRight, Clock, LayoutGrid, List, Plus
 import { format } from 'date-fns';
 import { Badge } from '../ui/badge';
 import { Button } from '../ui/button';
-import { Card } from '../ui/card';
 import { cn } from '../ui/utils';
 import type { ActivityCategoryItem, Task } from '../../types';
 import { TaskProgressCell } from './TaskProgressCell';
@@ -116,6 +115,7 @@ function TaskCard({ task, layout, favorite, toggling, onToggleFavorite, onOpen, 
           <p className="min-w-0 flex-1 basis-56 break-words text-sm font-bold leading-5 text-foreground [overflow-wrap:anywhere]" title={task.title}>{truncateText(task.title, 90)}</p>
           <Badge variant="outline" className={cn('shrink-0 border-transparent px-2 py-0.5 text-[9px] font-black uppercase', status.className)}>{status.label}</Badge>
           <div className="min-w-0 basis-40"><AssigneesText task={task} /></div>
+          <TaskTraceLine task={task as never} className="basis-52" />
           <span className={cn('inline-flex shrink-0 items-center gap-1 text-xs font-medium', overdue ? 'font-bold text-rose-600 dark:text-rose-400' : 'text-muted-foreground')}><Clock className="size-3.5" />{dueLabel(task)}</span>
         </div>
       </li>
@@ -288,60 +288,43 @@ export function TareasCategoriasView({
           </p>
         )}
 
-        <Card className="min-w-0 rounded-2xl border-border/50 bg-card/70 shadow-none">
-          <button type="button" className="flex w-full items-center justify-between gap-2 px-4 py-3 text-left" aria-expanded={showTeam} onClick={() => setShowTeam((value) => !value)}>
-            <span className="flex items-center gap-2 text-xs font-black uppercase tracking-widest text-foreground"><Users className="size-4 text-primary" />Quién tiene qué</span>
-            {showTeam ? <ChevronDown className="size-4 text-muted-foreground" /> : <ChevronRight className="size-4 text-muted-foreground" />}
+        {/* Quién tiene qué: KPIs pequeños por persona (antes era una tabla que empujaba las categorías hasta abajo). */}
+        <div className="min-w-0 space-y-2" data-testid="activities-team-kpis">
+          <button type="button" className="flex items-center gap-2 text-[10px] font-black uppercase tracking-widest text-muted-foreground hover:text-foreground" aria-expanded={showTeam} onClick={() => setShowTeam((value) => !value)}>
+            <Users className="size-3.5 text-primary" />Quién tiene qué
+            {showTeam ? <ChevronDown className="size-3.5" /> : <ChevronRight className="size-3.5" />}
           </button>
           {showTeam && (
-            <div className="overflow-x-auto border-t border-border/40 px-2 pb-2" data-table-content-sized="true">
-              <table className="w-full min-w-[28rem] text-left text-xs">
-                <thead>
-                  <tr className="text-[10px] font-black uppercase tracking-widest text-muted-foreground">
-                    <th className="px-2 py-2">Persona</th>
-                    <th className="px-2 py-2 text-right">Abiertas</th>
-                    <th className="px-2 py-2 text-right">En progreso</th>
-                    <th className="px-2 py-2 text-right">Sin tomar</th>
-                    <th className="px-2 py-2 text-right">Vencidas</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  <tr className="border-t border-border/30">
-                    <td className="px-2 py-2 font-bold text-foreground">Sin asignar</td>
-                    <td className="px-2 py-2 text-right font-bold tabular-nums">{scoped.unassigned}</td>
-                    <td className="px-2 py-2 text-right text-muted-foreground">—</td>
-                    <td className="px-2 py-2 text-right text-muted-foreground">—</td>
-                    <td className="px-2 py-2 text-right text-muted-foreground">—</td>
-                  </tr>
-                  {[...busyPeople, ...(showFreePeople ? freePeople : [])].map((person) => (
-                    <tr key={person.id} className="border-t border-border/30">
-                      <td className="max-w-[14rem] truncate px-2 py-2 font-semibold text-foreground" title={person.name}>
-                        {person.name}
-                        {person.open === 0 && <span className="ml-2 text-[10px] font-medium text-muted-foreground">libre</span>}
-                      </td>
-                      <td className="px-2 py-2 text-right font-bold tabular-nums">{person.open}</td>
-                      <td className="px-2 py-2 text-right tabular-nums">{person.inProgress}</td>
-                      <td className={cn('px-2 py-2 text-right tabular-nums', person.notStarted > 0 && 'font-bold text-amber-600 dark:text-amber-400')}>{person.notStarted}</td>
-                      <td className={cn('px-2 py-2 text-right tabular-nums', person.overdue > 0 && 'font-bold text-rose-600 dark:text-rose-400')}>{person.overdue}</td>
-                    </tr>
-                  ))}
-                  {freePeople.length > 0 && (
-                    <tr className="border-t border-border/30">
-                      <td colSpan={5} className="px-2 py-2">
-                        <button type="button" className="text-[11px] font-bold text-primary hover:underline" aria-expanded={showFreePeople} onClick={() => setShowFreePeople((value) => !value)}>
-                          {showFreePeople ? 'Ocultar a quienes no tienen tareas abiertas' : `Mostrar ${freePeople.length} ${freePeople.length === 1 ? 'persona sin tareas abiertas' : 'personas sin tareas abiertas'}`}
-                        </button>
-                      </td>
-                    </tr>
-                  )}
-                </tbody>
-              </table>
-              <p className="px-2 pb-1 pt-2 text-[11px] text-muted-foreground">
-                «Sin tomar»: tiene responsable pero sigue en Pendiente. «Abiertas» es todo lo que no está completado ni cancelado, vencidas incluidas.
-              </p>
+            <div className="flex min-w-0 flex-wrap gap-2">
+              {scoped.unassigned > 0 && (
+                <div className="inline-flex min-w-0 items-center gap-2 rounded-xl border border-amber-500/30 bg-amber-500/5 px-2.5 py-1.5 text-xs" title="Tareas abiertas sin responsable">
+                  <span className="font-bold text-foreground">Sin asignar</span>
+                  <span className="rounded-md bg-amber-500/15 px-1.5 font-black tabular-nums text-amber-700 dark:text-amber-400">{scoped.unassigned}</span>
+                </div>
+              )}
+              {[...busyPeople, ...(showFreePeople ? freePeople : [])].map((person) => (
+                <div
+                  key={person.id}
+                  className="inline-flex min-w-0 max-w-full items-center gap-2 rounded-xl border border-border/50 bg-card px-2.5 py-1.5 text-xs"
+                  title={`${person.name}: ${person.open} abiertas, ${person.inProgress} en progreso, ${person.notStarted} sin tomar, ${person.overdue} vencidas`}
+                  data-testid="activities-team-kpi"
+                >
+                  <span className="min-w-0 max-w-[10rem] truncate font-bold text-foreground">{person.name}</span>
+                  <span className="rounded-md bg-primary/10 px-1.5 font-black tabular-nums text-primary" aria-label={`${person.open} abiertas`}>{person.open}</span>
+                  {person.inProgress > 0 && <span className="text-[10px] text-muted-foreground">{person.inProgress} en progreso</span>}
+                  {person.notStarted > 0 && <span className="text-[10px] font-bold text-amber-700 dark:text-amber-400">{person.notStarted} sin tomar</span>}
+                  {person.overdue > 0 && <span className="text-[10px] font-bold text-rose-600 dark:text-rose-400">{person.overdue} vencidas</span>}
+                </div>
+              ))}
+              {freePeople.length > 0 && (
+                <button type="button" className="rounded-xl border border-dashed border-border/60 px-2.5 py-1.5 text-[11px] font-bold text-primary hover:bg-primary/5" aria-expanded={showFreePeople} onClick={() => setShowFreePeople((value) => !value)}>
+                  {showFreePeople ? 'Ocultar libres' : `+${freePeople.length} sin tareas abiertas`}
+                </button>
+              )}
+              {busyPeople.length === 0 && scoped.unassigned === 0 && !showFreePeople && <p className="text-[11px] text-muted-foreground">Nadie tiene tareas abiertas en esta vista.</p>}
             </div>
           )}
-        </Card>
+        </div>
 
         {loading && tasks.length === 0 ? (
           <p className="text-sm text-muted-foreground" role="status">Cargando tareas…</p>

@@ -85,7 +85,10 @@ export const ActividadesPage = ({ activeSubModule, onSubModuleChange, isSidebarC
     // Mantener la visibilidad existente para usuarios que no son administradores.
     if (user && user.role !== 'admin' && !user.isPlatformAdmin && !user.managerCanAdminBranch) {
       fetchTareas = fetchTareas.filter((t: any) =>
-        t.createdBy === user.id || t.assignments?.some((a: any) => a.userId === user.id)
+        // createdBy llega como objeto { id, name }: compararlo con el id dejaba fuera las tareas que la persona creó.
+        String(t.createdById || t.createdBy?.id || t.createdBy || '') === String(user.id)
+        || String(t.assignedToId || '') === String(user.id)
+        || t.assignments?.some((a: any) => String(a.userId || a.user?.id || '') === String(user.id))
       );
       fetchRecordatorios = fetchRecordatorios.filter((r: any) => {
         if (r.scope === 'GLOBAL' || r.scope === 'DEPARTMENT') return true;

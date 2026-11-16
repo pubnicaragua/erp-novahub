@@ -32,6 +32,14 @@ export class ModuleErrorBoundary extends React.Component<Props, State> {
     });
   }
 
+  componentDidUpdate(previous: Props) {
+    // React reutiliza esta misma barrera al cambiar de módulo: sin esto, el error de un
+    // módulo (p. ej. el Dashboard) se quedaba mostrado como «Error en Ventas» al navegar.
+    if (this.state.hasError && previous.moduleName !== this.props.moduleName) {
+      this.setState({ hasError: false, error: undefined });
+    }
+  }
+
   handleRetry = () => {
     if (isDynamicImportLoadError(this.state.error)) {
       // React.lazy caches a rejected import promise; a full reload creates a fresh one.
