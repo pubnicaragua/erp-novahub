@@ -45,6 +45,7 @@ import { aggregateCustomerHistory, mergeCustomerHistoryByIdentifier, prepareCust
 import { buildCustomerHistoryTemplateHeaders, DEFAULT_CUSTOMER_HISTORY_PROFILE, normalizeCustomerHistoryProfile, type CustomerHistoryProfile } from '../../utils/customer-history-profile';
 import { generateConfiguredReportSectionsPDF } from '../../utils/pdfGenerator';
 import type { PdfPaperFormat } from '../../utils/pdfDownloadFormats';
+import { beginPdfBrowserPreview, closePdfBrowserPreview, type PdfBrowserPreviewSession } from '../../utils/pdfBrowserPreview';
 import { ExportMenu } from '../ui/ExportMenu';
 import { buildDatedDownloadFileName } from '../../utils/exportFileNames';
 import { createReportWorkbook } from '../../utils/reportWorkbook';
@@ -871,8 +872,11 @@ export function ClientesView({ data, loading, error, onRefresh, pagination, onSe
     }
   };
 
-  const exportCustomers = async (format: 'pdf' | 'xlsx', paperFormat: PdfPaperFormat = 'letter', selectedColumnKeys = visibleColumnKeys) => {
-    if (!canPerform('SALES_CLIENTS', 'export')) return;
+  const exportCustomers = async (format: 'pdf' | 'xlsx', paperFormat: PdfPaperFormat = 'letter', selectedColumnKeys = visibleColumnKeys, previewSession: PdfBrowserPreviewSession | null = null) => {
+    if (!canPerform('SALES_CLIENTS', 'export')) {
+      closePdfBrowserPreview(previewSession);
+      return;
+    }
     const selectedColumns = columnOptions.filter((option) => selectedColumnKeys.includes(option.key));
     if (selectedColumns.length === 0) {
       toast.error('Selecciona al menos una columna para exportar.');
@@ -911,6 +915,7 @@ export function ClientesView({ data, loading, error, onRefresh, pagination, onSe
         selectedColumns.map((column) => [column.label, exportCustomerColumnValue(customer, column.key)]),
       ));
       if (!rows.length) {
+        closePdfBrowserPreview(previewSession);
         toast.error('No hay clientes para exportar con los filtros actuales.');
         return;
       }
@@ -948,6 +953,7 @@ export function ClientesView({ data, loading, error, onRefresh, pagination, onSe
       }
       toast.success(`Reporte de clientes exportado en ${format === 'xlsx' ? 'Excel' : 'PDF'}.`);
     } catch (error) {
+      closePdfBrowserPreview(previewSession);
       toast.error(error instanceof Error ? error.message : 'No se pudo exportar el reporte de clientes.');
     } finally {
       setExportingCustomers(false);
@@ -1472,8 +1478,15 @@ export function ClientesView({ data, loading, error, onRefresh, pagination, onSe
   ];
   const confirmCustomerExport = async () => {
     const selected = [...customerExportColumnKeys];
+    const previewSession = customerExportFormat === 'pdf'
+      ? beginPdfBrowserPreview('Reporte de clientes')
+      : null;
+    if (customerExportFormat === 'pdf' && !previewSession) {
+      toast.error('No se pudo abrir la previsualización. Habilita las ventanas emergentes para NovaHub.');
+      return;
+    }
     setCustomerExportDialogOpen(false);
-    await exportCustomers(customerExportFormat, customerExportPaperFormat, selected);
+    await exportCustomers(customerExportFormat, customerExportPaperFormat, selected, previewSession);
   };
   const editMissingRucDecision = editingCustomer
     ? resolveMissingRucCreditDecision({
@@ -1590,6 +1603,7 @@ export function ClientesView({ data, loading, error, onRefresh, pagination, onSe
               <ExportMenu
                 label={exportingCustomers ? 'Preparando exportación…' : 'Exportar clientes'}
                 disabled={exportingCustomers || loading}
+                preopenPdfPreview={false}
                 onPdf={(paperFormat) => requestCustomerExport('pdf', paperFormat)}
                 onExcel={() => requestCustomerExport('xlsx')}
                 pdfDescription="Listado de clientes con los filtros activos"
