@@ -36,6 +36,7 @@ import { accountingList, useAccountingQuery } from '../../hooks/useAccountingQue
 import { normalizeSearchText } from '../../utils/searchText';
 import { ConfirmDialog } from '../ui/ConfirmDialog';
 import { CostCentersDialog } from './CostCentersDialog';
+import { nextChildAccountCode } from './accountCodes';
 import { beginNotificationAction, completeNotificationAction, failNotificationAction } from '../../services/notification-action-coordinator';
 import { Combobox } from '../ui/Combobox';
 import { ColumnFilterMenu, useColumnFilters } from '../ui/ColumnFilterMenu';
@@ -500,8 +501,7 @@ export function PlanCuentasView({ isSidebarCollapsed = true, helpTrigger }: Plan
     const parent = flatList.find(a => a.id === parentId);
     if (!parent) return base + '00001';
     const siblings = flatList.filter(a => a.parentId === parentId);
-    const nextNum = siblings.length + 1;
-    return `${parent.code.replace(/-+$/, '')}-${String(nextNum).padStart(3, '0')}`;
+    return nextChildAccountCode(parent.code, siblings.map(a => a.code), flatList.map(a => a.code));
   };
 
   const openAddDialog = async (parentAccount?: AccountNode) => {
