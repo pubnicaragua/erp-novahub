@@ -9,6 +9,7 @@ import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, D
 import { toast } from '@/app/services/toast';
 import { contabilidadService } from '../../services/contabilidad.service';
 import { todayIso } from '../../utils/dateFormat';
+import { useAuth } from '../../contexts/AuthContext';
 import { beginNotificationAction, completeNotificationAction, failNotificationAction } from '../../services/notification-action-coordinator';
 
 export interface AdjustableAccount { id: string; code: string; name: string; type: string; currency?: string }
@@ -30,10 +31,12 @@ export function suggestCounterAccountId(options: AdjustableAccount[], accountId:
 }
 
 export function AccountBalanceAdjustDialog({ account, counterOptions, onClose, onDone }: Props) {
+  const { user } = useAuth();
+  const timeZone = user?.clientTenant?.timeZone;
   const [direction, setDirection] = useState<'INCREASE' | 'DECREASE'>('INCREASE');
   const [amount, setAmount] = useState('');
   const [concept, setConcept] = useState(DEFAULT_CONCEPT);
-  const [date, setDate] = useState(() => todayIso());
+  const [date, setDate] = useState(() => todayIso(timeZone));
   const [counterId, setCounterId] = useState('');
   const [saving, setSaving] = useState(false);
   // Un mismo envío repetido (doble clic) no duplica el asiento: el servidor reconoce este identificador.

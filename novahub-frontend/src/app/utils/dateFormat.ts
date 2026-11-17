@@ -37,6 +37,70 @@ export function todayIso(timeZone = 'America/Managua', now = new Date()): string
   return `${parts.year}-${parts.month}-${parts.day}`;
 }
 
+/** Suma días de calendario a una fecha civil sin depender de la zona del navegador. */
+export function addCivilDays(value: string, days: number): string {
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(value) || !Number.isFinite(days)) return value;
+  const date = new Date(`${value}T12:00:00.000Z`);
+  if (Number.isNaN(date.getTime())) return value;
+  date.setUTCDate(date.getUTCDate() + Math.trunc(days));
+  return date.toISOString().slice(0, 10);
+}
+
+/** Convierte un instante a la hora de pared que debe mostrar datetime-local en la zona del tenant. */
+export function toDateTimeLocal(value: Date, timeZone = 'America/Managua'): string {
+  const parts = Object.fromEntries(new Intl.DateTimeFormat('en-CA', {
+    timeZone,
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+    hour: '2-digit',
+    minute: '2-digit',
+    hourCycle: 'h23',
+  }).formatToParts(value).map(({ type, value: part }) => [type, part]));
+  return `${parts.year}-${parts.month}-${parts.day}T${parts.hour}:${parts.minute}`;
+}
+
+/** Interpreta una hora datetime-local como hora civil del tenant y la convierte a ISO UTC. */
+export function dateTimeLocalToIso(value: string, timeZone = 'America/Managua'): string | null {
+  const match = /^(\d{4})-(\d{2})-(\d{2})T(\d{2}):(\d{2})$/.exec(value);
+  if (!match) return null;
+  const [, yearText, monthText, dayText, hourText, minuteText] = match;
+  const [year, month, day, hour, minute] = [yearText, monthText, dayText, hourText, minuteText].map(Number);
+  const wallClockUtc = Date.UTC(year, month - 1, day, hour, minute);
+  const normalized = new Date(wallClockUtc);
+  if (normalized.getUTCFullYear() !== year || normalized.getUTCMonth() !== month - 1
+    || normalized.getUTCDate() !== day || normalized.getUTCHours() !== hour || normalized.getUTCMinutes() !== minute) return null;
+
+  const formatter = new Intl.DateTimeFormat('en-CA', {
+    timeZone,
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+    hour: '2-digit',
+    minute: '2-digit',
+    second: '2-digit',
+    hourCycle: 'h23',
+  });
+  const offsetAt = (timestamp: number) => {
+    const parts = Object.fromEntries(formatter.formatToParts(new Date(timestamp)).map(({ type, value: part }) => [type, part]));
+    const localAsUtc = Date.UTC(
+      Number(parts.year), Number(parts.month) - 1, Number(parts.day),
+      Number(parts.hour), Number(parts.minute), Number(parts.second),
+    );
+    return localAsUtc - Math.floor(timestamp / 1000) * 1000;
+  };
+
+  let timestamp = wallClockUtc;
+  for (let attempt = 0; attempt < 6; attempt += 1) {
+    const adjusted = wallClockUtc - offsetAt(timestamp);
+    if (adjusted === timestamp) break;
+    timestamp = adjusted;
+  }
+  const result = new Date(timestamp);
+  if (toDateTimeLocal(result, timeZone) !== value) return null;
+  return result.toISOString();
+}
+
 /** Formats a civil date without shifting it through the browser's local zone. */
 export function formatDateOnly(value: string | number | Date | null | undefined, locale = 'es-NI'): string {
   if (value === null || value === undefined || value === '') return '';

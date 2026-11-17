@@ -18,7 +18,8 @@ import { useAccountingQuery, accountingList } from '../../hooks/useAccountingQue
 import { useQueryClient } from '@tanstack/react-query';
 import { DateField } from '../ui/DateField';
 import { useCurrency } from '../../contexts/CurrencyContext';
-import { formatDateOnly } from '../../utils/dateFormat';
+import { addCivilDays, formatDateOnly, todayIso } from '../../utils/dateFormat';
+import { useAuth } from '../../contexts/AuthContext';
 import { normalizeSearchText } from '../../utils/searchText';
 
 interface CashFlowTx {
@@ -76,16 +77,12 @@ const SECTION_CONFIG = [
   },
 ];
 
-const localISO = (d: Date) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
-
 export function FlujoEfectivoView() {
+  const { user } = useAuth();
+  const timeZone = user?.clientTenant?.timeZone;
   const { baseCurrency, formatCurrentAmount } = useCurrency();
-  const [dateFrom, setDateFrom] = useState(() => {
-    const d = new Date();
-    d.setDate(d.getDate() - 30);
-    return localISO(d);
-  });
-  const [dateTo, setDateTo] = useState(() => localISO(new Date()));
+  const [dateFrom, setDateFrom] = useState(() => addCivilDays(todayIso(timeZone), -30));
+  const [dateTo, setDateTo] = useState(() => todayIso(timeZone));
   const [expandedItem, setExpandedItem] = useState<string | null>(null);
   const [searchTerm, setSearchTerm] = useState('');
   const [showSettings, setShowSettings] = useState(false);
@@ -397,10 +394,9 @@ export function FlujoEfectivoView() {
           </div>
           {(dateFrom || dateTo) && (
             <button onClick={() => {
-              const d = new Date();
-              d.setDate(d.getDate() - 30);
-              setDateFrom(localISO(d));
-              setDateTo(localISO(new Date()));
+              const today = todayIso(timeZone);
+              setDateFrom(addCivilDays(today, -30));
+              setDateTo(today);
             }} className="h-9 px-4 flex items-center gap-1.5 text-[10px] font-black uppercase tracking-widest text-muted-foreground hover:text-rose-500 hover:bg-rose-500/5 rounded-xl border border-dashed border-border/60 transition-all mt-5">
               <X className="size-3" /> Restablecer 30 días
             </button>

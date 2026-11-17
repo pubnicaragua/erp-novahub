@@ -30,7 +30,7 @@ import type { Currency } from '../../types';
 import type { AccountDetailType, AccountSubtype, AccountType, ChartAccountCsvRow } from '../../types/accounting';
 import { downloadXlsx, templateRows } from '../../utils/chartOfAccountsCsv';
 import { useAuth } from '../../contexts/AuthContext';
-import { formatDateOnly } from '../../utils/dateFormat';
+import { formatDateOnly, formatInstant, todayIso } from '../../utils/dateFormat';
 import { AccountImportPreview } from './AccountImportPreview';
 import { AccountBalanceAdjustDialog } from './AccountBalanceAdjustDialog';
 import { accountingList, useAccountingQuery } from '../../hooks/useAccountingQuery';
@@ -43,7 +43,6 @@ import { Combobox } from '../ui/Combobox';
 import { ColumnFilterMenu, useColumnFilters } from '../ui/ColumnFilterMenu';
 import { parseSpreadsheetInWorker } from '../../utils/import-spreadsheet';
 import { useLocalStorageState } from '../../hooks/useLocalStorageState';
-import { formatDateEs } from '../../utils/dateFormat';
 import { generateConfiguredReportTemplate } from '../../utils/pdfGenerator';
 import { ExportMenu } from '../ui/ExportMenu';
 import { Checkbox } from '../ui/checkbox';
@@ -125,13 +124,14 @@ const PERIOD_COLUMN_KEYS: AccountColumnKey[] = ['opening', 'debits', 'credits'];
 const DEFAULT_ACCOUNT_COLUMN_KEYS: AccountColumnKey[] = ACCOUNT_COLUMN_DEFS.map((column) => column.key).filter((key) => !PERIOD_COLUMN_KEYS.includes(key));
 
 // Solo los meses del año en curso (de enero hasta el mes actual): la empresa no tiene movimientos anteriores.
-function recentMonthOptions() {
-  const now = new Date();
-  const count = now.getMonth() + 1;
+function recentMonthOptions(today: string) {
+  const [year, month] = today.split('-').map(Number);
+  const count = month;
   return Array.from({ length: count }, (_, i) => {
-    const d = new Date(now.getFullYear(), now.getMonth() - i, 1);
-    const value = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
-    return { value, label: d.toLocaleDateString('es-NI', { month: 'long', year: 'numeric' }) };
+    const d = new Date(Date.UTC(year, month - 1 - i, 1, 12));
+    const value = `${d.getUTCFullYear()}-${String(d.getUTCMonth() + 1).padStart(2, '0')}`;
+    const label = new Intl.DateTimeFormat('es-NI', { month: 'long', year: 'numeric', timeZone: 'UTC' }).format(d);
+    return { value, label };
   });
 }
 
@@ -222,6 +222,7 @@ interface PlanCuentasViewProps {
 
 export function PlanCuentasView({ isSidebarCollapsed = true, helpTrigger }: PlanCuentasViewProps) {
   const { canPerform, user } = useAuth();
+  const timeZone = user?.clientTenant?.timeZone;
   const canExportAccounts = canPerform('ACCOUNTING_CHART', 'export');
   const [costCentersOpen, setCostCentersOpen] = useState(false);
   const { baseCurrency, formatConvertedAmount, convertAmount, displayCurrency } = useCurrency();
@@ -231,7 +232,7 @@ export function PlanCuentasView({ isSidebarCollapsed = true, helpTrigger }: Plan
   const [periodFrom, setPeriodFrom] = useState('');
   const [periodTo, setPeriodTo] = useState('');
   const periodActive = Boolean(periodFrom || periodTo);
-  const monthOptions = useMemo(() => recentMonthOptions(), []);
+  const monthOptions = useMemo(() => recentMonthOptions(todayIso(timeZone)), [timeZone]);
   const selectedMonth = useMemo(() => {
     const match = monthOptions.find((option) => {
       const range = monthToRange(option.value);
@@ -935,7 +936,7 @@ export function PlanCuentasView({ isSidebarCollapsed = true, helpTrigger }: Plan
     const totalLine = periodActive
       ? ['', 'TOTAL (cuentas principales elegidas)', '', sum((a) => a.openingBalance), sum((a) => a.periodDebit), sum((a) => a.periodCredit), sum((a) => a.balance)]
       : ['', 'TOTAL (cuentas principales elegidas)', '', sum((a) => a.balance)];
-    const periodLabel = periodActive ? `Del ${periodFrom || 'inicio'} al ${periodTo || 'hoy'}` : `Saldo al ${new Date().toLocaleDateString('es-NI')}`;
+    const periodLabel = periodActive ? `Del ${periodFrom || 'inicio'} al ${periodTo || 'hoy'}` : `Saldo al ${formatDateOnly(todayIso(timeZone))}`;
     const companyName = user?.sessionBranding?.name || user?.clientTenant?.name || user?.tenantName || 'NovaHub ERP';
     const sheetRows: (string | number)[][] = [[companyName], ['Saldos de cuentas'], [periodLabel], [`Moneda: ${displayCurrency}`], [], header, ...chosen.map(lineOf), [], totalLine];
     const sheet = XLSX.utils.aoa_to_sheet(sheetRows);
@@ -1367,13 +1368,13 @@ export function PlanCuentasView({ isSidebarCollapsed = true, helpTrigger }: Plan
                 <div className="grid min-w-0 gap-4 sm:grid-cols-2">
                   <div className="min-w-0">
                     <p className="text-[10px] font-black uppercase tracking-wider text-muted-foreground">Fecha contable</p>
-                    <p className="mt-1 text-sm font-semibold">{formatDateEs(selectedTransaction.date) || '—'}</p>
+                    <p className="mt-1 text-sm font-semibold">{formatDateOnly(selectedTransaction.date) || '—'}</p>
                   </div>
                   <div className="min-w-0">
                     <p className="text-[10px] font-black uppercase tracking-wider text-muted-foreground">Registrado</p>
                     <p className="mt-1 text-sm font-semibold">
                       {selectedTransaction.createdAt
-                        ? new Date(selectedTransaction.createdAt).toLocaleString('es-NI', { dateStyle: 'long', timeStyle: 'short' })
+                        ? formatInstant(selectedTransaction.createdAt, timeZone)
                         : '—'}
                     </p>
                   </div>

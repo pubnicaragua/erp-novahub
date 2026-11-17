@@ -9,7 +9,8 @@ import { contabilidadService } from '../../services/contabilidad.service';
 import { toast } from '@/app/services/toast';
 import { useAccountingQuery } from '../../hooks/useAccountingQuery';
 import { DateField } from '../ui/DateField';
-import { formatDateOnly } from '../../utils/dateFormat';
+import { addCivilDays, formatDateOnly, todayIso } from '../../utils/dateFormat';
+import { useAuth } from '../../contexts/AuthContext';
 import { getCurrencyDecimalPlaces } from '../../utils/currency';
 import { normalizeSearchText } from '../../utils/searchText';
 
@@ -44,17 +45,13 @@ function formatCurrency(n: number): string {
   return new Intl.NumberFormat('es-NI', { minimumFractionDigits: getCurrencyDecimalPlaces(), maximumFractionDigits: getCurrencyDecimalPlaces() }).format(n);
 }
 
-const localISO = (d: Date) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
-
 export function CambiosPatrimonioView() {
+  const { user } = useAuth();
+  const timeZone = user?.clientTenant?.timeZone;
   // Por defecto se muestran los últimos 30 días: sin seleccionar fechas la
   // vista ya trae información.
-  const [dateFrom, setDateFrom] = useState(() => {
-    const d = new Date();
-    d.setDate(d.getDate() - 30);
-    return localISO(d);
-  });
-  const [dateTo, setDateTo] = useState(() => localISO(new Date()));
+  const [dateFrom, setDateFrom] = useState(() => addCivilDays(todayIso(timeZone), -30));
+  const [dateTo, setDateTo] = useState(() => todayIso(timeZone));
   const [searchTerm, setSearchTerm] = useState('');
   const query = useAccountingQuery<EquityData | null>(
     ['equity-changes', dateFrom, dateTo],
@@ -174,10 +171,9 @@ export function CambiosPatrimonioView() {
           </div>
           {(dateFrom || dateTo) && (
             <button onClick={() => {
-              const d = new Date();
-              d.setDate(d.getDate() - 30);
-              setDateFrom(localISO(d));
-              setDateTo(localISO(new Date()));
+              const today = todayIso(timeZone);
+              setDateFrom(addCivilDays(today, -30));
+              setDateTo(today);
             }} className="h-9 px-4 flex items-center gap-1.5 text-[10px] font-black uppercase tracking-widest text-muted-foreground hover:text-rose-500 hover:bg-rose-500/5 rounded-xl border border-dashed border-border/60 transition-all mt-5">
               <X className="size-3" /> Restablecer 30 días
             </button>

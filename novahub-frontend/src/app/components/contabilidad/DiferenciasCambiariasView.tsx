@@ -13,7 +13,7 @@ import { accountingList, useAccountingQuery } from '../../hooks/useAccountingQue
 import { useAuth } from '../../contexts/AuthContext';
 import { CurrencyDisplayAmount } from '../ui/CurrencyValuation';
 import { beginNotificationAction, completeNotificationAction, failNotificationAction } from '../../services/notification-action-coordinator';
-import { formatDateOnly, todayIso } from '../../utils/dateFormat';
+import { formatDateOnly, formatInstantDate, todayIso } from '../../utils/dateFormat';
 
 type RevaluationPreview = {
   asOfDate: string;
@@ -71,6 +71,11 @@ function today(timeZone?: string) {
 function formatDate(value?: string | null) {
   if (!value) return '—';
   return formatDateOnly(value);
+}
+
+function formatTenantInstantDate(value?: string | null, timeZone?: string) {
+  if (!value) return '—';
+  return formatInstantDate(value, timeZone) || '—';
 }
 
 function rateSourceLabel(source?: string | null) {
@@ -271,7 +276,7 @@ export function DiferenciasCambiariasView() {
 
           <Card className="rounded-2xl shadow-sm">
             <CardContent className="flex min-w-0 flex-col gap-2 p-4 text-xs text-muted-foreground sm:flex-row sm:items-center sm:justify-between">
-              <span>Base: <strong className="text-foreground">{preview.baseCurrency}</strong> · Tasa: <strong className="text-foreground">{preview.valuationRate}</strong> · Corte: <strong className="text-foreground">{formatDate(preview.asOfDate)}</strong></span>
+              <span>Base: <strong className="text-foreground">{preview.baseCurrency}</strong> · Tasa: <strong className="text-foreground">{preview.valuationRate}</strong> · Corte: <strong className="text-foreground">{formatTenantInstantDate(preview.asOfDate, user?.clientTenant?.timeZone)}</strong></span>
               <span className="flex flex-wrap items-center gap-2">
                 <span>Origen: <strong className="text-foreground">{rateSourceLabel(preview.rateSource)}</strong></span>
                 <Button type="button" variant="outline" size="sm" onClick={goToExchangeRateConfig} className="gap-1.5 rounded-lg text-[11px] font-bold">
@@ -311,7 +316,7 @@ export function DiferenciasCambiariasView() {
                       {history.map(row => (
                         <tr key={row.id} className="hover:bg-muted/20">
                           <td className="px-4 py-3">
-                            <p className="font-bold">{formatDate(row.asOfDate)}</p>
+                            <p className="font-bold">{formatTenantInstantDate(row.asOfDate, user?.clientTenant?.timeZone)}</p>
                             <p className="text-[11px] text-muted-foreground">{row.itemCount ?? 0} saldo(s) · {rateSourceLabel(row.rateSource)}</p>
                           </td>
                           <td className="px-4 py-3"><Badge variant="outline" className="text-[9px] uppercase tracking-wider">{statusLabel(row.status)}</Badge></td>
@@ -319,7 +324,7 @@ export function DiferenciasCambiariasView() {
                           <td className="px-4 py-3 text-right font-bold tabular-nums text-emerald-600"><CurrencyDisplayAmount amount={Number(row.totalUnrealizedGain || 0)} sourceCurrency={row.baseCurrency || preview.baseCurrency} /></td>
                           <td className="px-4 py-3 text-right font-bold tabular-nums text-red-600"><CurrencyDisplayAmount amount={Number(row.totalUnrealizedLoss || 0)} sourceCurrency={row.baseCurrency || preview.baseCurrency} /></td>
                           <td className="px-4 py-3 text-xs text-muted-foreground">{row.journal ? `${row.journal.number} · ${statusLabel(row.journal.status)}` : 'Sin asiento'}</td>
-                          <td className="px-4 py-3 text-xs text-muted-foreground">{formatDate(row.createdAt)}</td>
+                          <td className="px-4 py-3 text-xs text-muted-foreground">{formatTenantInstantDate(row.createdAt, user?.clientTenant?.timeZone)}</td>
                         </tr>
                       ))}
                     </tbody>

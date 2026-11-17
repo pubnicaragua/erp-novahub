@@ -19,7 +19,7 @@ import { buildDateFilteredDownloadFileName } from '../../utils/exportFileNames';
 import { generateConfiguredReportTemplate } from '../../utils/pdfGenerator';
 import { ExportMenu } from '../ui/ExportMenu';
 import type { PdfDownloadFormat } from '../../utils/pdfDownloadFormats';
-import { formatDateOnly } from '../../utils/dateFormat';
+import { addCivilDays, formatDateOnly, todayIso } from '../../utils/dateFormat';
 import { normalizeSearchText } from '../../utils/searchText';
 
 interface PnLAccount {
@@ -49,21 +49,14 @@ interface PnLData {
 
 export function EstadoResultadosView() {
   const { canPerform, user } = useAuth();
+  const timeZone = user?.clientTenant?.timeZone;
   const canExportProfitLoss = canPerform('ACCOUNTING_PROFIT_LOSS', 'export');
   const { baseCurrency, displayCurrency, displayMode, convertCurrentAmount, formatCurrentAmount } = useCurrency();
   const reportCurrency = displayMode === 'ORIGINAL' ? baseCurrency : displayCurrency;
   const toReportAmount = (amount: number) => displayMode === 'ORIGINAL' ? Number(amount || 0) : convertCurrentAmount(Number(amount || 0), baseCurrency);
-  const toLocalDate = (value: Date) => {
-    const pad = (n: number) => String(n).padStart(2, '0');
-    return `${value.getFullYear()}-${pad(value.getMonth() + 1)}-${pad(value.getDate())}`;
-  };
-  const initialFrom = () => {
-    const d = new Date();
-    d.setDate(d.getDate() - 30);
-    return toLocalDate(d);
-  };
+  const initialFrom = () => addCivilDays(todayIso(timeZone), -30);
   const [dateFrom, setDateFrom] = useState(initialFrom);
-  const [dateTo, setDateTo] = useState(() => toLocalDate(new Date()));
+  const [dateTo, setDateTo] = useState(() => todayIso(timeZone));
   const [expandedAccountId, setExpandedAccountId] = useState<string | null>(null);
   const [searchTerm, setSearchTerm] = useState('');
   const [showSettings, setShowSettings] = useState(false);

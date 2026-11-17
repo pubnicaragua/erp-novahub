@@ -403,16 +403,27 @@ function applyRuntimeTableColumns(definition: PdfTemplateDefinition, data: PdfTe
   };
 }
 
-function reportRowUnits(section: PdfTemplateReportSection, row: Record<string, unknown>) {
+function reportRowLineCount(section: PdfTemplateReportSection, row: Record<string, unknown>) {
   const fallbackWidth = 100 / Math.max(1, section.columns.length);
-  const lineCount = section.columns.reduce((maxLines, column) => {
+  return section.columns.reduce((maxLines, column) => {
     const rawValue = row[column.token] ?? row[column.id];
     const width = Math.max(8, Number(column.width) || fallbackWidth);
     const charactersPerLine = Math.max(8, Math.floor(width * 0.9));
     const lines = String(rawValue ?? '—').split('\n').reduce((total, line) => total + Math.max(1, Math.ceil(line.length / charactersPerLine)), 0);
     return Math.max(maxLines, lines);
   }, 1);
+}
+
+function reportRowUnits(section: PdfTemplateReportSection, row: Record<string, unknown>) {
+  const lineCount = reportRowLineCount(section, row);
   return Math.max(1.15, 0.35 + lineCount * 0.8);
+}
+
+function customerDirectoryRowHeightUnits(section: PdfTemplateReportSection, row: Record<string, unknown>) {
+  // La tabla usa padding fijo; cada línea envuelta agrega altura, pero menos
+  // que una fila completa. Este modelo aproxima esa altura para llenar la hoja
+  // sin rebasar el pie cuando una fila tiene varias líneas.
+  return 1 + Math.max(0, reportRowLineCount(section, row) - 1) * 0.45;
 }
 
 export function paginatePdfTableRows(rows: Array<Record<string, unknown>>, columns: PdfTemplateColumn[], firstPageCapacity: number, continuationPageCapacity = firstPageCapacity) {
@@ -445,7 +456,7 @@ export function paginatePdfTableRows(rows: Array<Record<string, unknown>>, colum
   return chunks;
 }
 
-export function paginatePdfReportSections(sections: PdfTemplateReportSection[], options: { firstPageCapacity?: number; continuationPageCapacity?: number } = {}) {
+export function paginatePdfReportSections(sections: PdfTemplateReportSection[], options: { firstPageCapacity?: number; continuationPageCapacity?: number; rowHeightModel?: 'customer-directory' } = {}) {
   const groups: PdfTemplateReportSection[][] = [];
   let current: PdfTemplateReportSection[] = [];
   let used = 0;
@@ -458,6 +469,9 @@ export function paginatePdfReportSections(sections: PdfTemplateReportSection[], 
     Number(options.continuationPageCapacity) || 20,
   );
   const capacity = () => pageIndex === 0 ? firstPageCapacity : continuationPageCapacity;
+  const rowUnits = (section: PdfTemplateReportSection, row: Record<string, unknown>) => options.rowHeightModel === 'customer-directory'
+    ? customerDirectoryRowHeightUnits(section, row)
+    : reportRowUnits(section, row);
   const flush = () => {
     if (!current.length) return;
     groups.push(current);
@@ -481,7 +495,7 @@ export function paginatePdfReportSections(sections: PdfTemplateReportSection[], 
       let take = 0;
       let sectionUnits = 0;
       while (offset + take < rows.length) {
-        const nextUnits = reportRowUnits(section, rows[offset + take]);
+        const nextUnits = rowUnits(section, rows[offset + take]);
         if (take > 0 && sectionUnits + nextUnits > available) break;
         sectionUnits += nextUnits;
         take += 1;
@@ -493,7 +507,7 @@ export function paginatePdfReportSections(sections: PdfTemplateReportSection[], 
           continue;
         }
         take = 1;
-        sectionUnits = reportRowUnits(section, rows[offset]);
+        sectionUnits = rowUnits(section, rows[offset]);
       }
       current.push({ ...section, rows: rows.slice(offset, offset + take) });
       offset += take;
@@ -505,10 +519,20 @@ export function paginatePdfReportSections(sections: PdfTemplateReportSection[], 
   return groups;
 }
 
-export function getPdfReportPagination(targetKey: string) {
+export function getPdfReportPagination(targetKey: string, pageHeightMm?: number) {
   if (targetKey === 'ventas.cash-session') return { firstPageCapacity: 16, continuationPageCapacity: 24 };
   if (targetKey === 'ventas.cash-historical-report') return { firstPageCapacity: 20, continuationPageCapacity: 24 };
-  if (targetKey === 'ventas.customers') return { firstPageCapacity: 11, continuationPageCapacity: 17 };
+  if (targetKey === 'ventas.customers') {
+    // El presupuesto basado solo en líneas dejaba media página vacía en este
+    // listado. Estimamos el alto de las filas por líneas envueltas y escalamos
+    // la capacidad con el alto de la hoja configurada.
+    const pageScale = Math.max(0.65, Math.min(1.5, (Number(pageHeightMm) || 279.4) / 279.4));
+    return {
+      firstPageCapacity: Math.round(19 * pageScale),
+      continuationPageCapacity: Math.round(30 * pageScale),
+      rowHeightModel: 'customer-directory' as const,
+    };
+  }
   const target = getPdfTemplateTarget(targetKey);
   if (target.structure === 'report' && ['inventario', 'finanzas', 'contabilidad'].includes(target.module)) {
     // Las filas de estos reportes suelen envolver descripción, fecha y notas.
@@ -2704,7 +2728,7 @@ export async function renderPdfTemplateToPdf({ definition, settings: requestedSe
   const visibleReportSections = reportNode
     ? indexedReportSections.filter(section => reportNode.reportSectionVisibility?.[String(section.templateIndex)] !== false)
     : indexedReportSections;
-  const reportPagination = getPdfReportPagination(targetKey);
+  const reportPagination = getPdfReportPagination(targetKey, height);
   const sectionGroups: Array<PdfTemplateReportSection[] | null> = reportNode
     ? (visibleReportSections.length ? paginatePdfReportSections(visibleReportSections, reportPagination) : [[]])
     : visibleReportSections.length

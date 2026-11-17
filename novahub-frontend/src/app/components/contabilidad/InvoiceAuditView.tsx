@@ -20,7 +20,7 @@ import { invoicesService } from '../../services/ventas.service';
 import { DateField } from '../ui/DateField';
 import { useAuth } from '../../contexts/AuthContext';
 import { beginNotificationAction, completeNotificationAction, failNotificationAction } from '../../services/notification-action-coordinator';
-import { formatDateOnly, formatInstantDate } from '../../utils/dateFormat';
+import { formatDateOnly, formatInstant, formatInstantDate } from '../../utils/dateFormat';
 import { getCurrencyDecimalPlaces } from '../../utils/currency';
 
 type AuditKind = 'SALE' | 'PURCHASE';
@@ -440,7 +440,7 @@ export function InvoiceAuditView() {
                           <div className="flex flex-wrap items-center gap-2">
                             <span className="font-mono text-xs font-black">{request.invoice?.number || 'Factura'}</span>
                             <Badge variant="outline" className="rounded-md text-[9px]">{request.requestedBy?.name || 'Usuario'}</Badge>
-                            <span className="text-[10px] text-muted-foreground">{request.createdAt ? new Date(request.createdAt).toLocaleString('es-NI') : ''}</span>
+                            <span className="text-[10px] text-muted-foreground">{request.createdAt ? formatInstant(request.createdAt, user?.clientTenant?.timeZone) : ''}</span>
                           </div>
                           <p className="mt-1 truncate text-xs text-muted-foreground" title={request.reason}>{request.reason}</p>
                         </div>
@@ -583,7 +583,7 @@ export function InvoiceAuditView() {
                     return (
                       <TableRow key={event.id}>
                         <TableCell className="text-xs text-muted-foreground">
-                          {event.auditedAt ? new Date(event.auditedAt).toLocaleString('es-NI', { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit' }) : '—'}
+                          {event.auditedAt ? formatInstant(event.auditedAt, user?.clientTenant?.timeZone) : '—'}
                         </TableCell>
                         <TableCell><span className="font-mono text-xs font-bold">{event.invoiceNumber}</span></TableCell>
                         <TableCell className="text-xs">{event.partyName}</TableCell>

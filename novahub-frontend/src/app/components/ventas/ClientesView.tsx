@@ -946,7 +946,7 @@ export function ClientesView({ data, loading, error, onRefresh, pagination, onSe
             { label: 'PARTICULARES', value: String(individualCount), detail: 'Personas' },
             { label: 'EMPRESAS', value: String(companyCount), detail: 'Organizaciones' },
           ],
-          sections: [{ id: 'sales-customers', title: 'Clientes', headers: Object.keys(rows[0]), widths: selectedColumns.map(() => 1), rows: rows.map((row) => Object.values(row)) }],
+          sections: [{ id: 'sales-customers', title: 'Clientes', headers: Object.keys(rows[0]), widths: selectedColumns.map(() => 100 / Math.max(selectedColumns.length, 1)), rows: rows.map((row) => Object.values(row)) }],
           fileName,
           format: paperFormat,
           useVectorTables: rows.length > 500,

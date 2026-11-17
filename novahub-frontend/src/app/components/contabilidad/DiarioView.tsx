@@ -40,7 +40,7 @@ import { ImportPreviewField, ImportPreviewMobileCard } from '../ui/ImportPreview
 import { parseSpreadsheetInWorker } from '../../utils/import-spreadsheet';
 import { VirtualizedImportList } from '../ui/VirtualizedImportList';
 import { beginNotificationAction, completeNotificationAction, failNotificationAction } from '../../services/notification-action-coordinator';
-import { formatDateOnly, formatInstant } from '../../utils/dateFormat';
+import { formatDateOnly, formatInstant, todayIso } from '../../utils/dateFormat';
 import { firstReadable } from '../../utils/displayText';
 
 const STATUS_COLORS: Record<string, 'secondary' | 'default' | 'destructive' | 'outline'> = {
@@ -138,6 +138,7 @@ interface PreviewRow {
 
 export function DiarioView() {
   const { user, canPerform } = useAuth();
+  const today = todayIso(user?.clientTenant?.timeZone);
   const { baseCurrency, displayCurrency, displayMode, convertCurrentAmount, formatAmount } = useCurrency();
   const reportCurrency = displayMode === 'ORIGINAL' ? baseCurrency : displayCurrency;
   const toReportAmount = (amount: number) => displayMode === 'ORIGINAL' ? Number(amount || 0) : convertCurrentAmount(Number(amount || 0), baseCurrency);
@@ -163,8 +164,8 @@ export function DiarioView() {
   const [exportingPdf, setExportingPdf] = useState(false);
   const [exportingExcel, setExportingExcel] = useState(false);
 
-  const currentYear = new Date().getFullYear();
-  const currentMonth = new Date().getMonth() + 1;
+  const currentYear = Number(today.slice(0, 4));
+  const currentMonth = Number(today.slice(5, 7));
   const [importOpen, setImportOpen] = useState(false);
   const [scopeMode, setScopeMode] = useState<'full' | 'elapsed' | 'custom'>('full');
   const [elapsedMonths, setElapsedMonths] = useState(String(currentMonth));

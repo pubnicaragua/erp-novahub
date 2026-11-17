@@ -11,6 +11,8 @@ import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, D
 import { toast } from '@/app/services/toast';
 import { contabilidadService, type CostCenter, type CostCenterReport } from '../../services/contabilidad.service';
 import { getCurrencyDecimalPlaces } from '../../utils/currency';
+import { useAuth } from '../../contexts/AuthContext';
+import { todayIso } from '../../utils/dateFormat';
 
 const COST_CENTER_TYPES: Record<string, string> = {
   DEPARTMENT: 'Área / departamento',
@@ -96,17 +98,16 @@ export function CostCenterFormDialog({
   );
 }
 
-const monthStart = () => { const d = new Date(); return new Date(d.getFullYear(), 0, 1).toISOString().slice(0, 10); };
-const today = () => new Date().toISOString().slice(0, 10);
-
 /** Modal para ver, crear, editar y activar/desactivar centros de costo, y ver ingresos por área. */
 export function CostCentersDialog({ open, onOpenChange, canEdit }: { open: boolean; onOpenChange: (open: boolean) => void; canEdit: boolean }) {
+  const { user } = useAuth();
+  const today = todayIso(user?.clientTenant?.timeZone);
   const [centers, setCenters] = useState<CostCenter[]>([]);
   const [loading, setLoading] = useState(false);
   const [formOpen, setFormOpen] = useState(false);
   const [editing, setEditing] = useState<CostCenter | null>(null);
-  const [dateFrom, setDateFrom] = useState(monthStart());
-  const [dateTo, setDateTo] = useState(today());
+  const [dateFrom, setDateFrom] = useState(() => `${today.slice(0, 4)}-01-01`);
+  const [dateTo, setDateTo] = useState(today);
   const [report, setReport] = useState<CostCenterReport | null>(null);
   const [reportLoading, setReportLoading] = useState(false);
 

@@ -34,6 +34,7 @@ import { customersService } from '../../services/ventas.service'
 import { CHART_ACCOUNT_CSV_HEADERS, csvRowsToText, downloadXlsx, templateRows } from '../../utils/chartOfAccountsCsv'
 import { accountingList, useAccountingQuery } from '../../hooks/useAccountingQuery'
 import { useAuth } from '../../contexts/AuthContext'
+import { todayIso } from '../../utils/dateFormat'
 
 const INDUSTRIES = [
   { value: 'RETAIL', label: 'Comercio Minorista' },
@@ -998,7 +999,8 @@ type ConnectionModule = {
 }
 
 export function ConfiguracionContableView() {
-  const { canPerform } = useAuth()
+  const { canPerform, user } = useAuth()
+  const tenantToday = todayIso(user?.clientTenant?.timeZone)
   const canEditAccounting = canPerform('ACCOUNTING_CONFIG', 'edit')
   const anyAccountType = useAllowAnyAccountType()
   const [costCentersOpen, setCostCentersOpen] = useState(false)
@@ -1066,8 +1068,7 @@ const [mappingsSearch, setMappingsSearch] = useState('')
   const [expandedGroups, setExpandedGroups] = useState<Set<string>>(new Set())
   const [activityExpanded, setActivityExpanded] = useState(false)
   const [openingCutoffDate, setOpeningCutoffDate] = useState(() => {
-    const today = new Date()
-    return `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, '0')}-${String(today.getDate()).padStart(2, '0')}`
+    return tenantToday
   })
   const [openingPostConfirmOpen, setOpeningPostConfirmOpen] = useState(false)
   const [postingOpeningBalances, setPostingOpeningBalances] = useState(false)

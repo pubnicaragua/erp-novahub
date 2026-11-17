@@ -23,7 +23,7 @@ import { toast } from '@/app/services/toast';
 import { useAuth } from '../../contexts/AuthContext';
 import { accountingList, useAccountingQuery } from '../../hooks/useAccountingQuery';
 import { beginNotificationAction, completeNotificationAction, failNotificationAction } from '../../services/notification-action-coordinator';
-import { formatDateOnly } from '../../utils/dateFormat';
+import { formatDateOnly, todayIso } from '../../utils/dateFormat';
 
 const statusStyles: Record<string, string> = {
   OPEN: 'bg-emerald-500/10 text-emerald-500 border-emerald-500/20',
@@ -47,7 +47,8 @@ const months = [
 ];
 
 export function PeriodosView() {
-  const { canPerform } = useAuth();
+  const { canPerform, user } = useAuth();
+  const today = todayIso(user?.clientTenant?.timeZone);
   const canClosePeriod = canPerform('ACCOUNTING_PERIODS', 'close');
   const canReopenPeriod = canPerform('ACCOUNTING_PERIODS', 'reopen');
   const canLockPeriod = canPerform('ACCOUNTING_PERIODS', 'lock');
@@ -61,8 +62,8 @@ export function PeriodosView() {
   const [lockLoading, setLockLoading] = useState(false);
   const [form, setForm] = useState({ name: '', month: '', year: '' });
 
-  const currentYear = new Date().getFullYear();
-  const currentMonth = new Date().getMonth() + 1;
+  const currentYear = Number(today.slice(0, 4));
+  const currentMonth = Number(today.slice(5, 7));
 
   const periodsQuery = useAccountingQuery<any[]>(['periods'], async (signal) => accountingList(await contabilidadService.getPeriods(signal)));
   const periods = periodsQuery.data || [];
@@ -79,8 +80,6 @@ export function PeriodosView() {
         name: form.name,
         month: Number(form.month),
         year: Number(form.year),
-        startDate: new Date(Date.UTC(Number(form.year), Number(form.month) - 1, 1)).toISOString(),
-        endDate: new Date(Date.UTC(Number(form.year), Number(form.month), 0)).toISOString(),
       });
       toast.success('Período creado');
       completeNotificationAction(actionToken);

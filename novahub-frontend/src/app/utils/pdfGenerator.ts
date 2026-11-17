@@ -3379,13 +3379,17 @@ export async function generateConfiguredReportSectionsPDF({ targetKey, title, te
     });
   }
 
-  // Este reporte repite el detalle en tres tablas. Al superar 500 filas
-  // combinadas, rasterizar cada página conserva los datos pero bloquea la descarga.
+  // El renderer HTML reparte filas según una estimación de texto, no por la
+  // altura física libre de la hoja. En listados largos eso puede dejar mucho
+  // espacio vacío en las continuaciones. Para diseños predeterminados usamos
+  // autoTable desde 100 filas, que pagina según el espacio imprimible real.
   const reportRowCount = reportSections.reduce((total, section) => total + section.rows.length, 0);
-  const useNativeVectorTables = useVectorTables && (
-    reportRowCount > 500
-    || (!configuredDefinition && !baseSettings.curatedTemplateSelection)
-  );
+  const hasCustomReportTemplate = Boolean(configuredDefinition || baseSettings.curatedTemplateSelection);
+  const useNativeVectorTables = (reportRowCount >= 100 && !hasCustomReportTemplate)
+    || (useVectorTables && (
+      reportRowCount > 500
+      || !hasCustomReportTemplate
+    ));
   const vectorReportSections = reportSections
     .map((section, templateIndex) => ({ section, templateIndex }))
     .filter(({ templateIndex }) => !reportNode || reportNode.reportSectionVisibility?.[String(templateIndex)] !== false);
@@ -3501,7 +3505,10 @@ export async function generateConfiguredReportSectionsPDF({ targetKey, title, te
     autoTable(doc, {
       startY: currentY,
       tableWidth: contentWidth,
-      margin: { left: margin, right: margin, top: 53, bottom: 22 },
+      // La primera tabla empieza en currentY, después de la cabecera y los KPI.
+      // En continuaciones solo se repite el logo, así que se puede empezar más
+      // arriba y aprovechar mejor el espacio imprimible.
+      margin: { left: margin, right: margin, top: 28, bottom: 22 },
       head: [section.columns.map(column => column.label)],
       body: section.rows.length ? section.rows.map(row => section.columns.map(column => String(row[column.token] ?? row[column.id] ?? '—'))) : [section.columns.map(() => '—')],
       theme: 'grid',

@@ -23,26 +23,28 @@ import { accountingList, useAccountingQuery } from '../../hooks/useAccountingQue
 import { useCurrency } from '../../contexts/CurrencyContext';
 import { useAuth } from '../../contexts/AuthContext';
 import { beginNotificationAction, completeNotificationAction, failNotificationAction } from '../../services/notification-action-coordinator';
-
-const PERIODS = [
-  { label: 'Este Mes', value: `${new Date().getFullYear()}-${String(new Date().getMonth() + 1).padStart(2, '0')}` },
-  { label: 'Este Año', value: `${new Date().getFullYear()}` },
-];
+import { todayIso } from '../../utils/dateFormat';
 
 export function BudgetItemsView() {
-  const { canPerform } = useAuth();
+  const { canPerform, user } = useAuth();
+  const today = todayIso(user?.clientTenant?.timeZone);
+  const currentPeriod = today.slice(0, 7);
+  const periods = [
+    { label: 'Este Mes', value: currentPeriod },
+    { label: 'Este Año', value: today.slice(0, 4) },
+  ];
   const canCreate = canPerform('ACCOUNTING_BUDGET', 'create');
   const canEdit = canPerform('ACCOUNTING_BUDGET', 'edit');
   const canDelete = canPerform('ACCOUNTING_BUDGET', 'delete');
   const { baseCurrency, formatConvertedAmount } = useCurrency();
   const queryClient = useQueryClient();
   const [search, setSearch] = useState('');
-  const [filterPeriod, setFilterPeriod] = useState(PERIODS[0].value);
+  const [filterPeriod, setFilterPeriod] = useState(currentPeriod);
   const [dialogOpen, setDialogOpen] = useState(false);
   const [editing, setEditing] = useState<any>(null);
   const [saving, setSaving] = useState(false);
   const [pendingDeleteId, setPendingDeleteId] = useState<string | null>(null);
-  const [form, setForm] = useState({ code: '', name: '', assignedAmount: 0, accountId: '', costCenterId: '', period: PERIODS[0].value, status: 'ACTIVE' });
+  const [form, setForm] = useState({ code: '', name: '', assignedAmount: 0, accountId: '', costCenterId: '', period: currentPeriod, status: 'ACTIVE' });
 
   const itemsQuery = useAccountingQuery<any[]>(['budget-items', filterPeriod], async (signal) => accountingList(await contabilidadService.getBudgetItems(filterPeriod, signal)));
   const accountsQuery = useAccountingQuery<any[]>(['accounts'], async (signal) => accountingList(await contabilidadService.getChartOfAccounts(false, signal)));
@@ -149,7 +151,7 @@ export function BudgetItemsView() {
           </SelectTrigger>
           <SelectContent>
             <SelectItem value="all" className="text-xs">Todos</SelectItem>
-            {PERIODS.map(p => <SelectItem key={p.value} value={p.value} className="text-xs">{p.label}</SelectItem>)}
+            {periods.map(p => <SelectItem key={p.value} value={p.value} className="text-xs">{p.label}</SelectItem>)}
             <Input type="month" className="text-xs mt-1" placeholder="Otro..." onChange={e => { if (e.target.value) setFilterPeriod(e.target.value); }} />
           </SelectContent>
         </Select>

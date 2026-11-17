@@ -25,6 +25,7 @@ import { toast } from '@/app/services/toast';
 import { useAccountingQuery } from '../../hooks/useAccountingQuery';
 import { useAuth } from '../../contexts/AuthContext';
 import { beginNotificationAction, completeNotificationAction, failNotificationAction } from '../../services/notification-action-coordinator';
+import { dateTimeLocalToIso, formatInstant, formatInstantDate, todayIso, toDateTimeLocal } from '../../utils/dateFormat';
 
 const statusStyles: Record<string, string> = {
   DRAFT: 'bg-amber-500/10 text-amber-500 border-amber-500/20',
@@ -78,16 +79,11 @@ interface BackupForm {
   notes: string;
 }
 
-function toLocalDateTime(value: Date): string {
-  const pad = (n: number) => String(n).padStart(2, '0');
-  return `${value.getFullYear()}-${pad(value.getMonth() + 1)}-${pad(value.getDate())}T${pad(value.getHours())}:${pad(value.getMinutes())}`;
-}
-
-function createInitialForm(): BackupForm {
+function createInitialForm(timeZone?: string): BackupForm {
   return {
     month: '1',
-    year: String(new Date().getFullYear()),
-    submittedAt: toLocalDateTime(new Date()),
+    year: todayIso(timeZone).slice(0, 4),
+    submittedAt: toDateTimeLocal(new Date(), timeZone),
     file: null,
     acta: null,
     notes: '',
@@ -98,7 +94,8 @@ const isAllowedBackupFile = (file: File): boolean =>
   ACCEPTED_EXTENSIONS.includes(file.type) || /\.(pdf|xlsx|xls)$/i.test(file.name);
 
 export function ReportesFiscalesView() {
-  const { canPerform } = useAuth();
+  const { canPerform, user } = useAuth();
+  const timeZone = user?.clientTenant?.timeZone;
   const canDeleteReports = canPerform('ACCOUNTING_FISCAL', 'read') && canPerform('ACCOUNTING_FISCAL', 'delete');
   const queryClient = useQueryClient();
   const [expandedGenerate, setExpandedGenerate] = useState(true);
@@ -106,7 +103,7 @@ export function ReportesFiscalesView() {
   const [uploading, setUploading] = useState<string | null>(null);
   const [forms, setForms] = useState<Record<string, BackupForm>>(() => {
     const initial: Record<string, BackupForm> = {};
-    REPORT_TYPES.forEach((type) => { initial[type] = createInitialForm(); });
+    REPORT_TYPES.forEach((type) => { initial[type] = createInitialForm(timeZone); });
     return initial;
   });
 
@@ -142,8 +139,9 @@ export function ReportesFiscalesView() {
       toast.error('Indica un año válido');
       return;
     }
-    if (!form.submittedAt) {
-      toast.error('Indica la fecha y hora del envío');
+    const submittedAt = dateTimeLocalToIso(form.submittedAt, timeZone);
+    if (!submittedAt) {
+      toast.error('Indica una fecha y hora válida para la zona horaria de la sucursal');
       return;
     }
     const actionToken = beginNotificationAction();
@@ -166,7 +164,7 @@ export function ReportesFiscalesView() {
         fileName: form.file.name,
         actaUri: actaUploaded?.uri || null,
         actaFileName: form.acta?.name || null,
-        submittedAt: new Date(form.submittedAt).toISOString(),
+        submittedAt,
         notes: form.notes.trim() || null,
       });
       toast.success(`${reportTypeInfo[type].label} registrada como respaldo`);
@@ -373,7 +371,7 @@ export function ReportesFiscalesView() {
                     {!['IR'].includes(r.type) && r.month ? ` · ${monthLabel(r.month)}` : ''}
                   </TableCell>
                   <TableCell className="text-xs text-muted-foreground">
-                    {submittedDate ? new Date(submittedDate).toLocaleString('es-NI', { dateStyle: 'short', timeStyle: 'short' }) : 'N/A'}
+                    {submittedDate ? formatInstant(submittedDate, timeZone) : 'N/A'}
                   </TableCell>
                   <TableCell>
                     {isBackup ? (
@@ -459,7 +457,7 @@ export function ReportesFiscalesView() {
                 <div className="flex min-w-0 items-start justify-between gap-3">
                   <div className="min-w-0">
                     <p className="break-words text-xs font-bold">{formatReportType(r.type)}</p>
-                    <p className="mt-1 text-[10px] text-muted-foreground">{r.period || 'N/A'} · {submittedDate ? new Date(submittedDate).toLocaleString('es-NI', { dateStyle: 'short', timeStyle: 'short' }) : 'N/A'}</p>
+                    <p className="mt-1 text-[10px] text-muted-foreground">{r.period || 'N/A'} · {submittedDate ? formatInstant(submittedDate, timeZone) : 'N/A'}</p>
                   </div>
                   <Badge variant="outline" className={cn('shrink-0 text-[9px] font-black uppercase tracking-widest', statusStyles[r.status || 'DRAFT'])}>{statusLabels[r.status || 'DRAFT']}</Badge>
                 </div>
@@ -512,14 +510,14 @@ export function ReportesFiscalesView() {
                 <p className="text-[10px] font-black uppercase tracking-widest text-muted-foreground">Fecha y hora de envío</p>
                 <p className="text-sm font-bold">
                   {(showMeta?.submittedAt || showMeta?.generatedAt || showMeta?.createdAt)
-                    ? new Date(showMeta?.submittedAt || showMeta?.generatedAt || showMeta?.createdAt).toLocaleString('es-NI', { dateStyle: 'long', timeStyle: 'short' })
+                    ? formatInstant(showMeta?.submittedAt || showMeta?.generatedAt || showMeta?.createdAt, timeZone)
                     : 'N/A'}
                 </p>
               </div>
               <div className="rounded-xl bg-muted/30 p-4">
                 <p className="text-[10px] font-black uppercase tracking-widest text-muted-foreground">Registrado</p>
                 <p className="text-sm font-bold">
-                  {showMeta?.createdAt ? new Date(showMeta.createdAt).toLocaleDateString('es-NI') : 'N/A'}
+                  {showMeta?.createdAt ? formatInstantDate(showMeta.createdAt, timeZone) : 'N/A'}
                 </p>
               </div>
             </div>

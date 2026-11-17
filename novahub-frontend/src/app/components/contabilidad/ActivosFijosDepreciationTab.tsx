@@ -17,6 +17,7 @@ import { useAuth } from '../../contexts/AuthContext';
 import { fetchFixedAssetDetails, exportFixedAssetsExcel } from './fixedAssetsExport';
 import { toast } from '@/app/services/toast';
 import { beginNotificationAction, completeNotificationAction, failNotificationAction } from '../../services/notification-action-coordinator';
+import { todayIso } from '../../utils/dateFormat';
 
 interface AssetSummary {
   id: string;
@@ -49,14 +50,12 @@ const STATUS_LABELS: Record<string, string> = {
 export function ActivosFijosDepreciationTab() {
   const queryClient = useQueryClient();
   const { displayCurrency, displayMode, formatConvertedAmount, convertAmount, convertDisplayAmount } = useCurrency();
-  const { canPerform } = useAuth();
+  const { canPerform, user } = useAuth();
+  const timeZone = user?.clientTenant?.timeZone;
   const canExportAssets = canPerform('ACCOUNTING_ASSETS', 'export');
   const canGenerateProjection = canPerform('ACCOUNTING_ASSETS', 'generateProjection');
   const canProcessDepreciation = canPerform('ACCOUNTING_ASSETS', 'processDepreciation');
-  const [period, setPeriod] = useState(() => {
-    const now = new Date();
-    return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
-  });
+  const [period, setPeriod] = useState(() => todayIso(timeZone).slice(0, 7));
   const [processing, setProcessing] = useState(false);
   const [generatingId, setGeneratingId] = useState<string | null>(null);
   const [expandedId, setExpandedId] = useState<string | null>(null);

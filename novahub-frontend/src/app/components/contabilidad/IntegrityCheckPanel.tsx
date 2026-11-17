@@ -7,6 +7,8 @@ import { cn } from '../ui/utils';
 import { contabilidadService } from '../../services/contabilidad.service';
 import { formatCurrencyAmount } from '../../utils/currency';
 import { toast } from '@/app/services/toast';
+import { useAuth } from '../../contexts/AuthContext';
+import { formatInstant } from '../../utils/dateFormat';
 
 type IntegrityStatus = 'OK' | 'REVISAR' | 'ERROR' | 'INFO';
 type IntegrityCheck = {
@@ -45,6 +47,7 @@ const COLUMN_LABEL: Record<string, string> = {
  * Solo lee; no corrige nada. Cada fila explica qué se comparó y qué hacer.
  */
 export function IntegrityCheckPanel() {
+  const { user } = useAuth();
   const [report, setReport] = useState<IntegrityReport | null>(null);
   const [loading, setLoading] = useState(false);
   const [openId, setOpenId] = useState<string | null>(null);
@@ -95,7 +98,7 @@ export function IntegrityCheckPanel() {
             <Badge variant="outline" className={STATUS_STYLE.OK.className}>{report.summary.ok} cuadran</Badge>
             <Badge variant="outline" className={STATUS_STYLE.REVISAR.className}>{report.summary.revisar} por revisar</Badge>
             <Badge variant="outline" className={STATUS_STYLE.ERROR.className}>{report.summary.error} no cuadran</Badge>
-            <span className="text-muted-foreground">Ejecutado {new Date(report.generatedAt).toLocaleString('es-NI')}</span>
+            <span className="text-muted-foreground">Ejecutado {formatInstant(report.generatedAt, user?.clientTenant?.timeZone)}</span>
           </div>
           <ul className="space-y-2">
             {report.checks.map((check) => {
