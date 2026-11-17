@@ -73,6 +73,42 @@ function buildAllowedDate(value: string, weekdays: Set<number>, dates: Set<strin
   return '';
 }
 
+function isoWeekday(value: string) {
+  const [year, month, day] = value.split('-').map(Number);
+  const jsDay = new Date(Date.UTC(year, month - 1, day)).getUTCDay();
+  return jsDay === 0 ? 7 : jsDay;
+}
+
+function countDailyInstallmentsThroughDeadline(
+  firstDate: string,
+  finalDate: string,
+  exclusions: CustomerCreditCalendarExclusions,
+) {
+  const [firstYear, firstMonth, firstDay] = firstDate.split('-').map(Number);
+  const [finalYear, finalMonth, finalDay] = finalDate.split('-').map(Number);
+  const start = Date.UTC(firstYear, firstMonth - 1, firstDay);
+  const end = Date.UTC(finalYear, finalMonth - 1, finalDay);
+  const dayCount = Math.floor((end - start) / 86_400_000) + 1;
+  const excludedWeekdays = new Set(exclusions.excludedWeekdays || []);
+  const excludedDates = new Set(exclusions.excludedDates || []);
+  const fullWeeks = Math.floor(dayCount / 7);
+  let count = fullWeeks * (7 - excludedWeekdays.size);
+  const remainingDays = dayCount % 7;
+
+  for (let offset = 0; offset < remainingDays; offset += 1) {
+    const candidate = addDays(firstDate, fullWeeks * 7 + offset);
+    if (!excludedWeekdays.has(isoWeekday(candidate))) count += 1;
+  }
+
+  for (const date of excludedDates) {
+    if (date >= firstDate && date <= finalDate && !excludedWeekdays.has(isoWeekday(date))) count -= 1;
+  }
+
+  const finalDateExcluded = excludedWeekdays.has(isoWeekday(finalDate)) || excludedDates.has(finalDate);
+  if (finalDateExcluded) count += 1;
+  return count;
+}
+
 function scheduleDates(input: {
   firstDate: string;
   frequency: CustomerCreditFrequency;
@@ -84,10 +120,10 @@ function scheduleDates(input: {
   const excludedWeekdays = new Set(input.exclusions.excludedWeekdays || []);
   const excludedDates = new Set(input.exclusions.excludedDates || []);
   for (let index = 0; index < input.count; index += 1) {
-    let candidate = input.frequency === 'DAILY'
+    let candidate = index === input.count - 1 && input.finalDate
+      ? input.finalDate
+      : input.frequency === 'DAILY'
       ? index === 0 ? input.firstDate : addDays(dates[index - 1], 1)
-      : index === input.count - 1 && input.finalDate
-        ? input.finalDate
         : dateAt(input.firstDate, input.frequency, index);
     if (dates.length && candidate <= dates[dates.length - 1]) candidate = addDays(dates[dates.length - 1], 1);
     const allowed = buildAllowedDate(candidate, excludedWeekdays, excludedDates);
@@ -313,10 +349,14 @@ export function calculateCustomerCreditPlanEstimate(input: {
   } else {
     if (!isDateOnly(input.finalDueDate) || input.finalDueDate! < firstInstallmentDate) return null;
     finalDueDate = input.finalDueDate!;
-    installmentCount = 1;
-    while (installmentCount <= MAX_INSTALLMENTS
-      && dateAt(firstInstallmentDate, frequency, installmentCount) <= finalDueDate) {
-      installmentCount += 1;
+    if (frequency === 'DAILY') {
+      installmentCount = countDailyInstallmentsThroughDeadline(firstInstallmentDate, finalDueDate, exclusions);
+    } else {
+      installmentCount = 1;
+      while (installmentCount <= MAX_INSTALLMENTS
+        && dateAt(firstInstallmentDate, frequency, installmentCount) <= finalDueDate) {
+        installmentCount += 1;
+      }
     }
     if (installmentCount > MAX_INSTALLMENTS) return null;
     installmentAmount = roundCurrencyNumber(total / installmentCount);
