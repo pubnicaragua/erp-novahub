@@ -728,6 +728,7 @@ export function PlanCuentasView({ isSidebarCollapsed = true, helpTrigger }: Plan
     const hasChildren = account.children.length > 0;
     const isExpanded = expandedIds.has(account.id);
     const isSelected = selectedAccount?.id === account.id;
+    const canCreateSubaccount = canPerform('ACCOUNTING_CHART', 'create');
 
     return (
       <div key={account.id}>
@@ -774,7 +775,7 @@ export function PlanCuentasView({ isSidebarCollapsed = true, helpTrigger }: Plan
               {account.isActive ? 'Activo' : 'Inactivo'}
             </Badge>
             <div className="flex items-center gap-0.5" onClick={(e) => e.stopPropagation()}>
-              {canPerform('ACCOUNTING_CHART', 'create') && account.isActive && (
+              {canCreateSubaccount && (
                 <Button variant="ghost" size="icon" className="size-7" onClick={() => { void openAddDialog(account); }} title="Crear subcuenta" aria-label={`Crear subcuenta para ${account.code} · ${account.name}`}>
                   <Plus className="size-3.5" />
                 </Button>
@@ -836,7 +837,7 @@ export function PlanCuentasView({ isSidebarCollapsed = true, helpTrigger }: Plan
           {effectiveColumnKeys.includes('currency') && <Badge variant="outline" className="mx-2 max-w-full justify-center truncate text-[10px] text-muted-foreground">{account.currency}</Badge>}
           {effectiveColumnKeys.includes('status') && <Badge variant={account.isActive ? 'default' : 'secondary'} className="mx-2 max-w-full justify-center truncate text-[10px]">{account.isActive ? 'Activo' : 'Inactivo'}</Badge>}
           <div className="flex shrink-0 items-center justify-end gap-1" onClick={(e) => e.stopPropagation()}>
-            {canPerform('ACCOUNTING_CHART', 'create') && account.isActive && (
+            {canCreateSubaccount && (
               <Button variant="ghost" size="icon" className="size-7" onClick={() => { void openAddDialog(account); }} title="Crear subcuenta" aria-label={`Crear subcuenta para ${account.code} · ${account.name}`}>
                 <Plus className="size-3.5" />
               </Button>
