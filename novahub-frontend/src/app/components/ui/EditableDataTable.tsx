@@ -181,7 +181,6 @@ export function EditableDataTable<T extends { [key: string]: any }>({
   const tableScrollRef = useRef<HTMLDivElement>(null);
   const pointerInsideTable = useRef(false);
   const [focusedCell, setFocusedCell] = useState({ rowIndex: 0, colIndex: 0 });
-  const [horizontalScroll, setHorizontalScroll] = useState({ left: false, right: false });
   const hasRowEditAction = showRowEditAction && data.some((row) => canOpenRowEditor(row));
   const actionColumnWidth = (() => {
     const match = /^w-(\d+)$/.exec(actionsWidth);
@@ -289,34 +288,6 @@ export function EditableDataTable<T extends { [key: string]: any }>({
   useEffect(() => {
     setData(initialData);
   }, [initialData]);
-
-  useEffect(() => {
-    if (!showHorizontalControls || effectiveLayoutMode === 'cards') return;
-    const element = tableScrollRef.current;
-    if (!element) return;
-    const updateScrollState = () => {
-      const nextState = {
-        left: element.scrollLeft > 4,
-        right: element.scrollLeft + element.clientWidth < element.scrollWidth - 4,
-      };
-      setHorizontalScroll((current) => current.left === nextState.left && current.right === nextState.right ? current : nextState);
-    };
-    updateScrollState();
-    element.addEventListener('scroll', updateScrollState, { passive: true });
-    const observer = new ResizeObserver(updateScrollState);
-    observer.observe(element);
-    const table = element.querySelector<HTMLElement>('[data-slot="table"]');
-    if (table) observer.observe(table);
-    const mutationObserver = new MutationObserver(updateScrollState);
-    mutationObserver.observe(element, { childList: true, subtree: true, attributes: true, attributeFilter: ['style', 'class'] });
-    window.addEventListener('resize', updateScrollState);
-    return () => {
-      element.removeEventListener('scroll', updateScrollState);
-      observer.disconnect();
-      mutationObserver.disconnect();
-      window.removeEventListener('resize', updateScrollState);
-    };
-  }, [columns.length, data.length, effectiveLayoutMode, showHorizontalControls, tableMinWidth]);
 
   const scrollTable = (direction: 'left' | 'right') => {
     const element = tableScrollRef.current;
@@ -666,8 +637,8 @@ export function EditableDataTable<T extends { [key: string]: any }>({
           <div className="flex items-center justify-between gap-3 border-b border-border/40 bg-muted/10 px-3 py-2">
             <span className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground/60">Desplazamiento horizontal</span>
             <div className="flex items-center gap-1">
-              <Button type="button" variant="outline" size="icon" className="size-8 rounded-lg" onClick={() => scrollTable('left')} disabled={!horizontalScroll.left} aria-label="Desplazar tabla a la izquierda"><ChevronLeft className="size-4" /></Button>
-              <Button type="button" variant="outline" size="icon" className="size-8 rounded-lg" onClick={() => scrollTable('right')} disabled={!horizontalScroll.right} aria-label="Desplazar tabla a la derecha"><ChevronRight className="size-4" /></Button>
+              <Button type="button" variant="outline" size="icon" className="size-8 rounded-lg" onClick={() => scrollTable('left')} aria-label="Desplazar tabla a la izquierda"><ChevronLeft className="size-4" /></Button>
+              <Button type="button" variant="outline" size="icon" className="size-8 rounded-lg" onClick={() => scrollTable('right')} aria-label="Desplazar tabla a la derecha"><ChevronRight className="size-4" /></Button>
             </div>
           </div>
         )}
