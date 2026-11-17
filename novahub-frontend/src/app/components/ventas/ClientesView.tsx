@@ -45,7 +45,7 @@ import { aggregateCustomerHistory, mergeCustomerHistoryByIdentifier, prepareCust
 import { buildCustomerHistoryTemplateHeaders, DEFAULT_CUSTOMER_HISTORY_PROFILE, normalizeCustomerHistoryProfile, type CustomerHistoryProfile } from '../../utils/customer-history-profile';
 import { generateConfiguredReportSectionsPDF } from '../../utils/pdfGenerator';
 import type { PdfPaperFormat } from '../../utils/pdfDownloadFormats';
-import { beginPdfBrowserPreview, closePdfBrowserPreview, downloadPdfBlob, type PdfBrowserPreviewSession } from '../../utils/pdfBrowserPreview';
+import { beginPdfBrowserPreview, closePdfBrowserPreview, showPdfInBrowserPreview, type PdfBrowserPreviewSession } from '../../utils/pdfBrowserPreview';
 import { ExportMenu } from '../ui/ExportMenu';
 import { buildDatedDownloadFileName } from '../../utils/exportFileNames';
 import { createReportWorkbook } from '../../utils/reportWorkbook';
@@ -950,10 +950,13 @@ export function ClientesView({ data, loading, error, onRefresh, pagination, onSe
           fileName,
           format: paperFormat,
           useVectorTables: rows.length > 500,
+          save: false,
         });
-        downloadPdfBlob(report.output('blob'), fileName);
+        showPdfInBrowserPreview(report.output('blob'), fileName, previewSession);
       }
-      toast.success(`Reporte de clientes exportado en ${format === 'xlsx' ? 'Excel' : 'PDF'}.`);
+      toast.success(format === 'xlsx'
+        ? 'Reporte de clientes exportado en Excel.'
+        : 'Vista previa del reporte lista. Puedes descargar el PDF desde el visor.');
     } catch (error) {
       closePdfBrowserPreview(previewSession);
       toast.error(error instanceof Error ? error.message : 'No se pudo exportar el reporte de clientes.');
