@@ -61,6 +61,7 @@ export const forceSalesPortfoliosService = {
     sourceFileName: string;
     batchId: string;
     portfolioName: string;
+    portfolioNamesByAssignee: Record<string, string>;
     openingBalanceCurrency: 'NIO' | 'USD';
     openingBalanceDate: string;
   }) => api.post<ForceSalesPortfolioImportResult>('/force-sales/portfolios/import', data),

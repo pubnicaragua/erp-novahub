@@ -119,6 +119,14 @@ function parseImportRows(rawRows: Array<Record<string, unknown>>, managers: Forc
   }).filter((row) => row._name || row._managerId || row._signedBalance);
 }
 
+function getDefaultPortfolioNames(rows: ForceSalesImportRow[], managers: ForceSalesImportManager[]) {
+  const managerIds = [...new Set(rows.map((row) => row._managerId).filter(Boolean))];
+  return Object.fromEntries(managerIds.map((managerId) => [
+    managerId,
+    managers.find((manager) => manager.id === managerId)?.name || '',
+  ]));
+}
+
 export function ForceSalesPortfoliosView({
   canImport,
   canManage,
@@ -146,7 +154,7 @@ export function ForceSalesPortfoliosView({
   const [fileName, setFileName] = useState('');
   const [rows, setRows] = useState<ForceSalesImportRow[]>([]);
   const [importErrors, setImportErrors] = useState<string[]>([]);
-  const [portfolioName, setPortfolioName] = useState('Cartera');
+  const [portfolioNamesByAssignee, setPortfolioNamesByAssignee] = useState<Record<string, string>>({});
   const [openingBalanceDate, setOpeningBalanceDate] = useState(localDate);
   const [openingBalanceCurrency, setOpeningBalanceCurrency] = useState<'NIO' | 'USD'>('NIO');
   const [importing, setImporting] = useState(false);
@@ -201,6 +209,7 @@ export function ForceSalesPortfoliosView({
 
   const activePortfolios = useMemo(() => portfolios.filter((portfolio) => portfolio.status === 'ACTIVE'), [portfolios]);
   const activeCustomers = useMemo(() => portfolios.reduce((count, portfolio) => count + portfolio.customers.filter((row) => row.assignmentStatus === 'ACTIVE').length, 0), [portfolios]);
+  const usedPortfolioManagerCount = useMemo(() => new Set(rows.map((row) => row._managerId).filter(Boolean)).size, [rows]);
   const selectedProspectRecord = useMemo(() => unlinkedProspects.find((prospect) => prospect.id === selectedProspect) || null, [selectedProspect, unlinkedProspects]);
   const filteredUnlinkedProspects = useMemo(() => {
     const query = normalizeSearchText(pointSearch);
@@ -213,7 +222,7 @@ export function ForceSalesPortfoliosView({
   }, [pointSearch, unlinkedProspects]);
   const openImport = () => {
     setFileName(''); setRows([]); setImportErrors([]); setImportResult(null); setImportPreviewOpen(false);
-    setPortfolioName('Cartera'); setOpeningBalanceDate(localDate()); setOpeningBalanceCurrency('NIO'); setBatchId(crypto.randomUUID());
+    setPortfolioNamesByAssignee({}); setOpeningBalanceDate(localDate()); setOpeningBalanceCurrency('NIO'); setBatchId(crypto.randomUUID());
     setImportOpen(true);
   };
 
@@ -226,7 +235,7 @@ export function ForceSalesPortfoliosView({
       toast.error('Selecciona un archivo Excel en formato .xlsx o .xls.');
       return;
     }
-    setImportErrors([]); setImportResult(null); setFileName(file.name); setPortfolioName(file.name.replace(/\.[^.]+$/, '').slice(0, 120) || 'Cartera'); setBatchId(crypto.randomUUID());
+    setImportErrors([]); setImportResult(null); setFileName(file.name); setBatchId(crypto.randomUUID());
     try {
       const workbook = XLSX.read(await file.arrayBuffer(), { type: 'array', cellDates: true });
       const sheetName = workbook.SheetNames.find((name) => normalizeHeader(name) === 'clientes') || workbook.SheetNames[0];
@@ -235,13 +244,22 @@ export function ForceSalesPortfoliosView({
       if (!parsedRows.length) throw new Error('No se encontraron filas de clientes en la hoja seleccionada.');
       if (parsedRows.length > 5000) throw new Error('El archivo supera el límite de 5,000 clientes por carga. Divídelo en varios archivos.');
       setRows(parsedRows);
+      setPortfolioNamesByAssignee(getDefaultPortfolioNames(parsedRows, managers));
     } catch (error: unknown) {
       setRows([]);
+      setPortfolioNamesByAssignee({});
       toast.error(errorMessage(error, 'No se pudo leer el archivo Excel. Usa formato .xlsx o .xls.'));
     }
   };
 
-  const updateRowManager = (index: number, managerId: string) => setRows((current) => current.map((row, rowIndex) => rowIndex === index ? { ...row, _managerId: managerId } : row));
+  const updateRowManager = (index: number, managerId: string) => {
+    setRows((current) => current.map((row, rowIndex) => rowIndex === index ? { ...row, _managerId: managerId } : row));
+    if (managerId) setPortfolioNamesByAssignee((current) => (
+      Object.prototype.hasOwnProperty.call(current, managerId)
+        ? current
+        : { ...current, [managerId]: managers.find((manager) => manager.id === managerId)?.name || '' }
+    ));
+  };
   const rowErrors = useMemo(() => rows.flatMap((row) => {
     const result: string[] = [];
     if (!row._name) result.push(`Fila ${row._rowNumber}: falta el nombre.`);
@@ -251,13 +269,19 @@ export function ForceSalesPortfoliosView({
   }), [rows]);
 
   const confirmImport = async () => {
-    if (!rows.length || rowErrors.length || !portfolioName.trim() || !openingBalanceDate) return;
+    const assignedManagerIds = [...new Set(rows.map((row) => row._managerId).filter(Boolean))];
+    const namesForImport = Object.fromEntries(assignedManagerIds.map((managerId) => [
+      managerId,
+      (portfolioNamesByAssignee[managerId] ?? managers.find((manager) => manager.id === managerId)?.name ?? '').trim(),
+    ]));
+    if (!rows.length || rowErrors.length || Object.values(namesForImport).some((name) => !name) || !openingBalanceDate) return;
     setImporting(true); setImportErrors([]); setImportResult(null);
     try {
       const response = await forceSalesPortfoliosService.import({
         batchId,
         sourceFileName: fileName,
-        portfolioName: portfolioName.trim(),
+        portfolioName: 'Carteras por gestor',
+        portfolioNamesByAssignee: namesForImport,
         openingBalanceCurrency,
         openingBalanceDate,
         rows: rows.map((row) => {
@@ -370,12 +394,13 @@ export function ForceSalesPortfoliosView({
     rows={rows}
     managers={managers}
     fileName={fileName}
-    portfolioName={portfolioName}
+    portfolioNamesByAssignee={portfolioNamesByAssignee}
     isSidebarCollapsed={isSidebarCollapsed}
     importing={importing}
     errors={importErrors}
     result={importResult}
     onRowManagerChange={updateRowManager}
+    onPortfolioNameChange={(managerId, name) => setPortfolioNamesByAssignee((current) => ({ ...current, [managerId]: name }))}
     onBack={backToImport}
     onConfirm={() => void confirmImport()}
     onDone={finishImport}
@@ -445,7 +470,7 @@ export function ForceSalesPortfoliosView({
                     const canOfferLocate = canLocate && active;
                     const targets = activePortfolios.filter((target) => target.id !== portfolio.id);
                     return <div key={row.assignmentId} className="flex min-w-0 flex-col gap-3 rounded-xl border border-border/70 bg-background/60 p-3 sm:flex-row sm:items-center sm:justify-between">
-                      <div className="min-w-0"><div className="flex flex-wrap items-center gap-2"><p className="break-words font-bold text-foreground">{customer.name}</p>{customer.code && <span className="text-xs text-muted-foreground">{customer.code}</span>}{!active && <Badge variant="secondary">Histórico</Badge>}</div><p className="mt-1 break-words text-xs text-muted-foreground">{[customer.address, customer.city, customer.department].filter(Boolean).join(' · ') || 'Sin dirección'}{customer.phone ? ` · ${customer.phone}` : ''}</p>{customer.balance !== undefined && <p className="mt-1 text-xs text-muted-foreground">Saldo: <span className="font-semibold text-foreground">{formatBalance(customer.balance)}</span></p>}</div>
+                      <div className="min-w-0"><div className="flex flex-wrap items-center gap-2"><p className="break-words font-bold text-foreground">{customer.name}</p>{customer.code && <span className="text-xs text-muted-foreground">{customer.code}</span>}{active && <Badge variant={row.hasMapLocation ? 'default' : 'secondary'}>{row.hasMapLocation ? 'Ubicado' : row.mapPointId ? 'Vinculado · pendiente de ubicación' : 'Pendiente de vincular'}</Badge>}{!active && <Badge variant="secondary">Histórico</Badge>}</div><p className="mt-1 break-words text-xs text-muted-foreground">{[customer.address, customer.city, customer.department].filter(Boolean).join(' · ') || 'Sin dirección'}{customer.phone ? ` · ${customer.phone}` : ''}</p>{customer.balance !== undefined && <p className="mt-1 text-xs text-muted-foreground">Saldo: <span className="font-semibold text-foreground">{formatBalance(customer.balance)}</span></p>}</div>
                       <div className="flex shrink-0 flex-wrap gap-2">
                         {canOfferLocate && <Button size="sm" variant="outline" onClick={() => void openLocateDialog(portfolio, customer.id, customer.name)}><MapPin className="mr-1.5 size-4" />Ubicar</Button>}
                         {canTransfer && active && targets.length > 0 && <div className="flex max-w-full items-center gap-1.5"><select aria-label={`Cartera destino para ${customer.name}`} className="h-9 max-w-[190px] rounded-lg border border-input bg-background px-2 text-xs text-foreground" value={transferTarget[customer.id] || ''} onChange={(event) => setTransferTarget((current) => ({ ...current, [customer.id]: event.target.value }))}><option value="">Mover a…</option>{targets.map((target) => <option key={target.id} value={target.id}>{target.assignedTo?.name} · {target.name}</option>)}</select><Button size="sm" variant="outline" aria-label={`Transferir ${customer.name}`} onClick={() => void transferCustomer(portfolio, customer.id, customer.name)}><ArrowLeftRight className="size-4" /></Button></div>}
@@ -463,14 +488,13 @@ export function ForceSalesPortfoliosView({
       <Dialog open={importOpen} onOpenChange={(open) => { if (!importing) setImportOpen(open); }}>
         <DialogContent className="max-h-[92dvh] w-[calc(100vw-1rem)] max-w-5xl overflow-y-auto">
           <DialogHeader><DialogTitle className="nh-section-title flex items-center gap-2"><FileSpreadsheet className="size-5" />Importar cartera comercial</DialogTitle><DialogDescription>Usa la plantilla normal de clientes con la columna Gestor/Usuario. Se crearán clientes nuevos en Ventas y una cartera por gestor.</DialogDescription></DialogHeader>
-          <div className="grid min-w-0 grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-[minmax(0,1fr)_minmax(0,1fr)_minmax(0,1fr)_minmax(200px,1.1fr)]">
-            <label className="min-w-0 space-y-1 text-xs font-bold text-muted-foreground">Nombre del lote<Input value={portfolioName} onChange={(event) => setPortfolioName(event.target.value)} maxLength={120} className="min-w-0 max-w-full" /></label>
+          <div className="grid min-w-0 grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-[minmax(0,1fr)_minmax(0,1fr)_minmax(200px,1.1fr)]">
             <label className="min-w-0 space-y-1 text-xs font-bold text-muted-foreground">Fecha de corte<Input type="date" value={openingBalanceDate} onChange={(event) => setOpeningBalanceDate(event.target.value)} className="min-w-0 max-w-full" /></label>
             <label className="min-w-0 space-y-1 text-xs font-bold text-muted-foreground">Moneda de saldos<Select value={openingBalanceCurrency} onValueChange={(value) => setOpeningBalanceCurrency(value as 'NIO' | 'USD')}><SelectTrigger className="min-w-0 max-w-full"><SelectValue /></SelectTrigger><SelectContent><SelectItem value="NIO">NIO · Córdoba</SelectItem><SelectItem value="USD">USD · Dólar</SelectItem></SelectContent></Select></label>
             <div className="min-w-0 space-y-1"><span className="text-xs font-bold text-muted-foreground">Archivo Excel</span><input ref={fileInput} type="file" accept=".xlsx,.xls,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,application/vnd.ms-excel" aria-label="Archivo Excel de cartera" tabIndex={-1} className="sr-only" onChange={(event) => { void onFile(event.target.files?.[0]); event.target.value = ''; }} /><Button type="button" variant="outline" className="w-full min-w-0 justify-start overflow-hidden" onClick={() => fileInput.current?.click()}><Upload className="mr-2 size-4 shrink-0" /><span className="min-w-0 truncate">Elegir archivo Excel</span></Button><p className="min-w-0 truncate text-[11px] text-muted-foreground" title={fileName}>{fileName || 'Solo formatos .xlsx y .xls'}</p></div>
           </div>
           <div className="flex flex-wrap items-center justify-between gap-2 rounded-xl border border-primary/15 bg-primary/[0.035] p-3 text-xs text-muted-foreground"><span>Saldo negativo = deuda pendiente · positivo = saldo a favor · cero = sin saldo. El saldo y los datos del cliente no se actualizan si existe un homónimo; revisa los avisos.</span><Button type="button" variant="ghost" size="sm" onClick={downloadPortfolioTemplate}><Download className="mr-1.5 size-4" />Descargar plantilla</Button></div>
-          {!!rows.length && <div className="flex min-w-0 flex-wrap items-center gap-2 rounded-xl border border-border bg-muted/20 p-3 text-xs"><Badge variant="secondary">{rows.length} filas</Badge><Badge variant="secondary">{managers.length} gestores</Badge><span className="min-w-0 flex-1 truncate text-muted-foreground">Revisa la asignación de clientes antes de importar.</span><Button type="button" onClick={openImportPreview} className="w-full sm:ml-auto sm:w-auto">Previsualizar clientes</Button></div>}
+          {!!rows.length && <div className="flex min-w-0 flex-wrap items-center gap-2 rounded-xl border border-border bg-muted/20 p-3 text-xs"><Badge variant="secondary">{rows.length} filas</Badge><Badge variant="secondary">{usedPortfolioManagerCount} gestores</Badge><span className="min-w-0 flex-1 truncate text-muted-foreground">El nombre de cada cartera inicia con el nombre de su gestor y puedes editarlo en la vista previa.</span><Button type="button" onClick={openImportPreview} className="w-full sm:ml-auto sm:w-auto">Previsualizar clientes</Button></div>}
           <DialogFooter className="flex-wrap"><Button type="button" variant="outline" onClick={() => setImportOpen(false)} disabled={importing}>Cerrar</Button>{!rows.length && <span className="text-xs text-muted-foreground">Carga un archivo Excel para habilitar la previsualización.</span>}</DialogFooter>
         </DialogContent>
       </Dialog>

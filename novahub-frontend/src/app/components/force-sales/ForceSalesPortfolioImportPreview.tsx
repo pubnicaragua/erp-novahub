@@ -23,12 +23,13 @@ type ForceSalesPortfolioImportPreviewProps = {
   rows: ForceSalesImportRow[];
   managers: ForceSalesImportManager[];
   fileName: string;
-  portfolioName: string;
+  portfolioNamesByAssignee: Record<string, string>;
   isSidebarCollapsed?: boolean;
   importing: boolean;
   errors: string[];
   result: ForceSalesPortfolioImportResult | null;
   onRowManagerChange: (index: number, managerId: string) => void;
+  onPortfolioNameChange: (managerId: string, name: string) => void;
   onBack: () => void;
   onConfirm: () => void;
   onDone: () => void;
@@ -42,12 +43,13 @@ export function ForceSalesPortfolioImportPreview({
   rows,
   managers,
   fileName,
-  portfolioName,
+  portfolioNamesByAssignee,
   isSidebarCollapsed = false,
   importing,
   errors,
   result,
   onRowManagerChange,
+  onPortfolioNameChange,
   onBack,
   onConfirm,
   onDone,
@@ -68,6 +70,14 @@ export function ForceSalesPortfolioImportPreview({
     return new Set([...counts].filter(([, count]) => count > 1).map(([key]) => key));
   }, [rows]);
 
+  const usedManagers = useMemo(() => {
+    const ids = [...new Set(rows.map((row) => row._managerId).filter(Boolean))];
+    return ids.flatMap((id) => {
+      const manager = managers.find((item) => item.id === id);
+      return manager ? [{ ...manager, customerCount: rows.filter((row) => row._managerId === id).length }] : [];
+    });
+  }, [rows, managers]);
+
   const rowReview = (row: ForceSalesImportRow) => {
     if (!row._name.trim()) return { error: 'Falta el nombre del cliente.' };
     if (!row._managerId) return { error: 'Asigna un gestor activo.' };
@@ -79,6 +89,9 @@ export function ForceSalesPortfolioImportPreview({
   const errorCount = rows.filter((row) => rowReview(row).error).length;
   const warningCount = rows.filter((row) => rowReview(row).warning).length;
   const validCount = rows.length - errorCount;
+  const portfolioNamesValid = usedManagers.every((manager) => (
+    (portfolioNamesByAssignee[manager.id] ?? manager.name).trim().length > 0
+  ));
 
   const renderManagerSelect = (row: ForceSalesImportRow, index: number) => (
     <select
@@ -120,7 +133,7 @@ export function ForceSalesPortfolioImportPreview({
             <div className="min-w-0">
               <p className="text-[10px] font-black uppercase tracking-wider text-muted-foreground">Archivo Excel · lote</p>
               <p className="truncate text-sm font-bold text-foreground" title={fileName}>{fileName}</p>
-              <p className="mt-0.5 truncate text-xs text-muted-foreground" title={portfolioName}>{portfolioName}</p>
+              <p className="mt-0.5 text-xs text-muted-foreground">Una cartera por gestor; puedes editar sus nombres abajo.</p>
             </div>
             <div className="flex flex-wrap gap-2 text-xs">
               <Badge variant="secondary">Gestor por cliente</Badge>
@@ -128,6 +141,27 @@ export function ForceSalesPortfolioImportPreview({
               <Badge variant="secondary">Saldo vacío = 0</Badge>
             </div>
           </div>
+
+          <section className="min-w-0 shrink-0 rounded-2xl border border-border bg-card p-3 sm:p-4" aria-label="Nombres de las carteras">
+            <div className="mb-3">
+              <h2 className="text-sm font-bold text-foreground">Nombre de cada cartera</h2>
+              <p className="mt-1 text-xs text-muted-foreground">Cada nombre se inicializa con el usuario asignado, por ejemplo, RUTA 3 o RUTA 5.</p>
+            </div>
+            <div className="grid min-w-0 grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-3">
+              {usedManagers.map((manager) => <label key={manager.id} className="min-w-0 space-y-1 text-xs font-bold text-muted-foreground">
+                <span className="flex flex-wrap items-center justify-between gap-2"><span>{manager.name}</span><span className="font-normal">{manager.customerCount} clientes</span></span>
+                <Input
+                  value={portfolioNamesByAssignee[manager.id] ?? manager.name}
+                  onChange={(event) => onPortfolioNameChange(manager.id, event.target.value)}
+                  maxLength={180}
+                  disabled={importing}
+                  aria-label={`Nombre de la cartera de ${manager.name}`}
+                  className="min-w-0 max-w-full"
+                />
+              </label>)}
+            </div>
+            {!portfolioNamesValid && <p role="alert" className="mt-2 text-xs text-destructive">Escribe un nombre para cada cartera antes de continuar.</p>}
+          </section>
 
           <ImportReviewSummary total={rows.length} valid={validCount} skipped={errorCount} warnings={warningCount} entityLabel="clientes" />
 
@@ -206,8 +240,8 @@ export function ForceSalesPortfolioImportPreview({
 
           <footer className="flex shrink-0 flex-col items-stretch gap-2 border-t border-border/70 pt-3 sm:flex-row sm:items-center sm:justify-between sm:gap-3 sm:pt-4">
             <Button variant="outline" onClick={onBack} disabled={importing} className="w-full sm:w-auto"><ArrowLeft className="mr-2 size-4" />Volver a la carga</Button>
-            <Button onClick={() => { setConfirmText(''); setConfirmOpen(true); }} disabled={importing || errorCount > 0 || !rows.length} className="w-full font-bold sm:w-auto">
-              {importing ? <><RefreshCw className="mr-2 size-4 animate-spin" />Importando clientes…</> : <><Upload className="mr-2 size-4" />Importar {validCount} clientes en {managers.length} carteras</>}
+            <Button onClick={() => { setConfirmText(''); setConfirmOpen(true); }} disabled={importing || errorCount > 0 || !portfolioNamesValid || !rows.length} className="w-full font-bold sm:w-auto">
+              {importing ? <><RefreshCw className="mr-2 size-4 animate-spin" />Importando clientes…</> : <><Upload className="mr-2 size-4" />Importar {validCount} clientes en {usedManagers.length} carteras</>}
             </Button>
           </footer>
         </div>
@@ -224,7 +258,7 @@ export function ForceSalesPortfolioImportPreview({
           <DialogContent className="max-w-md">
             <DialogHeader><div className="flex flex-col items-center gap-3 py-3 text-center"><div className="flex size-16 items-center justify-center rounded-full bg-emerald-500/10 text-emerald-500"><CheckCircle2 className="size-10" /></div><DialogTitle className="nh-section-title">{result?.idempotentReplay ? 'Carga recuperada' : 'Importación completada'}</DialogTitle><DialogDescription>{result?.idempotentReplay ? 'El servidor confirmó que este lote ya se había guardado. No se duplicaron los clientes.' : `Se registraron ${result?.created || 0} clientes en ${result?.portfolios?.length || 0} carteras.`}</DialogDescription></div></DialogHeader>
             <div className="max-h-48 space-y-2 overflow-auto rounded-xl border border-border p-3 text-xs">
-              {(result?.portfolios || []).map((portfolio) => <div key={portfolio.id} className="flex min-w-0 items-center justify-between gap-3"><span className="min-w-0 break-words font-semibold">{portfolio.assignedToName || portfolio.name}</span><Badge variant="secondary" className="shrink-0">{portfolio.memberCount} clientes</Badge></div>)}
+              {(result?.portfolios || []).map((portfolio) => <div key={portfolio.id} className="flex min-w-0 items-center justify-between gap-3"><span className="min-w-0 break-words font-semibold">{portfolio.name}</span><Badge variant="secondary" className="shrink-0">{portfolio.memberCount} clientes</Badge></div>)}
               {(result?.warnings || []).slice(0, 8).map((warning, index) => <p key={`${index}-${warning}`} className="break-words text-amber-700 dark:text-amber-300">{warning}</p>)}
             </div>
             <DialogFooter><Button className="w-full" onClick={onDone}>Continuar a Carteras</Button></DialogFooter>
