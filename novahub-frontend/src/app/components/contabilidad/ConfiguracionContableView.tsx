@@ -437,20 +437,20 @@ function getAccountOptionStateForType(
   allowBankParent = false,
   anyType = allowAnyAccountType,
 ): AccountOptionState {
-  if (account.isActive === false) return { disabled: true, label: 'Inactiva', className: 'text-red-500' }
+  if (account.isActive === false) return { disabled: true, label: 'Inactiva · actívala en Plan de cuentas para poder usarla', className: 'text-red-500' }
   const typeMismatch = String(account.type).toUpperCase() !== expectedType
   if (typeMismatch && !anyType) {
     return { disabled: true, label: `Activa · Es ${accountTypeLabel(account.type)}`, className: 'text-amber-500' }
   }
   const grouping = isGroupingAccount(account)
   if (account.acceptsPostings === false && !(allowBankParent && grouping)) {
-    return { disabled: true, label: 'Activa · No contabilizable', className: 'text-red-500' }
+    return { disabled: true, label: 'No se puede usar: no acepta movimientos. Actívalo en Plan de cuentas o elige una subcuenta', className: 'text-red-500' }
   }
   if (grouping) {
     if (allowBankParent) {
       return { disabled: false, label: 'Activa · Cuenta mayor; recibe el subtotal de sus bancos hijos', className: 'text-amber-500' }
     }
-    return { disabled: true, label: 'Activa · Agrupadora; requiere cuenta de detalle', className: 'text-red-500' }
+    return { disabled: true, label: 'No se puede usar: es agrupadora. Elige una de sus subcuentas', className: 'text-red-500' }
   }
   if (typeMismatch) return { disabled: false, label: `Activa · Es ${accountTypeLabel(account.type)} (tipo distinto al habitual)`, className: 'text-amber-500' }
   return { disabled: false, label: 'Activa · Disponible', className: 'text-emerald-600' }
