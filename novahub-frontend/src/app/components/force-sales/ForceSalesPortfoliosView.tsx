@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import * as XLSX from 'xlsx';
-import { ArrowLeftRight, Check, ChevronDown, Download, FileSpreadsheet, LocateFixed, MapPin, Plus, RefreshCw, Route, Search, Upload, UserRound, X } from 'lucide-react';
-import { forceSalesPortfoliosService, type ForceSalesPortfolio, type ForceSalesPortfolioImportResult, type UnlinkedForceSalesProspect } from '../../services/force-sales-portfolios.service';
+import { ArrowLeftRight, Check, ChevronDown, Download, FileSpreadsheet, LocateFixed, MapPin, MoreHorizontal, Plus, RefreshCw, Route, Search, Upload, UserRound, X } from 'lucide-react';
+import { forceSalesPortfoliosService, type AvailablePortfolioCustomer, type ForceSalesPortfolio, type ForceSalesPortfolioImportResult, type UnlinkedForceSalesProspect } from '../../services/force-sales-portfolios.service';
 import { ForceSalesPortfolioImportPreview, type ForceSalesImportManager, type ForceSalesImportRow } from './ForceSalesPortfolioImportPreview';
 import { toast } from '../../services/toast';
 import { normalizeSearchText } from '../../utils/searchText';
@@ -10,6 +10,8 @@ import { Button } from '../ui/button';
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '../ui/dialog';
 import { Input } from '../ui/input';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../ui/select';
+import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from '../ui/dropdown-menu';
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '../ui/table';
 
 const normalizeHeader = (value: unknown) => String(value ?? '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase().replace(/[^a-z0-9]/g, '');
 function errorMessage(error: unknown, fallback: string) {
@@ -169,6 +171,18 @@ export function ForceSalesPortfoliosView({
   const [pointSearch, setPointSearch] = useState('');
   const [transferTarget, setTransferTarget] = useState<Record<string, string>>({});
   const [expandedPortfolio, setExpandedPortfolio] = useState<string | null>(null);
+  const [portfolioSearch, setPortfolioSearch] = useState('');
+  const [createPortfolioOpen, setCreatePortfolioOpen] = useState(false);
+  const [newPortfolioName, setNewPortfolioName] = useState('');
+  const [newPortfolioAssignee, setNewPortfolioAssignee] = useState('');
+  const [availableCustomerSearch, setAvailableCustomerSearch] = useState('');
+  const [availableCustomers, setAvailableCustomers] = useState<AvailablePortfolioCustomer[]>([]);
+  const [availableCustomerCache, setAvailableCustomerCache] = useState<Record<string, AvailablePortfolioCustomer>>({});
+  const [availableCustomerTotal, setAvailableCustomerTotal] = useState(0);
+  const [availableCustomersLoading, setAvailableCustomersLoading] = useState(false);
+  const [availableCustomersLoadingMore, setAvailableCustomersLoadingMore] = useState(false);
+  const [selectedNewCustomerIds, setSelectedNewCustomerIds] = useState<string[]>([]);
+  const [creatingPortfolio, setCreatingPortfolio] = useState(false);
   const fileInput = useRef<HTMLInputElement>(null);
 
   const reload = useCallback(async () => {
@@ -176,14 +190,14 @@ export function ForceSalesPortfoliosView({
     try {
       const [portfolioResult, managerResult] = await Promise.all([
         forceSalesPortfoliosService.list(true),
-        canImport || canTransfer ? forceSalesPortfoliosService.assignees() : Promise.resolve([]),
+        canImport || canTransfer || canManage ? forceSalesPortfoliosService.assignees() : Promise.resolve([]),
       ]);
       setPortfolios(Array.isArray(portfolioResult) ? portfolioResult : []);
       setManagers(Array.isArray(managerResult) ? managerResult : []);
     } catch (error: unknown) {
       toast.error(errorMessage(error, 'No se pudieron cargar las carteras.'));
     } finally { setLoading(false); }
-  }, [canImport, canTransfer]);
+  }, [canImport, canManage, canTransfer]);
 
   useEffect(() => {
     let cancelled = false;
@@ -191,7 +205,7 @@ export function ForceSalesPortfoliosView({
       try {
         const [portfolioResult, managerResult] = await Promise.all([
           forceSalesPortfoliosService.list(true),
-          canImport || canTransfer ? forceSalesPortfoliosService.assignees() : Promise.resolve([]),
+          canImport || canTransfer || canManage ? forceSalesPortfoliosService.assignees() : Promise.resolve([]),
         ]);
         if (!cancelled) {
           setPortfolios(Array.isArray(portfolioResult) ? portfolioResult : []);
@@ -205,10 +219,42 @@ export function ForceSalesPortfoliosView({
     };
     void load();
     return () => { cancelled = true; };
-  }, [canImport, canTransfer]);
+  }, [canImport, canManage, canTransfer]);
+
+  useEffect(() => {
+    if (!createPortfolioOpen) return undefined;
+    let cancelled = false;
+    const timer = window.setTimeout(() => {
+      setAvailableCustomersLoading(true);
+      setAvailableCustomers([]);
+      void forceSalesPortfoliosService.availableCustomers(availableCustomerSearch, 0, 50)
+        .then((page) => {
+          if (cancelled) return;
+          const items = Array.isArray(page?.items) ? page.items : [];
+          setAvailableCustomers(items);
+          setAvailableCustomerTotal(Number(page?.total) || 0);
+          setAvailableCustomerCache((current) => ({ ...current, ...Object.fromEntries(items.map((item) => [item.id, item])) }));
+        })
+        .catch((error: unknown) => {
+          if (!cancelled) toast.error(errorMessage(error, 'No se pudieron cargar los clientes disponibles.'));
+        })
+        .finally(() => { if (!cancelled) setAvailableCustomersLoading(false); });
+    }, 250);
+    return () => { cancelled = true; window.clearTimeout(timer); };
+  }, [availableCustomerSearch, createPortfolioOpen]);
 
   const activePortfolios = useMemo(() => portfolios.filter((portfolio) => portfolio.status === 'ACTIVE'), [portfolios]);
   const activeCustomers = useMemo(() => portfolios.reduce((count, portfolio) => count + portfolio.customers.filter((row) => row.assignmentStatus === 'ACTIVE').length, 0), [portfolios]);
+  const filteredPortfolios = useMemo(() => {
+    const query = normalizeSearchText(portfolioSearch);
+    return portfolios.map((portfolio) => ({
+      portfolio,
+      customers: query ? portfolio.customers.filter((row) => normalizeSearchText([
+        row.customer.name, row.customer.code, row.customer.address, row.customer.city, row.customer.department, row.customer.phone,
+      ].filter(Boolean).join(' ')).includes(query)) : portfolio.customers,
+    })).filter((item) => !query || item.customers.length > 0);
+  }, [portfolioSearch, portfolios]);
+  const matchedPortfolioCustomerCount = useMemo(() => filteredPortfolios.reduce((count, item) => count + item.customers.length, 0), [filteredPortfolios]);
   const usedPortfolioManagerCount = useMemo(() => new Set(rows.map((row) => row._managerId).filter(Boolean)).size, [rows]);
   const selectedProspectRecord = useMemo(() => unlinkedProspects.find((prospect) => prospect.id === selectedProspect) || null, [selectedProspect, unlinkedProspects]);
   const filteredUnlinkedProspects = useMemo(() => {
@@ -220,6 +266,47 @@ export function ForceSalesPortfoliosView({
       `${prospect.lat}, ${prospect.lng}`,
     ].filter(Boolean).join(' ')).includes(query));
   }, [pointSearch, unlinkedProspects]);
+  const openCreatePortfolio = () => {
+    setNewPortfolioName('');
+    setNewPortfolioAssignee('');
+    setAvailableCustomerSearch('');
+    setAvailableCustomers([]);
+    setAvailableCustomerCache({});
+    setAvailableCustomerTotal(0);
+    setSelectedNewCustomerIds([]);
+    setCreatePortfolioOpen(true);
+  };
+
+  const loadMoreAvailableCustomers = async () => {
+    if (availableCustomersLoadingMore || availableCustomersLoading || availableCustomers.length >= availableCustomerTotal) return;
+    setAvailableCustomersLoadingMore(true);
+    try {
+      const page = await forceSalesPortfoliosService.availableCustomers(availableCustomerSearch, availableCustomers.length, 50);
+      const items = Array.isArray(page?.items) ? page.items : [];
+      setAvailableCustomers((current) => {
+        const seen = new Set(current.map((item) => item.id));
+        return [...current, ...items.filter((item) => !seen.has(item.id))];
+      });
+      setAvailableCustomerCache((current) => ({ ...current, ...Object.fromEntries(items.map((item) => [item.id, item])) }));
+      setAvailableCustomerTotal(Number(page?.total) || 0);
+    } catch (error: unknown) {
+      toast.error(errorMessage(error, 'No se pudieron cargar más clientes.'));
+    } finally { setAvailableCustomersLoadingMore(false); }
+  };
+
+  const createManualPortfolio = async () => {
+    const name = newPortfolioName.trim();
+    if (!name || !newPortfolioAssignee || !selectedNewCustomerIds.length) return;
+    setCreatingPortfolio(true);
+    try {
+      const result = await forceSalesPortfoliosService.create({ name, assignedToId: newPortfolioAssignee, customerIds: selectedNewCustomerIds });
+      toast.success(`Cartera “${result.name}” creada con ${result.memberCount} clientes.`);
+      setCreatePortfolioOpen(false);
+      await reload();
+    } catch (error: unknown) {
+      toast.error(errorMessage(error, 'No se pudo crear la cartera. Actualiza los clientes seleccionados e inténtalo de nuevo.'));
+    } finally { setCreatingPortfolio(false); }
+  };
   const openImport = () => {
     setFileName(''); setRows([]); setImportErrors([]); setImportResult(null); setImportPreviewOpen(false);
     setPortfolioNamesByAssignee({}); setOpeningBalanceDate(localDate()); setOpeningBalanceCurrency('NIO'); setBatchId(crypto.randomUUID());
@@ -417,9 +504,19 @@ export function ForceSalesPortfoliosView({
           </div>
           <div className="flex shrink-0 flex-wrap gap-2">
             <Button variant="outline" onClick={() => void reload()} disabled={loading} aria-label="Actualizar carteras"><RefreshCw className={`mr-2 size-4 ${loading ? 'animate-spin' : ''}`} />Actualizar</Button>
+            {canManage && canTransfer && <Button variant="outline" onClick={openCreatePortfolio}><Plus className="mr-2 size-4" />Nueva cartera</Button>}
             {canImport && <Button onClick={openImport}><Plus className="mr-2 size-4" />Importar cartera</Button>}
           </div>
         </header>
+
+        <div className="rounded-2xl border border-border bg-card p-3 shadow-sm sm:p-4">
+          <label className="relative block">
+            <Search className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
+            <Input value={portfolioSearch} onChange={(event) => setPortfolioSearch(event.target.value)} className="h-11 pl-10 pr-10" placeholder="Buscar clientes por nombre, código, dirección o teléfono…" aria-label="Buscar clientes dentro de las carteras" />
+            {portfolioSearch && <button type="button" onClick={() => setPortfolioSearch('')} className="absolute right-2 top-1/2 flex size-7 -translate-y-1/2 items-center justify-center rounded-md text-muted-foreground hover:bg-muted hover:text-foreground" aria-label="Limpiar búsqueda"><X className="size-4" /></button>}
+          </label>
+          {portfolioSearch && <p className="mt-2 text-xs text-muted-foreground">{matchedPortfolioCustomerCount} clientes coinciden en {filteredPortfolios.length} carteras.</p>}
+        </div>
 
         <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
           <div className="rounded-2xl border border-border bg-card p-4 shadow-sm"><p className="text-xs font-bold uppercase tracking-wider text-muted-foreground">Carteras activas</p><p className="mt-2 text-2xl font-black text-foreground">{activePortfolios.length}</p></div>
@@ -429,7 +526,7 @@ export function ForceSalesPortfoliosView({
         {loading && <div className="rounded-2xl border border-border bg-card p-8 text-center text-sm text-muted-foreground">Cargando carteras…</div>}
         {!loading && !portfolios.length && <div className="rounded-2xl border border-dashed border-border bg-card p-10 text-center"><FileSpreadsheet className="mx-auto size-9 text-muted-foreground" /><h2 className="mt-3 font-bold text-foreground">Todavía no hay carteras</h2><p className="mx-auto mt-1 max-w-lg text-sm text-muted-foreground">Importa el Excel de clientes con el gestor indicado en cada fila. Los clientes se crearán en Ventas y quedarán agrupados por gestor.</p>{canImport && <Button className="mt-4" onClick={openImport}><Upload className="mr-2 size-4" />Importar primer listado</Button>}</div>}
 
-        {!loading && portfolios.map((portfolio) => {
+        {!loading && filteredPortfolios.map(({ portfolio, customers: visibleCustomers }) => {
           const isExpanded = expandedPortfolio === portfolio.id;
           const activeRows = portfolio.customers.filter((row) => row.assignmentStatus === 'ACTIVE');
           const locatedRows = activeRows.filter((row) => row.hasMapLocation && row.mapPointId);
@@ -442,13 +539,19 @@ export function ForceSalesPortfoliosView({
               : 'Se cargarán todos los puntos al planificador para revisar el orden, la fecha y el responsable antes de guardar.';
           return (
             <article key={portfolio.id} className="overflow-hidden rounded-2xl border border-border bg-card shadow-sm">
-              <button type="button" onClick={() => setExpandedPortfolio(isExpanded ? null : portfolio.id)} className="flex w-full min-w-0 flex-col gap-3 p-4 text-left sm:flex-row sm:items-center sm:justify-between sm:p-5" aria-expanded={isExpanded}>
+              <div className="flex min-w-0 items-start gap-2 p-4 sm:items-center sm:p-5">
+              <button type="button" onClick={() => setExpandedPortfolio(isExpanded ? null : portfolio.id)} className="flex min-w-0 flex-1 flex-col gap-3 text-left sm:flex-row sm:items-center sm:justify-between" aria-expanded={isExpanded}>
                 <div className="flex min-w-0 items-start gap-3">
                   <span className="mt-0.5 rounded-xl bg-primary/10 p-2 text-primary"><UserRound className="size-5" /></span>
                   <div className="min-w-0"><div className="flex flex-wrap items-center gap-2"><h2 className="nh-section-title break-words text-foreground">{portfolio.name}</h2><Badge variant={portfolio.status === 'ACTIVE' ? 'default' : 'secondary'}>{portfolio.status === 'ACTIVE' ? 'Activa' : 'Cerrada'}</Badge></div><p className="mt-1 text-sm text-muted-foreground">Gestor: <span className="font-semibold text-foreground">{portfolio.assignedTo?.name || 'Sin usuario'}</span> · {activeRows.length} clientes activos · carga {new Date(portfolio.createdAt).toLocaleDateString('es-NI')}</p></div>
                 </div>
                 <div className="flex shrink-0 items-center gap-2"><ChevronDown className={`size-4 transition-transform ${isExpanded ? 'rotate-180' : ''}`} /></div>
               </button>
+              {canManage && portfolio.status === 'ACTIVE' && <DropdownMenu>
+                <DropdownMenuTrigger asChild><Button type="button" variant="ghost" size="icon" className="shrink-0" aria-label={`Acciones de la cartera ${portfolio.name}`}><MoreHorizontal className="size-5" /></Button></DropdownMenuTrigger>
+                <DropdownMenuContent align="end"><DropdownMenuItem variant="destructive" onSelect={() => void closePortfolio(portfolio)}><X className="size-4" />Cerrar cartera</DropdownMenuItem></DropdownMenuContent>
+              </DropdownMenu>}
+              </div>
               {isExpanded && <div className="border-t border-border p-3 sm:p-5">
                 {portfolio.status === 'ACTIVE' && canCreateRoute && <div className="mb-4 flex min-w-0 flex-col gap-3 rounded-xl border border-primary/20 bg-primary/[0.035] p-3 sm:flex-row sm:items-center sm:justify-between sm:p-4">
                   <div className="min-w-0">
@@ -463,27 +566,88 @@ export function ForceSalesPortfoliosView({
                     <Route className="mr-2 size-4" />Armar ruta
                   </Button>
                 </div>}
-                {!portfolio.customers.length ? <p className="rounded-xl bg-muted/30 p-4 text-sm text-muted-foreground">No hay clientes en esta cartera.</p> : <div className="space-y-2">
-                  {portfolio.customers.map((row) => {
+                {!visibleCustomers.length ? <p className="rounded-xl bg-muted/30 p-4 text-sm text-muted-foreground">No hay clientes que coincidan en esta cartera.</p> : <Table responsiveCards={false} copyableCells={false} containerClassName="max-h-[min(58vh,34rem)] overflow-auto overscroll-contain" className="min-w-[720px]">
+                  <TableHeader className="sticky top-0 z-20 bg-card shadow-sm">
+                    <TableRow className="hover:bg-card">
+                      <TableHead>Cliente</TableHead><TableHead>Dirección</TableHead><TableHead>Estado</TableHead><TableHead className="text-right">Acciones</TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                  {visibleCustomers.map((row) => {
                     const customer = row.customer;
                     const active = row.assignmentStatus === 'ACTIVE' && portfolio.status === 'ACTIVE';
                     const canOfferLocate = canLocate && active;
                     const targets = activePortfolios.filter((target) => target.id !== portfolio.id);
-                    return <div key={row.assignmentId} className="flex min-w-0 flex-col gap-3 rounded-xl border border-border/70 bg-background/60 p-3 sm:flex-row sm:items-center sm:justify-between">
-                      <div className="min-w-0"><div className="flex flex-wrap items-center gap-2"><p className="break-words font-bold text-foreground">{customer.name}</p>{customer.code && <span className="text-xs text-muted-foreground">{customer.code}</span>}{active && <Badge variant={row.hasMapLocation ? 'default' : 'secondary'}>{row.hasMapLocation ? 'Ubicado' : row.mapPointId ? 'Vinculado · pendiente de ubicación' : 'Pendiente de vincular'}</Badge>}{!active && <Badge variant="secondary">Histórico</Badge>}</div><p className="mt-1 break-words text-xs text-muted-foreground">{[customer.address, customer.city, customer.department].filter(Boolean).join(' · ') || 'Sin dirección'}{customer.phone ? ` · ${customer.phone}` : ''}</p>{customer.balance !== undefined && <p className="mt-1 text-xs text-muted-foreground">Saldo: <span className="font-semibold text-foreground">{formatBalance(customer.balance)}</span></p>}</div>
-                      <div className="flex shrink-0 flex-wrap gap-2">
+                    return <TableRow key={row.assignmentId}>
+                      <TableCell className="max-w-[260px] whitespace-normal"><p className="break-words font-bold text-foreground">{customer.name}</p><p className="mt-0.5 text-xs text-muted-foreground">{customer.code || 'Sin código'}{customer.balance !== undefined ? ` · Saldo ${formatBalance(customer.balance)}` : ''}</p></TableCell>
+                      <TableCell className="max-w-[250px] whitespace-normal text-xs text-muted-foreground">{[customer.address, customer.city, customer.department].filter(Boolean).join(' · ') || 'Sin dirección'}{customer.phone ? ` · ${customer.phone}` : ''}</TableCell>
+                      <TableCell>{active && <Badge variant={row.hasMapLocation ? 'default' : 'secondary'}>{row.hasMapLocation ? 'Ubicado' : row.mapPointId ? 'Vinculado · pendiente' : 'Pendiente de vincular'}</Badge>}{!active && <Badge variant="secondary">Histórico</Badge>}</TableCell>
+                      <TableCell className="text-right"><div className="flex justify-end gap-2">
                         {canOfferLocate && <Button size="sm" variant="outline" onClick={() => void openLocateDialog(portfolio, customer.id, customer.name)}><MapPin className="mr-1.5 size-4" />Ubicar</Button>}
                         {canTransfer && active && targets.length > 0 && <div className="flex max-w-full items-center gap-1.5"><select aria-label={`Cartera destino para ${customer.name}`} className="h-9 max-w-[190px] rounded-lg border border-input bg-background px-2 text-xs text-foreground" value={transferTarget[customer.id] || ''} onChange={(event) => setTransferTarget((current) => ({ ...current, [customer.id]: event.target.value }))}><option value="">Mover a…</option>{targets.map((target) => <option key={target.id} value={target.id}>{target.assignedTo?.name} · {target.name}</option>)}</select><Button size="sm" variant="outline" aria-label={`Transferir ${customer.name}`} onClick={() => void transferCustomer(portfolio, customer.id, customer.name)}><ArrowLeftRight className="size-4" /></Button></div>}
-                      </div>
-                    </div>;
+                      </div></TableCell>
+                    </TableRow>;
                   })}
-                </div>}
-                {canManage && portfolio.status === 'ACTIVE' && <div className="mt-4 flex justify-end border-t border-border pt-3"><Button size="sm" variant="outline" onClick={() => void closePortfolio(portfolio)}><X className="mr-1.5 size-4" />Cerrar cartera</Button></div>}
+                  </TableBody>
+                </Table>}
               </div>}
             </article>
           );
         })}
+        {!loading && portfolios.length > 0 && !filteredPortfolios.length && <div className="rounded-2xl border border-dashed border-border bg-card p-10 text-center text-sm text-muted-foreground">No encontramos clientes que coincidan con “{portfolioSearch}”.</div>}
       </div>
+
+      <Dialog open={createPortfolioOpen} onOpenChange={(open) => { if (!creatingPortfolio) setCreatePortfolioOpen(open); }}>
+        <DialogContent className="max-h-[92dvh] w-[calc(100vw-1rem)] max-w-3xl overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle className="nh-section-title flex items-center gap-2"><Plus className="size-5" />Crear cartera</DialogTitle>
+            <DialogDescription>Elige un nombre, el usuario responsable y clientes activos que todavía no pertenezcan a otra cartera activa.</DialogDescription>
+          </DialogHeader>
+          <div className="grid min-w-0 gap-3 sm:grid-cols-2">
+            <label className="min-w-0 space-y-1.5 text-xs font-bold text-muted-foreground">Nombre de la cartera
+              <Input value={newPortfolioName} onChange={(event) => setNewPortfolioName(event.target.value)} maxLength={180} placeholder="Ej. Ruta 5" autoFocus />
+            </label>
+            <label className="min-w-0 space-y-1.5 text-xs font-bold text-muted-foreground">Usuario responsable
+              <Select value={newPortfolioAssignee} onValueChange={setNewPortfolioAssignee}>
+                <SelectTrigger aria-label="Usuario responsable de la cartera"><SelectValue placeholder="Selecciona un usuario" /></SelectTrigger>
+                <SelectContent>{managers.map((manager) => <SelectItem key={manager.id} value={manager.id}>{manager.name}</SelectItem>)}</SelectContent>
+              </Select>
+            </label>
+          </div>
+          <div className="space-y-2 rounded-xl border border-border p-3">
+            <div className="flex min-w-0 flex-col gap-1 sm:flex-row sm:items-end sm:justify-between">
+              <div><p className="text-sm font-bold text-foreground">Clientes disponibles</p><p className="text-xs text-muted-foreground">Los clientes ya asignados a una cartera activa no aparecen aquí.</p></div>
+              <Badge variant="secondary">{selectedNewCustomerIds.length} / 500 seleccionados</Badge>
+            </div>
+            <label className="relative block">
+              <Search className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
+              <Input value={availableCustomerSearch} onChange={(event) => setAvailableCustomerSearch(event.target.value)} className="pl-10" placeholder="Buscar por nombre, código o RUC…" aria-label="Buscar clientes disponibles" />
+            </label>
+            <div className="max-h-[min(38vh,24rem)] overflow-y-auto overscroll-contain rounded-lg border border-border/70" aria-label="Lista de clientes disponibles">
+              {availableCustomersLoading && <p className="p-5 text-center text-sm text-muted-foreground">Buscando clientes…</p>}
+              {!availableCustomersLoading && availableCustomers.map((customer) => {
+                const selected = selectedNewCustomerIds.includes(customer.id);
+                return <label key={customer.id} className="flex cursor-pointer items-start gap-3 border-b border-border/60 p-3 last:border-0 hover:bg-muted/30">
+                  <input type="checkbox" checked={selected} disabled={!selected && selectedNewCustomerIds.length >= 500} onChange={(event) => setSelectedNewCustomerIds((current) => event.target.checked ? [...current, customer.id] : current.filter((id) => id !== customer.id))} className="mt-1 size-4 shrink-0 accent-primary" />
+                  <span className="min-w-0 flex-1"><span className="block break-words text-sm font-semibold text-foreground">{customer.name}{customer.companyName ? ` · ${customer.companyName}` : ''}</span><span className="mt-0.5 block break-words text-xs text-muted-foreground">{customer.code}{customer.taxId || customer.ruc ? ` · ${customer.taxId || customer.ruc}` : ''}{customer.address || customer.city ? ` · ${[customer.address, customer.city].filter(Boolean).join(', ')}` : ''}</span></span>
+                </label>;
+              })}
+              {!availableCustomersLoading && !availableCustomers.length && <p className="p-5 text-center text-sm text-muted-foreground">No hay clientes disponibles que coincidan con la búsqueda.</p>}
+            </div>
+            {availableCustomers.length < availableCustomerTotal && <div className="flex justify-center"><Button type="button" variant="outline" size="sm" onClick={() => void loadMoreAvailableCustomers()} disabled={availableCustomersLoadingMore}><ChevronDown className={`mr-2 size-4 ${availableCustomersLoadingMore ? 'animate-bounce' : ''}`} />{availableCustomersLoadingMore ? 'Cargando…' : `Cargar más (${availableCustomers.length} de ${availableCustomerTotal})`}</Button></div>}
+          </div>
+          {!!selectedNewCustomerIds.length && <div className="rounded-xl border border-primary/20 bg-primary/[0.035] p-3">
+            <p className="mb-2 text-xs font-bold text-foreground">Selección ({selectedNewCustomerIds.length})</p>
+            <div className="flex max-h-24 flex-wrap gap-1.5 overflow-y-auto">
+              {selectedNewCustomerIds.map((id) => <button key={id} type="button" onClick={() => setSelectedNewCustomerIds((current) => current.filter((item) => item !== id))} className="inline-flex max-w-full items-center gap-1 rounded-full border border-border bg-background px-2.5 py-1 text-xs text-foreground hover:border-destructive/40 hover:text-destructive" title="Quitar de la selección"><span className="max-w-[220px] truncate">{availableCustomerCache[id]?.name || 'Cliente seleccionado'}</span><X className="size-3 shrink-0" /></button>)}
+            </div>
+          </div>}
+          <DialogFooter className="flex-wrap">
+            <Button type="button" variant="outline" onClick={() => setCreatePortfolioOpen(false)} disabled={creatingPortfolio}>Cancelar</Button>
+            <Button type="button" onClick={() => void createManualPortfolio()} disabled={creatingPortfolio || !newPortfolioName.trim() || !newPortfolioAssignee || !selectedNewCustomerIds.length}><Plus className="mr-2 size-4" />{creatingPortfolio ? 'Creando cartera…' : 'Crear cartera'}</Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
 
       <Dialog open={importOpen} onOpenChange={(open) => { if (!importing) setImportOpen(open); }}>
         <DialogContent className="max-h-[92dvh] w-[calc(100vw-1rem)] max-w-5xl overflow-y-auto">

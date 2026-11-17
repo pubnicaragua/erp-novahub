@@ -43,6 +43,24 @@ export type ForceSalesPortfolioImportResult = {
   portfolios?: Array<{ id: string; name: string; assignedToId: string | null; assignedToName: string | null; memberCount: number }>;
 };
 
+export type AvailablePortfolioCustomer = {
+  id: string;
+  code: string;
+  name: string;
+  companyName?: string | null;
+  taxId?: string | null;
+  ruc?: string | null;
+  address?: string | null;
+  city?: string | null;
+};
+
+export type AvailablePortfolioCustomersPage = {
+  items: AvailablePortfolioCustomer[];
+  total: number;
+  skip: number;
+  take: number;
+};
+
 export type UnlinkedForceSalesProspect = {
   id: string;
   name: string;
@@ -55,6 +73,8 @@ export type UnlinkedForceSalesProspect = {
 export const forceSalesPortfoliosService = {
   list: (includeHistory = true) => api.get<ForceSalesPortfolio[]>('/force-sales/portfolios', { params: { includeHistory } }),
   assignees: () => api.get<Array<{ id: string; name: string; activeRouteCount: number }>>('/force-sales/assignees'),
+  availableCustomers: (search = '', skip = 0, take = 50) => api.get<AvailablePortfolioCustomersPage>('/force-sales/portfolios/available-customers', { params: { search, skip, take } }),
+  create: (data: { name: string; assignedToId: string; customerIds: string[] }) => api.post<{ id: string; name: string; status: 'ACTIVE'; assignedToId: string; createdAt: string; memberCount: number }>('/force-sales/portfolios', data),
   unlinkedProspects: () => api.get<UnlinkedForceSalesProspect[]>('/force-sales/portfolios/unlinked-prospects'),
   import: (data: {
     rows: Array<Record<string, unknown>>;
