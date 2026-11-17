@@ -29,6 +29,7 @@ let pendingPointAccuracy = null;
 let pendingPointMarker = null;
 let quickPointLocationRequestId = 0;
 let pendingPortfolioLocationSelection = null;
+let portfolioLocationRequestId = 0;
 let focusedQuickPointMarker = null;
 let focusedQuickPointBusinessId = null;
 let presenceMarkers = new Map();

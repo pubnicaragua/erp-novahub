@@ -95,7 +95,7 @@ export function ForceSalesCustomerLinkDialog({ open, point = null, canCreate = f
     <Dialog open={open} onOpenChange={(next) => { if (!next) close(); }}>
       <DialogContent className="!z-[121] w-[calc(100%-2rem)] !max-w-md" overlayClassName="!z-[120]">
         <DialogHeader>
-          <DialogTitle>{creating ? 'Nuevo cliente de ventas' : 'Cliente de ventas'}</DialogTitle>
+          <DialogTitle className="nh-section-title">{creating ? 'Nuevo cliente de ventas' : 'Cliente de ventas'}</DialogTitle>
         </DialogHeader>
         {!creating && (
           <>

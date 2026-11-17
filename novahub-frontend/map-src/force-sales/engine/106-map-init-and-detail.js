@@ -221,8 +221,9 @@ googleMap.addListener('click', event => {
   if(pendingPortfolioLocationSelection){
     const selection=pendingPortfolioLocationSelection;
     pendingPortfolioLocationSelection=null;
-    window.parent?.postMessage({source:'novahub-force-sales',type:'force-sales-portfolio-location-picked',portfolioId:selection.portfolioId,customerId:selection.customerId,lat:event.latLng.lat(),lng:event.latLng.lng()},location.origin);
-    toast('Ubicación enviada para guardar en la cartera.');
+    portfolioLocationRequestId+=1;
+    window.parent?.postMessage({source:'novahub-force-sales',type:'force-sales-portfolio-location-picked',portfolioId:selection.portfolioId,customerId:selection.customerId,customerName:selection.customerName,lat:event.latLng.lat(),lng:event.latLng.lng()},location.origin);
+    toast(`Ubicación enviada para guardar y vincular el punto${selection.customerName?` de ${selection.customerName}`:''}.`);
     return;
   }
   if(handleWorkZoneMapClick(event))return;

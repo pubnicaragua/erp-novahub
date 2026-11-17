@@ -60,7 +60,7 @@ export function ForceSalesMapHeader({ modes, activeMode, onModeChange, summary, 
             ))}
           </div>
         ) : (
-          <h1 className="text-sm font-black text-primary dark:text-foreground">{label}</h1>
+          <h1 className="nh-section-title text-primary dark:text-foreground">{label}</h1>
         )}
         {guide && <ViewGuide guide={guide} />}
       </div>

@@ -111,7 +111,7 @@ export function ForceSalesPortfolioImportPreview({
           <header className="flex shrink-0 flex-wrap items-start justify-between gap-4 border-b border-border/70 pb-4">
             <div className="min-w-0">
               <p className="text-xs font-black uppercase tracking-[0.22em] text-primary">Importación de cartera</p>
-              <h1 className="mt-1 text-2xl font-black italic tracking-tight text-foreground sm:text-3xl">Previsualizar clientes</h1>
+              <h1 className="nh-module-title mt-1">Previsualizar clientes</h1>
               <p className="mt-1 max-w-3xl break-words text-xs leading-relaxed text-muted-foreground sm:text-sm">Revisa los datos y la asignación de cada gestor antes de crear los clientes y sus carteras.</p>
             </div>
           </header>
@@ -214,7 +214,7 @@ export function ForceSalesPortfolioImportPreview({
 
         <Dialog open={confirmOpen && !importing} onOpenChange={setConfirmOpen}>
           <DialogContent>
-            <DialogHeader><DialogTitle>Confirmar importación</DialogTitle><DialogDescription>Se crearán {validCount} clientes nuevos y se agruparán en carteras por gestor. Los nombres y direcciones existentes no se actualizarán. Escribe IMPORTAR para continuar.</DialogDescription></DialogHeader>
+            <DialogHeader><DialogTitle className="nh-section-title">Confirmar importación</DialogTitle><DialogDescription>Se crearán {validCount} clientes nuevos y se agruparán en carteras por gestor. Los nombres y direcciones existentes no se actualizarán. Escribe IMPORTAR para continuar.</DialogDescription></DialogHeader>
             <Input aria-label="Escribe IMPORTAR para confirmar" value={confirmText} onChange={(event) => setConfirmText(event.target.value.toUpperCase())} placeholder="IMPORTAR" autoFocus />
             <DialogFooter><Button variant="outline" onClick={() => setConfirmOpen(false)}>Cancelar</Button><Button onClick={() => { setConfirmOpen(false); onConfirm(); }} disabled={confirmText !== 'IMPORTAR'}>Confirmar importación</Button></DialogFooter>
           </DialogContent>
@@ -222,7 +222,7 @@ export function ForceSalesPortfolioImportPreview({
 
         <Dialog open={result !== null} onOpenChange={(open) => { if (!open) onDone(); }}>
           <DialogContent className="max-w-md">
-            <DialogHeader><div className="flex flex-col items-center gap-3 py-3 text-center"><div className="flex size-16 items-center justify-center rounded-full bg-emerald-500/10 text-emerald-500"><CheckCircle2 className="size-10" /></div><DialogTitle className="text-xl">{result?.idempotentReplay ? 'Carga recuperada' : 'Importación completada'}</DialogTitle><DialogDescription>{result?.idempotentReplay ? 'El servidor confirmó que este lote ya se había guardado. No se duplicaron los clientes.' : `Se registraron ${result?.created || 0} clientes en ${result?.portfolios?.length || 0} carteras.`}</DialogDescription></div></DialogHeader>
+            <DialogHeader><div className="flex flex-col items-center gap-3 py-3 text-center"><div className="flex size-16 items-center justify-center rounded-full bg-emerald-500/10 text-emerald-500"><CheckCircle2 className="size-10" /></div><DialogTitle className="nh-section-title">{result?.idempotentReplay ? 'Carga recuperada' : 'Importación completada'}</DialogTitle><DialogDescription>{result?.idempotentReplay ? 'El servidor confirmó que este lote ya se había guardado. No se duplicaron los clientes.' : `Se registraron ${result?.created || 0} clientes en ${result?.portfolios?.length || 0} carteras.`}</DialogDescription></div></DialogHeader>
             <div className="max-h-48 space-y-2 overflow-auto rounded-xl border border-border p-3 text-xs">
               {(result?.portfolios || []).map((portfolio) => <div key={portfolio.id} className="flex min-w-0 items-center justify-between gap-3"><span className="min-w-0 break-words font-semibold">{portfolio.assignedToName || portfolio.name}</span><Badge variant="secondary" className="shrink-0">{portfolio.memberCount} clientes</Badge></div>)}
               {(result?.warnings || []).slice(0, 8).map((warning, index) => <p key={`${index}-${warning}`} className="break-words text-amber-700 dark:text-amber-300">{warning}</p>)}

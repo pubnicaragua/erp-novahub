@@ -137,10 +137,20 @@ window.addEventListener('message',event=>{
     const portfolioId=String(event.data.portfolioId||'').trim();
     const customerId=String(event.data.customerId||'').trim();
     if(!portfolioId||!customerId)return;
-    pendingPortfolioLocationSelection={portfolioId,customerId};
-    activeView='map';
+    const customerName=String(event.data.customerName||'').trim();
+    pendingPortfolioLocationSelection={portfolioId,customerId,customerName};
+    const locationRequestId=++portfolioLocationRequestId;
+    setActiveView('map');
+    updateView();
     closeBusinessDetailPopup();
-    toast('Toca el punto del mapa donde está el cliente. No se registrará una visita.');
+    toast(`Buscando tu ubicación. Toca el punto donde está ${customerName||'el cliente'}; se creará y quedará vinculado directamente.`);
+    withLocationAccess(position=>{
+      if(locationRequestId!==portfolioLocationRequestId||!pendingPortfolioLocationSelection)return;
+      googleMap.panTo({lat:position.coords.latitude,lng:position.coords.longitude});
+      googleMap.setZoom(17);
+    },'No se pudo centrar el mapa en tu ubicación',()=>{
+      if(locationRequestId===portfolioLocationRequestId&&pendingPortfolioLocationSelection)toast('No se pudo obtener el GPS. Puedes tocar manualmente la ubicación del cliente en el mapa.');
+    },{maximumAge:0});
     return;
   }
   if(event.data?.type==='force-sales-start-portfolio-route'){
@@ -149,6 +159,7 @@ window.addEventListener('message',event=>{
   }
   if(event.data?.type==='force-sales-cancel-portfolio-location'){
     pendingPortfolioLocationSelection=null;
+    portfolioLocationRequestId+=1;
     return;
   }
   if(event.data?.type==='force-sales-refresh')refreshForceSalesData(event.data.event||{});

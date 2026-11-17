@@ -57,7 +57,7 @@ function EmptyMapState({ title, description }: { title: string; description: str
   return (
     <div className="flex h-full items-center justify-center p-6">
       <div role="status" className="max-w-md rounded-2xl border border-border bg-card p-6 text-center shadow-sm">
-        <h2 className="text-base font-bold text-foreground">{title}</h2>
+        <h2 className="nh-section-title text-foreground">{title}</h2>
         <p className="mt-2 text-sm text-muted-foreground">{description}</p>
       </div>
     </div>
@@ -71,7 +71,7 @@ export function FuerzaComercialPage({ activeSubModule, onSubModuleChange, isSide
   const routeImportInputRef = useRef<HTMLInputElement>(null);
   const pendingProspectTargetRef = useRef<string | null>(null);
   const pendingRouteTargetRef = useRef<string | null>(null);
-  const pendingPortfolioLocationRef = useRef<{ portfolioId: string; customerId: string } | null>(null);
+  const pendingPortfolioLocationRef = useRef<{ portfolioId: string; customerId: string; customerName: string } | null>(null);
   const pendingPortfolioRouteRef = useRef<{ portfolioName: string; assignedToId: string | null; prospectIds: string[] } | null>(null);
   const streamStatusRef = useRef<'connected' | 'reconnecting'>('reconnecting');
   const searchQueryRef = useRef('');
@@ -252,7 +252,7 @@ export function FuerzaComercialPage({ activeSubModule, onSubModuleChange, isSide
         }
         void forceSalesPortfoliosService.saveLocation(pendingLocation.portfolioId, pendingLocation.customerId, lat, lng)
           .then((result) => {
-            toast.success('Ubicación guardada en el mapa; no se registró una visita.');
+            toast.success(`Punto guardado y vinculado a ${pendingLocation.customerName}. No se registró una visita.`);
             sendToMap('force-sales-focus-prospect', { targetId: result.id });
           })
           .catch((error: unknown) => toast.error(forceSalesErrorMessage(error, 'No se pudo guardar la ubicación.')));
@@ -327,7 +327,7 @@ export function FuerzaComercialPage({ activeSubModule, onSubModuleChange, isSide
       <div className="flex min-h-[calc(100vh-4rem)] items-center justify-center bg-background p-6">
         <div className="max-w-md rounded-3xl border border-border/60 bg-card p-8 text-center shadow-xl">
           <ShieldAlert className="mx-auto mb-4 size-10 text-destructive" />
-          <h1 className="text-2xl font-black tracking-tight">Acceso restringido</h1>
+          <h1 className="nh-module-title">Acceso restringido</h1>
           <p className="mt-2 text-sm text-muted-foreground">
             Esta herramienta no está habilitada para tu empresa o tu rol.
           </p>
@@ -355,8 +355,8 @@ export function FuerzaComercialPage({ activeSubModule, onSubModuleChange, isSide
             pendingPortfolioRouteRef.current = request;
             onSubModuleChange?.('fuerza-comercial');
           }}
-          onPickLocation={(portfolioId, customerId) => {
-            pendingPortfolioLocationRef.current = { portfolioId, customerId };
+          onPickLocation={(portfolioId, customerId, customerName) => {
+            pendingPortfolioLocationRef.current = { portfolioId, customerId, customerName };
             onSubModuleChange?.('fuerza-comercial');
           }}
         />
@@ -406,7 +406,7 @@ export function FuerzaComercialPage({ activeSubModule, onSubModuleChange, isSide
         {mapConfig && !mapSrc && <EmptyMapState title={noModeMessage.title} description={noModeMessage.description} />}
         {mapFrameError && <div className="absolute inset-0 z-20 flex items-center justify-center bg-background/95 p-6">
           <div role="alert" className="max-w-md rounded-2xl border border-border bg-card p-6 text-center shadow-xl">
-            <h2 className="text-base font-bold text-foreground">No se pudo cargar el mapa comercial</h2>
+            <h2 className="nh-section-title text-foreground">No se pudo cargar el mapa comercial</h2>
             <p className="mt-2 text-sm text-muted-foreground">El servidor respondió con una página distinta al mapa. Reintenta para volver a cargarlo.</p>
             <button type="button" onClick={() => {
               setMapFrameError(false);

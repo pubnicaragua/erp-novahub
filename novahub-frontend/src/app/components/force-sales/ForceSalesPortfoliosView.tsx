@@ -135,7 +135,7 @@ export function ForceSalesPortfoliosView({
   canLocate: boolean;
   canCreateRoute: boolean;
   onBuildRoute: (request: { portfolioName: string; assignedToId: string | null; prospectIds: string[] }) => void;
-  onPickLocation: (portfolioId: string, customerId: string) => void;
+  onPickLocation: (portfolioId: string, customerId: string, customerName: string) => void;
   isSidebarCollapsed?: boolean;
 }) {
   const [portfolios, setPortfolios] = useState<ForceSalesPortfolio[]>([]);
@@ -347,7 +347,7 @@ export function ForceSalesPortfoliosView({
     navigator.geolocation.getCurrentPosition(async (position) => {
       try {
         await forceSalesPortfoliosService.saveLocation(locating.portfolioId, locating.customerId, position.coords.latitude, position.coords.longitude);
-        toast.success('Ubicación guardada en el mapa; no se registró una visita.'); setLocating(null); await reload();
+        toast.success(`Punto guardado y vinculado a ${locating.customerName}. No se registró una visita.`); setLocating(null); await reload();
       } catch (error: unknown) { toast.error(errorMessage(error, 'No se pudo guardar la ubicación.')); }
     }, (error) => toast.error(error.message || 'No se pudo obtener la ubicación del dispositivo.'), { enableHighAccuracy: true, timeout: 15000, maximumAge: 0 });
   };
@@ -387,7 +387,7 @@ export function ForceSalesPortfoliosView({
         <header className="flex min-w-0 flex-col gap-3 md:flex-row md:items-end md:justify-between">
           <div className="min-w-0">
             <p className="text-xs font-black uppercase tracking-[0.2em] text-primary">Fuerza Comercial</p>
-            <h1 className="mt-1 text-2xl font-black italic tracking-tight text-foreground sm:text-3xl">Carteras de clientes</h1>
+            <h1 className="nh-module-title mt-1">Carteras de clientes</h1>
             <p className="mt-1 max-w-3xl text-sm text-muted-foreground">Listados asignados por gestor. Después de ubicar un cliente, el punto aparece en el mapa para registrar visitas.</p>
           </div>
           <div className="flex shrink-0 flex-wrap gap-2">
@@ -396,10 +396,9 @@ export function ForceSalesPortfoliosView({
           </div>
         </header>
 
-        <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3">
+        <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
           <div className="rounded-2xl border border-border bg-card p-4 shadow-sm"><p className="text-xs font-bold uppercase tracking-wider text-muted-foreground">Carteras activas</p><p className="mt-2 text-2xl font-black text-foreground">{activePortfolios.length}</p></div>
           <div className="rounded-2xl border border-border bg-card p-4 shadow-sm"><p className="text-xs font-bold uppercase tracking-wider text-muted-foreground">Clientes asignados</p><p className="mt-2 text-2xl font-black text-foreground">{activeCustomers}</p></div>
-          <div className="rounded-2xl border border-border bg-card p-4 shadow-sm"><p className="text-xs font-bold uppercase tracking-wider text-muted-foreground">Usuarios</p><p className="mt-2 text-2xl font-black text-foreground">{managers.length || '—'}</p></div>
         </div>
 
         {loading && <div className="rounded-2xl border border-border bg-card p-8 text-center text-sm text-muted-foreground">Cargando carteras…</div>}
@@ -421,9 +420,9 @@ export function ForceSalesPortfoliosView({
               <button type="button" onClick={() => setExpandedPortfolio(isExpanded ? null : portfolio.id)} className="flex w-full min-w-0 flex-col gap-3 p-4 text-left sm:flex-row sm:items-center sm:justify-between sm:p-5" aria-expanded={isExpanded}>
                 <div className="flex min-w-0 items-start gap-3">
                   <span className="mt-0.5 rounded-xl bg-primary/10 p-2 text-primary"><UserRound className="size-5" /></span>
-                  <div className="min-w-0"><div className="flex flex-wrap items-center gap-2"><h2 className="break-words text-base font-black text-foreground sm:text-lg">{portfolio.name}</h2><Badge variant={portfolio.status === 'ACTIVE' ? 'default' : 'secondary'}>{portfolio.status === 'ACTIVE' ? 'Activa' : 'Cerrada'}</Badge></div><p className="mt-1 text-sm text-muted-foreground">Gestor: <span className="font-semibold text-foreground">{portfolio.assignedTo?.name || 'Sin usuario'}</span> · {activeRows.length} clientes activos · carga {new Date(portfolio.createdAt).toLocaleDateString('es-NI')}</p></div>
+                  <div className="min-w-0"><div className="flex flex-wrap items-center gap-2"><h2 className="nh-section-title break-words text-foreground">{portfolio.name}</h2><Badge variant={portfolio.status === 'ACTIVE' ? 'default' : 'secondary'}>{portfolio.status === 'ACTIVE' ? 'Activa' : 'Cerrada'}</Badge></div><p className="mt-1 text-sm text-muted-foreground">Gestor: <span className="font-semibold text-foreground">{portfolio.assignedTo?.name || 'Sin usuario'}</span> · {activeRows.length} clientes activos · carga {new Date(portfolio.createdAt).toLocaleDateString('es-NI')}</p></div>
                 </div>
-                <div className="flex shrink-0 items-center gap-2"><span className="text-xs text-muted-foreground">{portfolio.sourceFileName || 'Importación'}</span><ChevronDown className={`size-4 transition-transform ${isExpanded ? 'rotate-180' : ''}`} /></div>
+                <div className="flex shrink-0 items-center gap-2"><ChevronDown className={`size-4 transition-transform ${isExpanded ? 'rotate-180' : ''}`} /></div>
               </button>
               {isExpanded && <div className="border-t border-border p-3 sm:p-5">
                 {portfolio.status === 'ACTIVE' && canCreateRoute && <div className="mb-4 flex min-w-0 flex-col gap-3 rounded-xl border border-primary/20 bg-primary/[0.035] p-3 sm:flex-row sm:items-center sm:justify-between sm:p-4">
@@ -463,7 +462,7 @@ export function ForceSalesPortfoliosView({
 
       <Dialog open={importOpen} onOpenChange={(open) => { if (!importing) setImportOpen(open); }}>
         <DialogContent className="max-h-[92dvh] w-[calc(100vw-1rem)] max-w-5xl overflow-y-auto">
-          <DialogHeader><DialogTitle className="flex items-center gap-2"><FileSpreadsheet className="size-5" />Importar cartera comercial</DialogTitle><DialogDescription>Usa la plantilla normal de clientes con la columna Gestor/Usuario. Se crearán clientes nuevos en Ventas y una cartera por gestor.</DialogDescription></DialogHeader>
+          <DialogHeader><DialogTitle className="nh-section-title flex items-center gap-2"><FileSpreadsheet className="size-5" />Importar cartera comercial</DialogTitle><DialogDescription>Usa la plantilla normal de clientes con la columna Gestor/Usuario. Se crearán clientes nuevos en Ventas y una cartera por gestor.</DialogDescription></DialogHeader>
           <div className="grid min-w-0 grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-[minmax(0,1fr)_minmax(0,1fr)_minmax(0,1fr)_minmax(200px,1.1fr)]">
             <label className="min-w-0 space-y-1 text-xs font-bold text-muted-foreground">Nombre del lote<Input value={portfolioName} onChange={(event) => setPortfolioName(event.target.value)} maxLength={120} className="min-w-0 max-w-full" /></label>
             <label className="min-w-0 space-y-1 text-xs font-bold text-muted-foreground">Fecha de corte<Input type="date" value={openingBalanceDate} onChange={(event) => setOpeningBalanceDate(event.target.value)} className="min-w-0 max-w-full" /></label>
@@ -478,8 +477,8 @@ export function ForceSalesPortfoliosView({
 
       <Dialog open={Boolean(locating)} onOpenChange={(open) => { if (!open) { setPointPickerOpen(false); setPointSearch(''); setLocating(null); } }}>
         <DialogContent className="max-w-lg">
-          <DialogHeader><DialogTitle className="flex items-center gap-2"><LocateFixed className="size-5" />Ubicar cliente en el mapa</DialogTitle><DialogDescription>{locating?.customerName}. Guardar una ubicación crea o actualiza el punto comercial, sin registrar una visita.</DialogDescription></DialogHeader>
-          <div className="grid gap-2 sm:grid-cols-2"><Button variant="outline" onClick={saveCurrentGps}><LocateFixed className="mr-2 size-4" />Usar ubicación GPS</Button><Button variant="outline" onClick={() => { if (locating) onPickLocation(locating.portfolioId, locating.customerId); setLocating(null); }}><MapPin className="mr-2 size-4" />Marcar en mapa</Button></div>
+          <DialogHeader><DialogTitle className="nh-section-title flex items-center gap-2"><LocateFixed className="size-5" />Ubicar cliente en el mapa</DialogTitle><DialogDescription>{locating?.customerName}. Puedes guardar tu GPS actual o elegir el punto en el mapa. El punto quedará vinculado directamente a este cliente y no registrará una visita.</DialogDescription></DialogHeader>
+          <div className="grid gap-2 sm:grid-cols-2"><Button variant="outline" onClick={saveCurrentGps}><LocateFixed className="mr-2 size-4" />Usar ubicación GPS</Button><Button variant="outline" onClick={() => { if (locating) onPickLocation(locating.portfolioId, locating.customerId, locating.customerName); setLocating(null); }}><MapPin className="mr-2 size-4" />Crear punto y vincular</Button></div>
           <div className="space-y-2 rounded-xl border border-border p-3">
             <p className="text-sm font-bold text-foreground">Vincular punto existente</p>
             <p className="text-xs text-muted-foreground">Busca un punto con ubicación que todavía no esté vinculado a un cliente.</p>
@@ -515,7 +514,7 @@ export function ForceSalesPortfoliosView({
       >
         <DialogContent className="!z-[61] w-[calc(100%-1rem)] max-w-2xl gap-3 p-4 sm:p-6" overlayClassName="!z-[60]">
           <DialogHeader className="pr-8 text-left">
-            <DialogTitle>Buscar punto comercial</DialogTitle>
+            <DialogTitle className="nh-section-title">Buscar punto comercial</DialogTitle>
             <DialogDescription>Busca por nombre, dirección o coordenadas y selecciona el punto que corresponde a este cliente.</DialogDescription>
           </DialogHeader>
           <div className="relative min-w-0">
