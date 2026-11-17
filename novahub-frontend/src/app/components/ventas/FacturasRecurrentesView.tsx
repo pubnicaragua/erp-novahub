@@ -43,6 +43,7 @@ import { SalesCustomerActionButton } from './SalesCustomerActionButton';
 import { normalizeCurrency, type SupportedCurrency } from '../../utils/currency';
 import { normalizeSalesExtraCharges, getSalesExtraChargesPayload, getSalesExtraChargesAmount, getLegacySalesExtraCostFields, type SalesExtraChargeLine } from '../../utils/salesCharges';
 import { initialDocumentExchangeRate } from '../../utils/currency';
+import { getMonthlyRecurrenceFactor, getRecurrenceFrequencyLabel, RecurrenceScheduleFields, recurrenceFrequencyOptions } from '../ui/RecurrenceScheduleFields';
 
 interface FacturasRecurrentesViewProps {
   data: RecurringInvoice[];
@@ -71,12 +72,8 @@ const statusOptions = [
   { label: 'Cancelada',  value: 'CANCELLED', color: SALES_STATUS_COLORS.CANCELLED },
 ];
 
-const frequencyOptions = [
-  { label: 'Semanal',    value: 'WEEKLY' },
-  { label: 'Mensual',    value: 'MONTHLY' },
-  { label: 'Trimestral', value: 'QUARTERLY' },
-  { label: 'Anual',      value: 'YEARLY' },
-];
+const frequencyOptions = recurrenceFrequencyOptions;
+const frequencyLabelByKey = Object.fromEntries(frequencyOptions.map((option) => [option.value, option.label]));
 
 const toIsoDate = (dateValue?: string) => {
   if (!dateValue) return '';
@@ -88,24 +85,51 @@ const toDateInputValue = (dateValue?: string) => {
   return dateValue.includes('T') ? dateValue.split('T')[0] : dateValue;
 };
 
-const calculateNextInvoiceDate = (frequency: string, startDate: string) => {
+const calculateNextInvoiceDate = (frequency: string, startDate: string, intervalDays?: number | null, selectedDay?: number | null) => {
   if (!startDate) return '';
   const base = new Date(startDate.includes('T') ? startDate : `${startDate}T00:00:00`);
   if (Number.isNaN(base.getTime())) return '';
   const next = new Date(base);
   switch ((frequency || '').toUpperCase()) {
+    case 'DAILY':
+      next.setDate(next.getDate() + 1);
+      break;
     case 'WEEKLY':
       next.setDate(next.getDate() + 7);
       break;
+    case 'BIWEEKLY':
+      next.setDate(next.getDate() + 14);
+      break;
+    case 'CUSTOM_DAYS':
+      next.setDate(next.getDate() + Math.max(2, Number(intervalDays || 7)));
+      break;
+    case 'TWICE_MONTHLY': {
+      const lastDay = new Date(next.getFullYear(), next.getMonth() + 1, 0).getDate();
+      if (next.getDate() < 15) next.setDate(15);
+      else if (next.getDate() < lastDay) next.setDate(lastDay);
+      else next.setMonth(next.getMonth() + 1, 15);
+      break;
+    }
     case 'QUARTERLY':
+      next.setDate(1);
       next.setMonth(next.getMonth() + 3);
+      next.setDate(Math.min(Number(selectedDay || base.getDate()), new Date(next.getFullYear(), next.getMonth() + 1, 0).getDate()));
+      break;
+    case 'SEMIANNUAL':
+      next.setDate(1);
+      next.setMonth(next.getMonth() + 6);
+      next.setDate(Math.min(Number(selectedDay || base.getDate()), new Date(next.getFullYear(), next.getMonth() + 1, 0).getDate()));
       break;
     case 'YEARLY':
+      next.setDate(1);
       next.setFullYear(next.getFullYear() + 1);
+      next.setDate(Math.min(Number(selectedDay || base.getDate()), new Date(next.getFullYear(), next.getMonth() + 1, 0).getDate()));
       break;
     case 'MONTHLY':
     default:
+      next.setDate(1);
       next.setMonth(next.getMonth() + 1);
+      next.setDate(Math.min(Number(selectedDay || base.getDate()), new Date(next.getFullYear(), next.getMonth() + 1, 0).getDate()));
       break;
   }
   return next.toISOString();
@@ -244,7 +268,10 @@ export function FacturasRecurrentesView({ data, summaryData, summaryLoading, sum
 
   const handleUpdate = async (id: string | number, updates: Partial<RecurringInvoice>) => {
     try {
-      await recurringInvoicesService.update(id.toString(), updates);
+      const current = data.find((row) => row.id === String(id));
+      const payload = { ...updates };
+      if (String(updates.frequency || '').toUpperCase() === 'CUSTOM_DAYS' && !payload.intervalDays && !current?.intervalDays) payload.intervalDays = 7;
+      await recurringInvoicesService.update(id.toString(), payload);
       onRefresh();
     } catch (e: any) {
       toast.error(e?.response?.data?.message || e?.message || 'Error al actualizar');
@@ -276,6 +303,7 @@ export function FacturasRecurrentesView({ data, summaryData, summaryLoading, sum
     commitLocalDoc({
       customerId: '',
       frequency: 'MONTHLY',
+      dayOfMonth: new Date().getDate(),
       startDate: new Date().toISOString().split('T')[0],
       endDate: '',
       nextInvoiceDate: calculateNextInvoiceDate('MONTHLY', new Date().toISOString().split('T')[0]),
@@ -325,7 +353,7 @@ export function FacturasRecurrentesView({ data, summaryData, summaryLoading, sum
     sourceExchangeRate: row.exchangeRate,
     summaryDetails: [
       { label: 'Moneda', value: row.currency || 'NIO' },
-      { label: 'Frecuencia', value: String(row.frequency || '').toLowerCase() || 'No definida' },
+      { label: 'Frecuencia', value: getRecurrenceFrequencyLabel(row.frequency) || 'No definida' },
     ],
     metadata: [
       { label: 'Inicio', value: formatDateEs(row.startDate) },
@@ -447,7 +475,7 @@ export function FacturasRecurrentesView({ data, summaryData, summaryLoading, sum
     const saveToastId = toast.loading(isCreating ? 'Creando factura recurrente...' : 'Guardando cambios...');
     const normalizedStartDate = toIsoDate(localDoc.startDate);
     const normalizedEndDate = localDoc.endDate ? toIsoDate(localDoc.endDate) : undefined;
-    const calculatedNextInvoiceDate = calculateNextInvoiceDate(localDoc.frequency, localDoc.startDate);
+    const calculatedNextInvoiceDate = calculateNextInvoiceDate(localDoc.frequency, localDoc.startDate, localDoc.intervalDays, localDoc.dayOfMonth);
     const normalizedItems = (localDoc.items || []).map((item: any) => {
       const resolvedItemType = String(item.itemType || (item.productId ? 'PRODUCT' : 'SERVICE')).toUpperCase();
       return {
@@ -473,6 +501,8 @@ export function FacturasRecurrentesView({ data, summaryData, summaryLoading, sum
         const created = await recurringInvoicesService.create({
           customerId: localDoc.customerId,
           frequency: localDoc.frequency,
+          intervalDays: localDoc.intervalDays,
+          dayOfMonth: localDoc.dayOfMonth,
           startDate: normalizedStartDate,
           endDate: normalizedEndDate,
           nextInvoiceDate: calculatedNextInvoiceDate,
@@ -499,6 +529,8 @@ export function FacturasRecurrentesView({ data, summaryData, summaryLoading, sum
             description: `Factura recurrente ${recurrentRef} - ${customerName}`,
             category: 'VENTAS_RECURRENTE',
             frequency: String(localDoc.frequency || 'MONTHLY').toLowerCase(),
+            intervalDays: localDoc.intervalDays,
+            dayOfMonth: localDoc.dayOfMonth,
             startDate: normalizedStartDate,
             endDate: normalizedEndDate,
             nextDate: calculatedNextInvoiceDate,
@@ -519,7 +551,6 @@ export function FacturasRecurrentesView({ data, summaryData, summaryLoading, sum
           ...updatePayload,
           startDate: normalizedStartDate,
           endDate: normalizedEndDate,
-          nextInvoiceDate: calculatedNextInvoiceDate,
           items: normalizedItems,
         } as any);
         toast.success('Factura recurrente actualizada', { id: saveToastId });
@@ -553,9 +584,8 @@ export function FacturasRecurrentesView({ data, summaryData, summaryLoading, sum
       )
     },
     { key: 'customer', header: 'Cliente', render: (_, row) => <span className="text-[13px] font-bold text-foreground">{row.customer?.name || 'Cliente'}</span> },
-    { key: 'frequency', header: 'Frecuencia', width: '120px', editable: canPerform('SALES_RECURRING', 'edit'), type: 'select', options: frequencyOptions,
-      render: (val) => { const freqMap: Record<string, string> = { WEEKLY: 'Semanal', MONTHLY: 'Mensual', QUARTERLY: 'Trimestral', YEARLY: 'Anual' };
-        return <Badge variant="secondary" className="text-[9px] font-black uppercase tracking-widest bg-blue-500/10 text-blue-500 border-none">{freqMap[(val||'').toUpperCase()] || val}</Badge>; } },
+    { key: 'frequency', header: 'Frecuencia', width: '190px', editable: canPerform('SALES_RECURRING', 'edit'), type: 'select', options: frequencyOptions,
+      render: (val) => <Badge variant="secondary" className="text-[9px] font-black uppercase tracking-widest bg-blue-500/10 text-blue-500 border-none">{getRecurrenceFrequencyLabel(val)}</Badge> },
     { key: 'total', header: 'Monto Ciclo', width: '150px',
       render: (val, row) => (
         <span className="text-[13px] font-black tabular-nums text-foreground">
@@ -567,13 +597,16 @@ export function FacturasRecurrentesView({ data, summaryData, summaryLoading, sum
     { key: 'nextInvoiceDate', header: 'Próxima Fecha', render: (val) => <div className="flex items-center gap-1.5 text-[10px] font-medium text-muted-foreground"><Calendar className="size-3" />{formatDateSafe(val)}</div> },
   ];
 
-  const activeRecurringInBaseCurrency = activeRecurringGroups.reduce((acc, group) => acc + (group.baseTotalCount === group.count && group.baseTotal !== null
-    ? group.baseTotal
-    : toBaseAmount(group.total, group.currency, group.exchangeRate)), 0);
+  const activeRecurringInBaseCurrency = activeRecurringGroups.reduce((acc, group) => {
+    const factor = getMonthlyRecurrenceFactor(group.frequency, group.intervalDays);
+    return acc + (group.baseTotalCount === group.count && group.baseTotal !== null
+      ? group.baseTotal * factor
+      : toBaseAmount(group.total, group.currency, group.exchangeRate) * factor);
+  }, 0);
   const activeRecurringOriginalBreakdown = Object.values(activeRecurringGroups.reduce((acc, group) => {
     const currency = normalizeCurrency(group.currency, baseCurrency) as SupportedCurrency;
     const current = acc[currency] || { currency, amount: 0, count: 0 };
-    current.amount += group.total;
+    current.amount += group.total * getMonthlyRecurrenceFactor(group.frequency, group.intervalDays);
     current.count += group.count;
     acc[currency] = current;
     return acc;
@@ -645,19 +678,26 @@ export function FacturasRecurrentesView({ data, summaryData, summaryLoading, sum
                   required={(localDoc?.items || []).some((item: any) => item.productId && resolveItemType(item) !== 'SERVICE')}
                   helpText="Cada factura generada usará esta bodega de salida."
                 />
-                <div><p className="text-[10px] text-muted-foreground mb-1">Frecuencia</p>
-                  <Select value={localDoc?.frequency || 'MONTHLY'} onValueChange={(newFrequency) => {
-                      const nextInvoiceDate = calculateNextInvoiceDate(newFrequency, localDoc?.startDate || '');
-                      setLocalDoc({ ...localDoc, frequency: newFrequency, nextInvoiceDate });
-                    }}><SelectTrigger size="sm" className="h-8 w-full rounded-lg border-input bg-background px-2 text-xs font-bold uppercase"><SelectValue /></SelectTrigger><SelectContent>{frequencyOptions.map(f => <SelectItem key={f.value} value={f.value}>{f.label}</SelectItem>)}</SelectContent></Select></div>
+                <RecurrenceScheduleFields
+                  frequency={localDoc?.frequency}
+                  intervalDays={localDoc?.intervalDays}
+                  dayOfMonth={localDoc?.dayOfMonth}
+                  startDate={localDoc?.startDate}
+                  disabled={!canEditDocument}
+                  onChange={(schedule) => setLocalDoc((current) => current ? {
+                    ...current,
+                    ...schedule,
+                    ...(isCreating ? { nextInvoiceDate: calculateNextInvoiceDate(schedule.frequency, current.startDate || '', schedule.intervalDays, schedule.dayOfMonth) } : {}),
+                  } : current)}
+                />
                 <div><p className="text-[10px] text-muted-foreground mb-1">Fecha Inicio</p>
                   <Input
                     type="date"
                     value={toDateInputValue(localDoc?.startDate)}
                     onChange={(e) => {
                       const newStartDate = e.target.value;
-                      const nextInvoiceDate = calculateNextInvoiceDate(localDoc?.frequency || 'MONTHLY', newStartDate);
-                      setLocalDoc({ ...localDoc, startDate: newStartDate, nextInvoiceDate });
+                      const nextInvoiceDate = isCreating ? calculateNextInvoiceDate(localDoc?.frequency || 'MONTHLY', newStartDate, localDoc?.intervalDays, localDoc?.dayOfMonth) : localDoc?.nextInvoiceDate;
+                      setLocalDoc({ ...localDoc, startDate: newStartDate, nextInvoiceDate, ...(isCreating && !localDoc?.dayOfMonth ? { dayOfMonth: new Date(`${newStartDate}T00:00:00`).getDate() } : {}) });
                     }}
                     className="h-8 text-xs"
                   /></div>

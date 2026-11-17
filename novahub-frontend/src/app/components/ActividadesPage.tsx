@@ -48,8 +48,26 @@ export const ActividadesPage = ({ activeSubModule, onSubModuleChange, isSidebarC
   const { user, canPerform } = useAuth();
   const queryClient = useQueryClient();
   const [internalActiveTab, setInternalActiveTab] = useState('tareas');
+  const [activityNotificationTarget, setActivityNotificationTarget] = useState<{ subModule: string; id: string } | null>(null);
   const activeTab = activeSubModule || internalActiveTab;
   const navRef = useRef<HTMLDivElement | null>(null);
+
+  useEffect(() => {
+    const handler = (event: Event) => {
+      const detail = (event as CustomEvent).detail || {};
+      if (detail.module !== 'actividades') return;
+      const subModule = String(detail.subModule || '');
+      const id = String(detail.taskId || detail.eventId || detail.reminderId || detail.targetId || '');
+      if (!id || !['tareas', 'eventos', 'reuniones', 'recordatorios'].includes(subModule)) return;
+      setActivityNotificationTarget({ subModule, id });
+    };
+    window.addEventListener('navigate-module', handler);
+    return () => window.removeEventListener('navigate-module', handler);
+  }, []);
+
+  const clearActivityNotificationTarget = (id: string) => {
+    setActivityNotificationTarget((target) => target?.id === id ? null : target);
+  };
 
   // Cada pestaña consulta solo sus datos cuando se activa. React Query conserva
   // los resultados por tenant y aborta la petición anterior al cambiar rápido.
@@ -254,7 +272,7 @@ export const ActividadesPage = ({ activeSubModule, onSubModuleChange, isSidebarC
                 transition={{ duration: 0.2 }}
               >
                 {activeTab === 'reportes' && <ReportesActividadesView />}
-                {activeTab === 'tareas' && <TareasView data={data.tareas} loading={loading} summaryError={activeQuery.isError} onRefresh={fetchData} />}
+                {activeTab === 'tareas' && <TareasView data={data.tareas} loading={loading} summaryError={activeQuery.isError} onRefresh={fetchData} notificationTargetId={activityNotificationTarget?.subModule === activeTab ? activityNotificationTarget.id : undefined} onClearNotificationTarget={clearActivityNotificationTarget} />}
                 {['eventos', 'reuniones'].includes(activeTab) && (
                   <EventosView
                     data={
@@ -266,6 +284,8 @@ export const ActividadesPage = ({ activeSubModule, onSubModuleChange, isSidebarC
                     loading={loading}
                     summaryError={activeQuery.isError}
                     onRefresh={fetchData}
+                    notificationTargetId={activityNotificationTarget?.subModule === activeTab ? activityNotificationTarget.id : undefined}
+                    onClearNotificationTarget={clearActivityNotificationTarget}
                   />
                 )}
                 {activeTab === 'calendario' && (
@@ -284,7 +304,7 @@ export const ActividadesPage = ({ activeSubModule, onSubModuleChange, isSidebarC
                     } : undefined}
                   />
                 )}
-                {activeTab === 'recordatorios' && <RecordatoriosView data={data.recordatorios} loading={loading} summaryError={activeQuery.isError} onRefresh={fetchData} />}
+                {activeTab === 'recordatorios' && <RecordatoriosView data={data.recordatorios} loading={loading} summaryError={activeQuery.isError} onRefresh={fetchData} notificationTargetId={activityNotificationTarget?.subModule === activeTab ? activityNotificationTarget.id : undefined} onClearNotificationTarget={clearActivityNotificationTarget} />}
                 {activeTab === 'bitacora' && <BitacoraView data={data.bitacora} loading={loading} summaryError={activeQuery.isError} onRefresh={fetchData} />}
               </motion.div>
             </AnimatePresence>

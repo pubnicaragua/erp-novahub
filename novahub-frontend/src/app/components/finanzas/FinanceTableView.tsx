@@ -699,7 +699,12 @@ export function FinanceTableView({
                         setCategoryTargetItem({ id: String(itemBeingEdited.id), key: col.key });
                         setIsCategoryDialogOpen(true);
                       } else {
-                        setItemBeingEdited({ ...itemBeingEdited, [col.key]: e.target.value });
+                        const nextItem = { ...itemBeingEdited, [col.key]: e.target.value };
+                        if (col.key === 'frequency' && e.target.value === 'CUSTOM_DAYS' && !Number(nextItem.intervalDays)) nextItem.intervalDays = 7;
+                        if (col.key === 'frequency' && ['MONTHLY', 'QUARTERLY', 'SEMIANNUAL', 'YEARLY'].includes(e.target.value) && !Number(nextItem.dayOfMonth)) {
+                          nextItem.dayOfMonth = new Date(nextItem.startDate || Date.now()).getDate();
+                        }
+                        setItemBeingEdited(nextItem);
                       }
                     }}
                   >
@@ -712,7 +717,7 @@ export function FinanceTableView({
                   <Input 
                     type={col.type === 'number' ? 'number' : col.type.includes('date') ? 'date' : 'text'}
                     value={itemBeingEdited[col.key] || ''}
-                    onChange={e => setItemBeingEdited({...itemBeingEdited, [col.key]: col.type === 'number' ? Number(e.target.value) : e.target.value})}
+                    onChange={e => setItemBeingEdited({...itemBeingEdited, [col.key]: col.type === 'number' ? (e.target.value ? Number(e.target.value) : null) : e.target.value})}
                     className="h-10 rounded-xl bg-background/50"
                   />
                 )}

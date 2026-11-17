@@ -36,6 +36,7 @@ import { createReportWorkbook } from '../../utils/reportWorkbook';
 import { contabilidadService } from '../../services/contabilidad.service';
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '../ui/dialog';
 import { Label } from '../ui/label';
+import { getMonthlyRecurrenceFactor, RecurrenceScheduleFields, recurrenceFrequencyOptions } from '../ui/RecurrenceScheduleFields';
 import { beginNotificationAction, completeNotificationAction, failNotificationAction } from '../../services/notification-action-coordinator';
 
 interface ExpenseCategoryOption { id: string; name: string; isActive?: boolean; }
@@ -49,13 +50,8 @@ const standardExpenseCategories = [
   { value: 'OTRO', label: 'Otro' },
 ];
 
-const freqOpts = [
-  { label: 'Semanal',    value: 'weekly' },  
-  { label: 'Mensual',    value: 'monthly' },
-  { label: 'Trimestral', value: 'quarterly' }, 
-  { label: 'Anual',      value: 'yearly' },
-];
-const freqMap: Record<string,string> = { weekly:'Semanal', monthly:'Mensual', quarterly:'Trimestral', yearly:'Anual' };
+const freqOpts = recurrenceFrequencyOptions;
+const freqMap: Record<string,string> = Object.fromEntries(freqOpts.flatMap((option) => [[option.value, option.label], [option.value.toLowerCase(), option.label]]));
 const statusOpts = [
   { label: 'Activo',     value: 'ACTIVE',    color: 'bg-primary/10 text-primary' },
   { label: 'Pausado',    value: 'PAUSED',    color: 'bg-primary/10 text-primary' },
@@ -103,7 +99,7 @@ export function GastosRecurrentesView({ data, summaryData, summaryLoading, summa
     if (id === 'NEW') {
       setLocalDoc({
         description: '',
-        frequency: 'monthly',
+        frequency: 'MONTHLY',
         startDate: new Date().toISOString(),
         amount: 0,
         currency: displayCurrency,
@@ -239,7 +235,13 @@ export function GastosRecurrentesView({ data, summaryData, summaryLoading, summa
     if (!current || String((current as any).originModule || 'PURCHASES_EXPENSES_REC') !== 'PURCHASES_EXPENSES_REC'
       || !canPerform('PURCHASES_EXPENSES_REC', 'read') || !canPerform('PURCHASES_EXPENSES_REC', 'edit')) return;
     const updateToastId = toast.loading('Guardando cambios en el gasto recurrente...');
-    try { await recurringExpensesService.update(id as string, updates); toast.success('Actualizado', { id: updateToastId }); onRefresh(); }
+    try {
+      const payload = { ...updates };
+      if (String(updates.frequency || '').toUpperCase() === 'CUSTOM_DAYS' && !payload.intervalDays && !current.intervalDays) payload.intervalDays = 7;
+      await recurringExpensesService.update(id as string, payload);
+      toast.success('Actualizado', { id: updateToastId });
+      onRefresh();
+    }
     catch (e: any) { toast.error(e?.response?.data?.message || e?.message || 'Error al actualizar', { id: updateToastId }); throw new Error('Update failed', { cause: e }); }
   };
 
@@ -517,17 +519,14 @@ export function GastosRecurrentesView({ data, summaryData, summaryLoading, summa
                   </p>
                 </div>
 
-                <div>
-                  <p className="text-[10px] text-muted-foreground mb-1">Frecuencia</p>
-                  <Select
-                    disabled={isNew ? !canPerform('PURCHASES_EXPENSES_REC', 'create') : !canPerform('PURCHASES_EXPENSES_REC', 'edit')}
-                    value={localDoc.frequency || 'monthly'} 
-                    onValueChange={(frequency) => setLocalDoc({ ...localDoc, frequency: frequency as RecurringExpense['frequency'] })}
-                  >
-                    <SelectTrigger className="h-8 text-xs font-bold uppercase text-primary"><SelectValue /></SelectTrigger>
-                    <SelectContent>{freqOpts.map(o => <SelectItem key={o.value} value={o.value}>{o.label}</SelectItem>)}</SelectContent>
-                  </Select>
-                </div>
+                <RecurrenceScheduleFields
+                  frequency={localDoc.frequency}
+                  intervalDays={localDoc.intervalDays}
+                  dayOfMonth={localDoc.dayOfMonth}
+                  startDate={localDoc.startDate}
+                  disabled={isNew ? !canPerform('PURCHASES_EXPENSES_REC', 'create') : !canPerform('PURCHASES_EXPENSES_REC', 'edit')}
+                  onChange={(schedule) => setLocalDoc((current) => current ? { ...current, ...schedule } : current)}
+                />
                 {!isNew && <div>
                   <p className="text-[10px] text-muted-foreground mb-1">Estado</p>
                   <div className="flex h-8 items-center"><Badge variant="outline" className={cn('text-[9px] font-black uppercase border-none', currentStatus?.color || 'bg-muted/20 text-muted-foreground')}>{currentStatus?.label || localDoc.status || 'Activa'}</Badge></div>
@@ -625,7 +624,7 @@ export function GastosRecurrentesView({ data, summaryData, summaryLoading, summa
   const toDisplayAmount = (amount: number, currency?: string, rate?: number) => valuationMode === 'CURRENT'
     ? convertCurrentAmount(amount, currency)
     : convertAmount(amount, currency, rate || globalRate);
-  const monthlyGroups = filteredRecurringSummaryGroups.filter((group) => group.frequency === 'MONTHLY');
+  const monthlyGroups = filteredRecurringSummaryGroups.map((group) => ({ ...group, amount: group.amount * getMonthlyRecurrenceFactor(group.frequency, group.intervalDays) }));
   const monthly = monthlyGroups.reduce((acc, group) =>
     acc + toDisplayAmount(group.amount, group.currency, group.exchangeRate), 0);
   const originalMonthlyAmounts = summarizeAmountsByCurrency(

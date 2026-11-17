@@ -1,5 +1,5 @@
 import React from 'react';
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { EditableDataTable } from '../ui/EditableDataTable';
 import { Reminder } from '../../types';
 import { Card } from '../ui/card';
@@ -27,12 +27,25 @@ interface RecordatoriosViewProps {
   loading: boolean;
   summaryError?: boolean;
   onRefresh: () => void;
+  notificationTargetId?: string;
+  onClearNotificationTarget?: (id: string) => void;
 }
 
-export const RecordatoriosView: React.FC<RecordatoriosViewProps> = ({ data, loading, summaryError = false, onRefresh }) => {
+export const RecordatoriosView: React.FC<RecordatoriosViewProps> = ({ data, loading, summaryError = false, onRefresh, notificationTargetId, onClearNotificationTarget }) => {
   const [searchTerm, setSearchTerm] = useState('');
   const [isAddOpen, setIsAddOpen] = useState(false);
   const [selectedReminder, setSelectedReminder] = useState<Reminder | null>(null);
+
+  useEffect(() => {
+    if (!notificationTargetId) return;
+    const reminder = data.find((item) => String(item.id) === notificationTargetId);
+    if (reminder) {
+      setSelectedReminder(reminder);
+      onClearNotificationTarget?.(notificationTargetId);
+    } else if (!loading) {
+      onClearNotificationTarget?.(notificationTargetId);
+    }
+  }, [notificationTargetId, data, loading, onClearNotificationTarget]);
 
   const { canPerform } = useAuth();
   const canViewHr = canPerform('HR', 'view');

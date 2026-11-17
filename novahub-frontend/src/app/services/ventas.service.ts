@@ -69,6 +69,8 @@ export interface InvoiceKpiSummary {
   total: number;
   groups: Array<{
     status: string;
+    frequency: string;
+    intervalDays?: number | null;
     currency: string;
     exchangeRate: number;
     count: number;

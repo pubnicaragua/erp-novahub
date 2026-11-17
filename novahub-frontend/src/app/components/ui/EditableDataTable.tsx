@@ -170,7 +170,6 @@ export function EditableDataTable<T extends { [key: string]: any }>({
   const [openingRowId, setOpeningRowId] = useState<string | number | null>(null);
   const tableScrollRef = useRef<HTMLDivElement>(null);
   const pointerInsideTable = useRef(false);
-  const scrollAnimationRef = useRef<number | null>(null);
   const [focusedCell, setFocusedCell] = useState({ rowIndex: 0, colIndex: 0 });
   const [horizontalScroll, setHorizontalScroll] = useState({ left: false, right: false });
   const hasRowEditAction = showRowEditAction && data.some((row) => canOpenRowEditor(row));
@@ -280,18 +279,18 @@ export function EditableDataTable<T extends { [key: string]: any }>({
   const getColumnScrollTargets = useCallback(() => {
     const element = tableScrollRef.current;
     if (!element) return [0];
-
-    let offset = showSelection ? 48 : 0;
     const boundaries = [0];
-    columns.forEach((column) => {
-      offset += Number.parseFloat(String(column.width || '140')) || 140;
-      boundaries.push(offset);
-    });
-
     const maxScroll = Math.max(0, element.scrollWidth - element.clientWidth);
+    const viewportLeft = element.getBoundingClientRect().left;
+    const cells = element.querySelectorAll<HTMLElement>('[data-slot="table"] thead th');
+    cells.forEach((cell, index) => {
+      if (showSelection && index === 0) return;
+      const right = cell.getBoundingClientRect().right - viewportLeft + element.scrollLeft;
+      boundaries.push(Math.min(maxScroll, Math.max(0, right)));
+    });
     boundaries.push(maxScroll);
     return [...new Set(boundaries)].sort((a, b) => a - b);
-  }, [columns, showSelection]);
+  }, [showSelection]);
 
   useEffect(() => {
     setData(initialData);
@@ -301,27 +300,29 @@ export function EditableDataTable<T extends { [key: string]: any }>({
     if (!showHorizontalControls || effectiveLayoutMode === 'cards') return;
     const element = tableScrollRef.current;
     if (!element) return;
-    const scrollStateRef = { current: horizontalScroll };
     const updateScrollState = () => {
       const nextState = {
         left: element.scrollLeft > 4,
         right: element.scrollLeft + element.clientWidth < element.scrollWidth - 4,
       };
-      if (nextState.left === scrollStateRef.current.left && nextState.right === scrollStateRef.current.right) return;
-      scrollStateRef.current = nextState;
-      setHorizontalScroll(nextState);
+      setHorizontalScroll((current) => current.left === nextState.left && current.right === nextState.right ? current : nextState);
     };
     updateScrollState();
     element.addEventListener('scroll', updateScrollState, { passive: true });
     const observer = new ResizeObserver(updateScrollState);
     observer.observe(element);
+    const table = element.querySelector<HTMLElement>('[data-slot="table"]');
+    if (table) observer.observe(table);
+    const mutationObserver = new MutationObserver(updateScrollState);
+    mutationObserver.observe(element, { childList: true, subtree: true, attributes: true, attributeFilter: ['style', 'class'] });
     window.addEventListener('resize', updateScrollState);
     return () => {
       element.removeEventListener('scroll', updateScrollState);
       observer.disconnect();
+      mutationObserver.disconnect();
       window.removeEventListener('resize', updateScrollState);
     };
-  }, [columns.length, data.length, horizontalScroll, effectiveLayoutMode, showHorizontalControls, tableMinWidth]);
+  }, [columns.length, data.length, effectiveLayoutMode, showHorizontalControls, tableMinWidth]);
 
   const scrollTable = (direction: 'left' | 'right') => {
     const element = tableScrollRef.current;
@@ -331,28 +332,9 @@ export function EditableDataTable<T extends { [key: string]: any }>({
     const nextPosition = direction === 'right'
       ? targets.find((target) => target > currentPosition + 4) ?? targets[targets.length - 1]
       : [...targets].reverse().find((target) => target < currentPosition - 4) ?? targets[0];
-    if (scrollAnimationRef.current !== null) cancelAnimationFrame(scrollAnimationRef.current);
-    const startPosition = element.scrollLeft;
-    const distance = nextPosition - startPosition;
-    if (Math.abs(distance) < 1) return;
-    const startTime = performance.now();
-    const duration = 170;
-    const animate = (now: number) => {
-      const progress = Math.min(1, (now - startTime) / duration);
-      const eased = 1 - Math.pow(1 - progress, 3);
-      element.scrollLeft = startPosition + distance * eased;
-      if (progress < 1) {
-        scrollAnimationRef.current = requestAnimationFrame(animate);
-      } else {
-        scrollAnimationRef.current = null;
-      }
-    };
-    scrollAnimationRef.current = requestAnimationFrame(animate);
+    if (Math.abs(nextPosition - currentPosition) < 1) return;
+    element.scrollTo({ left: nextPosition, behavior: 'smooth' });
   };
-
-  useEffect(() => () => {
-    if (scrollAnimationRef.current !== null) cancelAnimationFrame(scrollAnimationRef.current);
-  }, []);
 
   useEffect(() => {
     if (editingCell && inputRef.current) {

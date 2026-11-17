@@ -576,6 +576,9 @@ export interface InvoiceItem {
 }
 
 // ---- Recurring Invoices ----
+export type RecurrenceFrequency = 'DAILY' | 'WEEKLY' | 'BIWEEKLY' | 'CUSTOM_DAYS' | 'TWICE_MONTHLY' | 'MONTHLY' | 'QUARTERLY' | 'SEMIANNUAL' | 'YEARLY';
+export type RecurrenceFrequencyValue = RecurrenceFrequency | Lowercase<RecurrenceFrequency>;
+
 export interface RecurringInvoice {
   id: string;
   /** Consecutivo de la empresa (FRC-001). Lo asigna el servidor al crear. */
@@ -587,7 +590,9 @@ export interface RecurringInvoice {
   irRate?: number;
   irTaxId?: string | null;
   irAmount?: number;
-  frequency: 'weekly' | 'monthly' | 'quarterly' | 'yearly';
+  frequency: RecurrenceFrequencyValue;
+  intervalDays?: number | null;
+  dayOfMonth?: number | null;
   startDate: string;
   endDate?: string;
   nextInvoiceDate: string;
@@ -1148,7 +1153,9 @@ export interface RecurringSupplierInvoice {
   tenantId: string;
   supplierId: string;
   supplier?: Supplier;
-  frequency: 'weekly' | 'monthly' | 'quarterly' | 'yearly';
+  frequency: RecurrenceFrequencyValue;
+  intervalDays?: number | null;
+  dayOfMonth?: number | null;
   startDate: string;
   endDate?: string;
   nextInvoiceDate: string;
@@ -1418,7 +1425,9 @@ export interface RecurringExpense {
   account?: Account;
   supplierId?: string;
   supplier?: Supplier;
-  frequency: 'weekly' | 'monthly' | 'quarterly' | 'yearly';
+  frequency: RecurrenceFrequencyValue;
+  intervalDays?: number | null;
+  dayOfMonth?: number | null;
   startDate: string;
   endDate?: string;
   nextDate: string;
@@ -1439,7 +1448,7 @@ export interface RecurringExpense {
 }
 
 export type RecurringExpenseStatus = 'active' | 'paused' | 'expired' | 'cancelled' | 'ACTIVE' | 'PAUSED' | 'EXPIRED' | 'CANCELLED';
-export type Frequency = 'weekly' | 'monthly' | 'quarterly' | 'yearly' | 'WEEKLY' | 'MONTHLY' | 'QUARTERLY' | 'YEARLY';
+export type Frequency = RecurrenceFrequencyValue;
 
 // ---- Journal Entries ----
 export interface JournalEntry {

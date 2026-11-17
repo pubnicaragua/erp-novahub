@@ -16,6 +16,7 @@ import { toast } from '@/app/services/toast';
 import { FINANCE_AXIS_TICK, FINANCE_GRID, FINANCE_TOOLTIP_WRAPPER, FinanceTooltipCard, financeCategoryLabel } from './financeChartTheme';
 import { normalizeCurrency, summarizeAmountsByCurrency, type SupportedCurrency } from '../../utils/currency';
 import { SalesKpiCard } from '../ventas/SalesKpiCard';
+import { getMonthlyRecurrenceFactor } from '../ui/RecurrenceScheduleFields';
 
 interface Props {
   incomes: any[];
@@ -28,19 +29,6 @@ interface Props {
 const COLORS = ['#10b981', '#3b82f6', '#f59e0b', '#ef4444', '#8b5cf6', '#06b6d4', '#f97316', '#ec4899']
 
 const toList = (response: any) => Array.isArray(response) ? response : (Array.isArray(response?.data) ? response.data : []);
-
-const monthlyFactor = (frequency: unknown) => {
-  switch (String(frequency || '').toUpperCase()) {
-    case 'DAILY': return 365 / 12;
-    case 'WEEKLY': return 52 / 12;
-    case 'BIWEEKLY': return 26 / 12;
-    case 'QUARTERLY': return 1 / 3;
-    case 'SEMIANNUAL': return 1 / 6;
-    case 'YEARLY': return 1 / 12;
-    case 'MONTHLY':
-    default: return 1;
-  }
-};
 
 export function FinanceDashboardView({ incomes, expenses, recurringExpenses, recurringIncomes, onNavigate }: Props) {
   const indicatorsStartedAt = useRef<number | null>(typeof performance === 'undefined' ? null : performance.now());
@@ -147,11 +135,11 @@ export function FinanceDashboardView({ incomes, expenses, recurringExpenses, rec
   const activeRecurringExpenses = useMemo(() => recurringExpenses.filter((r: any) => r.status === 'ACTIVE' && Number(r.amount) > 0), [recurringExpenses]);
   const activeRecurringIncomes = useMemo(() => (recurringIncomes || []).filter((r: any) => r.status === 'ACTIVE' && Number(r.amount) > 0), [recurringIncomes]);
   const monthlyRecurring = useMemo(() =>
-    activeRecurringExpenses.reduce((a, r) => a + cv(r) * monthlyFactor(r.frequency), 0),
+    activeRecurringExpenses.reduce((a, r) => a + cv(r) * getMonthlyRecurrenceFactor(r.frequency, r.intervalDays), 0),
     [activeRecurringExpenses, valuationMode, convertAmount, convertCurrentAmount]
   );
   const monthlyRecurringIncome = useMemo(() =>
-    activeRecurringIncomes.reduce((a, r) => a + cv(r) * monthlyFactor(r.frequency), 0),
+    activeRecurringIncomes.reduce((a, r) => a + cv(r) * getMonthlyRecurrenceFactor(r.frequency, r.intervalDays), 0),
     [activeRecurringIncomes, valuationMode, convertAmount, convertCurrentAmount]
   );
   const projected30 = netCashFlow + monthlyRecurringIncome - monthlyRecurring;

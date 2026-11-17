@@ -37,6 +37,8 @@ interface EventosViewProps {
   summaryError?: boolean;
   onRefresh: () => void;
   mode?: 'eventos' | 'reuniones';
+  notificationTargetId?: string;
+  onClearNotificationTarget?: (id: string) => void;
 }
 
 const parseGuestEmails = (value: string) => [...new Set(value.split(',').map(item => item.trim().toLowerCase()).filter(Boolean))];
@@ -71,7 +73,7 @@ const buildInvitationText = (event: { title: string; startDate: string; endDate:
   `Invitados: ${event.guests.join(', ')}`,
 ].filter(Boolean).join('\n');
 
-export const EventosView: React.FC<EventosViewProps> = ({ data, loading, summaryError = false, onRefresh, mode = 'eventos' }) => {
+export const EventosView: React.FC<EventosViewProps> = ({ data, loading, summaryError = false, onRefresh, mode = 'eventos', notificationTargetId, onClearNotificationTarget }) => {
   const isMeetingMode = mode === 'reuniones';
   const [searchTerm, setSearchTerm] = useState('');
   const { currency, displayCurrency, displayMode, valuationMode, valuationModeSuffix, convertAmount, convertCurrentAmount, formatExplicitAmount } = useCurrency();
@@ -121,6 +123,16 @@ export const EventosView: React.FC<EventosViewProps> = ({ data, loading, summary
   const [isAddOpen, setIsAddOpen] = useState(false);
   const [costReason, setCostReason] = useState('');
   const [selectedEvent, setSelectedEvent] = useState<Event | null>(null);
+  useEffect(() => {
+    if (!notificationTargetId) return;
+    const event = data.find((item) => String(item.id) === notificationTargetId);
+    if (event) {
+      setSelectedEvent(event);
+      onClearNotificationTarget?.(notificationTargetId);
+    } else if (!loading) {
+      onClearNotificationTarget?.(notificationTargetId);
+    }
+  }, [notificationTargetId, data, loading, onClearNotificationTarget]);
   const [pendingCancelEvent, setPendingCancelEvent] = useState<Event | null>(null);
   const [cancelReason, setCancelReason] = useState('');
   const [cancelReasonAttempted, setCancelReasonAttempted] = useState(false);

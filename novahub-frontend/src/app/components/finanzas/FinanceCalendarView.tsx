@@ -3,6 +3,7 @@ import { Card, CardContent, CardHeader, CardTitle } from '../ui/card'
 import { Badge } from '../ui/badge'
 import { useCurrency } from '../../contexts/CurrencyContext'
 import { normalizeCurrency, summarizeAmountsByCurrency, type SupportedCurrency } from '../../utils/currency'
+import { getMonthlyRecurrenceFactor, getRecurrenceFrequencyLabel } from '../ui/RecurrenceScheduleFields'
 
 interface Props { recurringExpenses: any[]; recurringIncomes?: any[] }
 
@@ -15,24 +16,24 @@ export function FinanceCalendarView({ recurringExpenses, recurringIncomes }: Pro
   const toBase = (r: any) => valuationMode === 'CURRENT'
     ? convertCurrentAmount(Number(r.amount ?? r.baseAmount ?? 0), r.currency)
     : convertAmount(Number(r.amount ?? r.baseAmount ?? 0), r.currency, r.exchangeRate)
-  const totalMonthlyExpenses = activeRecExpenses.reduce((a, r) => a + toBase(r), 0)
-  const totalMonthlyIncomes = activeRecIncomes.reduce((a, r) => a + toBase(r), 0)
+  const totalMonthlyExpenses = activeRecExpenses.reduce((a, r) => a + toBase(r) * getMonthlyRecurrenceFactor(r.frequency, r.intervalDays), 0)
+  const totalMonthlyIncomes = activeRecIncomes.reduce((a, r) => a + toBase(r) * getMonthlyRecurrenceFactor(r.frequency, r.intervalDays), 0)
   const recurringRows = [...activeRecExpenses, ...activeRecIncomes]
   const originalCurrencies = summarizeAmountsByCurrency(
     recurringRows,
-    (r) => Number(r.amount ?? r.baseAmount ?? 0),
+    (r) => Number(r.amount ?? r.baseAmount ?? 0) * getMonthlyRecurrenceFactor(r.frequency, r.intervalDays),
     (r) => r.currency,
     baseCurrency,
   )
   const originalExpenses = summarizeAmountsByCurrency(
     activeRecExpenses,
-    (r) => Number(r.amount ?? r.baseAmount ?? 0),
+    (r) => Number(r.amount ?? r.baseAmount ?? 0) * getMonthlyRecurrenceFactor(r.frequency, r.intervalDays),
     (r) => r.currency,
     baseCurrency,
   )
   const originalIncomes = summarizeAmountsByCurrency(
     activeRecIncomes,
-    (r) => Number(r.amount ?? r.baseAmount ?? 0),
+    (r) => Number(r.amount ?? r.baseAmount ?? 0) * getMonthlyRecurrenceFactor(r.frequency, r.intervalDays),
     (r) => r.currency,
     baseCurrency,
   )
@@ -96,7 +97,7 @@ export function FinanceCalendarView({ recurringExpenses, recurringIncomes }: Pro
                 <div key={r.id} className="flex min-w-0 items-start justify-between gap-3 rounded-xl border border-rose-500/20 bg-rose-500/10 px-3 py-2">
                   <div className="min-w-0">
                     <p className="break-words text-xs font-bold text-foreground">{r.description || r.source}</p>
-                    <p className="text-[10px] text-muted-foreground">{r.frequency} · Próxima: {r.nextDate ? new Date(r.nextDate).toLocaleDateString('es-NI') : 'Pendiente'}</p>
+                    <p className="text-[10px] text-muted-foreground">{getRecurrenceFrequencyLabel(r.frequency)} · Próxima: {r.nextDate ? new Date(r.nextDate).toLocaleDateString('es-NI') : 'Pendiente'}</p>
                   </div>
                   <span className="shrink-0 text-right text-xs font-black text-rose-500">-{displayMode === 'ORIGINAL' ? formatExplicitAmount(Number(r.amount ?? r.baseAmount ?? 0), normalizeCurrency(r.currency || baseCurrency)) : fmt(toBase(r))}</span>
                 </div>
@@ -105,7 +106,7 @@ export function FinanceCalendarView({ recurringExpenses, recurringIncomes }: Pro
                 <div key={r.id} className="flex min-w-0 items-start justify-between gap-3 rounded-xl border border-emerald-500/20 bg-emerald-500/10 px-3 py-2">
                   <div className="min-w-0">
                     <p className="break-words text-xs font-bold text-foreground">{r.description || r.source}</p>
-                    <p className="text-[10px] text-muted-foreground">{r.frequency} · Próxima: {r.nextDate ? new Date(r.nextDate).toLocaleDateString('es-NI') : 'Pendiente'}</p>
+                    <p className="text-[10px] text-muted-foreground">{getRecurrenceFrequencyLabel(r.frequency)} · Próxima: {r.nextDate ? new Date(r.nextDate).toLocaleDateString('es-NI') : 'Pendiente'}</p>
                   </div>
                   <span className="shrink-0 text-right text-xs font-black text-emerald-500">+{displayMode === 'ORIGINAL' ? formatExplicitAmount(Number(r.amount ?? r.baseAmount ?? 0), normalizeCurrency(r.currency || baseCurrency)) : fmt(toBase(r))}</span>
                 </div>

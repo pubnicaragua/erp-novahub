@@ -82,6 +82,8 @@ interface TareasViewProps {
   loading: boolean;
   summaryError?: boolean;
   onRefresh: () => void;
+  notificationTargetId?: string;
+  onClearNotificationTarget?: (id: string) => void;
 }
 
 /** Valor centinela del selector de categoría del formulario (Radix no admite ''). */
@@ -115,7 +117,7 @@ const getTaskAssigneeId = (task?: TaskLike | null): string => {
   return String(fromAssignments?.userId || '').trim();
 };
 
-export const TareasView: React.FC<TareasViewProps> = ({ data, loading, summaryError = false, onRefresh }) => {
+export const TareasView: React.FC<TareasViewProps> = ({ data, loading, summaryError = false, onRefresh, notificationTargetId, onClearNotificationTarget }) => {
   const [searchTerm, setSearchTerm] = useState('');
   const [viewLayout, setViewLayout] = useState<ViewLayoutMode>('table');
   const isCompactViewport = useCardsOnlyBelowTableBreakpoint();
@@ -159,6 +161,17 @@ export const TareasView: React.FC<TareasViewProps> = ({ data, loading, summaryEr
   const [reassignTask, setReassignTask] = useState<Task | null>(null);
   const [selectedTask, setSelectedTask] = useState<any>(null);
   const [detailTask, setDetailTask] = useState<any>(null);
+
+  useEffect(() => {
+    if (!notificationTargetId) return;
+    const task = data.find((item) => String(item.id) === notificationTargetId);
+    if (task) {
+      setDetailTask(task);
+      onClearNotificationTarget?.(notificationTargetId);
+    } else if (!loading) {
+      onClearNotificationTarget?.(notificationTargetId);
+    }
+  }, [notificationTargetId, data, loading, onClearNotificationTarget]);
   const [isCreating, setIsCreating] = useState(false);
   const [actionLoading, setActionLoading] = useState(false);
   const [claimingId, setClaimingId] = useState<string | null>(null);

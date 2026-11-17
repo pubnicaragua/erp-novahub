@@ -157,7 +157,7 @@ type PurchaseMixedPaymentInput = Omit<Partial<PaymentMade>, 'payments'> & {
 export interface RecurringSupplierInvoiceSummary {
   total: number;
   statusCounts: Record<string, number>;
-  groups: Array<{ status: string; frequency: string; currency: string; exchangeRate: number; count: number; amount: number }>;
+  groups: Array<{ status: string; frequency: string; intervalDays?: number | null; currency: string; exchangeRate: number; count: number; amount: number }>;
 }
 
 export interface PaymentMadeSummary {
@@ -281,7 +281,7 @@ export const recurringExpensesService = {
 export interface RecurringExpenseSummary {
   total: number;
   statusCounts: Record<string, number>;
-  groups: Array<{ status: string; frequency: string; currency: string; exchangeRate: number; count: number; amount: number }>;
+  groups: Array<{ status: string; frequency: string; intervalDays?: number | null; currency: string; exchangeRate: number; count: number; amount: number }>;
 }
 
 export const purchasesReportsService = {

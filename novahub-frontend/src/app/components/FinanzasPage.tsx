@@ -485,8 +485,11 @@ export function FinanzasPage({ activeSubModule, onSubModuleChange, isSidebarColl
     { key: 'description', label: 'descripcion', type: 'text' as const, editable: true },
     { key: 'frequency', label: 'frecuencia', type: 'select' as const, editable: true, options: [
       { value: 'DAILY', label: 'Diario' }, { value: 'WEEKLY', label: 'Semanal' }, { value: 'BIWEEKLY', label: 'Quincenal' },
+      { value: 'CUSTOM_DAYS', label: 'Cada N días' }, { value: 'TWICE_MONTHLY', label: 'Día 15 y fin de mes' },
       { value: 'MONTHLY', label: 'Mensual' }, { value: 'QUARTERLY', label: 'Trimestral' }, { value: 'SEMIANNUAL', label: 'Semestral' }, { value: 'YEARLY', label: 'Anual' },
     ] },
+    { key: 'intervalDays', label: 'cada N días', type: 'number' as const, editable: true, render: (value: number | null) => value || '—' },
+    { key: 'dayOfMonth', label: 'día del mes', type: 'number' as const, editable: true, render: (value: number | null) => value || '—' },
     { key: 'amount', label: 'monto', type: 'currency' as const, editable: true },
     { key: 'category', label: 'categoria', type: 'select' as const, editable: true },
     { key: 'status', label: 'estado', type: 'select' as const, editable: false, options: [
@@ -561,6 +564,7 @@ export function FinanzasPage({ activeSubModule, onSubModuleChange, isSidebarColl
         source: type === 'INCOME' ? 'Nuevo Ingreso Recurrente' : 'Nuevo Gasto Recurrente',
         description: '',
         frequency: 'MONTHLY',
+        dayOfMonth: new Date().getDate(),
         amount: 0,
         startDate: new Date().toISOString(),
         accountId: defaultAccount.id,

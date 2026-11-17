@@ -37,16 +37,12 @@ import { buildVariantDisplayName } from '../../types/variants';
 import { createReportWorkbook } from '../../utils/reportWorkbook';
 import { getCurrencyDecimalPlaces } from '../../utils/currency';
 import { initialDocumentExchangeRate } from '../../utils/currency';
+import { calculateNextRecurringDate, getMonthlyRecurrenceFactor, RecurrenceScheduleFields, recurrenceFrequencyOptions } from '../ui/RecurrenceScheduleFields';
 
 interface Props { data: RecurringSupplierInvoice[]; summaryData?: RecurringSupplierInvoiceSummary; summaryLoading?: boolean; summaryError?: boolean; loading: boolean; onRefresh: () => void; supplierCatalog?: Supplier[]; productCatalog?: any[]; warehouseCatalog?: any[]; pagination?: SalesPaginationControls; onSearchChange?: (value: string) => void; }
 
-const freqOpts = [
-  { label: 'Semanal',    value: 'weekly' },  
-  { label: 'Mensual',    value: 'monthly' },
-  { label: 'Trimestral', value: 'quarterly' }, 
-  { label: 'Anual',      value: 'yearly' },
-];
-const freqMap: Record<string,string> = { weekly:'Semanal', monthly:'Mensual', quarterly:'Trimestral', yearly:'Anual' };
+const freqOpts = recurrenceFrequencyOptions;
+const freqMap: Record<string,string> = Object.fromEntries(freqOpts.flatMap((option) => [[option.value, option.label], [option.value.toLowerCase(), option.label]]));
 const statusOpts = [
   { label: 'Activo',     value: 'ACTIVE',    color: 'bg-primary/10 text-primary' },
   { label: 'Pausado',    value: 'PAUSED',    color: 'bg-primary/10 text-primary' },
@@ -163,7 +159,7 @@ export function FacturasProveedorRecView({ data, summaryData, summaryLoading, su
       setLocalDoc({
         supplierId: '',
         description: '',
-        frequency: 'monthly',
+        frequency: 'MONTHLY',
         startDate: new Date().toISOString(),
         nextInvoiceDate: nextMonth.toISOString(),
         expectedDelivery: nextMonth.toISOString(),
@@ -316,7 +312,14 @@ export function FacturasProveedorRecView({ data, summaryData, summaryLoading, su
   ];
 
   const handleUpdate = async (id: string | number, updates: any) => {
-    try { await recurringSupplierInvoicesService.update(id as string, updates); toast.success('Actualizado'); onRefresh(); }
+    try {
+      const current = data.find((invoice) => invoice.id === String(id));
+      const payload = { ...updates };
+      if (String(updates.frequency || '').toUpperCase() === 'CUSTOM_DAYS' && !payload.intervalDays && !current?.intervalDays) payload.intervalDays = 7;
+      await recurringSupplierInvoicesService.update(id as string, payload);
+      toast.success('Actualizado');
+      onRefresh();
+    }
     catch (e: any) { toast.error(e?.response?.data?.message || e?.message || 'Error al actualizar'); throw new Error('Update failed', { cause: e }); }
   };
 
@@ -661,16 +664,42 @@ export function FacturasProveedorRecView({ data, summaryData, summaryLoading, su
                     <p className="mb-1 text-[10px] text-foreground">Nombre de la programación</p>
                     <Input disabled={!canEditRecurrence} value={localDoc.description || ''} onChange={(event) => setLocalDoc({ ...localDoc, description: event.target.value } as any)} className="h-8 text-xs font-bold" placeholder="Ej. Reposición mensual de suministros" />
                   </div>
-                  <div>
-                    <p className="mb-1 text-[10px] text-foreground">Frecuencia</p>
-                    <Select disabled={!canEditRecurrence} value={String(localDoc.frequency || 'monthly')} onValueChange={(value) => setLocalDoc({ ...localDoc, frequency: value as any } as any)}>
-                      <SelectTrigger className="h-8 text-xs"><SelectValue /></SelectTrigger>
-                      <SelectContent>{freqOpts.map((option) => <SelectItem key={option.value} value={option.value}>{option.label}</SelectItem>)}</SelectContent>
-                    </Select>
-                  </div>
+                  <RecurrenceScheduleFields
+                    frequency={localDoc.frequency}
+                    intervalDays={localDoc.intervalDays}
+                    dayOfMonth={localDoc.dayOfMonth}
+                    startDate={localDoc.startDate}
+                    disabled={!canEditRecurrence}
+                    onChange={(schedule) => setLocalDoc((current) => {
+                      if (!current) return current;
+                      const next = { ...current, ...schedule };
+                      if (editingId === 'NEW') {
+                        const nextInvoiceDate = calculateNextRecurringDate(next.startDate, next.frequency, next.intervalDays, next.dayOfMonth);
+                        if (nextInvoiceDate) {
+                          const deliveryFollowsInvoice = toDateInputValue(current.expectedDelivery) === toDateInputValue(current.nextInvoiceDate);
+                          next.nextInvoiceDate = nextInvoiceDate;
+                          if (deliveryFollowsInvoice) next.expectedDelivery = nextInvoiceDate;
+                        }
+                      }
+                      return next as any;
+                    })}
+                  />
                   <div>
                     <p className="mb-1 text-[10px] text-foreground">Fecha de inicio</p>
-                    <Input disabled={!canEditRecurrence} type="date" value={toDateInputValue(localDoc.startDate)} onChange={(event) => setLocalDoc({ ...localDoc, startDate: fromDateInputValue(event.target.value) } as any)} className="h-8 text-xs" />
+                    <Input disabled={!canEditRecurrence} type="date" value={toDateInputValue(localDoc.startDate)} onChange={(event) => setLocalDoc((current) => {
+                      if (!current) return current;
+                      const startDate = fromDateInputValue(event.target.value);
+                      const next = { ...current, startDate };
+                      if (editingId === 'NEW') {
+                        const nextInvoiceDate = calculateNextRecurringDate(startDate, next.frequency, next.intervalDays, next.dayOfMonth);
+                        if (nextInvoiceDate) {
+                          const deliveryFollowsInvoice = toDateInputValue(current.expectedDelivery) === toDateInputValue(current.nextInvoiceDate);
+                          next.nextInvoiceDate = nextInvoiceDate;
+                          if (deliveryFollowsInvoice) next.expectedDelivery = nextInvoiceDate;
+                        }
+                      }
+                      return next as any;
+                    })} className="h-8 text-xs" />
                   </div>
                   <div>
                     <p className="mb-1 text-[10px] text-foreground">Fecha de fin (opcional)</p>
@@ -760,7 +789,7 @@ export function FacturasProveedorRecView({ data, summaryData, summaryLoading, su
   const toDisplayAmount = (amount: number, currency?: string, rate?: number) => valuationMode === 'CURRENT'
     ? convertCurrentAmount(amount, currency)
     : convertAmount(amount, currency, rate || globalRate);
-  const monthlyGroups = filteredRecurringSummaryGroups.filter((group) => group.frequency === 'MONTHLY');
+  const monthlyGroups = filteredRecurringSummaryGroups.map((group) => ({ ...group, amount: group.amount * getMonthlyRecurrenceFactor(group.frequency, group.intervalDays) }));
   const monthly = monthlyGroups.reduce((acc, group) =>
     acc + toDisplayAmount(group.amount, group.currency, group.exchangeRate), 0);
   const originalMonthlyAmounts = summarizeAmountsByCurrency(

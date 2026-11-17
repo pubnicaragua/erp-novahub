@@ -143,7 +143,7 @@ function accountGridTemplate(visibleKeys: AccountColumnKey[]) {
   const columns = ACCOUNT_COLUMN_DEFS
     .filter((column) => visibleKeys.includes(column.key))
     .map((column) => column.width);
-  return ['96px', ...columns, '64px'].join(' ');
+  return ['96px', ...columns, '96px'].join(' ');
 }
 
 const ACCOUNT_TYPES: { value: AccountType; label: string; color: string }[] = [
@@ -504,14 +504,14 @@ export function PlanCuentasView({ isSidebarCollapsed = true, helpTrigger }: Plan
     return parent.code + String(nextNum).padStart(3, '0');
   };
 
-  const openAddDialog = async (parentId?: string) => {
+  const openAddDialog = async (parentAccount?: AccountNode) => {
     setEditingAccount(null);
-    const type = 'ASSET';
-    const code = await generateCode(type, parentId);
+    const type = parentAccount?.type || 'ASSET';
+    const code = await generateCode(type, parentAccount?.id);
     setFormData({
-      code, name: '', type, parentId, currency: 'USD',
-      subtype: parentId ? 'SUBACCOUNT' : 'DETAIL_ACCOUNT',
-      detailType: 'BALANCE_SHEET', allowManualEntry: true, acceptsPostings: true, isActive: true, notes: '',
+      code, name: '', type, parentId: parentAccount?.id, currency: parentAccount?.currency || 'USD',
+      subtype: parentAccount ? 'SUBACCOUNT' : 'DETAIL_ACCOUNT',
+      detailType: parentAccount?.detailType || 'BALANCE_SHEET', allowManualEntry: true, acceptsPostings: true, isActive: true, notes: '',
     });
     setDialogOpen(true);
   };
@@ -774,6 +774,11 @@ export function PlanCuentasView({ isSidebarCollapsed = true, helpTrigger }: Plan
               {account.isActive ? 'Activo' : 'Inactivo'}
             </Badge>
             <div className="flex items-center gap-0.5" onClick={(e) => e.stopPropagation()}>
+              {canPerform('ACCOUNTING_CHART', 'create') && account.isActive && (
+                <Button variant="ghost" size="icon" className="size-7" onClick={() => { void openAddDialog(account); }} title="Crear subcuenta" aria-label={`Crear subcuenta para ${account.code} · ${account.name}`}>
+                  <Plus className="size-3.5" />
+                </Button>
+              )}
               {canPerform('ACCOUNTING_CHART', 'edit') && (
                 <>
                   <Button variant="ghost" size="icon" className="size-7" onClick={() => openEditDialog(account)} title="Editar">
@@ -831,6 +836,11 @@ export function PlanCuentasView({ isSidebarCollapsed = true, helpTrigger }: Plan
           {effectiveColumnKeys.includes('currency') && <Badge variant="outline" className="mx-2 max-w-full justify-center truncate text-[10px] text-muted-foreground">{account.currency}</Badge>}
           {effectiveColumnKeys.includes('status') && <Badge variant={account.isActive ? 'default' : 'secondary'} className="mx-2 max-w-full justify-center truncate text-[10px]">{account.isActive ? 'Activo' : 'Inactivo'}</Badge>}
           <div className="flex shrink-0 items-center justify-end gap-1" onClick={(e) => e.stopPropagation()}>
+            {canPerform('ACCOUNTING_CHART', 'create') && account.isActive && (
+              <Button variant="ghost" size="icon" className="size-7" onClick={() => { void openAddDialog(account); }} title="Crear subcuenta" aria-label={`Crear subcuenta para ${account.code} · ${account.name}`}>
+                <Plus className="size-3.5" />
+              </Button>
+            )}
             {canPerform('ACCOUNTING_CHART', 'edit') && (
               <>
                 <Button variant="ghost" size="icon" className="size-7" onClick={() => openEditDialog(account)} title="Editar cuenta" aria-label="Editar cuenta">
@@ -1502,9 +1512,13 @@ export function PlanCuentasView({ isSidebarCollapsed = true, helpTrigger }: Plan
       <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
         <DialogContent className="sm:max-w-md">
           <DialogHeader>
-            <DialogTitle>{editingAccount ? 'Editar Cuenta' : 'Nueva Cuenta'}</DialogTitle>
+            <DialogTitle>{editingAccount ? 'Editar Cuenta' : formData.parentId ? 'Nueva Subcuenta' : 'Nueva Cuenta'}</DialogTitle>
             <DialogDescription>
-              {editingAccount ? 'Modifica los datos de la cuenta contable' : 'Registra una nueva cuenta en el plan de cuentas'}
+              {editingAccount
+                ? 'Modifica los datos de la cuenta contable'
+                : formData.parentId
+                  ? `Se creará bajo ${flatList.find((account) => account.id === formData.parentId)?.code || ''} · ${flatList.find((account) => account.id === formData.parentId)?.name || 'la cuenta seleccionada'}`
+                  : 'Registra una nueva cuenta en el plan de cuentas'}
             </DialogDescription>
           </DialogHeader>
           <div className="space-y-4 py-2">
@@ -1522,6 +1536,7 @@ export function PlanCuentasView({ isSidebarCollapsed = true, helpTrigger }: Plan
                 <Select
                   value={formData.type}
                   onValueChange={(v: AccountType) => setFormData(p => ({ ...p, type: v }))}
+                  disabled={!editingAccount && Boolean(formData.parentId)}
                 >
                   <SelectTrigger id="type">
                     <SelectValue />
@@ -1551,7 +1566,20 @@ export function PlanCuentasView({ isSidebarCollapsed = true, helpTrigger }: Plan
                     ...getParentOptions(editingAccount?.id).map(opt => ({ label: opt.label, value: opt.id })),
                   ]}
                   value={formData.parentId ?? 'NONE'}
-                  onChange={(v) => setFormData(p => ({ ...p, parentId: v === 'NONE' ? undefined : v }))}
+                  onChange={(v) => setFormData((previous) => {
+                    if (v === 'NONE') return { ...previous, parentId: undefined };
+                    const parent = flatList.find((account) => account.id === v);
+                    return {
+                      ...previous,
+                      parentId: v,
+                      ...(parent ? {
+                        type: parent.type,
+                        currency: parent.currency,
+                        detailType: parent.detailType,
+                        subtype: 'SUBACCOUNT' as AccountSubtype,
+                      } : {}),
+                    };
+                  })}
                   placeholder="Ninguna (Raíz)"
                   searchPlaceholder="Buscar por nombre o código..."
                   emptyMessage="Sin cuentas coincidentes"

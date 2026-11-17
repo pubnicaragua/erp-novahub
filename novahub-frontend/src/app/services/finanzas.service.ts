@@ -37,8 +37,8 @@ export interface FinanceAccountLookup {
 export interface FinanceOperationalDashboardSummary {
   incomeGroups: Array<{ month: string; currency: string; exchangeRate: number; amount: number }>;
   expenseGroups: Array<{ month: string; category: string; currency: string; exchangeRate: number; amount: number }>;
-  recurringExpenseGroups: Array<{ frequency: string; currency: string; exchangeRate: number; amount: number }>;
-  recurringIncomeGroups: Array<{ frequency: string; currency: string; exchangeRate: number; amount: number }>;
+  recurringExpenseGroups: Array<{ frequency: string; intervalDays?: number | null; currency: string; exchangeRate: number; amount: number }>;
+  recurringIncomeGroups: Array<{ frequency: string; intervalDays?: number | null; currency: string; exchangeRate: number; amount: number }>;
 }
 
 export const financeDashboardService = {

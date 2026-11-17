@@ -121,8 +121,21 @@ export function DataTableViewport({
   const scrollByColumn = useCallback((direction: 'left' | 'right') => {
     const element = scrollRef.current;
     if (!element) return;
-    const amount = Math.max(240, Math.floor(element.clientWidth * 0.78));
-    element.scrollBy({ left: direction === 'right' ? amount : -amount, behavior: scrollBehavior });
+    const maxScroll = Math.max(0, element.scrollWidth - element.clientWidth);
+    const viewportLeft = element.getBoundingClientRect().left;
+    const boundaries = [0, ...Array.from(element.querySelectorAll<HTMLElement>('[data-slot="table"] tr:first-child > *'))
+      .map((cell) => Math.min(maxScroll, Math.max(0, cell.getBoundingClientRect().right - viewportLeft + element.scrollLeft))), maxScroll]
+      .sort((a, b) => a - b);
+    const currentPosition = element.scrollLeft;
+    const nextPosition = direction === 'right'
+      ? boundaries.find((position) => position > currentPosition + 4) ?? maxScroll
+      : [...boundaries].reverse().find((position) => position < currentPosition - 4) ?? 0;
+    if (Math.abs(nextPosition - currentPosition) < 1) {
+      const fallbackStep = Math.max(240, Math.floor(element.clientWidth * 0.78));
+      element.scrollBy({ left: direction === 'right' ? fallbackStep : -fallbackStep, behavior: scrollBehavior });
+      return;
+    }
+    element.scrollTo({ left: nextPosition, behavior: scrollBehavior });
   }, [scrollBehavior, scrollRef]);
 
   useEffect(() => {
@@ -132,10 +145,15 @@ export function DataTableViewport({
     element.addEventListener('scroll', updateScrollState, { passive: true });
     const observer = new ResizeObserver(updateScrollState);
     observer.observe(element);
+    const table = element.querySelector<HTMLElement>('[data-slot="table"]');
+    if (table) observer.observe(table);
+    const mutationObserver = new MutationObserver(updateScrollState);
+    mutationObserver.observe(element, { childList: true, subtree: true, attributes: true, attributeFilter: ['style', 'class'] });
     window.addEventListener('resize', updateScrollState);
     return () => {
       element.removeEventListener('scroll', updateScrollState);
       observer.disconnect();
+      mutationObserver.disconnect();
       window.removeEventListener('resize', updateScrollState);
       if (scrollStateFrameRef.current !== null) {
         window.cancelAnimationFrame(scrollStateFrameRef.current);

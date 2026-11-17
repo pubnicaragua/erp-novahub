@@ -233,6 +233,10 @@ export function ClientesView({ data, loading, error, onRefresh, pagination, onSe
   const [importing, setImporting] = useState(false);
   const [importProgress, setImportProgress] = useState(0);
   const [exportingCustomers, setExportingCustomers] = useState(false);
+  const [customerExportDialogOpen, setCustomerExportDialogOpen] = useState(false);
+  const [customerExportFormat, setCustomerExportFormat] = useState<'pdf' | 'xlsx'>('pdf');
+  const [customerExportPaperFormat, setCustomerExportPaperFormat] = useState<PdfPaperFormat>('letter');
+  const [customerExportColumnKeys, setCustomerExportColumnKeys] = useState<string[]>([]);
   const [previewLoading, setPreviewLoading] = useState(false);
   const [previewProgress, setPreviewProgress] = useState(0);
   const [importResult, setImportResult] = useState<CustomerImportResult | null>(null);
@@ -827,8 +831,53 @@ export function ClientesView({ data, loading, error, onRefresh, pagination, onSe
     type: (row: Customer) => String(row.type || '').toUpperCase(),
   };
   const filteredData = colFilters.applyTo(filteredAndSorted, filterGetters);
-  const exportCustomers = async (format: 'pdf' | 'xlsx', paperFormat: PdfPaperFormat = 'letter') => {
+  const requestCustomerExport = (format: 'pdf' | 'xlsx', paperFormat: PdfPaperFormat = 'letter') => {
     if (!canPerform('SALES_CLIENTS', 'export')) return;
+    setCustomerExportFormat(format);
+    setCustomerExportPaperFormat(paperFormat);
+    setCustomerExportColumnKeys([...visibleColumnKeys]);
+    setCustomerExportDialogOpen(true);
+  };
+
+  const exportCustomerColumnValue = (customer: Customer, key: string): string | number => {
+    switch (key) {
+      case 'code': return customer.code || customer.id?.slice(0, 8) || '—';
+      case 'name': return customer.name || '—';
+      case 'taxId': return customer.taxId || '—';
+      case 'ruc': return customer.ruc || '—';
+      case 'type': return String(customer.type || '').toUpperCase() === 'INDIVIDUAL' ? 'Particular' : 'Empresa';
+      case 'fiscalRegime': return customer.fiscalRegime || '—';
+      case 'priceListId': return customer.priceList?.name || priceLists.find((list) => list.id === customer.priceListId)?.name || 'Sin asignar';
+      case 'email': return customer.email || '—';
+      case 'phone': return customer.phone ? formatCustomerPhoneForDisplay(String(customer.phone), customer.countryCode || countryCodeFromLegacy(customer.country) || 'NI') : '—';
+      case 'department': return customer.department || '—';
+      case 'creditLimit': return customer.creditLimit == null ? '—' : formatCurrentAmount(Number(customer.creditLimit), normalizeCurrency(customer.creditLimitCurrency, baseCurrency));
+      case 'creditDays': return customer.creditDays == null ? 'Sin plazo' : Number(customer.creditDays) === 0 ? 'Mismo día' : `${customer.creditDays} días`;
+      case 'balance': {
+        const debt = getCustomerDebtAmount(customer);
+        const favor = getCustomerFavorAmount(customer);
+        return [
+          ...(debt > 0.005 ? [`Pendiente: ${formatCurrentAmount(debt, baseCurrency)}`] : []),
+          ...(favor > 0.005 ? [`A favor: ${formatCurrentAmount(favor, baseCurrency)}`] : []),
+        ].join(' · ') || 'Saldo al día';
+      }
+      case 'customerLoans': {
+        const loans = customer.customerLoansSummary;
+        return loans?.totalCount ? `${loans.activeCount} vigente(s) · ${formatCurrentAmount(Number(loans.outstandingBalance || 0), normalizeCurrency(loans.currency, baseCurrency))}` : 'Sin préstamos';
+      }
+      case 'createdAt': return customer.createdAt ? formatDateEs(customer.createdAt) : '—';
+      case 'status': return String(customer.status || '').toUpperCase() === 'INACTIVE' ? 'Inactivo' : 'Activo';
+      default: return '—';
+    }
+  };
+
+  const exportCustomers = async (format: 'pdf' | 'xlsx', paperFormat: PdfPaperFormat = 'letter', selectedColumnKeys = visibleColumnKeys) => {
+    if (!canPerform('SALES_CLIENTS', 'export')) return;
+    const selectedColumns = columnOptions.filter((option) => selectedColumnKeys.includes(option.key));
+    if (selectedColumns.length === 0) {
+      toast.error('Selecciona al menos una columna para exportar.');
+      return;
+    }
     setExportingCustomers(true);
     try {
       const exportCustomersRows = await fetchAllReportPages<Customer>(
@@ -858,15 +907,9 @@ export function ClientesView({ data, loading, error, onRefresh, pagination, onSe
       const inactiveCount = customers.length - activeCount;
       const individualCount = customers.filter((customer) => String(customer.type || '').toUpperCase() === 'INDIVIDUAL').length;
       const companyCount = customers.filter((customer) => String(customer.type || '').toUpperCase() === 'COMPANY').length;
-      const rows = customers.map((customer) => ({
-        Código: customer.code || '—',
-        Cliente: customer.name || '—',
-        Tipo: String(customer.type || '').toUpperCase() === 'INDIVIDUAL' ? 'Particular' : 'Empresa',
-        Contacto: customer.contactName || '—',
-        Correo: customer.email || '—',
-        Teléfono: customer.phone || '—',
-        Estado: String(customer.status || '').toUpperCase() === 'INACTIVE' ? 'Inactivo' : 'Activo',
-      }));
+      const rows = customers.map((customer) => Object.fromEntries(
+        selectedColumns.map((column) => [column.label, exportCustomerColumnValue(customer, column.key)]),
+      ));
       if (!rows.length) {
         toast.error('No hay clientes para exportar con los filtros actuales.');
         return;
@@ -897,7 +940,7 @@ export function ClientesView({ data, loading, error, onRefresh, pagination, onSe
             { label: 'PARTICULARES', value: String(individualCount), detail: 'Personas' },
             { label: 'EMPRESAS', value: String(companyCount), detail: 'Organizaciones' },
           ],
-          sections: [{ id: 'sales-customers', title: 'Clientes', headers: Object.keys(rows[0]), widths: [10, 18, 12, 16, 24, 12, 8], rows: rows.map((row) => Object.values(row)) }],
+          sections: [{ id: 'sales-customers', title: 'Clientes', headers: Object.keys(rows[0]), widths: selectedColumns.map(() => 1), rows: rows.map((row) => Object.values(row)) }],
           fileName: buildDatedDownloadFileName(['reporte_clientes'], 'pdf'),
           format: paperFormat,
           useVectorTables: rows.length > 500,
@@ -1427,6 +1470,11 @@ export function ClientesView({ data, loading, error, onRefresh, pagination, onSe
     { key: 'createdAt', label: 'Fecha de ingreso' },
     { key: 'status', label: 'Estado' },
   ];
+  const confirmCustomerExport = async () => {
+    const selected = [...customerExportColumnKeys];
+    setCustomerExportDialogOpen(false);
+    await exportCustomers(customerExportFormat, customerExportPaperFormat, selected);
+  };
   const editMissingRucDecision = editingCustomer
     ? resolveMissingRucCreditDecision({
       rucRequired: customerRucRequired(editCustomer.type, editCustomer.countryCode),
@@ -1542,8 +1590,8 @@ export function ClientesView({ data, loading, error, onRefresh, pagination, onSe
               <ExportMenu
                 label={exportingCustomers ? 'Preparando exportación…' : 'Exportar clientes'}
                 disabled={exportingCustomers || loading}
-                onPdf={(paperFormat) => void exportCustomers('pdf', paperFormat)}
-                onExcel={() => void exportCustomers('xlsx')}
+                onPdf={(paperFormat) => requestCustomerExport('pdf', paperFormat)}
+                onExcel={() => requestCustomerExport('xlsx')}
                 pdfDescription="Listado de clientes con los filtros activos"
                 excelDescription="Todos los clientes con los filtros activos"
               />
@@ -1746,6 +1794,37 @@ export function ClientesView({ data, loading, error, onRefresh, pagination, onSe
           </div>
           <DialogFooter className="flex-wrap gap-2">
             <Button variant="outline" onClick={() => setVisibleColumnKeys(columnOptions.map((option) => option.key))}>Mostrar todas</Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={customerExportDialogOpen} onOpenChange={(open) => { if (!exportingCustomers) setCustomerExportDialogOpen(open); }}>
+        <DialogContent className="w-[calc(100%-2rem)] !max-w-3xl rounded-3xl">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2"><Download className="size-5 text-primary" /> Columnas para exportar</DialogTitle>
+            <DialogDescription>Elige las columnas que incluirá este archivo. La selección inicial sigue las columnas visibles de la tabla.</DialogDescription>
+          </DialogHeader>
+          <div className="grid max-h-[55vh] grid-cols-1 gap-2 overflow-y-auto sm:grid-cols-2 lg:grid-cols-3">
+            {columnOptions.map((option) => {
+              const active = customerExportColumnKeys.includes(option.key);
+              return <button
+                key={option.key}
+                type="button"
+                aria-pressed={active}
+                onClick={() => setCustomerExportColumnKeys((current) => active ? current.filter((key) => key !== option.key) : [...current, option.key])}
+                className={cn('flex min-h-11 items-center justify-between rounded-xl border px-3 text-left text-xs font-bold transition-colors', active ? 'border-primary bg-primary/10 text-foreground' : 'border-border/60 bg-muted/10 text-muted-foreground hover:border-primary/50')}
+              >
+                <span>{option.label}</span>{active && <Check className="size-4 text-primary" />}
+              </button>;
+            })}
+          </div>
+          <DialogFooter className="flex-wrap gap-2">
+            <Button type="button" variant="outline" disabled={exportingCustomers} onClick={() => setCustomerExportColumnKeys([...visibleColumnKeys])}>Usar columnas visibles</Button>
+            <Button type="button" variant="outline" disabled={exportingCustomers} onClick={() => setCustomerExportColumnKeys(columnOptions.map((option) => option.key))}>Seleccionar todas</Button>
+            <Button type="button" variant="outline" disabled={exportingCustomers} onClick={() => setCustomerExportDialogOpen(false)}>Cancelar</Button>
+            <Button type="button" disabled={exportingCustomers || customerExportColumnKeys.length === 0} onClick={() => void confirmCustomerExport()}>
+              {exportingCustomers ? 'Preparando…' : `Exportar ${customerExportFormat === 'pdf' ? 'PDF' : 'Excel'}`}
+            </Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
