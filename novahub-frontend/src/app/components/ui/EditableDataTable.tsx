@@ -1,5 +1,6 @@
-import { cloneElement, isValidElement, useState, useEffect, useRef, useCallback } from 'react';
+import { cloneElement, isValidElement, useState, useEffect, useRef, useCallback, type ComponentProps } from 'react';
 import {
+  TableViewportContext,
   Table,
   TableBody,
   TableCell,
@@ -27,6 +28,15 @@ import { getCopyTextFromNode, normalizeCopyText } from '../../utils/table-copy';
 const EMPTY_SELECT_VALUE = '__erp_empty_select_value__';
 const toRadixSelectValue = (value: unknown) => value === '' || value === null || value === undefined ? EMPTY_SELECT_VALUE : String(value);
 const fromRadixSelectValue = (value: string) => value === EMPTY_SELECT_VALUE ? '' : value;
+
+function ViewportManagedTable(props: ComponentProps<typeof Table>) {
+  return (
+    <TableViewportContext.Provider value={true}>
+      <Table {...props} />
+    </TableViewportContext.Provider>
+  );
+}
+
 const toEditorInputValue = (value: unknown, type?: ColumnDef<any>['type']) => {
   if (value === null || value === undefined) return '';
   if (type === 'date') {
@@ -692,7 +702,7 @@ export function EditableDataTable<T extends { [key: string]: any }>({
               : 'overflow-y-clip',
           )}
         >
-        <Table
+        <ViewportManagedTable
           containerClassName={
             verticalScroll
               ? 'contents'
@@ -882,7 +892,7 @@ export function EditableDataTable<T extends { [key: string]: any }>({
 
             {/* Loading skeleton placeholder could go here */}
           </TableBody>
-        </Table>
+        </ViewportManagedTable>
         </div>
       </div>
 
