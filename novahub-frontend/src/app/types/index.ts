@@ -187,6 +187,7 @@ export interface Customer {
   portalAccessEnabled?: boolean;
   priceList?: { id: string; code: string; name: string } | null;
   historicalSummaries?: CustomerHistoricalSummary[];
+  consumptionByCurrency?: Array<{ currency: string; amount: number | string }>;
   createdAt: string;
   updatedAt: string;
 }
