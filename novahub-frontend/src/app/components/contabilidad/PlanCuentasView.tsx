@@ -501,7 +501,7 @@ export function PlanCuentasView({ isSidebarCollapsed = true, helpTrigger }: Plan
     if (!parent) return base + '00001';
     const siblings = flatList.filter(a => a.parentId === parentId);
     const nextNum = siblings.length + 1;
-    return parent.code + String(nextNum).padStart(3, '0');
+    return `${parent.code.replace(/-+$/, '')}-${String(nextNum).padStart(3, '0')}`;
   };
 
   const openAddDialog = async (parentAccount?: AccountNode) => {
