@@ -1,9 +1,10 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import * as XLSX from 'xlsx';
-import { ArrowLeftRight, ChevronDown, Download, FileSpreadsheet, LocateFixed, MapPin, Plus, RefreshCw, Route, Upload, UserRound, X } from 'lucide-react';
+import { ArrowLeftRight, Check, ChevronDown, Download, FileSpreadsheet, LocateFixed, MapPin, Plus, RefreshCw, Route, Search, Upload, UserRound, X } from 'lucide-react';
 import { forceSalesPortfoliosService, type ForceSalesPortfolio, type ForceSalesPortfolioImportResult, type UnlinkedForceSalesProspect } from '../../services/force-sales-portfolios.service';
 import { ForceSalesPortfolioImportPreview, type ForceSalesImportManager, type ForceSalesImportRow } from './ForceSalesPortfolioImportPreview';
 import { toast } from '../../services/toast';
+import { normalizeSearchText } from '../../utils/searchText';
 import { Badge } from '../ui/badge';
 import { Button } from '../ui/button';
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '../ui/dialog';
@@ -153,7 +154,11 @@ export function ForceSalesPortfoliosView({
   const [batchId, setBatchId] = useState('');
   const [locating, setLocating] = useState<{ portfolioId: string; customerId: string; customerName: string } | null>(null);
   const [unlinkedProspects, setUnlinkedProspects] = useState<UnlinkedForceSalesProspect[]>([]);
+  const [unlinkedProspectsLoading, setUnlinkedProspectsLoading] = useState(false);
+  const [unlinkedProspectsError, setUnlinkedProspectsError] = useState('');
   const [selectedProspect, setSelectedProspect] = useState('');
+  const [pointPickerOpen, setPointPickerOpen] = useState(false);
+  const [pointSearch, setPointSearch] = useState('');
   const [transferTarget, setTransferTarget] = useState<Record<string, string>>({});
   const [expandedPortfolio, setExpandedPortfolio] = useState<string | null>(null);
   const fileInput = useRef<HTMLInputElement>(null);
@@ -196,6 +201,16 @@ export function ForceSalesPortfoliosView({
 
   const activePortfolios = useMemo(() => portfolios.filter((portfolio) => portfolio.status === 'ACTIVE'), [portfolios]);
   const activeCustomers = useMemo(() => portfolios.reduce((count, portfolio) => count + portfolio.customers.filter((row) => row.assignmentStatus === 'ACTIVE').length, 0), [portfolios]);
+  const selectedProspectRecord = useMemo(() => unlinkedProspects.find((prospect) => prospect.id === selectedProspect) || null, [selectedProspect, unlinkedProspects]);
+  const filteredUnlinkedProspects = useMemo(() => {
+    const query = normalizeSearchText(pointSearch);
+    if (!query) return unlinkedProspects;
+    return unlinkedProspects.filter((prospect) => normalizeSearchText([
+      prospect.name,
+      prospect.address,
+      `${prospect.lat}, ${prospect.lng}`,
+    ].filter(Boolean).join(' ')).includes(query));
+  }, [pointSearch, unlinkedProspects]);
   const openImport = () => {
     setFileName(''); setRows([]); setImportErrors([]); setImportResult(null); setImportPreviewOpen(false);
     setPortfolioName('Cartera'); setOpeningBalanceDate(localDate()); setOpeningBalanceCurrency('NIO'); setBatchId(crypto.randomUUID());
@@ -302,10 +317,28 @@ export function ForceSalesPortfoliosView({
     catch (error: unknown) { toast.error(errorMessage(error, 'No se pudo transferir el cliente.')); }
   };
 
+  const loadUnlinkedProspects = async () => {
+    setUnlinkedProspectsLoading(true);
+    setUnlinkedProspectsError('');
+    try {
+      const result = await forceSalesPortfoliosService.unlinkedProspects();
+      setUnlinkedProspects(Array.isArray(result) ? result : []);
+    } catch (error: unknown) {
+      const message = errorMessage(error, 'No se pudieron cargar los puntos sin cliente.');
+      setUnlinkedProspects([]);
+      setUnlinkedProspectsError(message);
+      toast.error(message);
+    } finally {
+      setUnlinkedProspectsLoading(false);
+    }
+  };
+
   const openLocateDialog = async (portfolio: ForceSalesPortfolio, customerId: string, customerName: string) => {
-    setLocating({ portfolioId: portfolio.id, customerId, customerName }); setSelectedProspect('');
-    try { setUnlinkedProspects(await forceSalesPortfoliosService.unlinkedProspects()); }
-    catch (error: unknown) { setUnlinkedProspects([]); toast.error(errorMessage(error, 'No se pudieron cargar los puntos sin cliente.')); }
+    setLocating({ portfolioId: portfolio.id, customerId, customerName });
+    setSelectedProspect('');
+    setPointSearch('');
+    setPointPickerOpen(false);
+    await loadUnlinkedProspects();
   };
 
   const saveCurrentGps = () => {
@@ -443,12 +476,92 @@ export function ForceSalesPortfoliosView({
         </DialogContent>
       </Dialog>
 
-      <Dialog open={Boolean(locating)} onOpenChange={(open) => { if (!open) setLocating(null); }}>
+      <Dialog open={Boolean(locating)} onOpenChange={(open) => { if (!open) { setPointPickerOpen(false); setPointSearch(''); setLocating(null); } }}>
         <DialogContent className="max-w-lg">
           <DialogHeader><DialogTitle className="flex items-center gap-2"><LocateFixed className="size-5" />Ubicar cliente en el mapa</DialogTitle><DialogDescription>{locating?.customerName}. Guardar una ubicación crea o actualiza el punto comercial, sin registrar una visita.</DialogDescription></DialogHeader>
           <div className="grid gap-2 sm:grid-cols-2"><Button variant="outline" onClick={saveCurrentGps}><LocateFixed className="mr-2 size-4" />Usar ubicación GPS</Button><Button variant="outline" onClick={() => { if (locating) onPickLocation(locating.portfolioId, locating.customerId); setLocating(null); }}><MapPin className="mr-2 size-4" />Marcar en mapa</Button></div>
-          <div className="space-y-2 rounded-xl border border-border p-3"><p className="text-sm font-bold text-foreground">Vincular punto existente</p><p className="text-xs text-muted-foreground">Escoge un punto que ya tenga ubicación y aún no esté vinculado a un cliente.</p><select className="h-10 w-full rounded-lg border border-input bg-background px-3 text-sm text-foreground" value={selectedProspect} onChange={(event) => setSelectedProspect(event.target.value)}><option value="">{unlinkedProspects.length ? 'Selecciona un punto' : 'No hay puntos disponibles'}</option>{unlinkedProspects.map((prospect) => <option key={prospect.id} value={prospect.id}>{prospect.name}{prospect.address ? ` · ${prospect.address}` : ''}</option>)}</select><Button className="w-full" onClick={() => void linkExistingPoint()} disabled={!selectedProspect}>Vincular cliente al punto</Button></div>
+          <div className="space-y-2 rounded-xl border border-border p-3">
+            <p className="text-sm font-bold text-foreground">Vincular punto existente</p>
+            <p className="text-xs text-muted-foreground">Busca un punto con ubicación que todavía no esté vinculado a un cliente.</p>
+            <Button
+              type="button"
+              variant="outline"
+              className="h-10 w-full min-w-0 justify-between gap-2 text-left font-normal"
+              onClick={() => { setPointSearch(''); setPointPickerOpen(true); }}
+              disabled={unlinkedProspectsLoading || Boolean(unlinkedProspectsError) || !unlinkedProspects.length}
+              aria-haspopup="dialog"
+              aria-expanded={pointPickerOpen}
+              aria-label={selectedProspectRecord ? `Cambiar punto seleccionado: ${selectedProspectRecord.name}` : 'Buscar punto comercial'}
+            >
+              <span className="min-w-0 truncate">
+                {unlinkedProspectsLoading
+                  ? 'Cargando puntos…'
+                  : selectedProspectRecord
+                    ? `${selectedProspectRecord.name}${selectedProspectRecord.address ? ` · ${selectedProspectRecord.address}` : ''}`
+                    : unlinkedProspectsError ? 'No se pudieron cargar los puntos' : unlinkedProspects.length ? 'Buscar punto por nombre o dirección' : 'No hay puntos disponibles'}
+              </span>
+              <Search className="size-4 shrink-0 text-muted-foreground" aria-hidden="true" />
+            </Button>
+            {unlinkedProspectsError && <div className="flex flex-wrap items-center justify-between gap-2"><p role="alert" className="min-w-0 text-xs text-destructive">{unlinkedProspectsError}</p><Button type="button" variant="outline" size="sm" onClick={() => void loadUnlinkedProspects()}>Reintentar</Button></div>}
+            <Button type="button" className="w-full" onClick={() => void linkExistingPoint()} disabled={!selectedProspect || unlinkedProspectsLoading}>Vincular cliente al punto</Button>
+          </div>
           <DialogFooter><Button variant="ghost" onClick={() => setLocating(null)}>Cerrar</Button></DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog
+        open={Boolean(locating) && pointPickerOpen}
+        onOpenChange={(open) => { setPointPickerOpen(open); if (!open) setPointSearch(''); }}
+      >
+        <DialogContent className="!z-[61] w-[calc(100%-1rem)] max-w-2xl gap-3 p-4 sm:p-6" overlayClassName="!z-[60]">
+          <DialogHeader className="pr-8 text-left">
+            <DialogTitle>Buscar punto comercial</DialogTitle>
+            <DialogDescription>Busca por nombre, dirección o coordenadas y selecciona el punto que corresponde a este cliente.</DialogDescription>
+          </DialogHeader>
+          <div className="relative min-w-0">
+            <Search className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" aria-hidden="true" />
+            <Input
+              autoFocus
+              type="search"
+              value={pointSearch}
+              onChange={(event) => setPointSearch(event.target.value)}
+              placeholder="Buscar nombre, dirección o coordenadas…"
+              className="pl-9"
+              aria-label="Buscar punto comercial por nombre, dirección o coordenadas"
+            />
+          </div>
+          <p className="text-xs text-muted-foreground" aria-live="polite">
+            {unlinkedProspectsLoading ? 'Cargando puntos…' : `${filteredUnlinkedProspects.length} de ${unlinkedProspects.length} puntos disponibles`}
+          </p>
+          <div role="listbox" aria-label="Puntos comerciales sin cliente" className="max-h-[min(56vh,calc(100dvh-17rem))] min-w-0 space-y-2 overflow-y-auto overscroll-contain rounded-xl border border-border/60 bg-muted/10 p-2">
+            {unlinkedProspectsLoading
+              ? <p className="py-10 text-center text-sm text-muted-foreground">Cargando puntos comerciales…</p>
+              : unlinkedProspectsError
+                ? <p role="alert" className="py-10 text-center text-sm text-destructive">{unlinkedProspectsError}</p>
+                : filteredUnlinkedProspects.length
+                  ? filteredUnlinkedProspects.map((prospect) => {
+                    const selected = selectedProspect === prospect.id;
+                    return (
+                      <button
+                        key={prospect.id}
+                        type="button"
+                        role="option"
+                        aria-selected={selected}
+                        onClick={() => { setSelectedProspect(prospect.id); setPointPickerOpen(false); setPointSearch(''); }}
+                        className={`flex min-w-0 w-full items-center gap-3 rounded-xl border p-3 text-left transition-colors hover:border-primary/40 hover:bg-primary/5 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring ${selected ? 'border-primary/50 bg-primary/5' : 'border-border/60 bg-card'}`}
+                      >
+                        <span className="flex size-9 shrink-0 items-center justify-center rounded-lg bg-primary/10 text-primary"><MapPin className="size-4" aria-hidden="true" /></span>
+                        <span className="min-w-0 flex-1">
+                          <span className="block break-words text-sm font-semibold text-foreground">{prospect.name}</span>
+                          <span className="mt-0.5 block break-words text-xs text-muted-foreground">{prospect.address || `${prospect.lat}, ${prospect.lng}`}</span>
+                        </span>
+                        <Check className={`size-4 shrink-0 text-primary ${selected ? 'opacity-100' : 'opacity-0'}`} aria-hidden="true" />
+                      </button>
+                    );
+                  })
+                  : <p className="py-10 text-center text-sm text-muted-foreground">{unlinkedProspects.length ? 'No se encontraron puntos con esa búsqueda.' : 'No hay puntos con ubicación pendientes de vincular.'}</p>}
+          </div>
+          <DialogFooter><Button type="button" variant="outline" onClick={() => setPointPickerOpen(false)}>Cerrar</Button></DialogFooter>
         </DialogContent>
       </Dialog>
     </div>
