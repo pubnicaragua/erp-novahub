@@ -286,22 +286,6 @@ export function EditableDataTable<T extends { [key: string]: any }>({
     ? columns.reduce((total, column) => total + (Number.parseInt(String(column.width || ''), 10) || 140), 0) + (showSelection ? 48 : 0) + actionColumnWidth
     : undefined;
 
-  const getColumnScrollTargets = useCallback(() => {
-    const element = tableScrollRef.current;
-    if (!element) return [0];
-    const boundaries = [0];
-    const maxScroll = Math.max(0, element.scrollWidth - element.clientWidth);
-    const viewportLeft = element.getBoundingClientRect().left;
-    const cells = element.querySelectorAll<HTMLElement>('[data-slot="table"] thead th');
-    cells.forEach((cell, index) => {
-      if (showSelection && index === 0) return;
-      const right = cell.getBoundingClientRect().right - viewportLeft + element.scrollLeft;
-      boundaries.push(Math.min(maxScroll, Math.max(0, right)));
-    });
-    boundaries.push(maxScroll);
-    return [...new Set(boundaries)].sort((a, b) => a - b);
-  }, [showSelection]);
-
   useEffect(() => {
     setData(initialData);
   }, [initialData]);
@@ -337,12 +321,12 @@ export function EditableDataTable<T extends { [key: string]: any }>({
   const scrollTable = (direction: 'left' | 'right') => {
     const element = tableScrollRef.current;
     if (!element) return;
-    const targets = getColumnScrollTargets();
-    const currentPosition = element.scrollLeft;
+    const maxScroll = Math.max(0, element.scrollWidth - element.clientWidth);
+    const distance = Math.max(240, Math.floor(element.clientWidth * 0.72));
     const nextPosition = direction === 'right'
-      ? targets.find((target) => target > currentPosition + 4) ?? targets[targets.length - 1]
-      : [...targets].reverse().find((target) => target < currentPosition - 4) ?? targets[0];
-    if (Math.abs(nextPosition - currentPosition) < 1) return;
+      ? Math.min(maxScroll, element.scrollLeft + distance)
+      : Math.max(0, element.scrollLeft - distance);
+    if (Math.abs(nextPosition - element.scrollLeft) < 1) return;
     element.scrollTo({ left: nextPosition, behavior: 'smooth' });
   };
 
@@ -705,12 +689,14 @@ export function EditableDataTable<T extends { [key: string]: any }>({
         <ViewportManagedTable
           containerClassName={
             verticalScroll
-              ? 'contents'
+              ? 'min-w-0 max-w-none overflow-visible'
               : fitContent
                 ? 'w-full min-w-0 max-w-none overflow-visible'
                 : undefined
           }
-          containerStyle={tableMinWidth ? { width: `max(100%, ${tableMinWidth}px)`, maxWidth: 'none' } : undefined}
+          containerStyle={tableMinWidth
+            ? { width: `max(100%, ${tableMinWidth}px)`, maxWidth: 'none', ...(verticalScroll ? { overflow: 'visible' } : {}) }
+            : verticalScroll ? { overflow: 'visible' } : undefined}
           style={tableMinWidth ? { width: '100%', minWidth: `${tableMinWidth}px`, maxWidth: 'none' } : undefined}
           className={cn(fitContent ? 'w-full min-w-full' : 'w-full min-w-max', 'table-fixed')}
         >
