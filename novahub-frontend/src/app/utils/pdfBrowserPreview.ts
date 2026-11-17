@@ -68,6 +68,20 @@ export function showPdfInBrowserPreview(
   }
 }
 
+/** Descarga el PDF con su nombre comercial, además de la previsualización. */
+export function downloadPdfBlob(blob: Blob, fileName: string) {
+  const downloadName = /\.pdf$/i.test(fileName) ? fileName : `${fileName}.pdf`;
+  const downloadUrl = URL.createObjectURL(blob);
+  const link = document.createElement('a');
+  link.href = downloadUrl;
+  link.download = downloadName;
+  link.style.display = 'none';
+  document.body.appendChild(link);
+  link.click();
+  link.remove();
+  window.setTimeout(() => URL.revokeObjectURL(downloadUrl), 1000);
+}
+
 export function closePdfBrowserPreview(session: PdfBrowserPreviewSession | null) {
   if (!session) return;
   if (pendingPreview === session) pendingPreview = null;

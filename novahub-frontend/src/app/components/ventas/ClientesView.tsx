@@ -45,7 +45,7 @@ import { aggregateCustomerHistory, mergeCustomerHistoryByIdentifier, prepareCust
 import { buildCustomerHistoryTemplateHeaders, DEFAULT_CUSTOMER_HISTORY_PROFILE, normalizeCustomerHistoryProfile, type CustomerHistoryProfile } from '../../utils/customer-history-profile';
 import { generateConfiguredReportSectionsPDF } from '../../utils/pdfGenerator';
 import type { PdfPaperFormat } from '../../utils/pdfDownloadFormats';
-import { beginPdfBrowserPreview, closePdfBrowserPreview, type PdfBrowserPreviewSession } from '../../utils/pdfBrowserPreview';
+import { beginPdfBrowserPreview, closePdfBrowserPreview, downloadPdfBlob, type PdfBrowserPreviewSession } from '../../utils/pdfBrowserPreview';
 import { ExportMenu } from '../ui/ExportMenu';
 import { buildDatedDownloadFileName } from '../../utils/exportFileNames';
 import { createReportWorkbook } from '../../utils/reportWorkbook';
@@ -926,14 +926,15 @@ export function ClientesView({ data, loading, error, onRefresh, pagination, onSe
         Tipo: customerTypeFilter === 'ALL' ? 'Todos' : customerTypeFilter === 'INDIVIDUAL' ? 'Particulares' : 'Empresas',
         'Fecha de ingreso': dateFrom || dateTo ? `${dateFrom || 'Sin inicio'} – ${dateTo || 'Sin fin'}` : 'Todas',
       };
+      const fileName = buildDatedDownloadFileName(['listado_de_clientes'], format);
       if (format === 'xlsx') {
         createReportWorkbook({
-          fileName: buildDatedDownloadFileName(['reporte_clientes'], 'xlsx'),
+          fileName,
           sheets: [{ name: 'Clientes', rows }],
           filters,
         });
       } else {
-        await generateConfiguredReportSectionsPDF({
+        const report = await generateConfiguredReportSectionsPDF({
           targetKey: 'ventas.customers',
           title: 'Listado de clientes',
           tenantName: user?.tenantName || 'Mi Empresa',
@@ -946,10 +947,11 @@ export function ClientesView({ data, loading, error, onRefresh, pagination, onSe
             { label: 'EMPRESAS', value: String(companyCount), detail: 'Organizaciones' },
           ],
           sections: [{ id: 'sales-customers', title: 'Clientes', headers: Object.keys(rows[0]), widths: selectedColumns.map(() => 1), rows: rows.map((row) => Object.values(row)) }],
-          fileName: buildDatedDownloadFileName(['reporte_clientes'], 'pdf'),
+          fileName,
           format: paperFormat,
           useVectorTables: rows.length > 500,
         });
+        downloadPdfBlob(report.output('blob'), fileName);
       }
       toast.success(`Reporte de clientes exportado en ${format === 'xlsx' ? 'Excel' : 'PDF'}.`);
     } catch (error) {

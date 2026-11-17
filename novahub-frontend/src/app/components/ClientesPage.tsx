@@ -20,6 +20,7 @@ import { normalizeCurrency } from '../utils/currency';
 import { CustomerCountrySelect, CustomerIdentifierInput, CustomerPhoneInput, useCustomerFormOptions, countryNameForForm } from './ventas/CustomerContactFields';
 import { countryCodeFromLegacy, customerRucRequired, formatCustomerPhoneForDisplay, isCustomerIdentifierValid, isCustomerPhoneValid } from '../utils/customer-data';
 import { generateConfiguredReportSectionsPDF } from '../utils/pdfGenerator';
+import { downloadPdfBlob } from '../utils/pdfBrowserPreview';
 import type { PdfPaperFormat } from '../utils/pdfDownloadFormats';
 import { ExportMenu } from './ui/ExportMenu';
 import { buildDatedDownloadFileName } from '../utils/exportFileNames';
@@ -105,10 +106,11 @@ export function ClientesPage() {
         toast.error('No hay clientes para exportar con los filtros actuales.');
         return;
       }
+      const fileName = buildDatedDownloadFileName(['listado_de_clientes'], format);
       if (format === 'xlsx') {
-        createReportWorkbook({ fileName: buildDatedDownloadFileName(['reporte_clientes'], 'xlsx'), sheets: [{ name: 'Clientes', rows }], filters: { Búsqueda: searchTerm || 'Todas', Alcance: 'Todos los resultados filtrados' } });
+        createReportWorkbook({ fileName, sheets: [{ name: 'Clientes', rows }], filters: { Búsqueda: searchTerm || 'Todas', Alcance: 'Todos los resultados filtrados' } });
       } else {
-        await generateConfiguredReportSectionsPDF({
+        const report = await generateConfiguredReportSectionsPDF({
           targetKey: 'ventas.customers', title: 'Listado de clientes', tenantName: user?.tenantName || 'Mi Empresa', tenantLogo: user?.sessionBranding?.logo || '',
           kpis: [
             { label: 'CLIENTES', value: String(rows.length), detail: 'En este listado' },
@@ -118,10 +120,11 @@ export function ClientesPage() {
             { label: 'EMPRESAS', value: String(companyCount), detail: 'Organizaciones' },
           ],
           sections: [{ id: 'sales-customers', title: 'Clientes', headers: Object.keys(rows[0]), widths: [10, 18, 12, 16, 24, 12, 8], rows: rows.map((row) => Object.values(row)) }],
-          fileName: buildDatedDownloadFileName(['reporte_clientes'], 'pdf'),
+          fileName,
           format: paperFormat,
           useVectorTables: rows.length > 500,
         });
+        downloadPdfBlob(report.output('blob'), fileName);
       }
       toast.success(`Reporte de clientes exportado en ${format === 'xlsx' ? 'Excel' : 'PDF'}.`);
     } catch (error: unknown) {
