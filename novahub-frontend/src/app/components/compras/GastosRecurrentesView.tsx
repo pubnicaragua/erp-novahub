@@ -452,7 +452,13 @@ export function GastosRecurrentesView({ data, summaryData, summaryLoading, summa
                     disabled={isNew ? !canPerform('PURCHASES_EXPENSES_REC', 'create') : !canPerform('PURCHASES_EXPENSES_REC', 'edit')}
                     type="date" 
                     value={localDoc.startDate ? new Date(localDoc.startDate).toISOString().split('T')[0] : ''} 
-                    onChange={(e) => setLocalDoc({ ...localDoc, startDate: new Date(e.target.value).toISOString() })} 
+                    onChange={(e) => {
+                      const startDate = new Date(e.target.value);
+                      if (Number.isNaN(startDate.getTime())) return;
+                      // En un recurrente nuevo, el día del mes sigue a la fecha de inicio (antes se quedaba en el día en que se abrió el formulario).
+                      const followsStart = isNew && ['MONTHLY', 'QUARTERLY', 'SEMIANNUAL', 'YEARLY'].includes(String(localDoc.frequency || '').toUpperCase());
+                      setLocalDoc({ ...localDoc, startDate: startDate.toISOString(), ...(followsStart ? { dayOfMonth: startDate.getUTCDate() } : {}) });
+                    }}
                     className="h-8 text-xs" 
                   />
                 </div>
