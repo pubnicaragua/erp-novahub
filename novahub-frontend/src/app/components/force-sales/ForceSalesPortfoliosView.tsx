@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import * as XLSX from 'xlsx';
-import { ArrowLeftRight, Check, ChevronDown, Download, FileSpreadsheet, LocateFixed, MapPin, MoreHorizontal, Plus, RefreshCw, Route, Search, Upload, UserRound, X } from 'lucide-react';
+import { ArrowLeftRight, Check, ChevronDown, Download, FileSpreadsheet, LocateFixed, MapPin, MoreHorizontal, Pencil, Plus, RefreshCw, Route, Search, Upload, UserRound, X } from 'lucide-react';
 import { forceSalesPortfoliosService, type AvailablePortfolioCustomer, type ForceSalesPortfolio, type ForceSalesPortfolioImportResult, type UnlinkedForceSalesProspect } from '../../services/force-sales-portfolios.service';
 import { ForceSalesPortfolioImportPreview, type ForceSalesImportManager, type ForceSalesImportRow } from './ForceSalesPortfolioImportPreview';
 import { toast } from '../../services/toast';
@@ -175,6 +175,9 @@ export function ForceSalesPortfoliosView({
   const [createPortfolioOpen, setCreatePortfolioOpen] = useState(false);
   const [newPortfolioName, setNewPortfolioName] = useState('');
   const [newPortfolioAssignee, setNewPortfolioAssignee] = useState('');
+  const [editingPortfolio, setEditingPortfolio] = useState<ForceSalesPortfolio | null>(null);
+  const [editPortfolioName, setEditPortfolioName] = useState('');
+  const [savingPortfolioName, setSavingPortfolioName] = useState(false);
   const [availableCustomerSearch, setAvailableCustomerSearch] = useState('');
   const [availableCustomers, setAvailableCustomers] = useState<AvailablePortfolioCustomer[]>([]);
   const [availableCustomerCache, setAvailableCustomerCache] = useState<Record<string, AvailablePortfolioCustomer>>({});
@@ -419,6 +422,28 @@ export function ForceSalesPortfoliosView({
     catch (error: unknown) { toast.error(errorMessage(error, 'No se pudo cerrar la cartera.')); }
   };
 
+  const openRenamePortfolio = (portfolio: ForceSalesPortfolio) => {
+    setEditPortfolioName(portfolio.name);
+    setEditingPortfolio(portfolio);
+  };
+
+  const savePortfolioName = async () => {
+    if (!editingPortfolio) return;
+    const name = editPortfolioName.trim();
+    if (!name) { toast.error('Escribe el nombre de la cartera.'); return; }
+    if (name.length > 180) { toast.error('El nombre no debe superar 180 caracteres.'); return; }
+    if (name === editingPortfolio.name) { setEditingPortfolio(null); return; }
+    setSavingPortfolioName(true);
+    try {
+      const updated = await forceSalesPortfoliosService.rename(editingPortfolio.id, name);
+      setPortfolios((current) => current.map((portfolio) => portfolio.id === updated.id ? { ...portfolio, name: updated.name } : portfolio));
+      toast.success('Nombre de la cartera actualizado.');
+      setEditingPortfolio(null);
+    } catch (error: unknown) {
+      toast.error(errorMessage(error, 'No se pudo actualizar el nombre de la cartera.'));
+    } finally { setSavingPortfolioName(false); }
+  };
+
   const transferCustomer = async (portfolio: ForceSalesPortfolio, customerId: string, customerName: string) => {
     const targetId = transferTarget[customerId];
     if (!targetId) { toast.error('Selecciona la cartera destino.'); return; }
@@ -547,9 +572,12 @@ export function ForceSalesPortfoliosView({
                 </div>
                 <div className="flex shrink-0 items-center gap-2"><ChevronDown className={`size-4 transition-transform ${isExpanded ? 'rotate-180' : ''}`} /></div>
               </button>
-              {canManage && portfolio.status === 'ACTIVE' && <DropdownMenu>
+              {canManage && <DropdownMenu>
                 <DropdownMenuTrigger asChild><Button type="button" variant="ghost" size="icon" className="shrink-0" aria-label={`Acciones de la cartera ${portfolio.name}`}><MoreHorizontal className="size-5" /></Button></DropdownMenuTrigger>
-                <DropdownMenuContent align="end"><DropdownMenuItem variant="destructive" onSelect={() => void closePortfolio(portfolio)}><X className="size-4" />Cerrar cartera</DropdownMenuItem></DropdownMenuContent>
+                <DropdownMenuContent align="end">
+                  <DropdownMenuItem onSelect={() => openRenamePortfolio(portfolio)}><Pencil className="size-4" />Editar nombre</DropdownMenuItem>
+                  {portfolio.status === 'ACTIVE' && <DropdownMenuItem variant="destructive" onSelect={() => void closePortfolio(portfolio)}><X className="size-4" />Cerrar cartera</DropdownMenuItem>}
+                </DropdownMenuContent>
               </DropdownMenu>}
               </div>
               {isExpanded && <div className="border-t border-border p-3 sm:p-5">
@@ -645,6 +673,22 @@ export function ForceSalesPortfoliosView({
           <DialogFooter className="flex-wrap">
             <Button type="button" variant="outline" onClick={() => setCreatePortfolioOpen(false)} disabled={creatingPortfolio}>Cancelar</Button>
             <Button type="button" onClick={() => void createManualPortfolio()} disabled={creatingPortfolio || !newPortfolioName.trim() || !newPortfolioAssignee || !selectedNewCustomerIds.length}><Plus className="mr-2 size-4" />{creatingPortfolio ? 'Creando cartera…' : 'Crear cartera'}</Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={Boolean(editingPortfolio)} onOpenChange={(open) => { if (!open && !savingPortfolioName) setEditingPortfolio(null); }}>
+        <DialogContent className="w-[calc(100vw-1rem)] max-w-md">
+          <DialogHeader>
+            <DialogTitle className="nh-section-title flex items-center gap-2"><Pencil className="size-5" />Editar nombre de cartera</DialogTitle>
+            <DialogDescription>Actualiza el nombre que aparece en Fuerza Comercial. Los clientes y su historial conservarán sus asignaciones.</DialogDescription>
+          </DialogHeader>
+          <label className="space-y-1.5 text-xs font-bold text-muted-foreground">Nombre de la cartera
+            <Input value={editPortfolioName} onChange={(event) => setEditPortfolioName(event.target.value)} maxLength={180} autoFocus />
+          </label>
+          <DialogFooter className="flex-wrap">
+            <Button type="button" variant="outline" onClick={() => setEditingPortfolio(null)} disabled={savingPortfolioName}>Cancelar</Button>
+            <Button type="button" onClick={() => void savePortfolioName()} disabled={savingPortfolioName || !editPortfolioName.trim()}>{savingPortfolioName ? 'Guardando…' : 'Guardar nombre'}</Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>

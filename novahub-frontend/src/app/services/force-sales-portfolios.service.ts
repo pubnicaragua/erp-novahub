@@ -75,6 +75,7 @@ export const forceSalesPortfoliosService = {
   assignees: () => api.get<Array<{ id: string; name: string; activeRouteCount: number }>>('/force-sales/assignees'),
   availableCustomers: (search = '', skip = 0, take = 50) => api.get<AvailablePortfolioCustomersPage>('/force-sales/portfolios/available-customers', { params: { search, skip, take } }),
   create: (data: { name: string; assignedToId: string; customerIds: string[] }) => api.post<{ id: string; name: string; status: 'ACTIVE'; assignedToId: string; createdAt: string; memberCount: number }>('/force-sales/portfolios', data),
+  rename: (portfolioId: string, name: string) => api.patch<{ id: string; name: string }>(`/force-sales/portfolios/${encodeURIComponent(portfolioId)}`, { name }),
   unlinkedProspects: () => api.get<UnlinkedForceSalesProspect[]>('/force-sales/portfolios/unlinked-prospects'),
   import: (data: {
     rows: Array<Record<string, unknown>>;
