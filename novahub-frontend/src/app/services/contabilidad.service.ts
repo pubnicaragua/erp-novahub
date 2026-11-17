@@ -42,6 +42,7 @@ export const contabilidadService = {
   },
   getAccount: (id: string, signal?: AbortSignal) => api.get<ChartAccount>(`/accounting/accounts/${id}`, { signal }),
   createAccount: (data: Partial<ChartAccount>) => api.post<ChartAccount>('/accounting/accounts', data),
+  adjustAccountBalance: (id: string, data: { amount: number; direction: 'INCREASE' | 'DECREASE'; concept: string; date: string; counterAccountId: string; requestId?: string }) => api.post<any>(`/accounting/accounts/${id}/balance-adjustment`, data),
   updateAccount: (id: string, data: Partial<ChartAccount>) => api.put<ChartAccount>(`/accounting/accounts/${id}`, data),
   deleteAccount: (id: string) => api.delete(`/accounting/accounts/${id}`),
   mergeAccount: (id: string, targetAccountId: string, deleteSource = true) => api.post<any>(`/accounting/accounts/${id}/merge`, { targetAccountId, deleteSource }),

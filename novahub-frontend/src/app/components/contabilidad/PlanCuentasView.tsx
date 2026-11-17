@@ -32,6 +32,7 @@ import { downloadXlsx, templateRows } from '../../utils/chartOfAccountsCsv';
 import { useAuth } from '../../contexts/AuthContext';
 import { formatDateOnly } from '../../utils/dateFormat';
 import { AccountImportPreview } from './AccountImportPreview';
+import { AccountBalanceAdjustDialog } from './AccountBalanceAdjustDialog';
 import { accountingList, useAccountingQuery } from '../../hooks/useAccountingQuery';
 import { normalizeSearchText } from '../../utils/searchText';
 import { ConfirmDialog } from '../ui/ConfirmDialog';
@@ -491,6 +492,16 @@ export function PlanCuentasView({ isSidebarCollapsed = true, helpTrigger }: Plan
     };
     return buildOptions(accounts, '');
   };
+
+  // «Ajustar saldo»: asiento publicado sin soporte contra la cuenta que elija el contador (p. ej. diferencial cambiario).
+  const [adjustAccount, setAdjustAccount] = useState<AccountNode | null>(null);
+  const canAdjustBalance = canPerform('ACCOUNTING_JOURNAL', 'create');
+  const isAdjustable = (account: AccountNode) => account.isActive && account.acceptsPostings !== false && (account.children?.length ?? 0) === 0;
+  const adjustCounterOptions = useMemo(
+    () => flatList.filter((a) => a.isActive && a.acceptsPostings !== false && a.children.length === 0)
+      .map((a) => ({ id: a.id, code: a.code, name: a.name, type: a.type, currency: a.currency })),
+    [flatList],
+  );
 
   const generateCode = async (type: AccountType, parentId?: string) => {
     const typePrefix: Record<AccountType, string> = {
@@ -1205,6 +1216,11 @@ export function PlanCuentasView({ isSidebarCollapsed = true, helpTrigger }: Plan
                 </div>
 
                 <div className="flex flex-wrap gap-2">
+                  {canAdjustBalance && isAdjustable(selectedAccount) && (
+                    <Button variant="outline" size="sm" className="w-full border-primary/40 text-primary hover:text-primary" data-testid="accounting-adjust-balance" onClick={() => setAdjustAccount(selectedAccount)}>
+                      <ArrowRightLeft className="mr-1 size-3.5" /> Ajustar saldo
+                    </Button>
+                  )}
                   {canPerform('ACCOUNTING_CHART', 'edit') && (
                     <>
                       <Button variant="outline" size="sm" className="flex-1" onClick={() => openEditDialog(selectedAccount)}>
@@ -1508,6 +1524,14 @@ export function PlanCuentasView({ isSidebarCollapsed = true, helpTrigger }: Plan
           </DialogFooter>
         </DialogContent>
       </Dialog>
+
+      <AccountBalanceAdjustDialog
+        key={adjustAccount?.id ?? 'sin-ajuste'}
+        account={adjustAccount ? { id: adjustAccount.id, code: adjustAccount.code, name: adjustAccount.name, type: adjustAccount.type, currency: adjustAccount.currency } : null}
+        counterOptions={adjustCounterOptions}
+        onClose={() => setAdjustAccount(null)}
+        onDone={() => { setAdjustAccount(null); fetchAccounts(true); }}
+      />
 
       {/* Add/Edit Dialog */}
       <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
