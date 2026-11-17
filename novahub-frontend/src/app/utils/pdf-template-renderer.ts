@@ -421,7 +421,10 @@ export function paginatePdfTableRows(rows: Array<Record<string, unknown>>, colum
   let current: Array<Record<string, unknown>> = [];
   let used = 0;
   let pageIndex = 0;
-  const capacity = () => pageIndex === 0 ? firstPageCapacity : continuationPageCapacity;
+  // Las páginas siguientes ya no cargan el título ni los metadatos del
+  // documento, por lo que no deben quedar con menos filas que la primera.
+  const effectiveContinuationCapacity = Math.max(firstPageCapacity, continuationPageCapacity);
+  const capacity = () => pageIndex === 0 ? firstPageCapacity : effectiveContinuationCapacity;
   const flush = () => {
     if (!current.length) return;
     chunks.push(current);
@@ -448,7 +451,12 @@ export function paginatePdfReportSections(sections: PdfTemplateReportSection[], 
   let used = 0;
   let pageIndex = 0;
   const firstPageCapacity = Math.max(1, Number(options.firstPageCapacity) || 11);
-  const continuationPageCapacity = Math.max(1, Number(options.continuationPageCapacity) || 20);
+  // La continuación omite la identidad completa, título y metadatos; mantener
+  // una capacidad menor producía páginas posteriores con tablas demasiado cortas.
+  const continuationPageCapacity = Math.max(
+    firstPageCapacity,
+    Number(options.continuationPageCapacity) || 20,
+  );
   const capacity = () => pageIndex === 0 ? firstPageCapacity : continuationPageCapacity;
   const flush = () => {
     if (!current.length) return;
@@ -504,9 +512,9 @@ export function getPdfReportPagination(targetKey: string) {
   const target = getPdfTemplateTarget(targetKey);
   if (target.structure === 'report' && ['inventario', 'finanzas', 'contabilidad'].includes(target.module)) {
     // Las filas de estos reportes suelen envolver descripción, fecha y notas.
-    // La estimación por caracteres no refleja por completo la altura real de
-    // esas celdas; dejar margen evita que las últimas filas invadan el footer.
-    return { firstPageCapacity: 27, continuationPageCapacity: 22 };
+    // La primera página conserva los metadatos; las continuaciones aprovechan
+    // el espacio liberado y mantienen margen para las celdas multilínea.
+    return { firstPageCapacity: 27, continuationPageCapacity: 28 };
   }
   return undefined;
 }
@@ -2769,7 +2777,7 @@ export async function renderPdfTemplateToPdf({ definition, settings: requestedSe
         rows,
         tableNode.columns?.length ? tableNode.columns : [],
         expandedReportCapacity ? 27 : purchaseDocument ? (denseTable ? 12 : 15) : denseTable ? 12 : 14,
-        expandedReportCapacity ? 25 : purchaseDocument ? (denseTable ? 18 : 22) : denseTable ? 18 : 20,
+        expandedReportCapacity ? 28 : purchaseDocument ? (denseTable ? 18 : 22) : denseTable ? 18 : 20,
       )
       : [[]];
     const renderChunks = isRepeatedLabel && rows.length ? rows.map(row => [row]) : chunks;
