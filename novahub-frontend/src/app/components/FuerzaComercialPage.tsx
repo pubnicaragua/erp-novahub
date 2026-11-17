@@ -341,6 +341,7 @@ export function FuerzaComercialPage({ activeSubModule, onSubModuleChange, isSide
           canManage={isAdmin && canPerform('FORCE_SALES', 'editRoute')}
           canTransfer={isAdmin && canPerform('FORCE_SALES', 'assignProspect')}
           canLocate={canPerform('FORCE_SALES', 'updateProspect')}
+          isSidebarCollapsed={isSidebarCollapsed}
           onPickLocation={(portfolioId, customerId) => {
             pendingPortfolioLocationRef.current = { portfolioId, customerId };
             onSubModuleChange?.('fuerza-comercial');

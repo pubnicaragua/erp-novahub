@@ -1,16 +1,14 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import * as XLSX from 'xlsx';
-import { AlertCircle, ArrowLeftRight, Check, ChevronDown, Download, FileSpreadsheet, LocateFixed, MapPin, Plus, RefreshCw, Upload, UserRound, X } from 'lucide-react';
+import { ArrowLeftRight, ChevronDown, Download, FileSpreadsheet, LocateFixed, MapPin, Plus, RefreshCw, Upload, UserRound, X } from 'lucide-react';
 import { forceSalesPortfoliosService, type ForceSalesPortfolio, type ForceSalesPortfolioImportResult, type UnlinkedForceSalesProspect } from '../../services/force-sales-portfolios.service';
+import { ForceSalesPortfolioImportPreview, type ForceSalesImportManager, type ForceSalesImportRow } from './ForceSalesPortfolioImportPreview';
 import { toast } from '../../services/toast';
 import { Badge } from '../ui/badge';
 import { Button } from '../ui/button';
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '../ui/dialog';
 import { Input } from '../ui/input';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../ui/select';
-
-type Manager = { id: string; name: string; activeRouteCount: number };
-type ImportRow = Record<string, unknown> & { _rowNumber: number; _managerId: string; _name: string; _signedBalance: string };
 
 const normalizeHeader = (value: unknown) => String(value ?? '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase().replace(/[^a-z0-9]/g, '');
 function errorMessage(error: unknown, fallback: string) {
@@ -25,10 +23,11 @@ function errorMessage(error: unknown, fallback: string) {
 }
 function errorList(error: unknown) {
   if (!error || typeof error !== 'object') return [];
-  const value = error as { response?: { data?: { errors?: unknown; message?: unknown } } };
+  const value = error as { response?: { data?: { errors?: unknown; message?: unknown } }; details?: unknown };
   const body = value.response?.data;
   if (Array.isArray(body?.errors)) return body.errors.map(String);
   if (Array.isArray(body?.message)) return body.message.map(String);
+  if (Array.isArray(value.details)) return value.details.map(String);
   return [];
 }
 const getCell = (row: Record<string, unknown>, aliases: string[]) => {
@@ -78,7 +77,7 @@ function downloadPortfolioTemplate() {
   XLSX.writeFile(workbook, 'plantilla_clientes_carteras.xlsx');
 }
 
-function parseImportRows(rawRows: Array<Record<string, unknown>>, managers: Manager[]): ImportRow[] {
+function parseImportRows(rawRows: Array<Record<string, unknown>>, managers: ForceSalesImportManager[]): ForceSalesImportRow[] {
   return rawRows.map((source, index) => {
     const managerValue = String(getCell(source, ['Gestor/Usuario', 'Gestor', 'Gestores', 'Usuario', 'Responsable', 'Assigned To', 'Manager']) || '').trim();
     const managerKey = normalizeHeader(managerValue);
@@ -125,21 +124,23 @@ export function ForceSalesPortfoliosView({
   canTransfer,
   canLocate,
   onPickLocation,
+  isSidebarCollapsed = false,
 }: {
   canImport: boolean;
   canManage: boolean;
   canTransfer: boolean;
   canLocate: boolean;
   onPickLocation: (portfolioId: string, customerId: string) => void;
+  isSidebarCollapsed?: boolean;
 }) {
   const [portfolios, setPortfolios] = useState<ForceSalesPortfolio[]>([]);
-  const [managers, setManagers] = useState<Manager[]>([]);
+  const [managers, setManagers] = useState<ForceSalesImportManager[]>([]);
   const [loading, setLoading] = useState(true);
   const [importOpen, setImportOpen] = useState(false);
+  const [importPreviewOpen, setImportPreviewOpen] = useState(false);
   const [fileName, setFileName] = useState('');
-  const [rows, setRows] = useState<ImportRow[]>([]);
+  const [rows, setRows] = useState<ForceSalesImportRow[]>([]);
   const [importErrors, setImportErrors] = useState<string[]>([]);
-  const [importWarnings, setImportWarnings] = useState<string[]>([]);
   const [portfolioName, setPortfolioName] = useState('Cartera');
   const [openingBalanceDate, setOpeningBalanceDate] = useState(localDate);
   const [openingBalanceCurrency, setOpeningBalanceCurrency] = useState<'NIO' | 'USD'>('NIO');
@@ -192,14 +193,21 @@ export function ForceSalesPortfoliosView({
   const activePortfolios = useMemo(() => portfolios.filter((portfolio) => portfolio.status === 'ACTIVE'), [portfolios]);
   const activeCustomers = useMemo(() => portfolios.reduce((count, portfolio) => count + portfolio.customers.filter((row) => row.assignmentStatus === 'ACTIVE').length, 0), [portfolios]);
   const openImport = () => {
-    setFileName(''); setRows([]); setImportErrors([]); setImportWarnings([]); setImportResult(null);
+    setFileName(''); setRows([]); setImportErrors([]); setImportResult(null); setImportPreviewOpen(false);
     setPortfolioName('Cartera'); setOpeningBalanceDate(localDate()); setOpeningBalanceCurrency('NIO'); setBatchId(crypto.randomUUID());
     setImportOpen(true);
   };
 
   const onFile = async (file?: File) => {
     if (!file) return;
-    setImportErrors([]); setImportWarnings([]); setImportResult(null); setFileName(file.name); setPortfolioName(file.name.replace(/\.[^.]+$/, '').slice(0, 120) || 'Cartera'); setBatchId(crypto.randomUUID());
+    const extension = file.name.split('.').pop()?.toLowerCase();
+    if (extension !== 'xlsx' && extension !== 'xls') {
+      setRows([]);
+      setFileName('');
+      toast.error('Selecciona un archivo Excel en formato .xlsx o .xls.');
+      return;
+    }
+    setImportErrors([]); setImportResult(null); setFileName(file.name); setPortfolioName(file.name.replace(/\.[^.]+$/, '').slice(0, 120) || 'Cartera'); setBatchId(crypto.randomUUID());
     try {
       const workbook = XLSX.read(await file.arrayBuffer(), { type: 'array', cellDates: true });
       const sheetName = workbook.SheetNames.find((name) => normalizeHeader(name) === 'clientes') || workbook.SheetNames[0];
@@ -210,7 +218,7 @@ export function ForceSalesPortfoliosView({
       setRows(parsedRows);
     } catch (error: unknown) {
       setRows([]);
-      toast.error(errorMessage(error, 'No se pudo leer el archivo. Usa XLSX, XLS o CSV.'));
+      toast.error(errorMessage(error, 'No se pudo leer el archivo Excel. Usa formato .xlsx o .xls.'));
     }
   };
 
@@ -225,7 +233,7 @@ export function ForceSalesPortfoliosView({
 
   const confirmImport = async () => {
     if (!rows.length || rowErrors.length || !portfolioName.trim() || !openingBalanceDate) return;
-    setImporting(true); setImportErrors([]); setImportWarnings([]); setImportResult(null);
+    setImporting(true); setImportErrors([]); setImportResult(null);
     try {
       const response = await forceSalesPortfoliosService.import({
         batchId,
@@ -245,15 +253,34 @@ export function ForceSalesPortfoliosView({
         }),
       });
       setImportResult(response);
-      setImportWarnings(response.warnings || []);
       await reload();
       toast.success(response.idempotentReplay ? 'Se recuperó el resultado de la carga anterior.' : `Se crearon ${response.created} clientes en ${response.portfolios?.length || 0} carteras.`);
     } catch (error: unknown) {
       const messages = errorList(error);
       const message = errorMessage(error, 'No se pudo importar el archivo.');
       setImportErrors(messages.length ? messages : [message]);
-      if (!messages.length) toast.error(message);
     } finally { setImporting(false); }
+  };
+
+  const openImportPreview = () => {
+    if (!rows.length) return;
+    setImportOpen(false);
+    setImportPreviewOpen(true);
+  };
+
+  const backToImport = () => {
+    if (importing) return;
+    setImportPreviewOpen(false);
+    setImportOpen(true);
+  };
+
+  const finishImport = () => {
+    setImportPreviewOpen(false);
+    setImportOpen(false);
+    setFileName('');
+    setRows([]);
+    setImportErrors([]);
+    setImportResult(null);
   };
 
   const closePortfolio = async (portfolio: ForceSalesPortfolio) => {
@@ -301,6 +328,21 @@ export function ForceSalesPortfoliosView({
     if (!Number.isFinite(amount)) return '—';
     return `${new Intl.NumberFormat('es-NI', { minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(amount)} · moneda base`;
   };
+
+  if (importPreviewOpen) return <ForceSalesPortfolioImportPreview
+    rows={rows}
+    managers={managers}
+    fileName={fileName}
+    portfolioName={portfolioName}
+    isSidebarCollapsed={isSidebarCollapsed}
+    importing={importing}
+    errors={importErrors}
+    result={importResult}
+    onRowManagerChange={updateRowManager}
+    onBack={backToImport}
+    onConfirm={() => void confirmImport()}
+    onDone={finishImport}
+  />;
 
   return (
     <div className="min-w-0 flex-1 overflow-y-auto bg-background px-4 py-5 sm:px-6 md:px-8">
@@ -364,20 +406,15 @@ export function ForceSalesPortfoliosView({
       <Dialog open={importOpen} onOpenChange={(open) => { if (!importing) setImportOpen(open); }}>
         <DialogContent className="max-h-[92dvh] w-[calc(100vw-1rem)] max-w-5xl overflow-y-auto">
           <DialogHeader><DialogTitle className="flex items-center gap-2"><FileSpreadsheet className="size-5" />Importar cartera comercial</DialogTitle><DialogDescription>Usa la plantilla normal de clientes con la columna Gestor/Usuario. Se crearán clientes nuevos en Ventas y una cartera por gestor.</DialogDescription></DialogHeader>
-          <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-4">
-            <label className="space-y-1 text-xs font-bold text-muted-foreground">Nombre del lote<Input value={portfolioName} onChange={(event) => setPortfolioName(event.target.value)} maxLength={120} /></label>
-            <label className="space-y-1 text-xs font-bold text-muted-foreground">Fecha de corte<Input type="date" value={openingBalanceDate} onChange={(event) => setOpeningBalanceDate(event.target.value)} /></label>
-            <label className="space-y-1 text-xs font-bold text-muted-foreground">Moneda de saldos<Select value={openingBalanceCurrency} onValueChange={(value) => setOpeningBalanceCurrency(value as 'NIO' | 'USD')}><SelectTrigger><SelectValue /></SelectTrigger><SelectContent><SelectItem value="NIO">NIO · Córdoba</SelectItem><SelectItem value="USD">USD · Dólar</SelectItem></SelectContent></Select></label>
-            <div className="flex items-end"><input ref={fileInput} type="file" accept=".xlsx,.xls,.csv,.tsv" aria-label="Archivo Excel o CSV de cartera" tabIndex={-1} className="sr-only" onChange={(event) => { void onFile(event.target.files?.[0]); event.target.value = ''; }} /><Button type="button" variant="outline" className="w-full" onClick={() => fileInput.current?.click()}><Upload className="mr-2 size-4" />{fileName || 'Elegir Excel/CSV'}</Button></div>
+          <div className="grid min-w-0 grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-[minmax(0,1fr)_minmax(0,1fr)_minmax(0,1fr)_minmax(200px,1.1fr)]">
+            <label className="min-w-0 space-y-1 text-xs font-bold text-muted-foreground">Nombre del lote<Input value={portfolioName} onChange={(event) => setPortfolioName(event.target.value)} maxLength={120} className="min-w-0 max-w-full" /></label>
+            <label className="min-w-0 space-y-1 text-xs font-bold text-muted-foreground">Fecha de corte<Input type="date" value={openingBalanceDate} onChange={(event) => setOpeningBalanceDate(event.target.value)} className="min-w-0 max-w-full" /></label>
+            <label className="min-w-0 space-y-1 text-xs font-bold text-muted-foreground">Moneda de saldos<Select value={openingBalanceCurrency} onValueChange={(value) => setOpeningBalanceCurrency(value as 'NIO' | 'USD')}><SelectTrigger className="min-w-0 max-w-full"><SelectValue /></SelectTrigger><SelectContent><SelectItem value="NIO">NIO · Córdoba</SelectItem><SelectItem value="USD">USD · Dólar</SelectItem></SelectContent></Select></label>
+            <div className="min-w-0 space-y-1"><span className="text-xs font-bold text-muted-foreground">Archivo Excel</span><input ref={fileInput} type="file" accept=".xlsx,.xls,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,application/vnd.ms-excel" aria-label="Archivo Excel de cartera" tabIndex={-1} className="sr-only" onChange={(event) => { void onFile(event.target.files?.[0]); event.target.value = ''; }} /><Button type="button" variant="outline" className="w-full min-w-0 justify-start overflow-hidden" onClick={() => fileInput.current?.click()}><Upload className="mr-2 size-4 shrink-0" /><span className="min-w-0 truncate">Elegir archivo Excel</span></Button><p className="min-w-0 truncate text-[11px] text-muted-foreground" title={fileName}>{fileName || 'Solo formatos .xlsx y .xls'}</p></div>
           </div>
           <div className="flex flex-wrap items-center justify-between gap-2 rounded-xl border border-primary/15 bg-primary/[0.035] p-3 text-xs text-muted-foreground"><span>Saldo negativo = deuda pendiente · positivo = saldo a favor · cero = sin saldo. El saldo y los datos del cliente no se actualizan si existe un homónimo; revisa los avisos.</span><Button type="button" variant="ghost" size="sm" onClick={downloadPortfolioTemplate}><Download className="mr-1.5 size-4" />Descargar plantilla</Button></div>
-          {!!rows.length && <div className="flex flex-wrap gap-2 text-xs"><Badge variant="secondary">{rows.length} filas</Badge><Badge variant={rowErrors.length ? 'destructive' : 'default'}>{rowErrors.length ? `${rowErrors.length} por corregir` : 'Lista para importar'}</Badge>{fileName && <span className="self-center text-muted-foreground">{fileName}</span>}</div>}
-          {!!rows.length && <div className="max-h-[38dvh] overflow-auto rounded-xl border border-border"><table className="w-full min-w-[740px] text-left text-xs"><thead className="sticky top-0 bg-muted text-muted-foreground"><tr><th className="p-2">Fila</th><th className="p-2">Cliente</th><th className="p-2">Dirección</th><th className="p-2">Saldo</th><th className="min-w-56 p-2">Gestor/Usuario *</th><th className="p-2">Estado</th></tr></thead><tbody>{rows.map((row, index) => { const manager = managers.find((candidate) => candidate.id === row._managerId); const invalid = !row._name || !row._managerId || (row._signedBalance !== '' && !Number.isFinite(Number(row._signedBalance))); return <tr key={`${row._rowNumber}-${index}`} className="border-t border-border/70"><td className="p-2 text-muted-foreground">{row._rowNumber}</td><td className="max-w-[230px] break-words p-2 font-semibold text-foreground">{row._name || 'Falta nombre'}</td><td className="max-w-[220px] break-words p-2 text-muted-foreground">{String(row.address || '—')}</td><td className="p-2 text-foreground">{row._signedBalance || '—'}</td><td className="p-2"><select className="h-9 w-full rounded-lg border border-input bg-background px-2 text-foreground" aria-label={`Gestor de la fila ${row._rowNumber}`} value={row._managerId} onChange={(event) => updateRowManager(index, event.target.value)}><option value="">Selecciona gestor</option>{managers.map((candidate) => <option key={candidate.id} value={candidate.id}>{candidate.name}</option>)}</select></td><td className="p-2">{invalid ? <span className="inline-flex items-center gap-1 text-destructive"><AlertCircle className="size-3.5" />Revisar</span> : <span className="inline-flex items-center gap-1 text-primary"><Check className="size-3.5" />{manager?.name || 'Válida'}</span>}</td></tr>; })}</tbody></table></div>}
-          {!!rowErrors.length && <div role="alert" className="max-h-28 overflow-auto rounded-xl border border-destructive/30 bg-destructive/5 p-3 text-xs text-destructive">{rowErrors.slice(0, 30).map((message) => <p key={message}>{message}</p>)}{rowErrors.length > 30 && <p>Y {rowErrors.length - 30} errores más.</p>}</div>}
-          {!!importErrors.length && <div role="alert" className="max-h-36 overflow-auto rounded-xl border border-destructive/30 bg-destructive/5 p-3 text-xs text-destructive">{importErrors.map((message, index) => <p key={`${index}-${message}`}>{message}</p>)}</div>}
-          {!!importWarnings.length && <div className="max-h-32 overflow-auto rounded-xl border border-amber-500/30 bg-amber-500/5 p-3 text-xs text-amber-800 dark:text-amber-200"><p className="mb-1 font-bold">Avisos para revisar</p>{importWarnings.map((message, index) => <p key={`${index}-${message}`}>{message}</p>)}</div>}
-          {importResult && <div role="status" className="rounded-xl border border-primary/20 bg-primary/5 p-3 text-sm text-foreground">{importResult.idempotentReplay ? 'La carga ya se había completado.' : `Importación completada: ${importResult.created} clientes en ${importResult.portfolios?.length || 0} carteras.`}</div>}
-          <DialogFooter className="flex-col-reverse gap-2 sm:flex-row"><Button type="button" variant="outline" onClick={() => setImportOpen(false)} disabled={importing}>{importResult ? 'Cerrar' : 'Cancelar'}</Button><Button type="button" onClick={() => void confirmImport()} disabled={!rows.length || rowErrors.length > 0 || importing || !portfolioName.trim() || !openingBalanceDate}>{importing ? <><RefreshCw className="mr-2 size-4 animate-spin" />Importando…</> : <><Upload className="mr-2 size-4" />Importar {rows.length || ''} clientes</>}</Button></DialogFooter>
+          {!!rows.length && <div className="flex min-w-0 flex-wrap items-center gap-2 rounded-xl border border-border bg-muted/20 p-3 text-xs"><Badge variant="secondary">{rows.length} filas</Badge><Badge variant="secondary">{managers.length} gestores</Badge><span className="min-w-0 flex-1 truncate text-muted-foreground">Revisa la asignación de clientes antes de importar.</span><Button type="button" onClick={openImportPreview} className="w-full sm:ml-auto sm:w-auto">Previsualizar clientes</Button></div>}
+          <DialogFooter className="flex-wrap"><Button type="button" variant="outline" onClick={() => setImportOpen(false)} disabled={importing}>Cerrar</Button>{!rows.length && <span className="text-xs text-muted-foreground">Carga un archivo Excel para habilitar la previsualización.</span>}</DialogFooter>
         </DialogContent>
       </Dialog>
 
