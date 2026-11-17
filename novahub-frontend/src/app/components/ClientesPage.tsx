@@ -33,6 +33,7 @@ export function ClientesPage() {
   const { baseCurrency, exchangeRate, formatConvertedAmount } = useCurrency();
   const [clientesData, setClientesData] = useState<Customer[]>([]);
   const [searchTerm, setSearchTerm] = useState('');
+  const [exportingCustomers, setExportingCustomers] = useState(false);
   const [isDialogOpen, setIsDialogOpen] = useState(false);
   const [editingCliente, setEditingCliente] = useState<Customer | null>(null);
   const [, setLoading] = useState(true);
@@ -77,30 +78,33 @@ export function ClientesPage() {
   );
 
   const exportCustomers = async (format: 'pdf' | 'xlsx', paperFormat: PdfPaperFormat = 'letter') => {
-    if (!canPerform('SALES_CLIENTS', 'export')) return;
-    const exportCustomersRows = await fetchAllPaginatedRows<Customer>((page, pageSize) => customersService.getAll({
-      search: searchTerm.trim() || undefined,
-      page,
-      pageSize,
-      report: true,
-      export: true,
-    }));
-    const customers = exportCustomersRows;
-    const activeCount = customers.filter(customer => String(customer.status || '').toUpperCase() !== 'INACTIVE').length;
-    const inactiveCount = customers.length - activeCount;
-    const individualCount = customers.filter(customer => String(customer.type || '').toUpperCase() === 'INDIVIDUAL').length;
-    const companyCount = customers.filter(customer => String(customer.type || '').toUpperCase() === 'COMPANY').length;
-    const rows = customers.map((customer) => ({
-      Código: customer.code || customer.id?.slice(0, 8) || '—',
-      Cliente: customer.name || '—',
-      Tipo: String(customer.type || '').toUpperCase() === 'INDIVIDUAL' ? 'Particular' : 'Empresa',
-      Contacto: customer.contactName || '—',
-      Correo: customer.email || '—',
-      Teléfono: customer.phone || '—',
-      Estado: String(customer.status || '').toUpperCase() === 'INACTIVE' ? 'Inactivo' : 'Activo',
-    }));
-    if (!rows.length && format === 'pdf') { toast.error('No hay clientes para exportar con los filtros actuales.'); return; }
+    if (!canPerform('SALES_CLIENTS', 'export') || exportingCustomers) return;
+    setExportingCustomers(true);
     try {
+      const customers = await fetchAllPaginatedRows<Customer>((page, pageSize) => customersService.getAll({
+        search: searchTerm.trim() || undefined,
+        page,
+        pageSize,
+        report: true,
+        export: true,
+      }));
+      const activeCount = customers.filter(customer => String(customer.status || '').toUpperCase() !== 'INACTIVE').length;
+      const inactiveCount = customers.length - activeCount;
+      const individualCount = customers.filter(customer => String(customer.type || '').toUpperCase() === 'INDIVIDUAL').length;
+      const companyCount = customers.filter(customer => String(customer.type || '').toUpperCase() === 'COMPANY').length;
+      const rows = customers.map((customer) => ({
+        Código: customer.code || customer.id?.slice(0, 8) || '—',
+        Cliente: customer.name || '—',
+        Tipo: String(customer.type || '').toUpperCase() === 'INDIVIDUAL' ? 'Particular' : 'Empresa',
+        Contacto: customer.contactName || '—',
+        Correo: customer.email || '—',
+        Teléfono: customer.phone || '—',
+        Estado: String(customer.status || '').toUpperCase() === 'INACTIVE' ? 'Inactivo' : 'Activo',
+      }));
+      if (!rows.length) {
+        toast.error('No hay clientes para exportar con los filtros actuales.');
+        return;
+      }
       if (format === 'xlsx') {
         createReportWorkbook({ fileName: buildDatedDownloadFileName(['reporte_clientes'], 'xlsx'), sheets: [{ name: 'Clientes', rows }], filters: { Búsqueda: searchTerm || 'Todas', Alcance: 'Todos los resultados filtrados' } });
       } else {
@@ -116,10 +120,15 @@ export function ClientesPage() {
           sections: [{ id: 'sales-customers', title: 'Clientes', headers: Object.keys(rows[0]), widths: [10, 18, 12, 16, 24, 12, 8], rows: rows.map((row) => Object.values(row)) }],
           fileName: buildDatedDownloadFileName(['reporte_clientes'], 'pdf'),
           format: paperFormat,
+          useVectorTables: rows.length > 500,
         });
       }
       toast.success(`Reporte de clientes exportado en ${format === 'xlsx' ? 'Excel' : 'PDF'}.`);
-    } catch (error: any) { toast.error(error?.message || 'No se pudo exportar el reporte de clientes.'); }
+    } catch (error: unknown) {
+      toast.error(error instanceof Error ? error.message : 'No se pudo exportar el reporte de clientes.');
+    } finally {
+      setExportingCustomers(false);
+    }
   };
 
   const handleOpenDialog = (cliente: Customer | null = null) => {
@@ -185,7 +194,7 @@ export function ClientesPage() {
       <CurrencyValuationBanner />
       <div className="flex min-w-0 justify-end">
         <div className="flex flex-wrap items-center gap-2">
-          {canPerform('SALES_CLIENTS', 'export') && <ExportMenu onPdf={(paperFormat) => void exportCustomers('pdf', paperFormat)} onExcel={() => void exportCustomers('xlsx')} />}
+          {canPerform('SALES_CLIENTS', 'export') && <ExportMenu label={exportingCustomers ? 'Preparando exportación…' : 'Exportar clientes'} disabled={exportingCustomers} onPdf={(paperFormat) => void exportCustomers('pdf', paperFormat)} onExcel={() => void exportCustomers('xlsx')} />}
           <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
             {canPerform('SALES_CLIENTS', 'create') && (
               <DialogTrigger asChild>

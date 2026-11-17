@@ -900,6 +900,7 @@ export function ClientesView({ data, loading, error, onRefresh, pagination, onSe
           sections: [{ id: 'sales-customers', title: 'Clientes', headers: Object.keys(rows[0]), widths: [10, 18, 12, 16, 24, 12, 8], rows: rows.map((row) => Object.values(row)) }],
           fileName: buildDatedDownloadFileName(['reporte_clientes'], 'pdf'),
           format: paperFormat,
+          useVectorTables: rows.length > 500,
         });
       }
       toast.success(`Reporte de clientes exportado en ${format === 'xlsx' ? 'Excel' : 'PDF'}.`);
