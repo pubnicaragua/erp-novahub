@@ -26,7 +26,6 @@ import { buildDatedDownloadFileName } from '../utils/exportFileNames';
 import { fetchAllPaginatedRows } from '../utils/export-utils';
 import { createReportWorkbook } from '../utils/reportWorkbook';
 import { firstReadable } from '../utils/displayText';
-import { buildCustomerPdfRows } from '../utils/customer-export';
 
 export function ClientesPage() {
   const { user, canPerform } = useAuth();
@@ -88,14 +87,13 @@ export function ClientesPage() {
         pageSize,
         report: true,
         export: true,
-        includePdfDetails: format === 'pdf',
       }));
       const activeCount = customers.filter(customer => String(customer.status || '').toUpperCase() !== 'INACTIVE').length;
       const inactiveCount = customers.length - activeCount;
       const individualCount = customers.filter(customer => String(customer.type || '').toUpperCase() === 'INDIVIDUAL').length;
       const companyCount = customers.filter(customer => String(customer.type || '').toUpperCase() === 'COMPANY').length;
       const rows = customers.map((customer) => ({
-        Código: customer.code || '—',
+        Código: customer.code || customer.id?.slice(0, 8) || '—',
         Cliente: customer.name || '—',
         Tipo: String(customer.type || '').toUpperCase() === 'INDIVIDUAL' ? 'Particular' : 'Empresa',
         Contacto: customer.contactName || '—',
@@ -110,10 +108,8 @@ export function ClientesPage() {
       if (format === 'xlsx') {
         createReportWorkbook({ fileName: buildDatedDownloadFileName(['reporte_clientes'], 'xlsx'), sheets: [{ name: 'Clientes', rows }], filters: { Búsqueda: searchTerm || 'Todas', Alcance: 'Todos los resultados filtrados' } });
       } else {
-        const includeConsumption = canPerform('SALES_INVOICES', 'read');
-        const pdfRows = buildCustomerPdfRows(customers, includeConsumption);
         await generateConfiguredReportSectionsPDF({
-          targetKey: 'ventas.customers', title: 'Listado de clientes', tenantName: user?.sessionBranding?.name || user?.tenantName || 'Mi Empresa', tenantLogo: user?.sessionBranding?.logo || '',
+          targetKey: 'ventas.customers', title: 'Listado de clientes', tenantName: user?.tenantName || 'Mi Empresa', tenantLogo: user?.sessionBranding?.logo || '',
           kpis: [
             { label: 'CLIENTES', value: String(rows.length), detail: 'En este listado' },
             { label: 'ACTIVOS', value: String(activeCount), detail: 'Estado activo' },
@@ -121,13 +117,7 @@ export function ClientesPage() {
             { label: 'PARTICULARES', value: String(individualCount), detail: 'Personas' },
             { label: 'EMPRESAS', value: String(companyCount), detail: 'Organizaciones' },
           ],
-          sections: [{
-            id: 'sales-customers',
-            title: 'Clientes',
-            headers: Object.keys(pdfRows[0]),
-            widths: includeConsumption ? [9, 24, 23, 12, 16, 16] : [10, 28, 28, 14, 20],
-            rows: pdfRows.map((row) => Object.values(row)),
-          }],
+          sections: [{ id: 'sales-customers', title: 'Clientes', headers: Object.keys(rows[0]), widths: [10, 18, 12, 16, 24, 12, 8], rows: rows.map((row) => Object.values(row)) }],
           fileName: buildDatedDownloadFileName(['reporte_clientes'], 'pdf'),
           format: paperFormat,
           useVectorTables: rows.length > 500,
