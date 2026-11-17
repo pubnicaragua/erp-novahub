@@ -1,5 +1,6 @@
 import { getCurrencyDecimalPlaces } from './currency';
 import { formatDateEs } from './dateFormat';
+import { buildDownloadFileName } from './exportFileNames';
 import type { CustomerCreditScheduleRow } from '../components/ventas/CustomerCreditInstallmentSchedule';
 import { generateConfiguredReportTemplate } from './pdfGenerator';
 
@@ -24,12 +25,6 @@ function reportMoney(amount: number, currency: string) {
     minimumFractionDigits: getCurrencyDecimalPlaces(),
     maximumFractionDigits: getCurrencyDecimalPlaces(),
   }).format(Number(amount || 0));
-}
-
-function reportFileName(value: string) {
-  const normalized = value.normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase();
-  const safe = normalized.replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '').slice(0, 70);
-  return `plan-abonos-${safe || 'credito'}.pdf`;
 }
 
 export async function generateCustomerCreditInstallmentReport(input: CustomerCreditInstallmentReportInput) {
@@ -77,7 +72,7 @@ export async function generateCustomerCreditInstallmentReport(input: CustomerCre
       { label: 'Total del plan', value: reportMoney(totalAmount, currency), detail: 'Capital + intereses' },
       { label: 'Abonos', value: input.installments.length, detail: 'Programados' },
     ],
-    fileName: reportFileName(input.contractNumber || input.customerName || 'credito'),
+    fileName: buildDownloadFileName(['plan_abonos', input.customerName, input.contractNumber], 'pdf'),
     format: 'configured',
   });
 }

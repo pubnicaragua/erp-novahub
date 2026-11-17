@@ -1,5 +1,6 @@
 import { getCurrencyDecimalPlaces } from './currency';
 import { formatDateEs } from './dateFormat';
+import { buildDownloadFileName } from './exportFileNames';
 import { generateConfiguredReportTemplate } from './pdfGenerator';
 
 const money = (amount: number, currency: string) => new Intl.NumberFormat('es-NI', {
@@ -101,7 +102,7 @@ export async function generateCustomerDebtStatementReport(input: {
       { label: 'Saldo actual', value: money(input.balance, currency) },
       { label: 'Saldo atrasado', value: money(input.overdueBalance, currency) },
     ],
-    fileName: `estado-de-deuda-${String(input.contractNumber || input.customerName).replace(/[^a-z0-9-]/gi, '-')}.pdf`,
+    fileName: buildDownloadFileName(['estado_de_deuda', input.customerName, input.contractNumber], 'pdf'),
     format: 'configured',
   });
 }

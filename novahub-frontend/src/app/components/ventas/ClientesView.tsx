@@ -1601,7 +1601,7 @@ export function ClientesView({ data, loading, error, onRefresh, pagination, onSe
             <ViewLayoutSelect value={layoutMode} onChange={(value) => setLayoutMode(value === 'kanban' ? 'table' : value)} ariaLabel="Elegir distribución" dataTour="customers-layout" />
             {canPerform('SALES_CLIENTS', 'export') && (
               <ExportMenu
-                label={exportingCustomers ? 'Preparando exportación…' : 'Exportar clientes'}
+                label={exportingCustomers ? 'Preparando exportación…' : 'Exportar'}
                 disabled={exportingCustomers || loading}
                 preopenPdfPreview={false}
                 onPdf={(paperFormat) => requestCustomerExport('pdf', paperFormat)}

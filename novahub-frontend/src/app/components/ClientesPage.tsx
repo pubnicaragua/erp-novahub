@@ -194,7 +194,7 @@ export function ClientesPage() {
       <CurrencyValuationBanner />
       <div className="flex min-w-0 justify-end">
         <div className="flex flex-wrap items-center gap-2">
-          {canPerform('SALES_CLIENTS', 'export') && <ExportMenu label={exportingCustomers ? 'Preparando exportación…' : 'Exportar clientes'} disabled={exportingCustomers} onPdf={(paperFormat) => void exportCustomers('pdf', paperFormat)} onExcel={() => void exportCustomers('xlsx')} />}
+          {canPerform('SALES_CLIENTS', 'export') && <ExportMenu label={exportingCustomers ? 'Preparando exportación…' : 'Exportar'} disabled={exportingCustomers} onPdf={(paperFormat) => void exportCustomers('pdf', paperFormat)} onExcel={() => void exportCustomers('xlsx')} />}
           <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
             {canPerform('SALES_CLIENTS', 'create') && (
               <DialogTrigger asChild>
