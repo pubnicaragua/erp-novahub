@@ -352,7 +352,7 @@ export function SupplierDetailDrawer({
               {error && <Card className="flex items-center gap-3 border-destructive/20 bg-destructive/10 p-4 text-destructive"><Activity className="size-5 shrink-0" /><p className="text-xs font-bold">{error}</p></Card>}
 
               <TabsContent value="general" className="mt-0 space-y-6 outline-none">
-                <div className="grid grid-cols-2 gap-3 lg:grid-cols-5">
+                <div className="grid min-w-0 grid-cols-2 gap-2.5 sm:grid-cols-3 lg:grid-cols-5">
                   <MetricCard label="Saldo pendiente" value={formatConvertedAmount(supplierDebt, baseCurrency)} icon={CircleDollarSign} accent="text-rose-600 dark:text-rose-400" loading={loading} />
                   <MetricCard label="Saldo a favor" value={formatConvertedAmount(supplierFavor, baseCurrency)} icon={Banknote} accent="text-emerald-600 dark:text-emerald-400" loading={loading} />
                   <MetricCard label="Órdenes" value={String(orderCount)} icon={ReceiptText} accent="text-primary" loading={loadingTransactions} />
@@ -497,7 +497,17 @@ export function SupplierDetailDrawer({
 }
 
 function MetricCard({ label, value, icon: Icon, accent, loading }: { label: string; value: string; icon: typeof CircleDollarSign; accent: string; loading?: boolean }) {
-  return <Card className="rounded-2xl border-border/50 bg-card p-3 shadow-sm"><div className={cn('mb-2 flex size-8 items-center justify-center rounded-xl bg-muted/40', accent)}><Icon className="size-4" /></div><p className="text-[9px] font-black uppercase tracking-widest text-muted-foreground">{label}</p>{loading ? <Skeleton className="mt-1 h-5 w-20" /> : <p className="mt-1 truncate text-sm font-black tabular-nums text-foreground">{value}</p>}</Card>;
+  return (
+    <Card className="flex min-h-[92px] min-w-0 flex-col rounded-xl border-border/60 p-3 shadow-xs transition-all hover:border-primary/30">
+      <div className="flex min-w-0 items-start justify-between gap-2">
+        <p className="min-h-[2rem] min-w-0 text-[10px] font-black uppercase leading-tight tracking-widest text-muted-foreground/70">{label}</p>
+        <Icon className={cn('size-3.5 shrink-0', accent)} />
+      </div>
+      {loading
+        ? <Skeleton className="mt-auto h-5 w-3/4" />
+        : <p className={cn('mt-auto min-w-0 truncate text-sm font-black tabular-nums', accent)} title={value}>{value}</p>}
+    </Card>
+  );
 }
 
 function InfoField({ label, value, icon: Icon, mono = false, muted = false }: { label: string; value: string; icon: typeof Mail; mono?: boolean; muted?: boolean }) {
