@@ -414,8 +414,9 @@ function isBankParentMapping(moduleId: string | undefined, fieldKey: string) {
 
 // Interruptor del usuario: permite elegir cuentas de cualquier tipo (p. ej. de resultados donde se espera balance).
 // Nunca habilita cuentas inactivas ni agrupadoras: el asiento no puede publicarse en ellas.
-const ANY_TYPE_STORAGE_KEY = 'accounting-config-any-account-type'
-let allowAnyAccountType = typeof window !== 'undefined' && window.localStorage?.getItem(ANY_TYPE_STORAGE_KEY) === '1'
+const ANY_TYPE_STORAGE_KEY = 'accounting-config-any-account-type-v2'
+// Por defecto se permite elegir cuentas de cualquier tipo; quien prefiera la guía estricta apaga el interruptor.
+let allowAnyAccountType = typeof window === 'undefined' || window.localStorage?.getItem(ANY_TYPE_STORAGE_KEY) !== '0'
 
 const anyTypeListeners = new Set<() => void>()
 function setAllowAnyAccountType(next: boolean) {
