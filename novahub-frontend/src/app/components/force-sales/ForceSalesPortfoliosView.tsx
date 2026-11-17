@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import * as XLSX from 'xlsx';
-import { ArrowLeftRight, ChevronDown, Download, FileSpreadsheet, LocateFixed, MapPin, Plus, RefreshCw, Upload, UserRound, X } from 'lucide-react';
+import { ArrowLeftRight, ChevronDown, Download, FileSpreadsheet, LocateFixed, MapPin, Plus, RefreshCw, Route, Upload, UserRound, X } from 'lucide-react';
 import { forceSalesPortfoliosService, type ForceSalesPortfolio, type ForceSalesPortfolioImportResult, type UnlinkedForceSalesProspect } from '../../services/force-sales-portfolios.service';
 import { ForceSalesPortfolioImportPreview, type ForceSalesImportManager, type ForceSalesImportRow } from './ForceSalesPortfolioImportPreview';
 import { toast } from '../../services/toast';
@@ -123,6 +123,8 @@ export function ForceSalesPortfoliosView({
   canManage,
   canTransfer,
   canLocate,
+  canCreateRoute,
+  onBuildRoute,
   onPickLocation,
   isSidebarCollapsed = false,
 }: {
@@ -130,6 +132,8 @@ export function ForceSalesPortfoliosView({
   canManage: boolean;
   canTransfer: boolean;
   canLocate: boolean;
+  canCreateRoute: boolean;
+  onBuildRoute: (request: { portfolioName: string; assignedToId: string | null; prospectIds: string[] }) => void;
   onPickLocation: (portfolioId: string, customerId: string) => void;
   isSidebarCollapsed?: boolean;
 }) {
@@ -371,6 +375,14 @@ export function ForceSalesPortfoliosView({
         {!loading && portfolios.map((portfolio) => {
           const isExpanded = expandedPortfolio === portfolio.id;
           const activeRows = portfolio.customers.filter((row) => row.assignmentStatus === 'ACTIVE');
+          const locatedRows = activeRows.filter((row) => row.hasMapLocation && row.mapPointId);
+          const pendingLocations = Math.max(0, activeRows.length - locatedRows.length);
+          const canBuildRoute = canCreateRoute && portfolio.status === 'ACTIVE' && activeRows.length > 0 && pendingLocations === 0;
+          const routeReadinessMessage = !activeRows.length
+            ? 'Esta cartera no tiene clientes activos.'
+            : pendingLocations
+              ? `Ubica los ${pendingLocations} pendientes para habilitar el armado.`
+              : 'Se cargarán todos los puntos al planificador para revisar el orden, la fecha y el responsable antes de guardar.';
           return (
             <article key={portfolio.id} className="overflow-hidden rounded-2xl border border-border bg-card shadow-sm">
               <button type="button" onClick={() => setExpandedPortfolio(isExpanded ? null : portfolio.id)} className="flex w-full min-w-0 flex-col gap-3 p-4 text-left sm:flex-row sm:items-center sm:justify-between sm:p-5" aria-expanded={isExpanded}>
@@ -381,6 +393,19 @@ export function ForceSalesPortfoliosView({
                 <div className="flex shrink-0 items-center gap-2"><span className="text-xs text-muted-foreground">{portfolio.sourceFileName || 'Importación'}</span><ChevronDown className={`size-4 transition-transform ${isExpanded ? 'rotate-180' : ''}`} /></div>
               </button>
               {isExpanded && <div className="border-t border-border p-3 sm:p-5">
+                {portfolio.status === 'ACTIVE' && canCreateRoute && <div className="mb-4 flex min-w-0 flex-col gap-3 rounded-xl border border-primary/20 bg-primary/[0.035] p-3 sm:flex-row sm:items-center sm:justify-between sm:p-4">
+                  <div className="min-w-0">
+                    <p className="font-bold text-foreground">Preparar ruta desde esta cartera</p>
+                    <p className="mt-1 text-xs text-muted-foreground">{locatedRows.length} de {activeRows.length} clientes activos tienen ubicación. {routeReadinessMessage}</p>
+                  </div>
+                  <Button className="shrink-0" onClick={() => onBuildRoute({
+                    portfolioName: portfolio.name,
+                    assignedToId: portfolio.assignedTo?.id || null,
+                    prospectIds: locatedRows.map((row) => String(row.mapPointId)),
+                  })} disabled={!canBuildRoute} title={pendingLocations ? `Faltan ${pendingLocations} ubicaciones` : !activeRows.length ? 'La cartera no tiene clientes activos' : undefined}>
+                    <Route className="mr-2 size-4" />Armar ruta
+                  </Button>
+                </div>}
                 {!portfolio.customers.length ? <p className="rounded-xl bg-muted/30 p-4 text-sm text-muted-foreground">No hay clientes en esta cartera.</p> : <div className="space-y-2">
                   {portfolio.customers.map((row) => {
                     const customer = row.customer;

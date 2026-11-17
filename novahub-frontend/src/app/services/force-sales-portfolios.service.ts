@@ -5,6 +5,8 @@ export type PortfolioCustomer = {
   assignmentStatus: 'ACTIVE' | 'TRANSFERRED' | 'PORTFOLIO_CLOSED';
   assignedAt: string;
   endedAt?: string | null;
+  mapPointId?: string | null;
+  hasMapLocation?: boolean;
   customer: {
     id: string;
     code?: string | null;

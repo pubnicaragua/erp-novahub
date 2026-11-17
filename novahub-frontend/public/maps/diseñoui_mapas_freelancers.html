@@ -3437,6 +3437,10 @@ window.addEventListener('message',event=>{
     toast('Toca el punto del mapa donde está el cliente. No se registrará una visita.');
     return;
   }
+  if(event.data?.type==='force-sales-start-portfolio-route'){
+    void startRouteFromPortfolio(event.data);
+    return;
+  }
   if(event.data?.type==='force-sales-cancel-portfolio-location'){
     pendingPortfolioLocationSelection=null;
     return;
@@ -7205,6 +7209,44 @@ function toggleRouteBusiness(business){
   if(index>=0){routeBusinesses.splice(index,1);if(index<routeProgress)routeProgress=Math.max(0,routeProgress-1);toast('Punto retirado del borrador')}
   else{routeBusinesses.push(business);toast(`Punto marcado · parada ${routeBusinesses.length} agregada a la ruta`)}
   markRouteDraftChanged();renderRoutePlanner();
+}
+async function startRouteFromPortfolio(request={}){
+  const prospectIds=[...new Set((Array.isArray(request.prospectIds)?request.prospectIds:[]).map(id=>String(id||'').trim()).filter(Boolean))];
+  const portfolioName=String(request.portfolioName||'Cartera').trim()||'Cartera';
+  if(!canForceSales('createRoute')){requireForceSales('createRoute');return}
+  if(!prospectIds.length){toast('Esta cartera no tiene puntos ubicados para preparar una ruta.');return}
+  activeView='map';updateView();closeBusinessDetailPopup();
+  try{
+    const existingById=new Map(businesses.filter(business=>String(stateOf(business).remoteId||'')).map(business=>[String(stateOf(business).remoteId),business]));
+    const missingIds=prospectIds.filter(id=>!existingById.has(id));
+    const fetched=missingIds.length?await Promise.all(missingIds.map(id=>forceSalesRequest(`/force-sales/prospects/${encodeURIComponent(id)}`))):[];
+    fetched.forEach(prospect=>{
+      if(!prospect?.id)return;
+      const lat=Number(prospect.lat),lng=Number(prospect.lng);
+      if(prospect.lat===null||prospect.lat===undefined||prospect.lng===null||prospect.lng===undefined||!Number.isFinite(lat)||lat < -90||lat > 90||!Number.isFinite(lng)||lng < -180||lng > 180)return;
+      const business=remoteBusiness(prospect),key=keyOf(business),current=commercialState[key]||{};
+      commercialState[key]={...current,remoteId:prospect.id,customerId:prospect.customerId||null,assignedToId:prospect.assignedToId||null,assignedToName:prospect.assignedTo?.name||null};
+      remoteProspects=[...remoteProspects.filter(item=>String(stateOf(item).remoteId||'')!==String(prospect.id)),business];
+    });
+    if(fetched.length){mergeBusinesses();populateFilters();render()}
+    const byRemoteId=new Map(businesses.map(business=>[String(stateOf(business).remoteId||''),business]).filter(([id])=>id));
+    const resolved=prospectIds.map(id=>byRemoteId.get(id)).filter(business=>business&&routePointCoordinates(business));
+    if(resolved.length!==prospectIds.length){
+      toast(`No se pudieron cargar todos los puntos ubicados (${resolved.length} de ${prospectIds.length}). Actualiza la cartera e inténtalo de nuevo.`);
+      return;
+    }
+    openRoutePlanner(resolved.map(business=>business.id));
+    const routeName=document.getElementById('routeName');
+    if(routeName)routeName.value=`Cartera: ${portfolioName}`.slice(0,180);
+    const assignedToId=String(request.assignedToId||'').trim();
+    if(assignedToId&&canForceSales('assignRoute'))chooseRouteAssignee(assignedToId);
+    markRouteDraftChanged();renderRoutePlanner();
+    if(routeBusinesses.length>=3)optimizeRoute();
+    else toast(`Borrador preparado con ${routeBusinesses.length} parada${routeBusinesses.length===1?'':'s'}. Revisa los datos antes de guardar.`);
+  }catch(error){
+    console.warn('No se pudo preparar la ruta desde la cartera',error);
+    toast(error?.message||'No se pudo cargar la cartera en el planificador de rutas.');
+  }
 }
 function openRoutePlanner(ids){
   const requested=(ids || []).map(findBusiness).filter(Boolean);

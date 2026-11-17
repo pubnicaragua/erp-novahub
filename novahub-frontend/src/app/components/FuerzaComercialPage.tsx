@@ -72,6 +72,7 @@ export function FuerzaComercialPage({ activeSubModule, onSubModuleChange, isSide
   const pendingProspectTargetRef = useRef<string | null>(null);
   const pendingRouteTargetRef = useRef<string | null>(null);
   const pendingPortfolioLocationRef = useRef<{ portfolioId: string; customerId: string } | null>(null);
+  const pendingPortfolioRouteRef = useRef<{ portfolioName: string; assignedToId: string | null; prospectIds: string[] } | null>(null);
   const streamStatusRef = useRef<'connected' | 'reconnecting'>('reconnecting');
   const searchQueryRef = useRef('');
   const [previousSubModule, setPreviousSubModule] = useState(activeSubModule);
@@ -221,6 +222,11 @@ export function FuerzaComercialPage({ activeSubModule, onSubModuleChange, isSide
       if (searchQueryRef.current) sendToMap('force-sales-search', { query: searchQueryRef.current });
       const pendingLocation = pendingPortfolioLocationRef.current;
       if (pendingLocation) sendToMap('force-sales-start-portfolio-location', pendingLocation);
+      const pendingPortfolioRoute = pendingPortfolioRouteRef.current;
+      if (pendingPortfolioRoute) {
+        sendToMap('force-sales-start-portfolio-route', pendingPortfolioRoute);
+        pendingPortfolioRouteRef.current = null;
+      }
     },
   });
 
@@ -296,9 +302,11 @@ export function FuerzaComercialPage({ activeSubModule, onSubModuleChange, isSide
 
   useEffect(() => {
     if (activeSubModule === 'fuerza-comercial' || activeSubModule === 'fuerza-comercial-carteras') return;
-    if (!pendingPortfolioLocationRef.current) return;
-    pendingPortfolioLocationRef.current = null;
-    sendToMap('force-sales-cancel-portfolio-location');
+    if (pendingPortfolioLocationRef.current) {
+      pendingPortfolioLocationRef.current = null;
+      sendToMap('force-sales-cancel-portfolio-location');
+    }
+    pendingPortfolioRouteRef.current = null;
   }, [activeSubModule, sendToMap]);
 
   useEffect(() => {
@@ -341,7 +349,12 @@ export function FuerzaComercialPage({ activeSubModule, onSubModuleChange, isSide
           canManage={isAdmin && canPerform('FORCE_SALES', 'editRoute')}
           canTransfer={isAdmin && canPerform('FORCE_SALES', 'assignProspect')}
           canLocate={canPerform('FORCE_SALES', 'updateProspect')}
+          canCreateRoute={canPerform('FORCE_SALES', 'createRoute')}
           isSidebarCollapsed={isSidebarCollapsed}
+          onBuildRoute={(request) => {
+            pendingPortfolioRouteRef.current = request;
+            onSubModuleChange?.('fuerza-comercial');
+          }}
           onPickLocation={(portfolioId, customerId) => {
             pendingPortfolioLocationRef.current = { portfolioId, customerId };
             onSubModuleChange?.('fuerza-comercial');

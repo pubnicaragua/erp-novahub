@@ -143,6 +143,10 @@ window.addEventListener('message',event=>{
     toast('Toca el punto del mapa donde está el cliente. No se registrará una visita.');
     return;
   }
+  if(event.data?.type==='force-sales-start-portfolio-route'){
+    void startRouteFromPortfolio(event.data);
+    return;
+  }
   if(event.data?.type==='force-sales-cancel-portfolio-location'){
     pendingPortfolioLocationSelection=null;
     return;
