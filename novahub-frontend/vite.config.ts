@@ -10,6 +10,7 @@ const buildId =
   process.env.VERCEL_GIT_COMMIT_SHA ||
   process.env.GITHUB_SHA ||
   `local-${Date.now()}`
+const sentryEnabled = Boolean(process.env.SENTRY_AUTH_TOKEN)
 
 export default defineConfig({
   define: {
@@ -34,7 +35,7 @@ export default defineConfig({
       org: 'testnova',
       project: 'javascript',
       authToken: process.env.SENTRY_AUTH_TOKEN,
-      disable: !process.env.SENTRY_AUTH_TOKEN,
+      disable: !sentryEnabled,
       telemetry: false,
     }),
   ],
@@ -45,7 +46,8 @@ export default defineConfig({
   },
   assetsInclude: ['**/*.svg', '**/*.csv'],
   build: {
-    sourcemap: true,
+    // Solo generar mapas cuando Sentry está habilitado para consumirlos.
+    sourcemap: sentryEnabled,
     rollupOptions: {
       output: {
         manualChunks: {

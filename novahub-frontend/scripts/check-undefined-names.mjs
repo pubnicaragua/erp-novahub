@@ -3,10 +3,16 @@
 // No exige que todo el proyecto pase TypeScript (hay errores de otro tipo en la base); solo estos.
 // Uso: npm run check:names
 import { spawnSync } from 'node:child_process';
+import { mkdirSync } from 'node:fs';
 import { createRequire } from 'node:module';
+import { dirname, resolve } from 'node:path';
+import { fileURLToPath } from 'node:url';
 
 const require = createRequire(import.meta.url);
 const tsc = require.resolve('typescript/bin/tsc');
+const frontendRoot = resolve(dirname(fileURLToPath(import.meta.url)), '..');
+const tsBuildInfoPath = resolve(frontendRoot, 'node_modules/.cache/novahub-check-names.tsbuildinfo');
+mkdirSync(dirname(tsBuildInfoPath), { recursive: true });
 const BLOCKING = new Map([
   ['TS2304', 'nombre no definido'],
   ['TS2552', 'nombre no definido (¿quisiste decir otro?)'],
@@ -17,7 +23,18 @@ const BLOCKING = new Map([
   ['TS2307', 'módulo no encontrado'],
 ]);
 
-const result = spawnSync(process.execPath, ['--max-old-space-size=4096', tsc, '--noEmit', '-p', 'tsconfig.json', '--pretty', 'false'], {
+const result = spawnSync(process.execPath, [
+  '--max-old-space-size=4096',
+  tsc,
+  '--noEmit',
+  '--incremental',
+  '--tsBuildInfoFile',
+  tsBuildInfoPath,
+  '-p',
+  'tsconfig.json',
+  '--pretty',
+  'false',
+], {
   encoding: 'utf8',
   maxBuffer: 256 * 1024 * 1024,
 });
