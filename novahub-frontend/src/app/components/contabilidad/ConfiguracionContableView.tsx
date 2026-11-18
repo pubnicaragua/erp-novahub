@@ -509,20 +509,20 @@ function ModuleStatusBadge({ status }: { status: { total: number; defined: numbe
   return (
     <span className={cn(
       'shrink-0 rounded-full px-2 py-0.5 text-[9px] font-black uppercase tracking-wider',
-      status.complete ? 'bg-emerald-500/15 text-emerald-600' : status.pct > 0 ? 'bg-amber-500/15 text-amber-600' : 'bg-muted text-muted-foreground',
+      status.complete ? 'bg-emerald-500/15 text-emerald-700 dark:text-emerald-400' : status.pct > 0 ? 'bg-amber-500/15 text-amber-700 dark:text-amber-300' : 'bg-muted text-muted-foreground',
     )}>
       {status.complete ? (
         <><Check className="mr-0.5 inline size-2.5" /> Listo</>
       ) : status.total - status.defined === 0 ? (
-        <>Faltan cuentas</>
+        <>Faltan asignaciones</>
       ) : (
-        <>Faltan {status.total - status.defined} cuentas</>
+        <>Faltan {status.total - status.defined} asignaciones</>
       )}
     </span>
   )
 }
 
-function AccountCodeInput({ code, field, moduleId, account, accountOptions, suggestions, configuredValid, configuredReason, onChange }: {
+function AccountCodeInput({ code, field, moduleId, account, accountOptions, suggestions, configuredValid, configuredReason, ariaLabel, onChange }: {
   code: string
   field: ModuleField
   moduleId?: string
@@ -531,6 +531,7 @@ function AccountCodeInput({ code, field, moduleId, account, accountOptions, sugg
   suggestions: AccountSuggestion[]
   configuredValid?: boolean | null
   configuredReason?: string | null
+  ariaLabel: string
   onChange: (val: string) => void
 }) {
   const anyAccountType = useAllowAnyAccountType()
@@ -611,7 +612,7 @@ function AccountCodeInput({ code, field, moduleId, account, accountOptions, sugg
             value={subtypeFilter}
             onChange={(e) => setSubtypeFilter(e.target.value)}
             className="h-9 w-[40%] max-w-[150px] shrink-0 rounded-lg border border-border/50 bg-background px-2 text-[10px] font-bold text-muted-foreground outline-none focus:border-primary/50"
-            aria-label="Filtrar por subtipo de cuenta"
+            aria-label={`Filtrar cuentas configuradas para ${field.label} por subtipo`}
             title="Filtrar por subtipo: auxiliares, detalle, grupos..."
           >
             <option value="ALL">Todos los subtipos</option>
@@ -628,12 +629,13 @@ function AccountCodeInput({ code, field, moduleId, account, accountOptions, sugg
           searchPlaceholder="Buscar por código o nombre..."
           maxVisibleOptions={500}
           className="h-9 min-w-0 flex-1 text-xs"
+          ariaLabel={ariaLabel}
           emptyMessage="No se encontraron cuentas con ese código o nombre."
         />
       </div>
       <div className="flex min-w-0 items-center justify-between gap-2">
         {account ? (
-          <span className={`min-w-0 truncate text-[10px] font-semibold ${accountTypeMismatch || accountUnavailable ? (accountTypeMismatch ? 'text-amber-500' : 'text-red-500') : 'text-emerald-600'}`} title={`${account.code} · ${account.name}`}>
+          <span className={`min-w-0 truncate text-xs font-medium ${accountTypeMismatch || accountUnavailable ? (accountTypeMismatch ? 'text-amber-600 dark:text-amber-400' : 'text-red-600 dark:text-red-400') : 'text-emerald-700 dark:text-emerald-400'}`} title={`${account.code} · ${account.name}`}>
             {account.code} · {account.name}
             {accountTypeMismatch
               ? ` · Tipo incorrecto: ${accountTypeLabel(account.type)}; se espera ${accountTypeLabel(field.defaultType)}`
@@ -646,14 +648,14 @@ function AccountCodeInput({ code, field, moduleId, account, accountOptions, sugg
                   : ` · ${subtypeLabel(account.subtype)} · Disponible`}
           </span>
         ) : code ? (
-          <span className="text-[10px] text-red-500">La cuenta no existe en el plan</span>
+          <span className="text-xs text-red-600 dark:text-red-400">La cuenta no existe en el plan</span>
         ) : topRecommendation ? (
-          <span className="inline-flex min-w-0 items-center gap-1.5 text-[10px] font-semibold text-emerald-600">
+          <span className="inline-flex min-w-0 items-center gap-1.5 text-xs font-medium text-emerald-700 dark:text-emerald-400">
             <Sparkles className="size-3 shrink-0" />
             <span className="min-w-0 truncate">Recomendación: {topRecommendation.code} · {topRecommendation.name}</span>
           </span>
         ) : (
-          <span className="text-[10px] text-muted-foreground">Código de referencia, no asociado: {field.defaultCode || '—'} · {accountTypeLabel(field.defaultType)}</span>
+          <span className="text-xs text-muted-foreground">Código de referencia, no asociado: {field.defaultCode || '—'} · {accountTypeLabel(field.defaultType)}</span>
         )}
       </div>
     </div>
@@ -688,29 +690,43 @@ function AccountMappingOptionsEditor({ codes, field, moduleId, accountsByCode, a
   }
 
   return (
-    <div className="min-w-0 space-y-2 rounded-xl border border-border/40 bg-background/60 p-3">
-      <div className="flex min-w-0 items-start justify-between gap-2">
-        <div className="flex min-w-0 items-center gap-1.5">
-          <span className={`shrink-0 rounded-md px-1.5 py-0.5 text-[9px] font-black uppercase tracking-wider ${field.side === 'debit' ? 'bg-orange-500/10 text-orange-600' : field.side === 'credit' ? 'bg-blue-500/10 text-blue-600' : 'bg-primary/10 text-primary'}`}>
+    <div className="flex min-w-0 flex-col gap-3 rounded-2xl border border-border/60 bg-card p-4 shadow-sm transition-colors hover:border-primary/30">
+      <div className="flex min-w-0 flex-wrap items-start justify-between gap-2">
+        <div className="flex min-w-0 flex-wrap items-center gap-2">
+          <Badge variant="outline" className={cn(
+            'shrink-0 text-[10px] font-bold',
+            field.side === 'debit' && 'border-orange-500/25 bg-orange-500/10 text-orange-700 dark:text-orange-300',
+            field.side === 'credit' && 'border-blue-500/25 bg-blue-500/10 text-blue-700 dark:text-blue-300',
+            field.side === 'both' && 'border-primary/25 bg-primary/10 text-primary',
+          )}>
             {postingSideLabel(field.side)}
-          </span>
-          <span className="min-w-0 truncate text-[11px] font-bold">{field.label}</span>
+          </Badge>
+          <h4 className="min-w-0 text-sm font-bold leading-5 text-foreground">{field.label}</h4>
         </div>
-        <span className="shrink-0 rounded-md border border-border/40 px-1.5 py-0.5 text-[9px] font-bold text-muted-foreground">
+        <Badge variant="outline" className="max-w-full shrink-0 text-[10px] font-medium text-muted-foreground">
           {field.anyType ? 'Cualquier tipo de cuenta' : `Espera: ${accountTypeLabel(field.defaultType)}`}
-        </span>
+        </Badge>
       </div>
-      <div className="flex min-w-0 flex-wrap gap-x-2 gap-y-0.5 text-[9px] text-muted-foreground">
-        <span>Referencia: <span className="font-mono font-bold">{field.defaultCode || '—'}</span> · {field.defaultName}</span>
-        <span>Podés elegir una cuenta principal y agregar alternativas para este campo.</span>
-        <span>{isBankParentMapping(moduleId, field.key)
-          ? 'Esta cuenta es la mayor; cada banco hijo recibirá el asiento y su saldo se consolidará aquí.'
-          : 'Podés elegir cuentas de detalle o auxiliares; las agrupadoras requieren una cuenta hija.'}</span>
-        {suggestions.length > 0 && <span className="text-emerald-600">Las opciones ★ Recomendada aparecen primero.</span>}
+      <div className="min-w-0 rounded-xl bg-muted/35 px-3 py-2 text-xs leading-5 text-muted-foreground">
+        <span className="font-semibold text-foreground">Referencia:</span>{' '}
+        <span className="font-mono font-semibold">{field.defaultCode || '—'}</span>
+        <span> · {field.defaultName}</span>
       </div>
-      <div className="space-y-2">
+      <p className="text-xs leading-5 text-muted-foreground">{field.description}</p>
+      {isBankParentMapping(moduleId, field.key) && (
+        <p className="rounded-xl border border-primary/20 bg-primary/5 px-3 py-2 text-xs leading-5 text-muted-foreground">
+          Esta es la cuenta mayor; cada banco hijo recibirá el asiento y su saldo se consolidará aquí.
+        </p>
+      )}
+      <div className="min-w-0 space-y-2">
+        <div className="flex min-w-0 flex-wrap items-center justify-between gap-2">
+          <p className="text-xs font-semibold text-foreground">Cuentas configuradas</p>
+          <Badge variant="secondary" className="text-[10px]">
+            {codes.length} {codes.length === 1 ? 'cuenta' : 'cuentas'}
+          </Badge>
+        </div>
         {displayedCodes.map((code, index) => (
-          <div key={`${field.key}-${index}`} className="flex min-w-0 items-start gap-2">
+          <div key={`${field.key}-${index}`} className="flex min-w-0 items-start gap-2 rounded-xl border border-border/50 bg-background/70 p-2">
             <AccountCodeInput
               code={code}
               field={field}
@@ -720,32 +736,40 @@ function AccountMappingOptionsEditor({ codes, field, moduleId, accountsByCode, a
               suggestions={suggestions}
               configuredValid={configuredValid}
               configuredReason={configuredReason}
+              ariaLabel={`Cuenta ${index + 1} configurada para ${field.label}`}
               onChange={value => updateOption(index, value)}
             />
             <Button
               type="button"
               variant="ghost"
               size="icon"
-              className="mt-1 size-8 shrink-0 text-muted-foreground hover:text-destructive"
+              className="size-9 shrink-0 text-muted-foreground hover:text-destructive"
               onClick={() => removeOption(index)}
-              aria-label={`Quitar cuenta alternativa ${code || index + 1} de ${field.label}`}
-              title="Quitar alternativa"
+              aria-label={`Quitar cuenta ${code || index + 1} configurada para ${field.label}`}
+              title="Quitar cuenta"
             >
               <Trash2 className="size-4" />
             </Button>
           </div>
         ))}
       </div>
-      <p className="text-[9px] leading-tight text-muted-foreground">{field.description}</p>
+      <p className="text-xs leading-5 text-muted-foreground">
+        Si hay varias cuentas configuradas, podrás elegir cuál usar al registrar el asiento.
+      </p>
+      {suggestions.length > 0 && (
+        <p className="flex items-center gap-1.5 text-xs font-medium text-emerald-700 dark:text-emerald-400">
+          <Sparkles className="size-3.5 shrink-0" /> Las cuentas recomendadas aparecen primero.
+        </p>
+      )}
       <Button
         type="button"
         variant="outline"
         size="sm"
-        className="h-8 rounded-lg text-[10px]"
+        className="h-9 w-full rounded-xl text-xs sm:w-fit"
         onClick={() => setAddingOption(true)}
-        aria-label={`Agregar cuenta alternativa para ${field.label}`}
+        aria-label={`Agregar cuenta configurada para ${field.label}`}
       >
-        <Plus className="mr-1.5 size-3.5" /> Agregar alternativa
+        <Plus className="mr-2 size-4" /> Agregar cuenta
       </Button>
     </div>
   )
@@ -1438,9 +1462,10 @@ const [mappingsSearch, setMappingsSearch] = useState('')
   }
 
   const salesModuleDefs = allModuleDefs.filter(mod => SALES_MODULE_IDS.has(mod.id) && matchesSearch(mod))
-  const invoiceSalesModule = salesModuleDefs.find(mod => mod.id === 'invoice')
-  const invoicePaymentModule = salesModuleDefs.find(mod => mod.id === 'payment')
-  const otherSalesModuleDefs = salesModuleDefs.filter(mod => !['invoice', 'payment'].includes(mod.id))
+  const orderedSalesModuleDefs = [...salesModuleDefs].sort((left, right) => {
+    const order = (id: string) => id === 'invoice' ? 0 : id === 'cashSale' ? 1 : id === 'payment' ? 2 : 3
+    return order(left.id) - order(right.id)
+  })
   const otherModuleDefs = allModuleDefs.filter(mod => !SALES_MODULE_IDS.has(mod.id) && matchesSearch(mod))
   const groupedOtherModules = useMemo(() => {
     const assigned = new Set<string>()
@@ -1602,88 +1627,29 @@ const [mappingsSearch, setMappingsSearch] = useState('')
     return renderCard(mod.fields, mod.label, mod.description, mod.id)
   }
 
-  const renderInvoiceSalesCard = (
-    invoiceModule: (typeof allModuleDefs)[number],
-    paymentModule: (typeof allModuleDefs)[number],
-  ) => {
-    const invoiceMapping = accountMappings[invoiceModule.id] || {}
-    const paymentMapping = accountMappings[paymentModule.id] || {}
-    const fields = [
-      ...invoiceModule.fields.map(field => ({ module: invoiceModule, mapping: invoiceMapping, field })),
-      ...paymentModule.fields.map(field => ({ module: paymentModule, mapping: paymentMapping, field })),
-    ]
-
-    return (
-      <div key="invoice-sales-cycle" className="min-w-0 rounded-2xl border border-primary/20 bg-primary/[0.025] p-4">
-        <div className="flex min-w-0 items-start justify-between gap-3">
-          <div className="flex min-w-0 items-start gap-2.5">
-            <FileText className="mt-0.5 size-4 shrink-0 text-primary" />
-            <div className="min-w-0">
-              <p className="text-xs font-black uppercase tracking-tight">Facturas de venta</p>
-            <p className="mt-1 text-[10px] leading-relaxed text-muted-foreground">
-              Un solo asiento para la factura pagada: ingreso, IVA y cuenta de cobro según la forma de pago.
-            </p>
-          </div>
-        </div>
-        <div className="mt-1.5 flex flex-wrap gap-1.5">
-          {fields.map(({ module, field }) => {
-            const code = module.id === 'invoice' ? getPrimaryMappingCode(invoiceMapping[field.key]) : getPrimaryMappingCode(paymentMapping[field.key])
-            const hasAccount = Boolean(code) && Boolean(accountsByCode.get(code))
-            return (
-              <span key={`${module.id}-${field.key}`} className={cn(
-                'inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[9px] font-black uppercase tracking-wider',
-                hasAccount ? 'bg-emerald-500/10 text-emerald-600' : 'bg-muted text-muted-foreground',
-              )}>
-                {hasAccount ? <Check className="size-2.5" /> : <Sparkles className="size-2.5" />}
-                {field.label}
-              </span>
-            )
-          })}
-        </div>
-        </div>
-        <div className="mt-4 grid min-w-0 grid-cols-1 gap-3 md:grid-cols-2">
-          {fields.map(({ module, mapping, field }) => {
-            const code = getPrimaryMappingCode(mapping[field.key])
-            return (
-              <AccountMappingOptionsEditor
-                key={`${module.id}-${field.key}`}
-                codes={getMappingCodes(mapping[field.key])}
-                field={field}
-                moduleId={module.id}
-                accountsByCode={accountsByCode}
-                accountOptions={accountOptionsByType[field.anyType ? 'ANY' : field.defaultType] || []}
-                suggestions={suggestionsForField(module.id, field.key)}
-                configuredValid={suggestionDetailsForField(module.id, field.key)?.configuredValid}
-                configuredReason={suggestionDetailsForField(module.id, field.key)?.configuredReason}
-                onChange={values => updateMapping(module.id, field.key, values)}
-              />
-            )
-          })}
-        </div>
-      </div>
-    )
-  }
-
   const renderSalesModuleCard = (mod: (typeof allModuleDefs)[number]) => {
     const modMapping = accountMappings[mod.id] || {}
     const Icon = mod.icon
     const label = mod.id === 'payment' ? 'Cobros de facturas' : mod.label
 
     return (
-      <div key={mod.id} className="min-w-0 rounded-2xl border border-border/40 bg-background/35 p-4">
-        <div className="flex min-w-0 items-start justify-between gap-3">
-          <div className="flex min-w-0 items-start gap-2.5">
-            <Icon className="mt-0.5 size-4 shrink-0 text-primary" />
-            <div className="min-w-0">
-              <p className="truncate text-xs font-black uppercase tracking-tight">{label}</p>
-              <p className="mt-1 text-[10px] leading-relaxed text-muted-foreground">{mod.description}</p>
+      <Card key={mod.id} className="h-full min-w-0 overflow-hidden border-border/50 bg-card shadow-sm transition-colors hover:border-primary/30">
+        <CardHeader className="flex flex-col gap-3 border-b border-border/40 p-4 sm:flex-row sm:items-start sm:justify-between sm:p-5">
+          <div className="flex min-w-0 items-start gap-3">
+            <span className="flex size-10 shrink-0 items-center justify-center rounded-xl border border-primary/15 bg-primary/10 text-primary">
+              <Icon className="size-5" />
+            </span>
+            <div className="min-w-0 space-y-1">
+              <CardTitle className="text-sm font-black uppercase tracking-tight text-foreground sm:text-base">{label}</CardTitle>
+              <p className="max-w-2xl text-xs leading-5 text-muted-foreground">{mod.description}</p>
             </div>
           </div>
-          <ModuleStatusBadge status={modConfigStatus(mod)} />
-        </div>
-        <div className="mt-4 grid grid-cols-1 gap-3 md:grid-cols-2">
+          <div className="flex shrink-0 items-center gap-2 sm:pt-1">
+            <ModuleStatusBadge status={modConfigStatus(mod)} />
+          </div>
+        </CardHeader>
+        <CardContent className="grid min-w-0 grid-cols-1 gap-3 p-4 sm:gap-4 sm:p-5 md:grid-cols-2">
           {mod.fields.map(field => {
-            const code = getPrimaryMappingCode(modMapping[field.key])
             return (
               <AccountMappingOptionsEditor
                 key={field.key}
@@ -1699,8 +1665,8 @@ const [mappingsSearch, setMappingsSearch] = useState('')
               />
             )
           })}
-        </div>
-      </div>
+        </CardContent>
+      </Card>
     )
   }
 
@@ -1965,8 +1931,8 @@ const [mappingsSearch, setMappingsSearch] = useState('')
               <Badge className="w-fit shrink-0 border-primary/20 bg-primary/10 text-[9px] font-black uppercase tracking-widest text-primary">
                 {allModuleDefs.length} módulos
               </Badge>
-              <Badge className="w-fit shrink-0 border-amber-500/30 bg-amber-500/10 text-[9px] font-black uppercase tracking-widest text-amber-600">
-                {configuredCounts.defined} de {configuredCounts.total} cuentas definidas
+              <Badge className="w-fit shrink-0 border-amber-500/30 bg-amber-500/10 text-[9px] font-black uppercase tracking-widest text-amber-700 dark:text-amber-300">
+                {configuredCounts.defined} de {configuredCounts.total} campos configurados
               </Badge>
               <Button
                 type="button"
@@ -1991,7 +1957,7 @@ const [mappingsSearch, setMappingsSearch] = useState('')
                   <CheckCircle2 className="size-4 text-primary shrink-0" />
                   <p className="text-xs font-black uppercase tracking-tight text-foreground">Completitud de la configuración</p>
                   <span className="rounded-full bg-primary/10 px-2 py-0.5 text-[9px] font-black text-primary">
-                    {configuredCounts.defined} de {configuredCounts.total} cuentas definidas
+                    {configuredCounts.defined} de {configuredCounts.total} campos configurados
                   </span>
                 </div>
                 <div className="mt-2 flex items-center gap-3">
@@ -2006,7 +1972,7 @@ const [mappingsSearch, setMappingsSearch] = useState('')
                   <span className="text-[10px] font-black text-muted-foreground">{configuredPct}%</span>
                 </div>
                 <p className="mt-1.5 text-[10px] leading-relaxed text-muted-foreground">
-                  Cada proceso del ERP usa <strong>varias cuentas a la vez</strong> (ej. una venta toca: ingreso, IVA, caja o banco e inventario). Elegí <strong>una cuenta por campo</strong>; podés filtrar por subtipo (auxiliares, detalle, grupos) para encontrarla más rápido. Cada selección se guarda automáticamente.
+                  Cada proceso del ERP combina cuentas para funciones distintas, como ingresos, IVA, caja e inventario. Configurá las cuentas disponibles en cada campo; si hay varias, podrás elegir cuál usar al generar el asiento. Filtrá por subtipo para encontrarlas más rápido. Cada cambio se guarda automáticamente.
                 </p>
               </div>
               <div className="flex w-full shrink-0 flex-col gap-2 sm:flex-row md:w-72 md:flex-col xl:w-auto xl:flex-row">
@@ -2081,11 +2047,8 @@ const [mappingsSearch, setMappingsSearch] = useState('')
             </div>
           </div>
         </CardHeader>
-        {salesExpanded && <CardContent id="ventas-cuentas-contables-content" className="grid grid-cols-1 gap-4 p-5 xl:grid-cols-2">
-          {invoiceSalesModule && invoicePaymentModule && (
-            renderInvoiceSalesCard(invoiceSalesModule, invoicePaymentModule)
-          )}
-          {otherSalesModuleDefs.map(renderSalesModuleCard)}
+        {salesExpanded && <CardContent id="ventas-cuentas-contables-content" className="grid min-w-0 grid-cols-1 gap-4 p-4 sm:p-5 xl:grid-cols-2">
+          {orderedSalesModuleDefs.map(renderSalesModuleCard)}
         </CardContent>}
       </Card>
 
