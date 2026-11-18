@@ -753,14 +753,6 @@ function AccountMappingOptionsEditor({ codes, field, moduleId, accountsByCode, a
           </div>
         ))}
       </div>
-      <p className="text-xs leading-5 text-muted-foreground">
-        Si hay varias cuentas configuradas, podrás elegir cuál usar al registrar el asiento.
-      </p>
-      {suggestions.length > 0 && (
-        <p className="flex items-center gap-1.5 text-xs font-medium text-emerald-700 dark:text-emerald-400">
-          <Sparkles className="size-3.5 shrink-0" /> Las cuentas recomendadas aparecen primero.
-        </p>
-      )}
       <Button
         type="button"
         variant="outline"
