@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { keepPreviousData, useQuery, useQueryClient } from '@tanstack/react-query';
 import * as XLSX from 'xlsx';
-import { AlertTriangle, Check, CheckCircle2, ChevronLeft, ChevronRight, CircleDollarSign, CircleHelp, Download, FileSpreadsheet, History, Layers, ListChecks, Loader2, Package, Pencil, Plus, Search, Settings2, Square, SquareCheckBig, Tag, Upload, X } from 'lucide-react';
+import { AlertTriangle, Check, CheckCircle2, ChevronLeft, ChevronRight, CircleDollarSign, CircleHelp, Download, FileSpreadsheet, History, Layers, ListChecks, Loader2, Package, Pencil, Plus, Search, Settings2, Square, SquareCheckBig, Tag, Upload, Users, X } from 'lucide-react';
 import { Card, CardContent, CardHeader, CardTitle } from '../ui/card';
 import { Button } from '../ui/button';
 import { Input } from '../ui/input';
@@ -30,6 +30,7 @@ import { parseSpreadsheetInWorker } from '../../utils/import-spreadsheet';
 import { VirtualizedImportList, useVirtualizedImportRows } from '../ui/VirtualizedImportList';
 import { buildDownloadFileName } from '../../utils/exportFileNames';
 import { AuditHistoryModal } from '../ui/AuditHistoryModal';
+import { PriceListCustomersDialog } from './PriceListCustomersDialog';
 import { getCurrencyDecimalPlaces } from '../../utils/currency';
 
 interface PriceListsViewProps { products?: any[]; onRefresh?: () => void; isSidebarCollapsed?: boolean; }
@@ -225,6 +226,7 @@ export function PriceListsView({ products = [], onRefresh, isSidebarCollapsed = 
   const queryClient = useQueryClient();
   const tenantKey = user?.tenantId || 'anonymous';
   const [activeItemType, setActiveItemType] = useState<'PRODUCT' | 'SERVICE'>('PRODUCT');
+  const [customersDialogOpen, setCustomersDialogOpen] = useState(false);
   const matrixQuery = useQuery({
     queryKey: ['sales', 'price-lists', 'matrix', tenantKey],
     queryFn: ({ signal }) => priceListsService.getMatrix(signal),
@@ -1015,9 +1017,10 @@ export function PriceListsView({ products = [], onRefresh, isSidebarCollapsed = 
   );
 
   return <div className="space-y-5">
+    <PriceListCustomersDialog open={customersDialogOpen} onOpenChange={setCustomersDialogOpen} lists={lists} />
     <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
       <div className="flex min-w-0 items-center gap-2"><h2 className="nh-module-title" data-tour="price-lists-title">Listas de Precios</h2><Button type="button" variant="ghost" size="icon" className="size-8 shrink-0 rounded-lg text-muted-foreground" onClick={() => setShowTutorial(true)} aria-label="Cómo actualizar precios" title="Cómo actualizar precios"><CircleHelp className="size-4" /></Button></div>
-      <div className="flex flex-wrap gap-2">{canCreatePriceList && <Button variant="outline" className="rounded-xl" onClick={() => setNewListOpen(true)} data-tour="price-lists-new"><Plus className="mr-2 size-4" /> Nueva lista</Button>}{canExportPriceLists && <Button variant="outline" className="rounded-xl" onClick={() => openDownload([...selectedProductIds])} disabled={!selectedCount} data-tour="price-lists-template"><Download className="mr-2 size-4" /> Plantilla ({selectedCount})</Button>}{canImportPriceLists && <Button className="rounded-xl" onClick={() => openImport([...selectedProductIds])} disabled={!catalogProducts.length || !importLists.length} data-tour="price-lists-import"><Upload className="mr-2 size-4" /> Importar precios</Button>}</div>
+      <div className="flex flex-wrap gap-2"><Button variant="outline" className="rounded-xl" onClick={() => setCustomersDialogOpen(true)}><Users className="mr-2 size-4" /> Clientes por lista</Button>{canCreatePriceList && <Button variant="outline" className="rounded-xl" onClick={() => setNewListOpen(true)} data-tour="price-lists-new"><Plus className="mr-2 size-4" /> Nueva lista</Button>}{canExportPriceLists && <Button variant="outline" className="rounded-xl" onClick={() => openDownload([...selectedProductIds])} disabled={!selectedCount} data-tour="price-lists-template"><Download className="mr-2 size-4" /> Plantilla ({selectedCount})</Button>}{canImportPriceLists && <Button className="rounded-xl" onClick={() => openImport([...selectedProductIds])} disabled={!catalogProducts.length || !importLists.length} data-tour="price-lists-import"><Upload className="mr-2 size-4" /> Importar precios</Button>}</div>
     </div>
 
     <div role="tablist" aria-label="Tipo de artículo en listas de precios" className="flex w-full max-w-md gap-1 rounded-xl border bg-muted/40 p-1">

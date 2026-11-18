@@ -121,3 +121,32 @@ export const priceListsService = {
     confirmText: string;
   }) => api.post<{ updated: number; unchanged: number; errors: string[] }>('/sales/price-lists/import', data),
 };
+
+export interface PriceListCustomerRow {
+  id: string;
+  code: string;
+  name: string;
+  companyName?: string | null;
+  priceListId: string | null;
+  priceList: { id: string; code: string; name: string } | null;
+}
+
+export interface PriceListCustomersPage {
+  data: PriceListCustomerRow[];
+  total: number;
+  page: number;
+  pageSize: number;
+  counts: Array<{ priceListId: string | null; count: number }>;
+}
+
+export const priceListCustomersService = {
+  /** priceListId: id de la lista, 'none' para clientes sin lista, vacío para todos. */
+  search: (params: { search?: string; priceListId?: string; page?: number; pageSize?: number }, signal?: AbortSignal) => {
+    const qs = new URLSearchParams();
+    if (params.search?.trim()) qs.set('search', params.search.trim());
+    if (params.priceListId) qs.set('priceListId', params.priceListId);
+    qs.set('page', String(params.page || 1));
+    qs.set('pageSize', String(params.pageSize || 50));
+    return api.get<PriceListCustomersPage>(`/sales/price-lists/customers?${qs.toString()}`, { signal });
+  },
+};
