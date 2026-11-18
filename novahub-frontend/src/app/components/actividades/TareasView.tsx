@@ -46,6 +46,7 @@ import { Label } from '../ui/label';
 import { Textarea } from '../ui/textarea';
 import { storageService } from '../../services/storage.service';
 import { asList, invalidateTenantQueries, useTenantQuery } from '../../hooks/useTenantQuery';
+import { useLocalStorageState } from '../../hooks/useLocalStorageState';
 import { ActivityDetailSheet } from './ActivityDetailSheet';
 import { TABLE_LAYOUT_BREAKPOINT, ViewLayoutSelect, useCardsOnlyBelowTableBreakpoint, type ViewLayoutMode } from '../ui/ViewLayoutSelect';
 import { TareasKanban } from './TareasKanban';
@@ -120,6 +121,11 @@ const getTaskAssigneeId = (task?: TaskLike | null): string => {
 export const TareasView: React.FC<TareasViewProps> = ({ data, loading, summaryError = false, onRefresh, notificationTargetId, onClearNotificationTarget }) => {
   const [searchTerm, setSearchTerm] = useState('');
   const [viewLayout, setViewLayout] = useState<ViewLayoutMode>('table');
+  const [kanbanGroupByCategory, setKanbanGroupByCategory] = useLocalStorageState<boolean>(
+    'activities-task-kanban-group-by-category',
+    true,
+    24 * 365,
+  );
   const isCompactViewport = useCardsOnlyBelowTableBreakpoint();
   const [isCompactContainer, setIsCompactContainer] = useState(false);
   const filtersContainerRef = useRef<HTMLDivElement>(null);
@@ -162,16 +168,6 @@ export const TareasView: React.FC<TareasViewProps> = ({ data, loading, summaryEr
   const [selectedTask, setSelectedTask] = useState<any>(null);
   const [detailTask, setDetailTask] = useState<any>(null);
 
-  useEffect(() => {
-    if (!notificationTargetId) return;
-    const task = data.find((item) => String(item.id) === notificationTargetId);
-    if (task) {
-      setDetailTask(task);
-      onClearNotificationTarget?.(notificationTargetId);
-    } else if (!loading) {
-      onClearNotificationTarget?.(notificationTargetId);
-    }
-  }, [notificationTargetId, data, loading, onClearNotificationTarget]);
   const [isCreating, setIsCreating] = useState(false);
   const [actionLoading, setActionLoading] = useState(false);
   const [claimingId, setClaimingId] = useState<string | null>(null);
@@ -198,6 +194,39 @@ export const TareasView: React.FC<TareasViewProps> = ({ data, loading, summaryEr
   const { user, canPerform } = useAuth();
   const queryClient = useQueryClient();
   const currentUserId = user?.id ? String(user.id) : null;
+  const taskNotificationQuery = useTenantQuery<Task>(
+    ['activities', 'task-notification-target', notificationTargetId || 'none'],
+    (signal) => tasksService.getById(String(notificationTargetId), signal),
+    {
+      enabled: Boolean(notificationTargetId)
+        && !loading
+        && !data.some((task) => String(task.id) === notificationTargetId)
+        && canPerform('ACTIVITIES_TASKS', 'view'),
+      retry: false,
+    },
+  );
+  useEffect(() => {
+    if (!notificationTargetId) return;
+    if (!canPerform('ACTIVITIES_TASKS', 'view')) {
+      onClearNotificationTarget?.(notificationTargetId);
+      return;
+    }
+
+    const task = data.find((item) => String(item.id) === notificationTargetId);
+    if (task) {
+      setDetailTask(task);
+      onClearNotificationTarget?.(notificationTargetId);
+      return;
+    }
+    if (loading || taskNotificationQuery.isPending) return;
+    if (taskNotificationQuery.isSuccess && taskNotificationQuery.data) {
+      setDetailTask(taskNotificationQuery.data);
+      onClearNotificationTarget?.(notificationTargetId);
+    } else if (taskNotificationQuery.isError) {
+      toast.error('No se encontró la tarea o no tienes acceso para verla.');
+      onClearNotificationTarget?.(notificationTargetId);
+    }
+  }, [notificationTargetId, data, loading, canPerform, taskNotificationQuery.data, taskNotificationQuery.isError, taskNotificationQuery.isPending, taskNotificationQuery.isSuccess, onClearNotificationTarget]);
   // Título, descripción, fechas y subtareas: solo quien creó la tarea o un administrador (igual que el backend).
   const viewerIsAdmin = Boolean(user?.isTenantAdmin || user?.isPlatformAdmin);
   const canEditTask = (task?: Task | null): boolean => Boolean(task) && canEditTaskContent(task as never, { id: currentUserId, isAdmin: viewerIsAdmin, canEdit: canPerform('ACTIVITIES_TASKS', 'edit') });
@@ -796,6 +825,29 @@ export const TareasView: React.FC<TareasViewProps> = ({ data, loading, summaryEr
       </CategoryGroupedSections>
     );
   };
+  const renderKanban = (rows: Task[], compact: boolean): ReactNode => (
+    <TareasKanban
+      data={rows}
+      compact={compact}
+      onEdit={(task) => setEditingTask(task)}
+      canEditTask={canEditTask}
+      onViewDetail={(task) => setDetailTask(task)}
+      canMoveToStatus={canMoveTaskToStatus}
+      onStatusChange={async (taskId, status) => {
+        await handleUpdate(taskId, { status: status as any });
+      }}
+      onSubmitApproval={(task) => {
+        setSelectedTask(task);
+        setIsApprovalOpen(true);
+      }}
+      onApprove={(task) => handleApproveTask(task)}
+      onComplete={(task) => {
+        setDetailTask(null);
+        setSelectedTask(task);
+        setIsCompleteOpen(true);
+      }}
+    />
+  );
   const kpiTasks = filteredWithoutStatus.filter((t) => String(t.status || '').toUpperCase() !== 'CANCELLED');
   const averageProgress = kpiTasks.length ? Math.round(kpiTasks.reduce((sum, t) => sum + getTaskProgress(t).percent, 0) / kpiTasks.length) : 0;
   const overdueCount = filteredWithoutStatus.filter((t) => getTaskDisplayStatus(t) === 'OVERDUE').length;
@@ -906,6 +958,30 @@ export const TareasView: React.FC<TareasViewProps> = ({ data, loading, summaryEr
             showKanban={true}
             showCategories={true}
           />
+          {viewLayout === 'kanban' && categoryFilter === 'ALL' && (
+            <div role="group" aria-label="Agrupar tablero Kanban" data-toolbar-role="layout" className="flex shrink-0 items-center gap-1 rounded-xl border border-border/50 bg-background/50 p-1">
+              <Button
+                type="button"
+                variant={kanbanGroupByCategory ? 'default' : 'ghost'}
+                aria-pressed={kanbanGroupByCategory}
+                data-testid="activities-kanban-grouping-category"
+                onClick={() => setKanbanGroupByCategory(true)}
+                className="h-8 gap-1.5 rounded-lg px-2.5 text-[10px] font-bold sm:px-3 sm:text-xs"
+              >
+                <Tag className="size-3.5" /> Por categoría
+              </Button>
+              <Button
+                type="button"
+                variant={!kanbanGroupByCategory ? 'default' : 'ghost'}
+                aria-pressed={!kanbanGroupByCategory}
+                data-testid="activities-kanban-grouping-status"
+                onClick={() => setKanbanGroupByCategory(false)}
+                className="h-8 gap-1.5 rounded-lg px-2.5 text-[10px] font-bold sm:px-3 sm:text-xs"
+              >
+                <ListTodo className="size-3.5" /> Solo estados
+              </Button>
+            </div>
+          )}
           {activeFiltersCount > 0 && (
             <Button
               type="button"
@@ -1039,27 +1115,9 @@ export const TareasView: React.FC<TareasViewProps> = ({ data, loading, summaryEr
 
       <Card className="min-w-0 overflow-hidden rounded-3xl border-border/50 bg-card/80 shadow-sm">
         {viewLayout === 'kanban' ? (
-          renderGrouped((rows) => <TareasKanban
-            data={rows}
-            compact={groupByCategory}
-            onEdit={(task) => setEditingTask(task)}
-            canEditTask={canEditTask}
-            onViewDetail={(task) => setDetailTask(task)}
-            canMoveToStatus={canMoveTaskToStatus}
-            onStatusChange={async (taskId, status) => {
-              await handleUpdate(taskId, { status: status as any });
-            }}
-            onSubmitApproval={(task) => {
-              setSelectedTask(task);
-              setIsApprovalOpen(true);
-            }}
-            onApprove={(task) => handleApproveTask(task)}
-            onComplete={(task) => {
-              setDetailTask(null);
-              setSelectedTask(task);
-              setIsCompleteOpen(true);
-            }}
-          />)
+          categoryFilter === 'ALL' && kanbanGroupByCategory
+            ? renderGrouped((rows) => renderKanban(rows, groupByCategory))
+            : renderKanban(filtered as Task[], false)
         ) : viewLayout === 'categories' ? (
           <TareasCategoriasView
             tasks={filtered}

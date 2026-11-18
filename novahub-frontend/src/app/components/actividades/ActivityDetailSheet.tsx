@@ -484,10 +484,6 @@ function TaskDetails({ item, onUpdate, canEdit, canReassign, canManageSubtasks, 
 
       <TaskTraceSection task={item} />
 
-      <DetailSection title="Qué se asignó" icon={FileText}>
-        <p className="whitespace-pre-wrap text-sm leading-6 text-muted-foreground">{item.description || 'Esta tarea no tiene una descripción. Revisa los reportes y comentarios de abajo.'}</p>
-      </DetailSection>
-
       <DetailSection title="Reportes de avance" icon={FileText}>
         <TaskReportsPanel taskId={String(item.id)} canReport={canReport} canReview={canReview} onChanged={() => onUpdate?.()} />
       </DetailSection>
@@ -930,7 +926,19 @@ export function ActivityDetailSheet({ kind, item, users, accounts, linkedExpense
         <SheetHeader className="sticky top-0 z-10 space-y-3 border-b border-border/50 bg-background/95 px-5 py-5 backdrop-blur-md sm:px-6">
           <div className="flex items-start gap-3 pr-8">
             <div className={cn('flex size-12 shrink-0 items-center justify-center rounded-2xl', config.accent)}><FileText className="size-6" /></div>
-            <div className="min-w-0 flex-1"><SheetTitle className="truncate text-lg font-black tracking-tight">{title}</SheetTitle><SheetDescription className="mt-1 truncate text-xs">{config.singular} · {description}</SheetDescription></div>
+            <div className="min-w-0 flex-1">
+              <SheetTitle className="truncate text-lg font-black tracking-tight">{title}</SheetTitle>
+              <SheetDescription
+                className={cn(
+                  'mt-1 text-xs',
+                  isTask && 'max-h-28 overflow-y-auto whitespace-pre-wrap break-words pr-1 text-sm leading-5 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/50',
+                )}
+                data-testid={isTask ? 'activities-task-detail-description' : undefined}
+                tabIndex={isTask ? 0 : undefined}
+              >
+                {isTask ? String(item?.description || '').trim() || 'Esta tarea no tiene descripción.' : `${config.singular} · ${description}`}
+              </SheetDescription>
+            </div>
           </div>
           <div className="flex flex-wrap items-center gap-2"><Badge variant="outline" className="rounded-lg border-border/50 text-[10px] font-bold uppercase tracking-wider">ID {item?.id || '—'}</Badge>{displayStatus && <StatusBadge value={displayStatus} kind={kind} />}</div>
           {extraActions && <div className="flex flex-wrap gap-2" data-tour="activity-detail-actions">{extraActions}</div>}

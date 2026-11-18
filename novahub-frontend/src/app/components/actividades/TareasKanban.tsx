@@ -35,7 +35,7 @@ interface TareasKanbanProps {
   onApprove?: (task: Task) => void;
   onComplete?: (task: Task) => void;
   canMoveToStatus: (task: Task, status: string) => boolean;
-  /** Alto menor: se usa cuando hay un tablero por categoría. */
+  /** Columnas más bajas cuando se muestra un tablero dentro de cada categoría. */
   compact?: boolean;
   /** Abre la edición de la tarea (el botón solo aparece si se pasa). */
   onEdit?: (task: Task) => void;
@@ -145,7 +145,11 @@ export const TareasKanban: React.FC<TareasKanbanProps> = ({
   const columns = columnTasks.CANCELLED.length > 0 ? [...KANBAN_COLUMNS, CANCELLED_COLUMN] : KANBAN_COLUMNS;
 
   return (
-    <div className={cn('grid grid-cols-1 gap-4 md:grid-cols-2 p-4 overflow-x-auto', columns.length > 4 ? 'lg:grid-cols-3 2xl:grid-cols-5' : 'lg:grid-cols-4', compact ? 'min-h-[16rem]' : 'min-h-[600px]')}>
+    <div className={cn(
+      'grid min-w-0 grid-flow-col auto-cols-[minmax(16rem,85vw)] grid-rows-1 gap-4 overflow-x-auto p-4 snap-x snap-proximity',
+      'md:grid-flow-row md:auto-cols-auto md:grid-cols-2 md:grid-rows-none md:overflow-x-visible md:snap-none',
+      columns.length > 4 ? 'lg:grid-cols-3 2xl:grid-cols-5' : 'lg:grid-cols-4',
+    )}>
       {columns.map((col) => {
         const tasks = columnTasks[col.status] || [];
         const isDragOver = dragOverColId === col.id;
@@ -158,12 +162,13 @@ export const TareasKanban: React.FC<TareasKanbanProps> = ({
             onDragLeave={(e) => handleDragLeave(e, col.id)}
             onDrop={(e) => handleDrop(e, col)}
             className={cn(
-              'flex flex-col rounded-3xl border border-border/50 bg-card/60 p-3 transition-colors duration-200', compact ? 'min-h-[12rem]' : 'min-h-[500px]',
+              'flex min-w-0 flex-col overflow-hidden rounded-3xl border border-border/50 bg-card/60 p-3 transition-colors duration-200 snap-start',
+              compact ? 'h-[min(54vh,34rem)] min-h-[15rem]' : 'h-[min(68vh,40rem)] min-h-[18rem]',
               isDragOver && 'border-primary/60 bg-primary/[0.04] ring-2 ring-primary/20'
             )}
           >
             {/* Column Header */}
-            <div className="flex items-center justify-between px-2 py-2 mb-2 border-b border-border/40">
+            <div className="sticky top-0 z-10 -mx-3 -mt-3 mb-2 flex shrink-0 items-center justify-between border-b border-border/40 bg-card/95 px-5 py-3 backdrop-blur-sm">
               <div className="flex items-center gap-2">
                 <span
                   className="size-2.5 rounded-full"
@@ -179,7 +184,12 @@ export const TareasKanban: React.FC<TareasKanbanProps> = ({
             </div>
 
             {/* Task list in column */}
-            <div className="flex-1 space-y-2.5 overflow-y-auto pr-0.5">
+            <div
+              role="region"
+              aria-label={`${col.label}: tareas`}
+              tabIndex={0}
+              className="min-h-0 flex-1 space-y-2.5 overflow-x-hidden overflow-y-auto overscroll-contain pr-1 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/50"
+            >
               {tasks.length === 0 && (
                 <div className="flex h-32 items-center justify-center rounded-2xl border border-dashed border-border/40 text-[11px] text-muted-foreground/60">
                   Sin tareas en esta etapa
