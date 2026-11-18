@@ -79,6 +79,7 @@ import { ActivityViewHeader } from './ActivityViewHeader';
 import { TaskSavedViews, type TaskViewFilters } from './TaskSavedViews';
 import { TaskProgressCell } from './TaskProgressCell';
 import { getTaskProgress } from './actividades.progress';
+import { readTaskLayoutPreference, writeTaskLayoutPreference } from './taskViewPreferences';
 
 interface TareasViewProps {
   data: Task[];
@@ -123,8 +124,20 @@ const getTaskAssigneeId = (task?: TaskLike | null): string => {
 };
 
 export const TareasView: React.FC<TareasViewProps> = ({ data, loading, summaryError = false, onRefresh, notificationTargetId, onClearNotificationTarget }) => {
+  const { user, canPerform } = useAuth();
+  const currentUserId = user?.id ? String(user.id) : null;
   const [searchTerm, setSearchTerm] = useState('');
-  const [viewLayout, setViewLayout] = useState<ViewLayoutMode>('table');
+  const [viewLayoutState, setViewLayoutState] = useState<{ userId: string | null; mode: ViewLayoutMode }>(() => ({
+    userId: currentUserId,
+    mode: readTaskLayoutPreference(currentUserId),
+  }));
+  const viewLayout = viewLayoutState.userId === currentUserId
+    ? viewLayoutState.mode
+    : readTaskLayoutPreference(currentUserId);
+  const setViewLayout = (mode: ViewLayoutMode) => {
+    setViewLayoutState({ userId: currentUserId, mode });
+    writeTaskLayoutPreference(currentUserId, mode);
+  };
   const [kanbanGroupByCategory, setKanbanGroupByCategory] = useLocalStorageState<boolean>(
     'activities-task-kanban-group-by-category',
     true,
@@ -139,7 +152,6 @@ export const TareasView: React.FC<TareasViewProps> = ({ data, loading, summaryEr
   const [isCompactContainer, setIsCompactContainer] = useState(false);
   const filtersContainerRef = useRef<HTMLDivElement>(null);
   const isCardsLayout = viewLayout === 'cards' || (viewLayout === 'table' && (isCompactViewport || isCompactContainer));
-  const effectiveViewLayout = viewLayout === 'table' && isCardsLayout ? 'cards' : viewLayout;
   const filterUsesCompactGrid = isCardsLayout || viewLayout === 'kanban' || viewLayout === 'categories';
   const [statusFilter, setStatusFilter] = useState<string>('ALL');
   const [priorityFilter, setPriorityFilter] = useState<string>('ALL');
@@ -200,9 +212,7 @@ export const TareasView: React.FC<TareasViewProps> = ({ data, loading, summaryEr
   const [rejectReason, setRejectReason] = useState('');
 
   const [currentTime, setCurrentTime] = useState(() => Date.now());
-  const { user, canPerform } = useAuth();
   const queryClient = useQueryClient();
-  const currentUserId = user?.id ? String(user.id) : null;
   const taskNotificationQuery = useTenantQuery<Task>(
     ['activities', 'task-notification-target', notificationTargetId || 'none'],
     (signal) => tasksService.getById(String(notificationTargetId), signal),
@@ -1001,7 +1011,7 @@ export const TareasView: React.FC<TareasViewProps> = ({ data, loading, summaryEr
           </Button>
           <TaskSavedViews userId={currentUserId} current={currentFilters} onApply={applyFilters} />
           <ViewLayoutSelect
-            value={effectiveViewLayout}
+            value={viewLayout}
             onChange={(val) => setViewLayout(val)}
             showKanban={true}
             showCategories={true}
