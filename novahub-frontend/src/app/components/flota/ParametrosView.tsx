@@ -37,6 +37,7 @@ function SettingsForm({ initial }: { initial: FleetSettings }) {
   const [kmPerGallon, setKmPerGallon] = useState(String(initial.defaultKmPerGallon ?? 10));
   const [linkAssets, setLinkAssets] = useState(Boolean(initial.linkFixedAssets));
   const [rateFormula, setRateFormula] = useState(initial.rateFormula || '');
+  const [priceFormula, setPriceFormula] = useState(initial.priceFormula || '');
   const [tiers, setTiers] = useState<Array<{ upToGallons: string; percent: string }>>((initial.commissionTiers || []).map((tier) => ({ upToGallons: String(tier.upToGallons), percent: String(tier.percent) })));
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState('');
@@ -45,7 +46,7 @@ function SettingsForm({ initial }: { initial: FleetSettings }) {
     setSaving(true); setError('');
     try {
       await flotaService.saveSettings({
-        dieselPrice: diesel, kmFactor: factor, defaultKmPerGallon: kmPerGallon, linkFixedAssets: linkAssets, rateFormula,
+        dieselPrice: diesel, kmFactor: factor, defaultKmPerGallon: kmPerGallon, linkFixedAssets: linkAssets, rateFormula, priceFormula,
         commissionTiers: tiers.filter((tier) => tier.upToGallons || tier.percent).map((tier) => ({ upToGallons: Number(tier.upToGallons), percent: Number(tier.percent) })),
       } as unknown as Partial<FleetSettings>);
       toast.success('Parámetros guardados');
@@ -68,6 +69,11 @@ function SettingsForm({ initial }: { initial: FleetSettings }) {
       <div className="mt-4">
         <Field label="Fórmula de la tarifa (opcional)" htmlFor="fl-rate-formula" hint="Se usa cuando el viaje no tiene tarifa manual ni de ruta. Por ejemplo: km * factor_km / capacidad. Cada empresa escribe la suya.">
           <FormulaField id="fl-rate-formula" value={rateFormula} onChange={setRateFormula} disabled={!canEdit} />
+        </Field>
+      </div>
+      <div className="mt-4">
+        <Field label="Fórmula del precio al cliente (opcional)" htmlFor="fl-price-formula" hint="Vacío = precio_bomba - descuento + flete. Variables: precio_bomba, descuento, descuento_pct, flete, cantidad, km. Quien factura puede cambiarla solo para su factura.">
+          <Input id="fl-price-formula" disabled={!canEdit} value={priceFormula} onChange={(event) => setPriceFormula(event.target.value)} placeholder="precio_bomba - descuento + flete" />
         </Field>
       </div>
       <div className="mt-4 flex items-center justify-between gap-3 rounded-xl border border-border p-3">

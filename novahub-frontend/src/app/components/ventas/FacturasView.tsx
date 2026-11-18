@@ -2316,7 +2316,15 @@ export function FacturasView({ data, summaryData, summaryLoading, summaryError, 
           </Card>
 
           {!isCreating && (
-            <TripCostBlock sourceType="INVOICE" sourceId={String(localDoc?.id)} revenue={toBaseAmount(Number(localDoc?.subtotal ?? localDoc?.total ?? 0), localDoc?.currency, Number(localDoc?.exchangeRate || 0) || undefined)} quantity={Number(localDoc?.items?.[0]?.quantity) || undefined} currency={baseCurrency} readOnly={['PAID', 'CANCELLED', 'REFUNDED'].includes(String(localDoc?.status || '').toUpperCase())} />
+            <TripCostBlock onApplyPrice={(unitPrice) => {
+              // El precio armado (bomba − descuento + flete) pasa a la primera línea; el cliente solo ve el precio final.
+              const newItems = [...(localDoc.items || [])];
+              if (!newItems.length) { toast.error('Agrega primero el producto de la factura.'); return; }
+              newItems[0] = { ...newItems[0], unitPrice, total: Number(newItems[0].quantity || 1) * unitPrice };
+              const calc = recalcTotals(newItems, localRates.dRate, localRates.tRate);
+              setLocalDoc({ ...localDoc, items: newItems, ...calc });
+              handleUpdate(localDoc!.id, { items: newItems, ...calc });
+            }} sourceType="INVOICE" sourceId={String(localDoc?.id)} revenue={toBaseAmount(Number(localDoc?.subtotal ?? localDoc?.total ?? 0), localDoc?.currency, Number(localDoc?.exchangeRate || 0) || undefined)} quantity={Number(localDoc?.items?.[0]?.quantity) || undefined} currency={baseCurrency} readOnly={['PAID', 'CANCELLED', 'REFUNDED'].includes(String(localDoc?.status || '').toUpperCase())} />
           )}
           <Card className="rounded-2xl border-border/50" data-tour="sales-form-summary">
             <CardContent className="min-w-0 p-4 space-y-3 sm:p-6">

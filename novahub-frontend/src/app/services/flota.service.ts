@@ -40,6 +40,8 @@ export interface FleetSettings {
   commissionTiers: CommissionTier[];
   /** Fórmula opcional de tarifa de la empresa (p. ej. «km * factor_km / capacidad»). */
   rateFormula?: string | null;
+  /** Fórmula del precio final al cliente (p. ej. «precio_bomba - descuento + flete»). */
+  priceFormula?: string | null;
 }
 
 export interface CostFieldDefinition {
@@ -62,7 +64,14 @@ export interface RateImportResult { preview: boolean; total: number; toCreate?: 
 export type TripSourceType = 'INVOICE' | 'ORDER' | 'ESTIMATE';
 export type DriverType = 'PAYROLL' | 'SUBCONTRACTED' | 'PER_TRIP';
 
-export interface TripCostLine { code: string; label: string; kind: string; amount: number; visibleToCustomer: boolean; error?: string }
+export interface TripCostLine { code: string; label: string; kind: string; amount: number; visibleToCustomer: boolean; error?: string; how?: string; formula?: string }
+
+/** Datos de la remisión de DINICO y del pedido del proveedor; viajan con el viaje desde la orden de venta hasta la factura. */
+export interface TripMeta {
+  remisionNumber?: string | null; supplierOrderNumber?: string | null; supplierName?: string | null; plate?: string | null;
+  truckLabel?: string | null; departureAt?: string | null; arrivalAt?: string | null; notes?: string | null;
+}
+export interface TripPricing { pumpPrice?: number; discount?: number; discountPercent?: number; freight?: number; unitPrice?: number; formula?: string }
 export interface TripCostResult {
   km: number; rate: number; rateSource: 'MANUAL' | 'ROUTE' | 'FORMULA' | 'NONE'; revenue: number; kmPerGallon: number;
   consumptionGallons: number; commissionPercent: number; lines: TripCostLine[]; totalCost: number; profit: number;
@@ -74,12 +83,36 @@ export interface TripCostInput {
   kmPerGallon?: number | string; dieselPrice?: number | string; commissionPercent?: number | string;
   viatico?: number | string; driverPay?: number | string; depreciation?: number | string; otherCosts?: number | string; extraStop?: number | string;
   custom?: Record<string, number | string>; lineId?: string; tripDate?: string; currency?: string;
+  /** Fórmula de tarifa y fórmulas de líneas (COMISION, DIESEL, campos propios) cambiadas solo para este viaje. */
+  rateFormula?: string; formulas?: Record<string, string>;
+  trip?: TripMeta; pricing?: TripPricing;
 }
 export interface SavedTripCost {
   id: string; lineId: string; vehicleId?: string | null; driverType: DriverType; driverEmployeeId?: string | null; driverName?: string | null;
   origin?: string | null; destination?: string | null; distanceKm: string | number; quantity: string | number; revenue: string | number;
   inputs: Record<string, unknown>; breakdown: TripCostLine[]; totalCost: string | number; profit: string | number;
 }
+export interface InheritedTrip { source: { type: 'ORDER'; id: string; number?: string } | null; rows: SavedTripCost[] }
+export interface LastVehicleTrip {
+  found: boolean; tripDate?: string; driverType?: DriverType; driverEmployeeId?: string | null; driverName?: string | null; origin?: string | null; destination?: string | null;
+  kmPerGallon?: number | null; commissionPercent?: number | null; viatico?: number | null; driverPay?: number | null; depreciation?: number | null;
+  otherCosts?: number | null; extraStop?: number | null; custom?: Record<string, number | string>;
+}
+export interface PriceInput { origin?: string; destination?: string; pumpPrice?: number | string; discountAmount?: number | string; discountPercent?: number | string; freight?: number | string; quantity?: number | string; km?: number | string; formula?: string }
+export interface PriceResult {
+  unitPrice: number; pumpPrice: number; discount: number; discountPercent: number; freight: number;
+  freightSource: 'MANUAL' | 'ROUTE_PER_GALLON' | 'ROUTE_PER_TRIP' | 'NONE'; formula: string; formulaSource: 'TRIP' | 'COMPANY' | 'DEFAULT'; how: string; warnings: string[];
+  route: { id: string; origin: string; destination: string; rate: number; rateUnit: string; distanceKm: number | null } | null;
+}
+export interface PriceHelp { variables: Array<{ name: string; description: string }>; companyFormula: string | null; defaultFormula: string }
+export interface TripDetailRow {
+  id: string; sourceType: TripSourceType; sourceId: string; documentNumber: string | null; customer: string | null; tripDate: string;
+  remisionNumber: string | null; supplierOrderNumber: string | null; supplierName: string | null; vehicle: string | null; plate: string | null;
+  driver: string | null; driverType: DriverType; origin: string | null; destination: string | null; km: number; quantity: number;
+  revenue: number; totalCost: number; profit: number; marginPercent: number; lines: Record<string, number>;
+  pricing: TripPricing | null; formulas: Record<string, string> | null;
+}
+export interface TripDetailReport { from: string; to: string; sourceType: TripSourceType; truncated: boolean; rows: TripDetailRow[] }
 export interface FormulaHelp { variables: Array<{ name: string; description: string }>; functions: string[]; operators: string[]; example: string }
 export interface FormulaCheck { ok: boolean; error?: string; variables: string[]; unknown: string[] }
 export interface ProfitabilityRow { key: string; label: string; trips: number; revenue: number; cost: number; profit: number; km: number; marginPercent: number; lines: Record<string, number> }
@@ -115,6 +148,11 @@ export const flotaService = {
   listTrips: (sourceType: TripSourceType, sourceId: string, signal?: AbortSignal) => api.get<SavedTripCost[]>(`/fleet/trips/${sourceType}/${sourceId}`, { signal }),
   saveTrip: (sourceType: TripSourceType, sourceId: string, data: TripCostInput) => api.put<SavedTripCost & { summary: TripCostResult }>(`/fleet/trips/${sourceType}/${sourceId}`, data),
   removeTrip: (sourceType: TripSourceType, sourceId: string, lineId = '') => api.delete<{ deleted: number }>(`/fleet/trips/${sourceType}/${sourceId}?lineId=${encodeURIComponent(lineId)}`),
+  inheritedTrip: (invoiceId: string, signal?: AbortSignal) => api.get<InheritedTrip>(`/fleet/trips/inherited/${invoiceId}`, { signal }),
+  lastTripOfVehicle: (vehicleId: string, signal?: AbortSignal) => api.get<LastVehicleTrip>(`/fleet/vehicles/${vehicleId}/last-trip`, { signal }),
+  priceHelp: (signal?: AbortSignal) => api.get<PriceHelp>('/fleet/pricing/help', { signal }),
+  previewPrice: (data: PriceInput) => api.post<PriceResult>('/fleet/pricing/preview', data),
+  tripsDetail: (params: { from?: string; to?: string; vehicleId?: string; search?: string; sourceType?: string }, signal?: AbortSignal) => api.get<TripDetailReport>('/fleet/reports/trips', { params, signal }),
   profitability: (params: { from?: string; to?: string; groupBy?: string; vehicleId?: string }, signal?: AbortSignal) => api.get<ProfitabilityReport>('/fleet/reports/profitability', { params, signal }),
 
   listTemplates: (signal?: AbortSignal) => api.get<IndustryTemplate[]>('/fleet/templates', { signal }),
