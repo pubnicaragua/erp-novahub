@@ -3,12 +3,14 @@ import { ChevronDown, Loader2, Save, Trash2, Truck, TriangleAlert, Wand2 } from 
 import { Button } from '../ui/button';
 import { Input } from '../ui/input';
 import { Skeleton } from '../ui/skeleton';
+import { Combobox } from '../ui/Combobox';
 import { useAuth } from '../../contexts/AuthContext';
 import { useTenantQuery } from '../../hooks/useTenantQuery';
 import {
   flotaService, type DriverType, type PriceResult, type SavedTripCost, type TripCostInput, type TripCostResult, type TripMeta, type TripSourceType,
 } from '../../services/flota.service';
 import { hrService } from '../../services/hr.service';
+import { suppliersService } from '../../services/compras.service';
 import { toast } from '../../services/toast';
 import { Field, NativeSelect } from '../organizacion/OrgBits';
 import { errorMessage } from '../organizacion/organizacion.utils';
@@ -31,6 +33,11 @@ interface Props {
   mode?: 'FULL' | 'REMISION';
   /** Si se da, aparece «Aplicar como precio de la línea» en el armado del precio. */
   onApplyPrice?: (unitPrice: number) => void;
+  /**
+   * Orden nueva (todavía sin guardar): la remisión se captura en el mismo formulario y el padre la guarda junto con la orden.
+   * Recibe los datos en cada cambio (o null cuando no aplica).
+   */
+  onDraftChange?: (payload: TripCostInput | null) => void;
 }
 
 const DRIVER_LABEL: Record<DriverType, string> = { PAYROLL: 'Empleado de nómina', SUBCONTRACTED: 'Subcontratado', PER_TRIP: 'Solo por viaje' };
@@ -114,7 +121,7 @@ function toPayload(draft: Draft, props: Pick<Props, 'revenue' | 'currency' | 'li
  *  - En la factura (mode FULL) esos datos ya vienen de la orden, el camión autocompleta el resto, y ahí está el costo interno, las fórmulas y el precio.
  * El cliente y el PDF nunca lo ven: ahí solo va el precio final.
  */
-export function TripCostBlock({ sourceType, sourceId, lineId = '', revenue, quantity, currency, readOnly, mode = 'FULL', onApplyPrice }: Props) {
+export function TripCostBlock({ sourceType, sourceId, lineId = '', revenue, quantity, currency, readOnly, mode = 'FULL', onApplyPrice, onDraftChange }: Props) {
   const { canPerform } = useAuth();
   const canView = canPerform('FLEET_COSTS', 'view');
   const canEdit = canPerform('FLEET_COSTS', 'edit') && !readOnly;
@@ -141,6 +148,7 @@ export function TripCostBlock({ sourceType, sourceId, lineId = '', revenue, quan
   const fields = useTenantQuery(['fleet', 'cost-fields', 'trip-block'], (signal) => flotaService.listCostFields(signal), { enabled: enabled && full, retry: false });
   const saved = useTenantQuery(['fleet', 'trips', sourceType, sourceId || 'new', lineId], (signal) => flotaService.listTrips(sourceType, String(sourceId), signal), { enabled: enabled && Boolean(sourceId) });
   const inherited = useTenantQuery(['fleet', 'trips', 'inherited', sourceId || 'new'], (signal) => flotaService.inheritedTrip(String(sourceId), signal), { enabled: enabled && Boolean(sourceId) && sourceType === 'INVOICE', retry: false });
+  const suppliers = useTenantQuery(['fleet', 'trip-suppliers'], (signal) => suppliersService.getAllLookup({ status: 'ACTIVE' }, signal), { enabled, retry: false });
   const employees = useTenantQuery(['fleet', 'trip-employees'], (signal) => hrService.getEmployeeLookup(undefined, signal), { enabled: enabled && full && draft.driverType === 'PAYROLL', retry: false });
 
   const savedRow = useMemo(() => (saved.data || []).find((row) => row.lineId === lineId) || null, [saved.data, lineId]);
@@ -154,7 +162,7 @@ export function TripCostBlock({ sourceType, sourceId, lineId = '', revenue, quan
       setKmManual(Boolean(savedRow.distanceKm && Number(savedRow.distanceKm) > 0));
     } else if (inheritedRow) {
       const fromOrder = draftFromSaved(inheritedRow);
-      setDraft({ ...fromOrder, quantity: quantity ? String(quantity) : fromOrder.quantity });
+      setDraft({ ...fromOrder, quantity: fromOrder.quantity && Number(fromOrder.quantity) > 0 ? fromOrder.quantity : (quantity ? String(quantity) : '') });
       setNote(`Datos tomados de la orden ${inherited.data?.source?.number || ''}. Puedes cambiarlos.`.replace('  ', ' '));
     }
     setHydrated(true);
@@ -168,7 +176,17 @@ export function TripCostBlock({ sourceType, sourceId, lineId = '', revenue, quan
 
   const activeFields = (fields.data || []).filter((field) => field.isActive && field.kind !== 'FORMULA');
   const formulaFields = (fields.data || []).filter((field) => field.isActive && field.kind === 'FORMULA');
-  const payload = useMemo(() => toPayload(shown, { revenue, currency, lineId }, priceResult), [shown, revenue, currency, lineId, priceResult]);
+  const payload = useMemo(() => {
+    const next = toPayload(shown, { revenue, currency, lineId }, priceResult);
+    if (!next.quantity && quantity) next.quantity = String(quantity);
+    return next;
+  }, [shown, revenue, currency, lineId, priceResult, quantity]);
+
+  // Orden sin guardar: el padre recibe lo capturado y lo guarda junto con la orden (un solo paso).
+  useEffect(() => {
+    if (!onDraftChange) return;
+    onDraftChange(!sourceId && hydrated ? payload : null);
+  }, [onDraftChange, sourceId, hydrated, payload]);
 
   // Vista previa del costo: el servidor calcula con los parámetros de la empresa (mismas reglas que al guardar).
   useEffect(() => {
@@ -214,14 +232,18 @@ export function TripCostBlock({ sourceType, sourceId, lineId = '', revenue, quan
     if (!vehicleId) return;
     try {
       const last = await flotaService.lastTripOfVehicle(vehicleId);
-      if (!last.found) { setNote('Primer viaje de este camión: completa los datos una vez y quedarán guardados para los próximos.'); return; }
+      if (!last.found) {
+        if (last.defaultDriverName) setDraft((current) => (trim(current.driverName) === '' ? { ...current, driverName: last.defaultDriverName || '' } : current));
+        setNote(last.defaultDriverName ? 'Se puso el conductor habitual del camión. Completa lo demás una vez y quedará guardado para los próximos viajes.' : 'Primer viaje de este camión: completa los datos una vez y quedarán guardados para los próximos.');
+        return;
+      }
       setDraft((current) => {
         const fill = (value: unknown, now: string) => (trim(now) === '' && value !== null && value !== undefined && String(value) !== '' ? String(value) : now);
         const custom = { ...current.custom };
         for (const [code, value] of Object.entries(last.custom || {})) if (!trim(custom[code] ?? '')) custom[code] = String(value);
         return {
           ...current,
-          driverName: fill(last.driverName, current.driverName),
+          driverName: fill(last.driverName || last.defaultDriverName, current.driverName),
           driverType: trim(current.driverName) === '' && last.driverType ? last.driverType : current.driverType,
           driverEmployeeId: fill(last.driverEmployeeId, current.driverEmployeeId),
           kmPerGallon: fill(last.kmPerGallon, current.kmPerGallon), commissionPercent: fill(last.commissionPercent, current.commissionPercent),
@@ -252,7 +274,7 @@ export function TripCostBlock({ sourceType, sourceId, lineId = '', revenue, quan
   const title = full ? 'Costo interno del viaje' : 'Datos de la remisión';
   const summaryHint = savedRow
     ? (full ? `Guardado · ganancia ${money(Number(savedRow.profit))}` : `Guardado${draft.remisionNumber ? ` · remisión ${draft.remisionNumber}` : ''}`)
-    : sourceId ? (full ? 'Sin costo registrado' : 'Sin remisión registrada') : 'Guarda el documento primero';
+    : sourceId ? (full ? 'Sin costo registrado' : 'Sin remisión registrada') : (full ? 'Guarda el documento primero' : 'Se guarda junto con la orden');
   const id = (name: string) => `tc-${name}-${lineId}`;
   const disabled = !canEdit;
 
@@ -269,18 +291,30 @@ export function TripCostBlock({ sourceType, sourceId, lineId = '', revenue, quan
 
       {open && (
         <div className="space-y-4 border-t border-border p-4">
-          {!sourceId && <p className="rounded-lg border border-dashed p-3 text-[13px] text-muted-foreground">Guarda el documento y vuelve a abrir este bloque para registrar {full ? 'el costo del viaje' : 'la remisión'}.</p>}
+          {!sourceId && full && <p className="rounded-lg border border-dashed p-3 text-[13px] text-muted-foreground">Guarda el documento y vuelve a abrir este bloque para registrar el costo del viaje.</p>}
+          {!sourceId && !full && <p className="rounded-lg bg-primary/5 px-3 py-2 text-[12px] text-foreground" role="status">Llena la remisión aquí mismo: se guarda automáticamente junto con la orden, sin pasos extra.</p>}
           {sourceId && (saved.isLoading || (sourceType === 'INVOICE' && inherited.isLoading)) && <Skeleton className="h-40 w-full" aria-busy="true" />}
-          {sourceId && !saved.isLoading && !(sourceType === 'INVOICE' && inherited.isLoading) && (
+          {(sourceId || !full) && !saved.isLoading && !(sourceType === 'INVOICE' && inherited.isLoading) && (
             <>
               {note && <p className="rounded-lg bg-primary/5 px-3 py-2 text-[12px] text-foreground" role="status">{note}</p>}
 
               <div>
                 <p className="mb-2 text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">Remisión y viaje</p>
-                <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+                <div className="grid gap-3 sm:grid-cols-2 2xl:grid-cols-4">
                   <Field label="Remisión Nº" htmlFor={id('remision')}><Input id={id('remision')} disabled={disabled} value={draft.remisionNumber} onChange={(event) => set({ remisionNumber: event.target.value })} placeholder="Ej.: 30718" /></Field>
                   <Field label="Pedido del proveedor Nº" htmlFor={id('pedido')} hint="El código del pedido en Puma u otro proveedor."><Input id={id('pedido')} disabled={disabled} value={draft.supplierOrderNumber} onChange={(event) => set({ supplierOrderNumber: event.target.value })} placeholder="Ej.: 5010" /></Field>
-                  <Field label="Proveedor" htmlFor={id('proveedor')}><Input id={id('proveedor')} disabled={disabled} value={draft.supplierName} onChange={(event) => set({ supplierName: event.target.value })} placeholder="Puma, Uno…" /></Field>
+                  <Field label="Proveedor" htmlFor={id('proveedor')}>
+                    {suppliers.data && suppliers.data.length > 0 ? (
+                      <Combobox
+                        id={id('proveedor')} disabled={disabled} className="h-9" value={draft.supplierName} onChange={(value) => set({ supplierName: value })}
+                        options={[...(draft.supplierName && !suppliers.data.some((supplier) => supplier.name === draft.supplierName) ? [{ label: draft.supplierName, value: draft.supplierName }] : []),
+                          ...suppliers.data.map((supplier) => ({ label: supplier.name, value: supplier.name }))]}
+                        placeholder="Elige el proveedor" searchPlaceholder="Buscar proveedor..." emptyMessage="Sin proveedores coincidentes"
+                      />
+                    ) : (
+                      <Input id={id('proveedor')} disabled={disabled} value={draft.supplierName} onChange={(event) => set({ supplierName: event.target.value })} placeholder="Puma, Uno…" />
+                    )}
+                  </Field>
                   <Field label="Cantidad (galones)" htmlFor={id('qty')}><Input id={id('qty')} inputMode="decimal" disabled={disabled} value={draft.quantity} onChange={(event) => set({ quantity: event.target.value })} /></Field>
                   <Field label="Camión" htmlFor={id('vehicle')}>
                     <NativeSelect id={id('vehicle')} disabled={disabled} value={draft.vehicleId} onChange={(event) => void pickVehicle(event.target.value)}>
@@ -309,7 +343,7 @@ export function TripCostBlock({ sourceType, sourceId, lineId = '', revenue, quan
                 <>
                   <div>
                     <p className="mb-2 text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">Costos del viaje</p>
-                    <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+                    <div className="grid gap-3 sm:grid-cols-2 2xl:grid-cols-4">
                       <Field label="Kilómetros" htmlFor={id('km')} hint={routeMatch?.distanceKm ? 'Salen de la ruta; cámbialos si hace falta.' : 'Si lo dejas vacío usa los km de la ruta.'}><Input id={id('km')} inputMode="decimal" disabled={disabled} value={shown.km} onChange={(event) => { setKmManual(true); set({ km: event.target.value }); }} /></Field>
                       <Field label="Rendimiento (km por galón)" htmlFor={id('kmg')} hint="Vacío = el del vehículo. Cámbialo si este viaje rindió distinto."><Input id={id('kmg')} inputMode="decimal" disabled={disabled} value={draft.kmPerGallon} onChange={(event) => set({ kmPerGallon: event.target.value })} /></Field>
                       <Field label="Comisión (%)" htmlFor={id('comm')} hint="Vacío = la del vehículo o la de su capacidad."><Input id={id('comm')} inputMode="decimal" disabled={disabled} value={draft.commissionPercent} onChange={(event) => set({ commissionPercent: event.target.value })} /></Field>
@@ -356,18 +390,18 @@ export function TripCostBlock({ sourceType, sourceId, lineId = '', revenue, quan
                   <div className="rounded-xl border border-border p-3">
                     <p className="text-[13px] font-medium">Armado del precio al cliente (interno)</p>
                     <p className="mt-1 text-[12px] text-muted-foreground">Precio bomba − descuento + flete. El cliente solo ve el precio final; el descuento y el flete nunca salen en la factura.</p>
-                    <div className="mt-3 grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+                    <div className="mt-3 grid gap-3 sm:grid-cols-2">
                       <Field label="Precio bomba (por galón)" htmlFor={id('pump')}><Input id={id('pump')} inputMode="decimal" disabled={disabled} value={price.pumpPrice} onChange={(event) => setPrice({ ...price, pumpPrice: event.target.value })} placeholder="163.36" /></Field>
                       <Field label="Descuento" htmlFor={id('disc')} hint="Por cliente y destino.">
-                        <div className="flex gap-2">
-                          <Input id={id('disc')} inputMode="decimal" disabled={disabled} value={price.discount} onChange={(event) => setPrice({ ...price, discount: event.target.value })} placeholder={price.discountMode === 'PERCENT' ? '6.3' : '10.36'} />
+                        <div className="flex min-w-0 gap-2">
+                          <Input id={id('disc')} className="min-w-0 flex-1" inputMode="decimal" disabled={disabled} value={price.discount} onChange={(event) => setPrice({ ...price, discount: event.target.value })} placeholder={price.discountMode === 'PERCENT' ? '6.3' : '10.36'} />
                           <NativeSelect aria-label="Tipo de descuento" disabled={disabled} value={price.discountMode} onChange={(event) => setPrice({ ...price, discountMode: event.target.value as PriceDraft['discountMode'] })}>
-                            <option value="AMOUNT">C$ por galón</option><option value="PERCENT">%</option>
+                            <option value="AMOUNT">C$ / galón</option><option value="PERCENT">% del bomba</option>
                           </NativeSelect>
                         </div>
                       </Field>
                       <Field label="Flete por galón" htmlFor={id('freight')} hint={routeMatch ? `Vacío = el de la ruta (${formatNumber(routeMatch.rate, 4)}).` : 'Vacío = el de la ruta si existe.'}><Input id={id('freight')} inputMode="decimal" disabled={disabled} value={price.freight} onChange={(event) => setPrice({ ...price, freight: event.target.value })} /></Field>
-                      <Field label="Fórmula del precio" htmlFor={id('pformula')} hint="Vacío = la de la empresa."><Input id={id('pformula')} disabled={disabled} value={price.formula} onChange={(event) => setPrice({ ...price, formula: event.target.value })} placeholder="precio_bomba - descuento + flete" /></Field>
+                      <Field label="Fórmula del precio" htmlFor={id('pformula')} hint="Vacío = la de la empresa." className="sm:col-span-2"><Input id={id('pformula')} disabled={disabled} value={price.formula} onChange={(event) => setPrice({ ...price, formula: event.target.value })} placeholder="precio_bomba - descuento + flete" /></Field>
                     </div>
                     {priceError && <p className="mt-2 flex items-center gap-1.5 text-[13px] text-destructive" role="alert"><TriangleAlert className="size-4" aria-hidden="true" />{priceError}</p>}
                     {priceResult && (
@@ -408,7 +442,7 @@ export function TripCostBlock({ sourceType, sourceId, lineId = '', revenue, quan
                 </>
               )}
 
-              {canEdit && (
+              {canEdit && sourceId && (
                 <div className="flex flex-wrap items-center justify-end gap-2">
                   {calculating && full && <span className="mr-auto flex items-center gap-1.5 text-[12px] text-muted-foreground"><Loader2 className="size-3.5 animate-spin" aria-hidden="true" />Calculando…</span>}
                   {savedRow && <Button type="button" variant="outline" size="sm" onClick={() => void remove()} disabled={saving}><Trash2 className="size-4" aria-hidden="true" />Quitar datos del viaje</Button>}

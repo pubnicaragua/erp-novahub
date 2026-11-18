@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect, useRef, useCallback } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { useLocalStorageState } from '../../hooks/useLocalStorageState';
 import { 
@@ -56,6 +56,7 @@ import { getSalesOrderOriginBadge } from '../../utils/document-origin-badges';
 import { getLoggedInSellerEmployeeId } from '../../utils/salesSeller';
 import { getCurrencyDecimalPlaces } from '../../utils/currency';
 import { TripCostBlock } from '../flota/TripCostBlock';
+import { flotaService, type TripCostInput } from '../../services/flota.service';
 import { initialDocumentExchangeRate } from '../../utils/currency';
 import { roundDecimal } from '../../utils/currency';
 
@@ -196,6 +197,9 @@ export function OrdenesVentaView({ data, summaryData, summaryLoading, summaryErr
     : showPriceTypeColumn ? 'sales-quote-line-product-layout--price-only' : 'sales-quote-line-product-layout--product-only';
   const [invoicingOrderId, setInvoicingOrderId] = useState<string | null>(null);
   const savingOrderRef = useRef(false);
+  // Remisión de una orden nueva: se captura en el mismo formulario y se guarda junto con la orden (un solo paso).
+  const pendingTripRef = useRef<TripCostInput | null>(null);
+  const handlePendingTrip = useCallback((payload: TripCostInput | null) => { pendingTripRef.current = payload; }, []);
   const [pricingMode, setPricingMode] = useState<'global' | 'individual'>('global');
   const [localRates, setLocalRates] = useState({ dRate: 0, tRate: 0 });
   const localDocRef = useRef<SalesOrder | null>(null);
@@ -600,6 +604,12 @@ export function OrdenesVentaView({ data, summaryData, summaryLoading, summaryErr
     try {
       if (String(localDoc.id).startsWith('local-')) {
         const created = await salesOrdersService.create({ ...buildOrderStatusPayload(status), number: undefined } as any);
+        const pendingTrip = pendingTripRef.current;
+        pendingTripRef.current = null;
+        if (pendingTrip && created?.id) {
+          try { await flotaService.saveTrip('ORDER', String(created.id), pendingTrip); }
+          catch (tripError: any) { toast.error(`La orden se guardó, pero no se pudo guardar la remisión: ${tripError?.message || 'inténtalo de nuevo desde la orden'}`); }
+        }
         commitLocalDoc(created);
         await onRefresh();
       } else {
@@ -1044,8 +1054,8 @@ export function OrdenesVentaView({ data, summaryData, summaryLoading, summaryErr
               </div>
             </CardContent>
           </Card>
-          {!String(localDoc?.id || '').startsWith('local-') && (
-            <TripCostBlock mode="REMISION" sourceType="ORDER" sourceId={String(localDoc?.id)} revenue={toBaseAmount(Number(localDoc?.subtotal ?? localDoc?.total ?? 0), localDoc?.currency, Number(localDoc?.exchangeRate || 0) || undefined)} quantity={Number(localDoc?.items?.[0]?.quantity) || undefined} currency={baseCurrency} />
+          {(
+            <TripCostBlock mode="REMISION" onDraftChange={handlePendingTrip} sourceType="ORDER" sourceId={String(localDoc?.id || '').startsWith('local-') ? null : String(localDoc?.id)} revenue={toBaseAmount(Number(localDoc?.subtotal ?? localDoc?.total ?? 0), localDoc?.currency, Number(localDoc?.exchangeRate || 0) || undefined)} quantity={Number(localDoc?.items?.[0]?.quantity) || undefined} currency={baseCurrency} />
           )}
           <Card className="rounded-2xl border-border/50" data-tour="sales-form-summary">
             <CardContent className="p-6 space-y-3">

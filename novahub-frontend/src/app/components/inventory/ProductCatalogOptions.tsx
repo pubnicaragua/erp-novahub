@@ -16,7 +16,7 @@ export interface ProductClassOption { value: string; label: string; hidden: bool
 
 const FALLBACK_UNITS: MeasureUnitOption[] = [
   ['unidad', 'Unidad'], ['kilo', 'Kilo'], ['libra', 'Libra'], ['docena', 'Docena'], ['caja', 'Caja'],
-  ['litro', 'Litro'], ['metro', 'Metro'], ['par', 'Par'], ['rollo', 'Rollo'], ['pieza', 'Pieza'],
+  ['litro', 'Litro'], ['galon', 'Galón'], ['metro', 'Metro'], ['par', 'Par'], ['rollo', 'Rollo'], ['pieza', 'Pieza'],
 ].map(([value, label]) => ({ value, label, hidden: false }))
 
 const QUERY_UNITS = ['inventory', 'measure-units']

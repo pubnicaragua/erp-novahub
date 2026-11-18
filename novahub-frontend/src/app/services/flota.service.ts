@@ -12,6 +12,8 @@ export interface FleetVehicle {
   capacityGallons?: string | number | null;
   kmPerGallon?: string | number | null;
   commissionPercent?: string | number | null;
+  /** Conductor habitual: se sugiere al elegir el camión. */
+  defaultDriverName?: string | null;
   status: VehicleStatus;
   consumptionWarehouseId?: string | null;
   fixedAssetId?: string | null;
@@ -94,7 +96,7 @@ export interface SavedTripCost {
 }
 export interface InheritedTrip { source: { type: 'ORDER'; id: string; number?: string } | null; rows: SavedTripCost[] }
 export interface LastVehicleTrip {
-  found: boolean; tripDate?: string; driverType?: DriverType; driverEmployeeId?: string | null; driverName?: string | null; origin?: string | null; destination?: string | null;
+  found: boolean; defaultDriverName?: string | null; tripDate?: string; driverType?: DriverType; driverEmployeeId?: string | null; driverName?: string | null; origin?: string | null; destination?: string | null;
   kmPerGallon?: number | null; commissionPercent?: number | null; viatico?: number | null; driverPay?: number | null; depreciation?: number | null;
   otherCosts?: number | null; extraStop?: number | null; custom?: Record<string, number | string>;
 }

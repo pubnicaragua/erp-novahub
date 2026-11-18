@@ -14,11 +14,11 @@ import { ErrorState, Field, PageTitle } from '../organizacion/OrgBits';
 import { errorMessage } from '../organizacion/organizacion.utils';
 import { formatNumber, useFleetRefresh, VEHICLE_STATUS_LABEL } from './flota.helpers';
 
-type Draft = { code: string; plate: string; name: string; vehicleType: string; capacityGallons: string; kmPerGallon: string; commissionPercent: string; status: string; notes: string };
-const EMPTY: Draft = { code: '', plate: '', name: '', vehicleType: '', capacityGallons: '', kmPerGallon: '', commissionPercent: '', status: 'ACTIVE', notes: '' };
+type Draft = { code: string; plate: string; name: string; vehicleType: string; defaultDriverName: string; capacityGallons: string; kmPerGallon: string; commissionPercent: string; status: string; notes: string };
+const EMPTY: Draft = { code: '', plate: '', name: '', vehicleType: '', defaultDriverName: '', capacityGallons: '', kmPerGallon: '', commissionPercent: '', status: 'ACTIVE', notes: '' };
 
 const toDraft = (vehicle: FleetVehicle): Draft => ({
-  code: vehicle.code, plate: vehicle.plate ?? '', name: vehicle.name ?? '', vehicleType: vehicle.vehicleType ?? '',
+  code: vehicle.code, plate: vehicle.plate ?? '', name: vehicle.name ?? '', vehicleType: vehicle.vehicleType ?? '', defaultDriverName: vehicle.defaultDriverName ?? '',
   capacityGallons: vehicle.capacityGallons != null ? String(vehicle.capacityGallons) : '',
   kmPerGallon: vehicle.kmPerGallon != null ? String(vehicle.kmPerGallon) : '',
   commissionPercent: vehicle.commissionPercent != null ? String(vehicle.commissionPercent) : '',
@@ -48,7 +48,7 @@ export function VehiculosView() {
   const save = async () => {
     setSaving(true); setError('');
     const body = {
-      code: draft.code, plate: draft.plate, name: draft.name, vehicleType: draft.vehicleType, status: draft.status, notes: draft.notes,
+      code: draft.code, plate: draft.plate, name: draft.name, vehicleType: draft.vehicleType, defaultDriverName: draft.defaultDriverName, status: draft.status, notes: draft.notes,
       capacityGallons: draft.capacityGallons, kmPerGallon: draft.kmPerGallon, commissionPercent: draft.commissionPercent,
     };
     try {
@@ -133,6 +133,7 @@ export function VehiculosView() {
                 <SelectContent>{Object.entries(VEHICLE_STATUS_LABEL).map(([value, label]) => <SelectItem key={value} value={value}>{label}</SelectItem>)}</SelectContent>
               </Select>
             </Field>
+            <Field label="Conductor habitual" htmlFor="veh-driver" hint="Se sugiere al elegir este camión en una remisión o factura; se puede cambiar."><Input id="veh-driver" value={draft.defaultDriverName} onChange={(event) => set('defaultDriverName', event.target.value)} /></Field>
             <Field label="Notas" htmlFor="veh-notes" className="sm:col-span-2"><Input id="veh-notes" value={draft.notes} onChange={(event) => set('notes', event.target.value)} /></Field>
           </div>
           <DialogFooter>
