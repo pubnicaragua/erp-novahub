@@ -112,6 +112,38 @@ function clearPresenceClusterLines(){
 function setPresenceMarkerPosition(marker,position){
   if(marker&&position)marker.setPosition({lat:Number(position.lat),lng:Number(position.lng)});
 }
+function nearestBusinessMarkerAt(position,maxDistance=44){
+  const pixel=projectPresencePosition(position);
+  if(!pixel||typeof markerById==='undefined')return null;
+  let nearest=null;
+  markerById.forEach(marker=>{
+    const business=marker?._b;
+    const lat=Number(business?.lat),lng=Number(business?.lng);
+    if(!business||!Number.isFinite(lat)||!Number.isFinite(lng))return;
+    const businessPosition={lat,lng};
+    const businessPixel=projectPresencePosition(businessPosition);
+    if(!businessPixel)return;
+    const distance=Math.hypot(pixel.x-businessPixel.x,pixel.y-businessPixel.y);
+    if(distance<=maxDistance&&(!nearest||distance<nearest.distance))nearest={business,businessPosition,pixel:businessPixel,distance};
+  });
+  return nearest;
+}
+function movePresenceAwayFromBusiness(pixel,businessPixel,seed,distance=56){
+  let dx=pixel.x-businessPixel.x,dy=pixel.y-businessPixel.y;
+  let length=Math.hypot(dx,dy);
+  if(length<6){
+    let hash=0;
+    for(const character of String(seed||''))hash=(hash*31+character.charCodeAt(0))|0;
+    const angle=((hash>>>0)%360)*Math.PI/180;
+    dx=Math.cos(angle);dy=Math.sin(angle);length=1;
+  }
+  return {x:businessPixel.x+(dx/length)*distance,y:businessPixel.y+(dy/length)*distance};
+}
+function drawPresenceSeparationLine(key,from,to){
+  if(!from||!to)return;
+  const line=new google.maps.Polyline({map:googleMap,path:[from,to],strokeColor:'#2364d2',strokeOpacity:.78,strokeWeight:2,clickable:false,zIndex:1200});
+  presenceClusterLines.set(key,line);
+}
 function presenceClusterListContent(groupMarker){
   const container=document.createElement('div');
   container.className='nova-presence-cluster-list';
@@ -184,10 +216,29 @@ function renderPresenceClusters(){
   }
   presenceClusterMarkers.forEach((marker,key)=>{if(!activeGroupKeys.has(key)){setNovaMarkerMap(marker,null);presenceClusterMarkers.delete(key)}});
   const clusteredIds=new Set(groups.flatMap(group=>group.rows.map(row=>String(row.userId))));
-  presenceMarkers.forEach((marker,id)=>setNovaMarkerMap(marker,clusteredIds.has(String(id))?null:googleMap));
+  presenceMarkers.forEach((marker,id)=>{
+    const clustered=clusteredIds.has(String(id));
+    setNovaMarkerMap(marker,clustered?null:googleMap);
+    if(clustered)return;
+    const overlap=nearestBusinessMarkerAt(marker._gpsPosition,44);
+    const originalPixel=projectPresencePosition(marker._gpsPosition);
+    if(!overlap||!originalPixel)return;
+    const displayPixel=movePresenceAwayFromBusiness(originalPixel,overlap.pixel,id,56);
+    const displayPosition=unprojectPresencePosition(displayPixel.x,displayPixel.y);
+    if(!displayPosition)return;
+    setPresenceMarkerPosition(marker,displayPosition);
+    drawPresenceSeparationLine(`business-overlap:${id}`,overlap.businessPosition,displayPosition);
+  });
   groups.forEach(group=>{
+    const overlapAnchor=unprojectPresencePosition(group.center.x,group.center.y);
+    const overlap=overlapAnchor?nearestBusinessMarkerAt(overlapAnchor,44):null;
+    if(overlap){
+      const displayPixel=movePresenceAwayFromBusiness(group.center,overlap.pixel,group.key,56);
+      group.center={x:displayPixel.x,y:displayPixel.y};
+    }
     const groupPosition=unprojectPresencePosition(group.center.x,group.center.y);
     if(!groupPosition){group.rows.forEach(row=>setNovaMarkerMap(row._presenceMarker,googleMap));return}
+    if(overlap)drawPresenceSeparationLine(`business-overlap-group:${group.key}`,overlap.businessPosition,groupPosition);
     let groupMarker=presenceClusterMarkers.get(group.key);
     if(!groupMarker){
       const clusterContent=createPresenceClusterContent(group.rows.length);

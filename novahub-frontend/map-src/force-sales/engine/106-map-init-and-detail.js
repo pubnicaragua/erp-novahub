@@ -220,10 +220,10 @@ googleMap.addListener('click', event => {
   if(activeView !== 'map' || !event.latLng)return;
   if(pendingPortfolioLocationSelection){
     const selection=pendingPortfolioLocationSelection;
-    pendingPortfolioLocationSelection=null;
     portfolioLocationRequestId+=1;
-    window.parent?.postMessage({source:'novahub-force-sales',type:'force-sales-portfolio-location-picked',portfolioId:selection.portfolioId,customerId:selection.customerId,customerName:selection.customerName,lat:event.latLng.lat(),lng:event.latLng.lng()},location.origin);
-    toast(`Ubicación enviada para guardar y vincular el punto${selection.customerName?` de ${selection.customerName}`:''}.`);
+    selection.locationMode='map';
+    publishPortfolioLocationPick(selection,{lat:event.latLng.lat(),lng:event.latLng.lng()},'map');
+    toast(`Revisa el punto para ${selection.customerName||'el cliente'} y confirma sus datos antes de guardarlo.`);
     return;
   }
   if(handleWorkZoneMapClick(event))return;

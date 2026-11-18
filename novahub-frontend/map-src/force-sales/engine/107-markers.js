@@ -76,7 +76,7 @@ function createMapMarker(options={}){
     position:options.position,
     title:options.title || '',
     content:options.content || markerContentFromIcon(options.icon,options.title,options.label),
-    gmpClickable:true,
+    gmpClickable:options.clickable!==false,
     gmpDraggable:Boolean(options.draggable||options.gmpDraggable),
     zIndex:options.zIndex
   });

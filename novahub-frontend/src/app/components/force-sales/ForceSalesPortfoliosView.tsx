@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import * as XLSX from 'xlsx';
 import { ArrowLeftRight, Check, ChevronDown, Download, FileSpreadsheet, LocateFixed, MapPin, MoreHorizontal, Pencil, Plus, RefreshCw, Route, Search, Upload, UserRound, X } from 'lucide-react';
-import { forceSalesPortfoliosService, type AvailablePortfolioCustomer, type ForceSalesPortfolio, type ForceSalesPortfolioImportResult, type UnlinkedForceSalesProspect } from '../../services/force-sales-portfolios.service';
+import { forceSalesPortfoliosService, type AvailablePortfolioCustomer, type ForceSalesPortfolio, type ForceSalesPortfolioImportResult, type PortfolioCustomer, type PortfolioLocationRequest, type UnlinkedForceSalesProspect } from '../../services/force-sales-portfolios.service';
 import { ForceSalesPortfolioImportPreview, type ForceSalesImportManager, type ForceSalesImportRow } from './ForceSalesPortfolioImportPreview';
 import { toast } from '../../services/toast';
 import { normalizeSearchText } from '../../utils/searchText';
@@ -145,7 +145,7 @@ export function ForceSalesPortfoliosView({
   canLocate: boolean;
   canCreateRoute: boolean;
   onBuildRoute: (request: { portfolioName: string; assignedToId: string | null; prospectIds: string[] }) => void;
-  onPickLocation: (portfolioId: string, customerId: string, customerName: string) => void;
+  onPickLocation: (request: PortfolioLocationRequest) => void;
   isSidebarCollapsed?: boolean;
 }) {
   const [portfolios, setPortfolios] = useState<ForceSalesPortfolio[]>([]);
@@ -162,7 +162,7 @@ export function ForceSalesPortfoliosView({
   const [importing, setImporting] = useState(false);
   const [importResult, setImportResult] = useState<ForceSalesPortfolioImportResult | null>(null);
   const [batchId, setBatchId] = useState('');
-  const [locating, setLocating] = useState<{ portfolioId: string; customerId: string; customerName: string } | null>(null);
+  const [locating, setLocating] = useState<Omit<PortfolioLocationRequest, 'locationMode'> | null>(null);
   const [unlinkedProspects, setUnlinkedProspects] = useState<UnlinkedForceSalesProspect[]>([]);
   const [unlinkedProspectsLoading, setUnlinkedProspectsLoading] = useState(false);
   const [unlinkedProspectsError, setUnlinkedProspectsError] = useState('');
@@ -469,23 +469,31 @@ export function ForceSalesPortfoliosView({
     }
   };
 
-  const openLocateDialog = async (portfolio: ForceSalesPortfolio, customerId: string, customerName: string) => {
-    setLocating({ portfolioId: portfolio.id, customerId, customerName });
+  const openLocateDialog = async (portfolio: ForceSalesPortfolio, row: PortfolioCustomer) => {
+    const customer = row.customer;
+    setLocating({
+      portfolioId: portfolio.id,
+      customerId: customer.id,
+      customerName: customer.name,
+      customerAddress: [customer.address, customer.city, customer.department].filter(Boolean).join(', '),
+      customerPhone: customer.phone || '',
+      ...(row.mapPoint ? { initialPoint: {
+        name: row.mapPoint.name || customer.name,
+        address: row.mapPoint.address || [customer.address, customer.city, customer.department].filter(Boolean).join(', '),
+        phone: row.mapPoint.phone || customer.phone || '',
+        category: row.mapPoint.category || 'Cliente',
+      } } : {}),
+    });
     setSelectedProspect('');
     setPointSearch('');
     setPointPickerOpen(false);
     await loadUnlinkedProspects();
   };
 
-  const saveCurrentGps = () => {
+  const startLocationPick = (locationMode: PortfolioLocationRequest['locationMode']) => {
     if (!locating) return;
-    if (!navigator.geolocation) { toast.error('Este dispositivo no permite obtener ubicación GPS.'); return; }
-    navigator.geolocation.getCurrentPosition(async (position) => {
-      try {
-        await forceSalesPortfoliosService.saveLocation(locating.portfolioId, locating.customerId, position.coords.latitude, position.coords.longitude);
-        toast.success(`Punto guardado y vinculado a ${locating.customerName}. No se registró una visita.`); setLocating(null); await reload();
-      } catch (error: unknown) { toast.error(errorMessage(error, 'No se pudo guardar la ubicación.')); }
-    }, (error) => toast.error(error.message || 'No se pudo obtener la ubicación del dispositivo.'), { enableHighAccuracy: true, timeout: 15000, maximumAge: 0 });
+    onPickLocation({ ...locating, locationMode });
+    setLocating(null);
   };
 
   const linkExistingPoint = async () => {
@@ -609,9 +617,9 @@ export function ForceSalesPortfoliosView({
                     return <TableRow key={row.assignmentId}>
                       <TableCell className="max-w-[260px] whitespace-normal"><p className="break-words font-bold text-foreground">{customer.name}</p><p className="mt-0.5 text-xs text-muted-foreground">{customer.code || 'Sin código'}{customer.balance !== undefined ? ` · Saldo ${formatBalance(customer.balance)}` : ''}</p></TableCell>
                       <TableCell className="max-w-[250px] whitespace-normal text-xs text-muted-foreground">{[customer.address, customer.city, customer.department].filter(Boolean).join(' · ') || 'Sin dirección'}{customer.phone ? ` · ${customer.phone}` : ''}</TableCell>
-                      <TableCell>{active && <Badge variant={row.hasMapLocation ? 'default' : 'secondary'}>{row.hasMapLocation ? 'Ubicado' : row.mapPointId ? 'Vinculado · pendiente' : 'Pendiente de vincular'}</Badge>}{!active && <Badge variant="secondary">Histórico</Badge>}</TableCell>
+                      <TableCell>{active && <Badge variant={row.hasMapLocation ? 'default' : 'secondary'}>{row.hasMapLocation ? 'Ubicado' : row.mapPointId ? 'Punto vinculado · sin ubicación' : 'Pendiente de ubicación'}</Badge>}{!active && <Badge variant="secondary">Histórico</Badge>}</TableCell>
                       <TableCell className="text-right"><div className="flex justify-end gap-2">
-                        {canOfferLocate && <Button size="sm" variant="outline" onClick={() => void openLocateDialog(portfolio, customer.id, customer.name)}><MapPin className="mr-1.5 size-4" />Ubicar</Button>}
+                        {canOfferLocate && <Button size="sm" variant="outline" onClick={() => void openLocateDialog(portfolio, row)}><MapPin className="mr-1.5 size-4" />Ubicar</Button>}
                         {canTransfer && active && targets.length > 0 && <div className="flex max-w-full items-center gap-1.5"><select aria-label={`Cartera destino para ${customer.name}`} className="h-9 max-w-[190px] rounded-lg border border-input bg-background px-2 text-xs text-foreground" value={transferTarget[customer.id] || ''} onChange={(event) => setTransferTarget((current) => ({ ...current, [customer.id]: event.target.value }))}><option value="">Mover a…</option>{targets.map((target) => <option key={target.id} value={target.id}>{target.assignedTo?.name} · {target.name}</option>)}</select><Button size="sm" variant="outline" aria-label={`Transferir ${customer.name}`} onClick={() => void transferCustomer(portfolio, customer.id, customer.name)}><ArrowLeftRight className="size-4" /></Button></div>}
                       </div></TableCell>
                     </TableRow>;
@@ -709,8 +717,8 @@ export function ForceSalesPortfoliosView({
 
       <Dialog open={Boolean(locating)} onOpenChange={(open) => { if (!open) { setPointPickerOpen(false); setPointSearch(''); setLocating(null); } }}>
         <DialogContent className="max-w-lg">
-          <DialogHeader><DialogTitle className="nh-section-title flex items-center gap-2"><LocateFixed className="size-5" />Ubicar cliente en el mapa</DialogTitle><DialogDescription>{locating?.customerName}. Puedes guardar tu GPS actual o elegir el punto en el mapa. El punto quedará vinculado directamente a este cliente y no registrará una visita.</DialogDescription></DialogHeader>
-          <div className="grid gap-2 sm:grid-cols-2"><Button variant="outline" onClick={saveCurrentGps}><LocateFixed className="mr-2 size-4" />Usar ubicación GPS</Button><Button variant="outline" onClick={() => { if (locating) onPickLocation(locating.portfolioId, locating.customerId, locating.customerName); setLocating(null); }}><MapPin className="mr-2 size-4" />Crear punto y vincular</Button></div>
+          <DialogHeader><DialogTitle className="nh-section-title flex items-center gap-2"><LocateFixed className="size-5" />Ubicar cliente en el mapa</DialogTitle><DialogDescription>{locating?.customerName}. Revisa el lugar en el mapa y confirma los datos del punto antes de guardarlo. Quedará vinculado a este cliente y no registrará una visita.</DialogDescription></DialogHeader>
+          <div className="grid gap-2 sm:grid-cols-2"><Button variant="outline" onClick={() => startLocationPick('gps')}><LocateFixed className="mr-2 size-4" />Ubicación GPS actual</Button><Button variant="outline" onClick={() => startLocationPick('map')}><MapPin className="mr-2 size-4" />Crear punto y ubicar</Button></div>
           <div className="space-y-2 rounded-xl border border-border p-3">
             <p className="text-sm font-bold text-foreground">Vincular punto existente</p>
             <p className="text-xs text-muted-foreground">Busca un punto con ubicación que todavía no esté vinculado a un cliente.</p>

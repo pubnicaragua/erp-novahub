@@ -2275,6 +2275,7 @@ let pendingPointMarker = null;
 let quickPointLocationRequestId = 0;
 let pendingPortfolioLocationSelection = null;
 let portfolioLocationRequestId = 0;
+let portfolioLocationPreviewMarker = null;
 let focusedQuickPointMarker = null;
 let focusedQuickPointBusinessId = null;
 let presenceMarkers = new Map();
@@ -2660,10 +2661,10 @@ googleMap.addListener('click', event => {
   if(activeView !== 'map' || !event.latLng)return;
   if(pendingPortfolioLocationSelection){
     const selection=pendingPortfolioLocationSelection;
-    pendingPortfolioLocationSelection=null;
     portfolioLocationRequestId+=1;
-    window.parent?.postMessage({source:'novahub-force-sales',type:'force-sales-portfolio-location-picked',portfolioId:selection.portfolioId,customerId:selection.customerId,customerName:selection.customerName,lat:event.latLng.lat(),lng:event.latLng.lng()},location.origin);
-    toast(`Ubicación enviada para guardar y vincular el punto${selection.customerName?` de ${selection.customerName}`:''}.`);
+    selection.locationMode='map';
+    publishPortfolioLocationPick(selection,{lat:event.latLng.lat(),lng:event.latLng.lng()},'map');
+    toast(`Revisa el punto para ${selection.customerName||'el cliente'} y confirma sus datos antes de guardarlo.`);
     return;
   }
   if(handleWorkZoneMapClick(event))return;
@@ -2748,7 +2749,7 @@ function createMapMarker(options={}){
     position:options.position,
     title:options.title || '',
     content:options.content || markerContentFromIcon(options.icon,options.title,options.label),
-    gmpClickable:true,
+    gmpClickable:options.clickable!==false,
     gmpDraggable:Boolean(options.draggable||options.gmpDraggable),
     zIndex:options.zIndex
   });
@@ -3427,6 +3428,43 @@ document.addEventListener('click',event=>{
 function updateCustomerLookupAvailability(){document.querySelectorAll('[data-customer-link-panel]').forEach(setCustomerLookupAvailability)}
 window.addEventListener('online',updateCustomerLookupAvailability);
 window.addEventListener('offline',updateCustomerLookupAvailability);
+function showPortfolioLocationPreview(position){
+  const coordinates=window.NovaForceSalesLocation.normalizeCoordinates(position);
+  if(!coordinates)return;
+  if(!portfolioLocationPreviewMarker){
+    const content=document.createElement('div');
+    content.setAttribute('role','img');
+    content.setAttribute('aria-label','Ubicación pendiente de confirmación');
+    Object.assign(content.style,{width:'38px',height:'38px',display:'grid',placeItems:'center',border:'3px solid #fff',borderRadius:'50% 50% 50% 4px',transform:'rotate(-45deg)',background:'#246b52',color:'#fff',boxShadow:'0 4px 12px rgba(12,53,43,.34)',font:'900 17px/1 Arial,sans-serif',pointerEvents:'none'});
+    const check=document.createElement('span');
+    check.textContent='✓';
+    Object.assign(check.style,{transform:'rotate(45deg)'});
+    content.appendChild(check);
+    portfolioLocationPreviewMarker=createMapMarker({position:coordinates,title:'Ubicación por confirmar',content,zIndex:1600,clickable:false});
+  }else portfolioLocationPreviewMarker.setPosition(coordinates);
+  setNovaMarkerMap(portfolioLocationPreviewMarker,googleMap);
+}
+function clearPortfolioLocationPreview(){
+  setNovaMarkerMap(portfolioLocationPreviewMarker,null);
+  portfolioLocationPreviewMarker=null;
+}
+function publishPortfolioLocationPick(selection,position,locationSource,accuracy){
+  const coordinates=window.NovaForceSalesLocation.normalizeCoordinates(position);
+  if(!coordinates||!selection)return;
+  showPortfolioLocationPreview(coordinates);
+  window.parent?.postMessage({
+    source:'novahub-force-sales',
+    type:'force-sales-portfolio-location-picked',
+    requestId:selection.requestId,
+    portfolioId:selection.portfolioId,
+    customerId:selection.customerId,
+    customerName:selection.customerName,
+    locationSource,
+    ...(Number.isFinite(Number(accuracy))&&Number(accuracy)>0?{accuracy:Number(accuracy)}:{}),
+    lat:coordinates.lat,
+    lng:coordinates.lng,
+  },location.origin);
+}
 window.addEventListener('message',event=>{
   if(event.source!==window.parent||event.origin!==window.location.origin||event.data?.source!=='novahub-force-sales')return;
   if(event.data?.type==='force-sales-start-portfolio-location'){
@@ -3434,18 +3472,26 @@ window.addEventListener('message',event=>{
     const customerId=String(event.data.customerId||'').trim();
     if(!portfolioId||!customerId)return;
     const customerName=String(event.data.customerName||'').trim();
-    pendingPortfolioLocationSelection={portfolioId,customerId,customerName};
+    const requestId=String(event.data.requestId||'').trim();
+    const locationMode=event.data.locationMode==='gps'?'gps':'map';
+    if(!requestId)return;
+    pendingPortfolioLocationSelection={requestId,portfolioId,customerId,customerName,locationMode};
     const locationRequestId=++portfolioLocationRequestId;
     setActiveView('map');
     updateView();
     closeBusinessDetailPopup();
-    toast(`Buscando tu ubicación. Toca el punto donde está ${customerName||'el cliente'}; se creará y quedará vinculado directamente.`);
+    clearPortfolioLocationPreview();
+    toast(locationMode==='gps'
+      ? `Buscando tu ubicación actual para ${customerName||'el cliente'}; podrás revisarla antes de guardar.`
+      : `Toca en el mapa donde está ${customerName||'el cliente'}; podrás revisar el punto antes de guardarlo.`);
     withLocationAccess(position=>{
       if(locationRequestId!==portfolioLocationRequestId||!pendingPortfolioLocationSelection)return;
-      googleMap.panTo({lat:position.coords.latitude,lng:position.coords.longitude});
-      googleMap.setZoom(17);
+      const coordinates={lat:position.coords.latitude,lng:position.coords.longitude};
+      googleMap.panTo(coordinates);
+      googleMap.setZoom(18);
+      if(locationMode==='gps')publishPortfolioLocationPick(pendingPortfolioLocationSelection,coordinates,'gps',position.coords.accuracy);
     },'No se pudo centrar el mapa en tu ubicación',()=>{
-      if(locationRequestId===portfolioLocationRequestId&&pendingPortfolioLocationSelection)toast('No se pudo obtener el GPS. Puedes tocar manualmente la ubicación del cliente en el mapa.');
+      if(locationRequestId===portfolioLocationRequestId&&pendingPortfolioLocationSelection){pendingPortfolioLocationSelection.locationMode='map';toast('No se pudo obtener el GPS. Toca manualmente la ubicación del cliente en el mapa.')}
     },{maximumAge:0});
     return;
   }
@@ -3453,9 +3499,10 @@ window.addEventListener('message',event=>{
     void startRouteFromPortfolio(event.data);
     return;
   }
-  if(event.data?.type==='force-sales-cancel-portfolio-location'){
+  if(event.data?.type==='force-sales-cancel-portfolio-location'||event.data?.type==='force-sales-finish-portfolio-location'){
     pendingPortfolioLocationSelection=null;
     portfolioLocationRequestId+=1;
+    clearPortfolioLocationPreview();
     return;
   }
   if(event.data?.type==='force-sales-refresh')refreshForceSalesData(event.data.event||{});
@@ -5522,6 +5569,38 @@ function clearPresenceClusterLines(){
 function setPresenceMarkerPosition(marker,position){
   if(marker&&position)marker.setPosition({lat:Number(position.lat),lng:Number(position.lng)});
 }
+function nearestBusinessMarkerAt(position,maxDistance=44){
+  const pixel=projectPresencePosition(position);
+  if(!pixel||typeof markerById==='undefined')return null;
+  let nearest=null;
+  markerById.forEach(marker=>{
+    const business=marker?._b;
+    const lat=Number(business?.lat),lng=Number(business?.lng);
+    if(!business||!Number.isFinite(lat)||!Number.isFinite(lng))return;
+    const businessPosition={lat,lng};
+    const businessPixel=projectPresencePosition(businessPosition);
+    if(!businessPixel)return;
+    const distance=Math.hypot(pixel.x-businessPixel.x,pixel.y-businessPixel.y);
+    if(distance<=maxDistance&&(!nearest||distance<nearest.distance))nearest={business,businessPosition,pixel:businessPixel,distance};
+  });
+  return nearest;
+}
+function movePresenceAwayFromBusiness(pixel,businessPixel,seed,distance=56){
+  let dx=pixel.x-businessPixel.x,dy=pixel.y-businessPixel.y;
+  let length=Math.hypot(dx,dy);
+  if(length<6){
+    let hash=0;
+    for(const character of String(seed||''))hash=(hash*31+character.charCodeAt(0))|0;
+    const angle=((hash>>>0)%360)*Math.PI/180;
+    dx=Math.cos(angle);dy=Math.sin(angle);length=1;
+  }
+  return {x:businessPixel.x+(dx/length)*distance,y:businessPixel.y+(dy/length)*distance};
+}
+function drawPresenceSeparationLine(key,from,to){
+  if(!from||!to)return;
+  const line=new google.maps.Polyline({map:googleMap,path:[from,to],strokeColor:'#2364d2',strokeOpacity:.78,strokeWeight:2,clickable:false,zIndex:1200});
+  presenceClusterLines.set(key,line);
+}
 function presenceClusterListContent(groupMarker){
   const container=document.createElement('div');
   container.className='nova-presence-cluster-list';
@@ -5594,10 +5673,29 @@ function renderPresenceClusters(){
   }
   presenceClusterMarkers.forEach((marker,key)=>{if(!activeGroupKeys.has(key)){setNovaMarkerMap(marker,null);presenceClusterMarkers.delete(key)}});
   const clusteredIds=new Set(groups.flatMap(group=>group.rows.map(row=>String(row.userId))));
-  presenceMarkers.forEach((marker,id)=>setNovaMarkerMap(marker,clusteredIds.has(String(id))?null:googleMap));
+  presenceMarkers.forEach((marker,id)=>{
+    const clustered=clusteredIds.has(String(id));
+    setNovaMarkerMap(marker,clustered?null:googleMap);
+    if(clustered)return;
+    const overlap=nearestBusinessMarkerAt(marker._gpsPosition,44);
+    const originalPixel=projectPresencePosition(marker._gpsPosition);
+    if(!overlap||!originalPixel)return;
+    const displayPixel=movePresenceAwayFromBusiness(originalPixel,overlap.pixel,id,56);
+    const displayPosition=unprojectPresencePosition(displayPixel.x,displayPixel.y);
+    if(!displayPosition)return;
+    setPresenceMarkerPosition(marker,displayPosition);
+    drawPresenceSeparationLine(`business-overlap:${id}`,overlap.businessPosition,displayPosition);
+  });
   groups.forEach(group=>{
+    const overlapAnchor=unprojectPresencePosition(group.center.x,group.center.y);
+    const overlap=overlapAnchor?nearestBusinessMarkerAt(overlapAnchor,44):null;
+    if(overlap){
+      const displayPixel=movePresenceAwayFromBusiness(group.center,overlap.pixel,group.key,56);
+      group.center={x:displayPixel.x,y:displayPixel.y};
+    }
     const groupPosition=unprojectPresencePosition(group.center.x,group.center.y);
     if(!groupPosition){group.rows.forEach(row=>setNovaMarkerMap(row._presenceMarker,googleMap));return}
+    if(overlap)drawPresenceSeparationLine(`business-overlap-group:${group.key}`,overlap.businessPosition,groupPosition);
     let groupMarker=presenceClusterMarkers.get(group.key);
     if(!groupMarker){
       const clusterContent=createPresenceClusterContent(group.rows.length);

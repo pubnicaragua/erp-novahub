@@ -6,6 +6,13 @@ export type PortfolioCustomer = {
   assignedAt: string;
   endedAt?: string | null;
   mapPointId?: string | null;
+  mapPoint?: {
+    id: string;
+    name?: string | null;
+    address?: string | null;
+    phone?: string | null;
+    category?: string | null;
+  } | null;
   hasMapLocation?: boolean;
   customer: {
     id: string;
@@ -70,6 +77,24 @@ export type UnlinkedForceSalesProspect = {
   assignedToId?: string | null;
 };
 
+export type PortfolioLocationRequest = {
+  requestId?: string;
+  portfolioId: string;
+  customerId: string;
+  customerName: string;
+  customerAddress: string;
+  customerPhone: string;
+  initialPoint?: PortfolioPointDetails;
+  locationMode: 'gps' | 'map';
+};
+
+export type PortfolioPointDetails = {
+  name: string;
+  address: string;
+  phone: string;
+  category: string;
+};
+
 export const forceSalesPortfoliosService = {
   list: (includeHistory = true) => api.get<ForceSalesPortfolio[]>('/force-sales/portfolios', { params: { includeHistory } }),
   assignees: () => api.get<Array<{ id: string; name: string; activeRouteCount: number }>>('/force-sales/assignees'),
@@ -92,8 +117,11 @@ export const forceSalesPortfoliosService = {
     `/force-sales/portfolios/${encodeURIComponent(portfolioId)}/customers/${encodeURIComponent(customerId)}/link`,
     { prospectId },
   ),
-  saveLocation: (portfolioId: string, customerId: string, lat: number, lng: number) => api.post<{ id: string; customerId: string; lat: number; lng: number }>(
-    `/force-sales/portfolios/${encodeURIComponent(portfolioId)}/customers/${encodeURIComponent(customerId)}/location`,
-    { lat, lng },
-  ),
+  saveLocation: (portfolioId: string, customerId: string, location: { lat: number; lng: number; source: 'gps' | 'map' }, details: PortfolioPointDetails) => {
+    const { source, ...coordinates } = location;
+    return api.post<{ id: string; customerId: string; lat: number; lng: number }>(
+      `/force-sales/portfolios/${encodeURIComponent(portfolioId)}/customers/${encodeURIComponent(customerId)}/location`,
+      { ...coordinates, ...details, locationSource: source },
+    );
+  },
 };
