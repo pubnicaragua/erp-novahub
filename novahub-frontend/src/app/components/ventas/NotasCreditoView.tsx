@@ -247,8 +247,8 @@ function CustomerCreditReminderDialog({
 }
 
 const methodOptions = [
-  { label: 'Transferencia', value: 'TRANSFER' },
   { label: 'Efectivo', value: 'CASH' },
+  { label: 'Transferencia', value: 'TRANSFER' },
   { label: 'Tarjeta', value: 'CARD' },
   { label: 'Cheque', value: 'CHECK' },
   { label: 'Saldo a favor', value: 'CUSTOMER_BALANCE' },
@@ -835,7 +835,7 @@ export function NotasCreditoView({ data, summaryData, summaryLoading, summaryErr
     const installmentRemainder = credit.planEnabled ? Number(credit.nextInstallment?.remainingAmount || 0) : 0;
     const defaultCreditAmount = installmentRemainder > 0 ? Math.min(creditBalance, installmentRemainder) : creditBalance;
     const initialAmount = convertBetweenCurrencies(defaultCreditAmount, creditCurrency, nextCurrency, Number(credit.exchangeRate || globalRate || 1), nextRate);
-    setPaymentLines([{ ...paymentLine('TRANSFER', initialAmount.toFixed(getCurrencyDecimalPlaces()), nextCurrency), reference: credit.number }]);
+    setPaymentLines([paymentLine('CASH', initialAmount.toFixed(getCurrencyDecimalPlaces()), nextCurrency)]);
     setMixedPaymentEnabled(false);
     setPartialPaymentEnabled(defaultCreditAmount + 0.01 < creditBalance);
   };

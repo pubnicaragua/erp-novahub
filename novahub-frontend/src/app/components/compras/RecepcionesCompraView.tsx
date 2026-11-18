@@ -328,7 +328,7 @@ function ReceiptPaymentDialog({ draft, onClose, onSaved, onRegisterInvoice, acco
 
   useEffect(() => {
     if (!draft) return;
-    const draftMethod = (draft.reference ? 'TRANSFER' : 'CASH') as PaymentMethod;
+    const draftMethod: PaymentMethod = 'CASH';
     const initialCurrency = displayCurrency === 'USD' ? 'USD' : 'NIO';
     const initialRate = paymentLineRate(initialCurrency);
     const initialAmount = Number(convertBetweenCurrencies(
@@ -1190,7 +1190,7 @@ export function RecepcionesCompraView({ data, summaryData, summaryLoading, summa
       amount: balance,
       currency: normalizeReceiptCurrency(invoice?.currency || receipt.currency),
       exchangeRate: Number(invoice?.exchangeRate || receipt.exchangeRate || 1),
-      reference: invoice?.id ? `PAG-${Date.now().toString().slice(-8)}` : '',
+      reference: '',
       notes: `Pago de la recepción ${receipt.number || ''}`,
       invoiceOnly,
     });

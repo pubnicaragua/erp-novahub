@@ -1094,6 +1094,7 @@ const [mappingsSearch, setMappingsSearch] = useState('')
   const [salesExpanded, setSalesExpanded] = useState(false)
   const [expandedSalesModules, setExpandedSalesModules] = useState<Set<string>>(() => new Set())
   const [expandedGroups, setExpandedGroups] = useState<Set<string>>(new Set())
+  const [expandedConnectionCards, setExpandedConnectionCards] = useState<Set<string>>(() => new Set())
   const [activityExpanded, setActivityExpanded] = useState(false)
   const [openingCutoffDate, setOpeningCutoffDate] = useState(() => {
     return tenantToday
@@ -1274,7 +1275,16 @@ const [mappingsSearch, setMappingsSearch] = useState('')
   }
 
   const toggleGroup = (id: string) => {
+    if (!expandedGroups.has(id)) setExpandedConnectionCards(new Set())
     setExpandedGroups(prev => {
+      const next = new Set(prev)
+      if (next.has(id)) next.delete(id); else next.add(id)
+      return next
+    })
+  }
+
+  const toggleConnectionCard = (id: string) => {
+    setExpandedConnectionCards(prev => {
       const next = new Set(prev)
       if (next.has(id)) next.delete(id); else next.add(id)
       return next
@@ -1532,76 +1542,100 @@ const [mappingsSearch, setMappingsSearch] = useState('')
     ) => {
       const fieldKeys = new Set(fields.map(field => field.key))
       const cardListFields = listMod?.fields.filter((field: any) => fieldKeys.has(field.key)) || []
+      const sectionId = `accounting-module-${mod.id}-${cardKey}`.replace(/[^a-zA-Z0-9_-]/g, '-')
+      const isExpanded = expandedConnectionCards.has(sectionId)
 
       return (
-        <div key={cardKey} className={cn(
-          'min-w-0 rounded-2xl border border-border/40 bg-background/35 p-4',
-          isPayroll && 'xl:col-span-2',
-        )}>
-          <div className="flex min-w-0 items-start justify-between gap-3">
-            <div className="flex min-w-0 items-start gap-2.5">
-              <CardIcon className="mt-0.5 size-4 shrink-0 text-primary" />
-              <div className="min-w-0">
-                <p className="truncate text-xs font-black uppercase tracking-tight">{title}</p>
-                <p className="mt-1 text-[10px] leading-relaxed text-muted-foreground">{description}</p>
+        <Card key={cardKey} className="min-w-0 overflow-hidden border-border/50 bg-card shadow-sm transition-colors hover:border-primary/30">
+          <CardHeader className="border-b border-border/40 p-4 sm:p-5">
+            <div className="flex min-w-0 items-start gap-3">
+              <span className="flex size-10 shrink-0 items-center justify-center rounded-xl border border-primary/15 bg-primary/10 text-primary" aria-hidden="true">
+                <CardIcon className="size-5" />
+              </span>
+              <div className="min-w-0 flex-1 space-y-1">
+                <div className="flex min-w-0 flex-wrap items-center justify-between gap-2">
+                  <CardTitle className="min-w-0 text-sm font-black uppercase tracking-tight text-foreground sm:text-base">{title}</CardTitle>
+                  <div className="flex shrink-0 items-center gap-2">
+                    <ModuleStatusBadge status={modConfigStatus(mod, fields)} />
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      size="icon"
+                      className="size-8 shrink-0"
+                      onClick={() => toggleConnectionCard(sectionId)}
+                      aria-label={isExpanded ? `Contraer ${title}` : `Expandir ${title}`}
+                      aria-expanded={isExpanded}
+                      aria-controls={sectionId}
+                    >
+                      {isExpanded ? <ChevronUp className="size-4" /> : <ChevronDown className="size-4" />}
+                    </Button>
+                  </div>
+                </div>
+                <p className="max-w-4xl text-xs leading-5 text-muted-foreground">{description}</p>
               </div>
             </div>
-            <ModuleStatusBadge status={modConfigStatus(mod, fields)} />
-          </div>
-          <div className={cn(
-            'mt-4 grid grid-cols-1 gap-3 md:grid-cols-2',
-            isPayroll && 'xl:grid-cols-4',
-          )}>
-            {fields.map(field => (
-              <AccountMappingOptionsEditor
-                key={field.key}
-                codes={getMappingCodes(modMapping[field.key])}
-                field={field}
-                moduleId={mod.id}
-                accountsByCode={accountsByCode}
-                accountOptions={accountOptionsByType[field.anyType ? 'ANY' : field.defaultType] || []}
-                suggestions={suggestionsForField(mod.id, field.key)}
-                configuredValid={suggestionDetailsForField(mod.id, field.key)?.configuredValid}
-                configuredReason={suggestionDetailsForField(mod.id, field.key)?.configuredReason}
-                onChange={values => updateMapping(mod.id, field.key, values)}
-              />
-            ))}
-          </div>
-          {cardListFields.length > 0 && (
-            <div className="mt-3 flex flex-wrap gap-x-3 gap-y-1 border-t border-border/10 pt-2">
-              {cardListFields.map((field: any) => (
-                <span key={field.key} className="text-[9px] text-muted-foreground">
-                  <span className={`mr-1 inline-block size-1.5 rounded-full ${field.status === 'ok' ? 'bg-emerald-500' : 'bg-red-500'}`} />
-                  {field.label}: <span className="font-mono font-bold">{field.code}</span>
-                  {field.reason && <span className="ml-1 text-red-500">({field.reason})</span>}
-                </span>
-              ))}
-            </div>
-          )}
-          {!mod.isBuiltin && (
-            <div className="mt-3 flex flex-wrap items-center gap-2 border-t border-border/10 pt-2">
-              <Button variant="ghost" size="sm" onClick={() => addCustomField(mod.id)}>
-                <Plus className="mr-1 size-3" /> Agregar Campo
-              </Button>
+          </CardHeader>
+          <CardContent
+            id={sectionId}
+            hidden={!isExpanded}
+            style={isExpanded ? undefined : { display: 'none' }}
+            className="space-y-4 p-4 sm:p-5"
+          >
+            <div className={cn(
+              'grid min-w-0 grid-cols-1 gap-3 md:grid-cols-2',
+              isPayroll && 'xl:grid-cols-4',
+            )}>
               {fields.map(field => (
-                <div key={field.key} className="flex items-center gap-1 rounded-lg bg-muted/10 px-2 py-1 text-[9px] text-muted-foreground">
-                  <span className="font-medium">{field.label}</span>
-                  <button
-                    type="button"
-                    aria-label={`Eliminar campo ${field.label}`}
-                    onClick={() => removeCustomField(mod.id, field.key)}
-                    className="hover:text-red-500"
-                  >
-                    <X className="size-2.5" />
-                  </button>
-                </div>
+                <AccountMappingOptionsEditor
+                  key={field.key}
+                  codes={getMappingCodes(modMapping[field.key])}
+                  field={field}
+                  moduleId={mod.id}
+                  accountsByCode={accountsByCode}
+                  accountOptions={accountOptionsByType[field.anyType ? 'ANY' : field.defaultType] || []}
+                  suggestions={suggestionsForField(mod.id, field.key)}
+                  configuredValid={suggestionDetailsForField(mod.id, field.key)?.configuredValid}
+                  configuredReason={suggestionDetailsForField(mod.id, field.key)?.configuredReason}
+                  onChange={values => updateMapping(mod.id, field.key, values)}
+                />
               ))}
-              <Button variant="ghost" size="sm" className="text-red-500 hover:text-red-600" onClick={() => removeCustomModule(mod.id)}>
-                <Trash2 className="mr-1 size-3" /> Eliminar conexión
-              </Button>
             </div>
-          )}
-        </div>
+            {cardListFields.length > 0 && (
+              <div className="flex flex-wrap gap-x-3 gap-y-1 border-t border-border/10 pt-2">
+                {cardListFields.map((field: any) => (
+                  <span key={field.key} className="text-[9px] text-muted-foreground">
+                    <span className={`mr-1 inline-block size-1.5 rounded-full ${field.status === 'ok' ? 'bg-emerald-500' : 'bg-red-500'}`} />
+                    {field.label}: <span className="font-mono font-bold">{field.code}</span>
+                    {field.reason && <span className="ml-1 text-red-500">({field.reason})</span>}
+                  </span>
+                ))}
+              </div>
+            )}
+            {!mod.isBuiltin && (
+              <div className="flex flex-wrap items-center gap-2 border-t border-border/10 pt-2">
+                <Button variant="ghost" size="sm" onClick={() => addCustomField(mod.id)}>
+                  <Plus className="mr-1 size-3" /> Agregar Campo
+                </Button>
+                {fields.map(field => (
+                  <div key={field.key} className="flex items-center gap-1 rounded-lg bg-muted/10 px-2 py-1 text-[9px] text-muted-foreground">
+                    <span className="font-medium">{field.label}</span>
+                    <button
+                      type="button"
+                      aria-label={`Eliminar campo ${field.label}`}
+                      onClick={() => removeCustomField(mod.id, field.key)}
+                      className="hover:text-red-500"
+                    >
+                      <X className="size-2.5" />
+                    </button>
+                  </div>
+                ))}
+                <Button variant="ghost" size="sm" className="text-red-500 hover:text-red-600" onClick={() => removeCustomModule(mod.id)}>
+                  <Trash2 className="mr-1 size-3" /> Eliminar conexión
+                </Button>
+              </div>
+            )}
+          </CardContent>
+        </Card>
       )
     }
 
@@ -2119,7 +2153,7 @@ const [mappingsSearch, setMappingsSearch] = useState('')
                 </div>
               </CardHeader>
               {isExpanded && (
-                <CardContent id={`${group.id}-cuentas-contables-content`} className="grid grid-cols-1 gap-4 p-5 xl:grid-cols-2">
+                <CardContent id={`${group.id}-cuentas-contables-content`} className="grid min-w-0 grid-cols-1 gap-4 p-4 sm:p-5">
                   {group.modules.map(renderConnectionModule)}
                 </CardContent>
               )}

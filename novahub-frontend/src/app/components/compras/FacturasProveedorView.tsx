@@ -603,8 +603,8 @@ export function FacturasProveedorView({ data, summaryData, summaryLoading, summa
       amount: getBillPaymentAmount(localDoc),
       currency: (localDoc.currency as any) || displayCurrency,
       exchangeRate: localDoc.exchangeRate || globalRate,
-      method: 'TRANSFER',
-      reference: `PAG-${(localDoc.number || localDoc.id || '').toString().replace(/[^A-Za-z0-9-]/g, '').slice(0, 20)}`,
+      method: 'CASH',
+      reference: '',
       notes: `Pago de factura proveedor ${localDoc.number || localDoc.id || ''}`.trim(),
     };
     
@@ -995,8 +995,8 @@ export function FacturasProveedorView({ data, summaryData, summaryLoading, summa
                     amount: getBillPaymentAmount(row),
                     currency: row.currency || displayCurrency,
                     exchangeRate: row.exchangeRate || globalRate,
-                    method: 'TRANSFER',
-                    reference: `PAG-${(row.number || row.id || '').toString().replace(/[^A-Za-z0-9-]/g, '').slice(0, 20)}`,
+                    method: 'CASH',
+                    reference: '',
                     notes: `Pago de factura proveedor ${row.number || row.id || ''}`.trim(),
                   })}
                 >

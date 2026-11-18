@@ -68,8 +68,8 @@ interface PagosRecibidosViewProps {
 }
 
 const methodOptions = [
-  { label: 'Transferencia', value: 'TRANSFER', color: 'bg-blue-500/10 text-blue-500' },
   { label: 'Efectivo', value: 'CASH', color: 'bg-emerald-500/10 text-emerald-500' },
+  { label: 'Transferencia', value: 'TRANSFER', color: 'bg-blue-500/10 text-blue-500' },
   { label: 'Tarjeta', value: 'CARD', color: 'bg-purple-500/10 text-purple-500' },
   { label: 'Cheque', value: 'CHECK', color: 'bg-amber-500/10 text-amber-500' },
   { label: 'Saldo a favor', value: 'CUSTOMER_BALANCE', color: 'bg-emerald-500/10 text-emerald-500' },
@@ -487,7 +487,7 @@ export function PagosRecibidosView({ data, summaryData, summaryLoading, summaryE
 
   const startNew = () => {
     clearSalesEditorDraft(salesDraftStorageKey);
-    const initialLine = paymentLine('TRANSFER');
+    const initialLine = paymentLine('CASH');
     setIsCreating(true);
     setPaymentLines([initialLine]);
     setMixedPaymentEnabled(false);
@@ -744,7 +744,7 @@ export function PagosRecibidosView({ data, summaryData, summaryLoading, summaryE
     const document = kind === 'invoice'
       ? invoices.find((invoice) => invoice.id === id)
       : credits.find((credit) => credit.id === id);
-    const currentLine = paymentLines[0] || paymentLine('TRANSFER');
+    const currentLine = paymentLines[0] || paymentLine('CASH');
     const sourceAmount = document
       ? Number((document as any).balance ?? (document as any).total ?? 0)
       : 0;
@@ -795,8 +795,8 @@ export function PagosRecibidosView({ data, summaryData, summaryLoading, summaryE
 
   const setPaymentTarget = (target: 'ADVANCE' | 'GENERAL_BALANCE' | 'INVOICE' | 'CREDIT') => {
     const nextIsGeneral = target === 'GENERAL_BALANCE';
-    const currentLine = paymentLines[0] || paymentLine('TRANSFER');
-    const nextMethod = currentLine.method === 'CUSTOMER_BALANCE' ? 'TRANSFER' : currentLine.method;
+    const currentLine = paymentLines[0] || paymentLine('CASH');
+    const nextMethod = currentLine.method === 'CUSTOMER_BALANCE' ? 'CASH' : currentLine.method;
     const targetAmount = nextIsGeneral
       ? Number(convertBetweenCurrencies(paymentOpeningBalanceDue, baseCurrency, currentLine.currency, 1, Number(currentLine.exchangeRate || globalRate)).toFixed(getCurrencyDecimalPlaces()))
       : 0;
