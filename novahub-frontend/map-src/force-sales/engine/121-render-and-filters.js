@@ -85,8 +85,6 @@ function render(){
     markerById.set(b.id, m);
     cluster.addLayer(m);
   });
-  cluster.refresh();
-  renderRouteMarkers();
   if(focusedQuickPointMarker && focusedQuickPointBusinessId){
     const focusedBusiness=findBusiness(focusedQuickPointBusinessId);
     if(focusedBusiness){
@@ -95,6 +93,9 @@ function render(){
       markerById.set(focusedBusiness.id,focusedQuickPointMarker);
     }else clearFocusedQuickPoint();
   }
+  renderPresenceClusters({refreshBusinessCluster:false});
+  cluster.refresh();
+  renderRouteMarkers();
   if(currentPopupBusinessId)refreshBusinessDetailOverlay();
   applyLabels();
   if(!initialFitDone&&ACTIVE_MODE!=='prospecting'&&!hasRestoredCamera&&filtered.length)fitMapToBusinessesOnce(filtered);

@@ -137,18 +137,25 @@ function showPortfolioLocationPreview(position,selection){
   const pointName=String(selection?.pointName||selection?.customerName||'Ubicación por confirmar').trim();
   if(!portfolioLocationPreviewMarker){
     const content=document.createElement('div');
+    content.className='nova-portfolio-location-preview';
     content.setAttribute('role','img');
     content.setAttribute('aria-label',`${pointName}, ubicación pendiente de confirmación`);
-    Object.assign(content.style,{width:'38px',height:'38px',display:'grid',placeItems:'center',border:'3px solid #fff',borderRadius:'50% 50% 50% 4px',transform:'rotate(-45deg)',background:'#246b52',color:'#fff',boxShadow:'0 4px 12px rgba(12,53,43,.34)',font:'900 17px/1 Arial,sans-serif',pointerEvents:'none'});
-    const check=document.createElement('span');
-    check.textContent='✓';
-    Object.assign(check.style,{transform:'rotate(45deg)'});
-    content.appendChild(check);
+    const pin=document.createElement('span');
+    pin.className='nova-portfolio-location-preview-pin';
+    pin.textContent='✓';
+    const label=document.createElement('span');
+    label.className='nova-portfolio-location-preview-label';
+    label.dataset.portfolioLocationLabel='true';
+    label.textContent=pointName;
+    content.append(pin,label);
     portfolioLocationPreviewMarker=createMapMarker({position:coordinates,title:pointName,content,zIndex:1600,clickable:false});
   }else{
     portfolioLocationPreviewMarker.setPosition(coordinates);
     portfolioLocationPreviewMarker.title=pointName;
-    portfolioLocationPreviewMarker.content?.setAttribute('aria-label',`${pointName}, ubicación pendiente de confirmación`);
+    const content=portfolioLocationPreviewMarker.content;
+    content?.setAttribute('aria-label',`${pointName}, ubicación pendiente de confirmación`);
+    const label=content?.querySelector?.('[data-portfolio-location-label]');
+    if(label)label.textContent=pointName;
   }
   setNovaMarkerMap(portfolioLocationPreviewMarker,googleMap);
 }
@@ -183,6 +190,7 @@ window.addEventListener('message',event=>{
     const requestId=String(event.data.requestId||'').trim();
     const locationMode=event.data.locationMode==='gps'?'gps':'map';
     if(!requestId)return;
+    if(pendingPortfolioLocationSelection?.requestId===requestId)return;
     pendingPortfolioLocationSelection={
       requestId,portfolioId,customerId,customerName,locationMode,
       pointName:String(event.data.pointName||customerName).trim(),
@@ -233,3 +241,4 @@ window.addEventListener('message',event=>{
   if(event.data?.type==='force-sales-focus-prospect')void focusProspectFromNotification(event.data.targetId);
   if(event.data?.type==='force-sales-focus-route')void focusRouteFromNotification(event.data.routeId);
 });
+window.parent?.postMessage({source:'novahub-force-sales',type:'force-sales-map-ready'},location.origin);

@@ -144,6 +144,24 @@ export function FuerzaComercialPage({ activeSubModule, onSubModuleChange, isSide
     iframeRef.current?.contentWindow?.postMessage({ source: 'novahub-force-sales', type, ...detail }, window.location.origin);
   }, []);
 
+  const sendPendingPortfolioLocationToMap = useCallback(() => {
+    const pendingLocation = pendingPortfolioLocationRef.current;
+    if (!pendingLocation) return;
+    sendToMap('force-sales-start-portfolio-location', {
+      requestId: pendingLocation.requestId,
+      portfolioId: pendingLocation.portfolioId,
+      customerId: pendingLocation.customerId,
+      customerName: pendingLocation.customerName,
+      customerAddress: pendingLocation.customerAddress,
+      customerPhone: pendingLocation.customerPhone,
+      pointName: pendingLocation.initialPoint?.name || pendingLocation.customerName,
+      pointAddress: pendingLocation.initialPoint?.address || pendingLocation.customerAddress,
+      pointPhone: pendingLocation.initialPoint?.phone || pendingLocation.customerPhone,
+      pointCategory: pendingLocation.initialPoint?.category || 'Cliente',
+      locationMode: pendingLocation.locationMode,
+    });
+  }, [sendToMap]);
+
   const changeMode = useCallback((mode: string) => {
     setStoredMode(mode);
     setSummary(null);
@@ -229,27 +247,14 @@ export function FuerzaComercialPage({ activeSubModule, onSubModuleChange, isSide
     frameRef: iframeRef,
     sectionRef: mapSectionRef,
     userName: user?.name || '',
-    refreshKey: `${mapSrc}|${mapFullscreen}|${mapFrameLoadVersion}`,
+    refreshKey: `${activeSubModule || ''}|${mapSrc}|${mapFullscreen}|${mapFrameLoadVersion}`,
     streamStatusRef,
     pendingProspectTargetRef,
     pendingRouteTargetRef,
     onFrameError: setMapFrameError,
     onFrameReady: () => {
       if (searchQueryRef.current) sendToMap('force-sales-search', { query: searchQueryRef.current });
-      const pendingLocation = pendingPortfolioLocationRef.current;
-      if (pendingLocation) sendToMap('force-sales-start-portfolio-location', {
-        requestId: pendingLocation.requestId,
-        portfolioId: pendingLocation.portfolioId,
-        customerId: pendingLocation.customerId,
-        customerName: pendingLocation.customerName,
-        customerAddress: pendingLocation.customerAddress,
-        customerPhone: pendingLocation.customerPhone,
-        pointName: pendingLocation.initialPoint?.name || pendingLocation.customerName,
-        pointAddress: pendingLocation.initialPoint?.address || pendingLocation.customerAddress,
-        pointPhone: pendingLocation.initialPoint?.phone || pendingLocation.customerPhone,
-        pointCategory: pendingLocation.initialPoint?.category || 'Cliente',
-        locationMode: pendingLocation.locationMode,
-      });
+      sendPendingPortfolioLocationToMap();
       const pendingPortfolioRoute = pendingPortfolioRouteRef.current;
       if (pendingPortfolioRoute) {
         sendToMap('force-sales-start-portfolio-route', pendingPortfolioRoute);
@@ -313,6 +318,10 @@ export function FuerzaComercialPage({ activeSubModule, onSubModuleChange, isSide
     const onMapMessage = (event: MessageEvent) => {
       if (event.source !== iframeRef.current?.contentWindow || event.origin !== window.location.origin) return;
       if (event.data?.source !== 'novahub-force-sales') return;
+      if (event.data?.type === 'force-sales-map-ready') {
+        sendPendingPortfolioLocationToMap();
+        return;
+      }
       if (event.data?.type === 'force-sales-open-customer-link') {
         const pointId = String(event.data.pointId || '').trim();
         if (!canLinkCustomer || !pointId) return;
@@ -342,17 +351,7 @@ export function FuerzaComercialPage({ activeSubModule, onSubModuleChange, isSide
           source: event.data.locationSource === 'gps' ? 'gps' : 'map',
           ...(Number.isFinite(accuracy) && accuracy > 0 ? { accuracy } : {}),
         };
-        if (location.source === 'gps') {
-          const details = pendingLocation.initialPoint || {
-            name: pendingLocation.customerName,
-            address: pendingLocation.customerAddress,
-            phone: pendingLocation.customerPhone,
-            category: 'Cliente',
-          };
-          void savePortfolioLocation(location, details, true);
-        } else {
-          setPortfolioLocationDraft(location);
-        }
+        setPortfolioLocationDraft(location);
       }
       if (event.data?.type === 'force-sales-open-payment') {
         const recordId = String(event.data.recordId || '').trim();
@@ -395,7 +394,7 @@ export function FuerzaComercialPage({ activeSubModule, onSubModuleChange, isSide
     };
     window.addEventListener('message', onMapMessage);
     return () => window.removeEventListener('message', onMapMessage);
-  }, [canLinkCustomer, canPerform, savePortfolioLocation, sendToMap]);
+  }, [canLinkCustomer, canPerform, savePortfolioLocation, sendPendingPortfolioLocationToMap, sendToMap]);
 
   useEffect(() => {
     if (activeSubModule === 'fuerza-comercial') return;
@@ -553,14 +552,19 @@ export function FuerzaComercialPage({ activeSubModule, onSubModuleChange, isSide
         )}
         {!mapConfig && <div className="flex h-full items-center justify-center text-sm font-semibold text-[#123f35]">Cargando configuración de mapas…</div>}
       </div>
-      <Dialog open={Boolean(portfolioLocationDraft && (portfolioLocationDraft.source === 'map' || !savingPortfolioLocation))} onOpenChange={(open) => { if (!open && !savingPortfolioLocation) cancelPortfolioLocation(); }}>
+      <Dialog open={Boolean(portfolioLocationDraft)} onOpenChange={(open) => { if (!open && !savingPortfolioLocation) cancelPortfolioLocation(); }}>
         <DialogContent className="max-h-[calc(100dvh-1rem)] w-[calc(100%-1rem)] max-w-xl gap-4 overflow-y-auto p-4 sm:p-6">
           <DialogHeader className="pr-8 text-left">
             <DialogTitle className="nh-section-title flex items-center gap-2"><MapPin className="size-5" />Confirmar ubicación del cliente</DialogTitle>
             <DialogDescription>
-              {portfolioLocationTarget?.customerName}. ¿Estás seguro de que el punto está aquí? Revisa el mapa y completa los datos antes de vincularlo.
+              ¿Confirmas que el pin está en la ubicación correcta? Revisa sus datos; al guardar, quedará vinculado automáticamente a {portfolioLocationTarget?.customerName || 'este cliente'}.
             </DialogDescription>
           </DialogHeader>
+          <div className="min-w-0 rounded-xl border border-primary/20 bg-primary/[0.045] p-3" aria-label="Cliente que se vinculará al punto">
+            <p className="text-[10px] font-bold uppercase tracking-wide text-muted-foreground">Cliente que quedará vinculado</p>
+            <p className="mt-1 break-words text-sm font-bold text-foreground">{portfolioLocationTarget?.customerName || 'Cliente seleccionado'}</p>
+            {portfolioLocationTarget?.customerAddress && <p className="mt-0.5 break-words text-xs text-muted-foreground">{portfolioLocationTarget.customerAddress}</p>}
+          </div>
           {portfolioLocationDraft && <div className="flex min-w-0 flex-wrap items-center justify-between gap-3 rounded-xl border border-primary/20 bg-primary/[0.04] p-3">
             <div className="min-w-0">
               <p className="text-sm font-semibold text-foreground">{portfolioLocationDraft.source === 'gps' ? 'Ubicación GPS actual' : 'Ubicación seleccionada en el mapa'}</p>

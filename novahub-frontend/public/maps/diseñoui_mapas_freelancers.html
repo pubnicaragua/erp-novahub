@@ -98,6 +98,8 @@ select{width:100%;border:1px solid var(--line);border-radius:11px;background:whi
 .nova-map-marker-content{display:block;pointer-events:auto;transform:translateZ(0)}.nova-map-marker-content img{display:block;user-select:none;-webkit-user-drag:none}.nova-map-marker-badge{position:absolute;right:-7px;top:-7px;min-width:15px;height:15px;padding:0 3px;border-radius:999px;background:#123f35;color:#fff;border:2px solid #fff;font:800 8px/11px Montserrat,Arial,sans-serif;text-align:center;box-shadow:0 2px 6px rgba(12,53,43,.24)}.nova-presence-marker{width:44px;height:44px;display:grid;place-items:center;border-radius:50%;background:#2364d2;border:3px solid white;box-shadow:0 5px 14px rgba(19,57,116,.35);overflow:hidden;color:#fff;font:800 10px/1 Montserrat,Arial,sans-serif}.nova-presence-marker.stale{background:#71828b;opacity:.86;box-shadow:0 4px 11px rgba(38,58,65,.28)}.nova-presence-marker img{width:100%;height:100%;object-fit:cover}.nova-user-location-marker{width:18px;height:18px;border-radius:50%;background:#08785a;border:3px solid #fff;box-shadow:0 0 0 5px rgba(8,120,90,.16),0 3px 10px rgba(8,62,45,.28)}
 .nova-quick-point-marker{width:40px;height:40px;display:grid;place-items:center;border:3px solid #fff;border-radius:50%;background:#e6a624;color:#173b31;box-shadow:0 0 0 5px rgba(230,166,36,.24),0 5px 14px rgba(36,55,47,.32);font:900 22px/1 Arial,sans-serif;cursor:grab}.nova-quick-point-marker:active{cursor:grabbing}.nova-quick-point-marker:focus-visible{outline:3px solid #145ac4;outline-offset:4px}.nova-quick-point-marker.saved{background:#08785a;color:#fff}.quick-capture-hint{margin:3px 0 10px!important;color:#587067!important;font-size:8px!important;line-height:1.4}
 .leaflet-marker-icon:focus-visible .nova-presence-cluster-marker,gmp-advanced-marker:focus-visible .nova-presence-cluster-marker{outline:3px solid #3287e8;outline-offset:3px}
+.nova-mixed-cluster-marker{width:58px;height:58px;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:2px;border:3px solid #fff;border-radius:50%;background:#123f35;color:#fff;box-shadow:0 5px 16px rgba(12,53,43,.4);font-family:Montserrat,Arial,sans-serif;pointer-events:none}.nova-mixed-cluster-total{font-size:17px;font-weight:900;line-height:1}.nova-mixed-cluster-breakdown{font-size:9px;font-weight:800;line-height:1;color:#b4f4d8}.nova-mixed-cluster-list{width:min(340px,calc(100vw - 2rem));max-height:min(420px,60vh,60dvh);overflow:auto;overscroll-behavior:contain;padding:4px;color:#123f35;font:12px Montserrat,Arial,sans-serif}.nova-mixed-cluster-list>strong{display:block;padding:7px 8px;font-size:12px}.nova-mixed-cluster-list-item{display:flex;width:100%;min-height:54px;align-items:center;gap:10px;padding:7px 8px;border:0;border-radius:9px;background:transparent;color:inherit;text-align:left;cursor:pointer;font:inherit}.nova-mixed-cluster-list-item:hover,.nova-mixed-cluster-list-item:focus-visible{background:#eaf4ef;outline:2px solid #3287e8;outline-offset:-2px}.nova-mixed-cluster-list-avatar,.nova-mixed-cluster-list-point{width:38px;height:38px;display:grid;flex:0 0 38px;place-items:center;overflow:hidden;border-radius:50%}.nova-mixed-cluster-list-avatar .nova-presence-marker{width:38px!important;height:38px!important;border-width:2px}.nova-mixed-cluster-list-point{border:2px solid #fff;background:#08785a;color:#fff;box-shadow:0 3px 8px rgba(8,62,45,.26);font-weight:900}.nova-mixed-cluster-list-details{display:grid;min-width:0;gap:3px}.nova-mixed-cluster-list-details b,.nova-mixed-cluster-list-details span{overflow-wrap:anywhere}.nova-mixed-cluster-list-details b{font-size:11px}.nova-mixed-cluster-list-details span{color:#687a73;font-size:9px;line-height:1.35}
+.nova-portfolio-location-preview{position:relative;width:38px;height:38px;pointer-events:none}.nova-portfolio-location-preview-pin{width:38px;height:38px;display:grid;place-items:center;border:3px solid #fff;border-radius:50%;background:#246b52;color:#fff;box-shadow:0 4px 12px rgba(12,53,43,.34);font:900 17px/1 Arial,sans-serif}.nova-portfolio-location-preview-label{position:absolute;left:31px;top:4px;display:block;width:max-content;max-width:min(220px,calc(100vw - 76px));overflow:hidden;padding:6px 10px;border:1px solid rgba(255,255,255,.9);border-radius:999px;background:#123f35;color:#fff;box-shadow:0 4px 12px rgba(12,53,43,.25);font:700 10px/1.2 Montserrat,Arial,sans-serif;text-overflow:ellipsis;white-space:nowrap}
 .sync-readout{margin:6px 0;padding:7px 8px;border:1px solid #d8e9e2;border-radius:8px;background:#f2f8f5;color:#315f50;font-size:8px;line-height:1.4}.sync-readout.pending{border-color:#f0d69b;background:#fff8e7;color:#765719}.sync-readout.synced{border-color:#cde9d2;background:#eff9f0;color:#277443}
 .nova-route-marker{width:34px;height:34px;display:grid;place-items:center;position:relative;border-radius:50%;background:#08785a;border:3px solid #fff;box-shadow:0 4px 12px rgba(8,62,45,.3);color:#fff;font:800 11px/1 Montserrat,Arial,sans-serif}.nova-route-marker img{width:22px;height:22px;border-radius:50%;object-fit:contain;background:#fff;padding:2px}.nova-route-marker span{position:absolute;right:-8px;top:-8px;min-width:16px;height:16px;display:grid;place-items:center;border-radius:50%;background:#123f35;color:#fff;border:2px solid #fff;font:800 8px/1 Montserrat,Arial,sans-serif}.nova-route-marker.route-stop-selected{width:42px;height:42px;background:#0b5ed7;border:4px solid #fff;outline:3px solid #f2bd27;outline-offset:2px;box-shadow:0 0 0 7px rgba(242,189,39,.32),0 7px 18px rgba(12,38,86,.48);font-size:16px}.nova-route-marker.route-stop-selected span{right:-9px;top:-9px;min-width:19px;height:19px;background:#102b53;font-size:10px;box-shadow:0 1px 5px #0005}.nova-route-marker:focus-visible{outline:4px solid #f2bd27;outline-offset:4px}
 .nova-route-marker.route-stop-next{width:42px;height:42px;background:#0b5ed7;border:4px solid #fff;outline:3px solid #f2bd27;outline-offset:2px;box-shadow:0 0 0 7px rgba(242,189,39,.32),0 7px 18px rgba(12,38,86,.48);font-size:16px}.nova-route-marker.route-stop-next span{right:-9px;top:-9px;min-width:19px;height:19px;background:#102b53;font-size:10px;box-shadow:0 1px 5px #0005}
@@ -2280,10 +2282,13 @@ let focusedQuickPointMarker = null;
 let focusedQuickPointBusinessId = null;
 let presenceMarkers = new Map();
 let presenceClusterMarkers = new Map();
+let mixedClusterMarkers = new Map();
 let presenceClusterLines = new Map();
 let expandedPresenceClusterKey = null;
 let presenceClusterListOpen = false;
 let presenceClusterListGroupKey = null;
+let mixedClusterListOpen = false;
+let mixedClusterListGroupKey = null;
 let pendingPresenceClosePointer = null;
 const storedPresenceSharing = localStorage.getItem(PRESENCE_STORAGE_KEY);
 let presenceSharingEnabled = IS_PLATFORM_ADMIN ? storedPresenceSharing === 'true' : storedPresenceSharing !== 'false';
@@ -2615,6 +2620,8 @@ function openBusinessDetailPopup(marker){
   }
   presenceClusterListOpen=false;
   presenceClusterListGroupKey=null;
+  mixedClusterListOpen=false;
+  mixedClusterListGroupKey=null;
   currentPopupBusinessId=id;
   focusedQuickPointPopupOpen=marker===focusedQuickPointMarker;
   refreshBusinessDetailOverlay();
@@ -2633,6 +2640,7 @@ let closingInfoWindowForRefresh=false;
 infoWindow.addListener?.('close',()=>{
   nativeInfoWindowOpen=false;
   if(presenceClusterListOpen){presenceClusterListOpen=false;if(activeView==='map')requestAnimationFrame(()=>renderPresenceClusters())}
+  if(mixedClusterListOpen){mixedClusterListOpen=false;mixedClusterListGroupKey=null;if(activeView==='map')requestAnimationFrame(()=>renderPresenceClusters())}
   if(!closingInfoWindowForRefresh&&focusedQuickPointBusinessId){
     clearFocusedQuickPoint({closeWindow:false});
     if(activeView==='map')requestAnimationFrame(()=>render());
@@ -2795,14 +2803,24 @@ function createGoogleMarker(coords, options){
 }
 const L={marker:createGoogleMarker};
 const cluster={
-  markers:[],clusterer:null,
+  markers:[],clusterer:null,excludedMarkerIds:new Set(),
   addLayer(marker){this.markers.push(marker)},
-  clearLayers(){this.clusterer?.clearMarkers();this.markers.forEach(marker=>setNovaMarkerMap(marker,null));this.markers=[]},
+  clearLayers(){this.clusterer?.clearMarkers();this.markers.forEach(marker=>setNovaMarkerMap(marker,null));this.markers=[];this.excludedMarkerIds=new Set()},
+  setExcludedMarkerIds(ids){
+    const next=new Set([...ids].map(String));
+    const changed=next.size!==this.excludedMarkerIds.size||[...next].some(id=>!this.excludedMarkerIds.has(id));
+    this.excludedMarkerIds=next;
+    return changed;
+  },
   refresh(){
     this.clusterer?.clearMarkers();
+    const visibleMarkers=this.markers.filter(marker=>!this.excludedMarkerIds.has(String(marker?._b?.id??'')));
     if(window.markerClusterer?.MarkerClusterer){
-       this.clusterer=new window.markerClusterer.MarkerClusterer({map:googleMap,markers:this.markers,renderer:{render:({count,position})=>createMapMarker({map:googleMap,position,icon:clusterSvg(count),label:NOVAHUB_ISOTIPO_URL?String(count):undefined,zIndex:1000+count})}});
-    }else this.markers.forEach(marker=>setNovaMarkerMap(marker,googleMap));
+       this.clusterer=new window.markerClusterer.MarkerClusterer({map:googleMap,markers:visibleMarkers,renderer:{render:({count,position})=>createMapMarker({map:googleMap,position,icon:clusterSvg(count),label:NOVAHUB_ISOTIPO_URL?String(count):undefined,zIndex:1000+count})}});
+    }else{
+      const visibleSet=new Set(visibleMarkers);
+      this.markers.forEach(marker=>setNovaMarkerMap(marker,visibleSet.has(marker)?googleMap:null));
+    }
   }
 };
 window.__novaRefreshClusters=()=>cluster.refresh();
@@ -3434,18 +3452,25 @@ function showPortfolioLocationPreview(position,selection){
   const pointName=String(selection?.pointName||selection?.customerName||'Ubicación por confirmar').trim();
   if(!portfolioLocationPreviewMarker){
     const content=document.createElement('div');
+    content.className='nova-portfolio-location-preview';
     content.setAttribute('role','img');
     content.setAttribute('aria-label',`${pointName}, ubicación pendiente de confirmación`);
-    Object.assign(content.style,{width:'38px',height:'38px',display:'grid',placeItems:'center',border:'3px solid #fff',borderRadius:'50% 50% 50% 4px',transform:'rotate(-45deg)',background:'#246b52',color:'#fff',boxShadow:'0 4px 12px rgba(12,53,43,.34)',font:'900 17px/1 Arial,sans-serif',pointerEvents:'none'});
-    const check=document.createElement('span');
-    check.textContent='✓';
-    Object.assign(check.style,{transform:'rotate(45deg)'});
-    content.appendChild(check);
+    const pin=document.createElement('span');
+    pin.className='nova-portfolio-location-preview-pin';
+    pin.textContent='✓';
+    const label=document.createElement('span');
+    label.className='nova-portfolio-location-preview-label';
+    label.dataset.portfolioLocationLabel='true';
+    label.textContent=pointName;
+    content.append(pin,label);
     portfolioLocationPreviewMarker=createMapMarker({position:coordinates,title:pointName,content,zIndex:1600,clickable:false});
   }else{
     portfolioLocationPreviewMarker.setPosition(coordinates);
     portfolioLocationPreviewMarker.title=pointName;
-    portfolioLocationPreviewMarker.content?.setAttribute('aria-label',`${pointName}, ubicación pendiente de confirmación`);
+    const content=portfolioLocationPreviewMarker.content;
+    content?.setAttribute('aria-label',`${pointName}, ubicación pendiente de confirmación`);
+    const label=content?.querySelector?.('[data-portfolio-location-label]');
+    if(label)label.textContent=pointName;
   }
   setNovaMarkerMap(portfolioLocationPreviewMarker,googleMap);
 }
@@ -3480,6 +3505,7 @@ window.addEventListener('message',event=>{
     const requestId=String(event.data.requestId||'').trim();
     const locationMode=event.data.locationMode==='gps'?'gps':'map';
     if(!requestId)return;
+    if(pendingPortfolioLocationSelection?.requestId===requestId)return;
     pendingPortfolioLocationSelection={
       requestId,portfolioId,customerId,customerName,locationMode,
       pointName:String(event.data.pointName||customerName).trim(),
@@ -3530,6 +3556,7 @@ window.addEventListener('message',event=>{
   if(event.data?.type==='force-sales-focus-prospect')void focusProspectFromNotification(event.data.targetId);
   if(event.data?.type==='force-sales-focus-route')void focusRouteFromNotification(event.data.routeId);
 });
+window.parent?.postMessage({source:'novahub-force-sales',type:'force-sales-map-ready'},location.origin);
 async function loadForceSalesConfiguration(){
   if(!localStorage.getItem('nh-auth-token'))return;
   try{
@@ -4843,7 +4870,13 @@ async function focusProspectFromNotification(rawId){
       const prospect=await forceSalesRequest(`/force-sales/prospects/${encodeURIComponent(targetId)}`);
       if(!prospect?.id)throw new Error('No se encontró el punto');
       business=remoteBusiness(prospect);
-      stateOf(business).remoteId=prospect.id;
+      Object.assign(stateOf(business),{
+        remoteId:prospect.id,
+        customerId:prospect.customerId||null,
+        customer:prospect.customer||null,
+        customerLinkedAt:prospect.customerLinkedAt||null,
+        customerLinkedBy:prospect.customerLinkedBy||null,
+      });
       remoteProspects=[...remoteProspects.filter(item=>String(item.id)!==String(business.id)),business];
       mergeBusinesses();populateFilters();render();
       business=businesses.find(item=>String(stateOf(item).remoteId||'')===targetId)||business;
@@ -5573,6 +5606,92 @@ function createPresenceClusterContent(count){
   Object.assign(badge.style,{width:'44px',height:'44px',display:'grid',placeItems:'center',border:'3px solid #fff',borderRadius:'50%',background:'#123f35',color:'#fff',boxShadow:'0 4px 14px rgba(12,53,43,.35)',font:'900 14px/1 Montserrat,Arial,sans-serif',pointerEvents:'none'});
   return badge;
 }
+function mixedClusterCounts(group){
+  const users=group?.rows?.filter(row=>row._mixedType==='user').length||0;
+  const points=group?.rows?.filter(row=>row._mixedType==='business').length||0;
+  return {users,points,total:users+points};
+}
+function mixedClusterLabel(group){
+  const {users,points}=mixedClusterCounts(group);
+  return `${users} ${users===1?'usuario':'usuarios'} y ${points} ${points===1?'punto comercial':'puntos comerciales'}; abrir grupo`;
+}
+function createMixedClusterContent(group){
+  const badge=document.createElement('div');
+  badge.className='nova-mixed-cluster-marker';
+  badge.setAttribute('role','img');
+  const total=document.createElement('span');
+  total.className='nova-mixed-cluster-total';
+  const breakdown=document.createElement('span');
+  breakdown.className='nova-mixed-cluster-breakdown';
+  badge.append(total,breakdown);
+  updateMixedClusterContent(badge,group);
+  return badge;
+}
+function updateMixedClusterContent(content,group){
+  if(!content)return;
+  const {users,points,total}=mixedClusterCounts(group);
+  const totalNode=content.querySelector('.nova-mixed-cluster-total');
+  const breakdownNode=content.querySelector('.nova-mixed-cluster-breakdown');
+  if(totalNode)totalNode.textContent=String(total);
+  if(breakdownNode)breakdownNode.textContent=`U${users} · P${points}`;
+  content.setAttribute('aria-label',mixedClusterLabel(group));
+  content.title=mixedClusterLabel(group);
+}
+function mixedClusterListContent(groupMarker){
+  const group=groupMarker?._mixedGroup;
+  const container=document.createElement('div');
+  container.className='nova-mixed-cluster-list';
+  const heading=document.createElement('strong');
+  const {users,points}=mixedClusterCounts(group);
+  heading.textContent=`${users} usuarios · ${points} puntos comerciales`;
+  container.appendChild(heading);
+  group?.rows?.forEach(entry=>{
+    const isUser=entry._mixedType==='user';
+    const user=entry._presenceRow;
+    const business=entry._business;
+    const button=document.createElement('button');
+    button.type='button';
+    button.className='nova-mixed-cluster-list-item';
+    button.setAttribute('aria-label',isUser?`Abrir usuario ${user?.name||'Colaborador'}`:`Abrir punto comercial ${business?.name||'Punto'}`);
+    const icon=document.createElement('span');
+    icon.className=isUser?'nova-mixed-cluster-list-avatar':'nova-mixed-cluster-list-point';
+    if(isUser){
+      icon.appendChild(presenceContent(user));
+    }else{
+      icon.textContent='P';
+      icon.setAttribute('aria-hidden','true');
+    }
+    const details=document.createElement('span');
+    details.className='nova-mixed-cluster-list-details';
+    const name=document.createElement('b');
+    name.textContent=String(isUser?user?.name||'Colaborador':business?.name||'Punto comercial');
+    const meta=document.createElement('span');
+    meta.textContent=isUser
+      ? `${user?.isOnline===false?'Sin conexión':'En línea'} · ${user?.gpsStatus==='recent'?'GPS reciente':user?.gpsStatus==='stale'?'sin lectura GPS reciente':'GPS sin confirmar'}`
+      : String(business?.address||`${Number(business?.lat).toFixed(5)}, ${Number(business?.lng).toFixed(5)}`);
+    details.append(name,meta);
+    button.append(icon,details);
+    button.addEventListener('click',()=>{
+      mixedClusterListOpen=false;
+      mixedClusterListGroupKey=null;
+      infoWindow.close();
+      if(isUser)openPresenceDetails(user,groupMarker);
+      else entry._businessMarker?.openPopup?.();
+    });
+    container.appendChild(button);
+  });
+  return container;
+}
+function openMixedClusterList(groupMarker){
+  mixedClusterListOpen=true;
+  mixedClusterListGroupKey=groupMarker?._mixedGroup?.key||null;
+  presenceClusterListOpen=false;
+  presenceClusterListGroupKey=null;
+  closeBusinessDetailPopup();
+  infoWindow.setContent(mixedClusterListContent(groupMarker));
+  try{infoWindow.open({map:googleMap,anchor:groupMarker})}catch(error){infoWindow.open(googleMap,groupMarker)}
+  nativeInfoWindowOpen=true;
+}
 function clearPresenceClusterLines(){
   presenceClusterLines.forEach(line=>line.setMap(null));
   presenceClusterLines.clear();
@@ -5659,13 +5778,17 @@ function showPresenceCluster(groupMarker){
   presenceClusterListOpen=false;
   renderPresenceClusters();
 }
-function renderPresenceClusters(){
+function renderPresenceClusters({refreshBusinessCluster=true}={}){
   presenceMarkers.forEach(marker=>setPresenceMarkerPosition(marker,marker._gpsPosition));
   clearPresenceClusterLines();
   if(activeView!=='map'||!mapLayers.users){
     presenceClusterMarkers.forEach(marker=>setNovaMarkerMap(marker,null));
+    mixedClusterMarkers.forEach(marker=>setNovaMarkerMap(marker,null));
     expandedPresenceClusterKey=null;
-    if(presenceClusterListOpen){presenceClusterListOpen=false;presenceClusterListGroupKey=null;infoWindow.close()}
+    if(presenceClusterListOpen||mixedClusterListOpen){presenceClusterListOpen=false;presenceClusterListGroupKey=null;mixedClusterListOpen=false;mixedClusterListGroupKey=null;infoWindow.close()}
+    const exclusionsChanged=cluster.setExcludedMarkerIds(new Set());
+    if(refreshBusinessCluster&&exclusionsChanged)cluster.refresh();
+    setNovaMarkerMap(focusedQuickPointMarker,activeView==='map'?googleMap:null);
     return;
   }
   const entries=[...presenceMarkers.values()].filter(marker=>marker._presenceRow&&marker._gpsPosition).map(marker=>({
@@ -5674,7 +5797,36 @@ function renderPresenceClusters(){
     _presencePosition:marker._gpsPosition,
     _presenceMarker:marker,
   }));
-  const groups=window.NovaForceSalesLocation.clusterPresenceRows(entries,row=>projectPresencePosition(row._presencePosition),44);
+  const businessMarkers=[...markerById.values()].filter(marker=>marker?._b&&Number.isFinite(Number(marker._b.lat))&&Number.isFinite(Number(marker._b.lng)));
+  const mixedEntries=[
+    ...entries.map(row=>({...row,userId:`user:${String(row.userId)}`,_mixedType:'user'})),
+    ...businessMarkers.map(marker=>({
+      userId:`business:${String(marker._b.id)}`,
+      _mixedType:'business',
+      _business:marker._b,
+      _businessMarker:marker,
+      _presencePosition:{lat:Number(marker._b.lat),lng:Number(marker._b.lng)},
+    })),
+  ];
+  const mixedCandidates=window.NovaForceSalesLocation.clusterPresenceRows(mixedEntries,row=>projectPresencePosition(row._presencePosition),44)
+    .filter(group=>group.rows.some(row=>row._mixedType==='user')&&group.rows.some(row=>row._mixedType==='business'));
+  const mixedGroups=mixedCandidates.map(group=>{
+    const position=unprojectPresencePosition(group.center.x,group.center.y);
+    return position?{...group,position}:null;
+  }).filter(Boolean);
+  const activeMixedKeys=new Set(mixedGroups.map(group=>group.key));
+  if(mixedClusterListOpen&&mixedClusterListGroupKey&&!activeMixedKeys.has(mixedClusterListGroupKey)){
+    mixedClusterListOpen=false;
+    mixedClusterListGroupKey=null;
+    infoWindow.close();
+  }
+  mixedClusterMarkers.forEach((marker,key)=>{if(!activeMixedKeys.has(key)){setNovaMarkerMap(marker,null);mixedClusterMarkers.delete(key)}});
+  const mixedUserIds=new Set(mixedGroups.flatMap(group=>group.rows.filter(row=>row._mixedType==='user').map(row=>String(row._presenceRow.userId))));
+  const mixedBusinessIds=new Set(mixedGroups.flatMap(group=>group.rows.filter(row=>row._mixedType==='business').map(row=>String(row._business.id))));
+  const exclusionsChanged=cluster.setExcludedMarkerIds(mixedBusinessIds);
+  if(refreshBusinessCluster&&exclusionsChanged)cluster.refresh();
+  const userEntries=entries.filter(row=>!mixedUserIds.has(String(row.userId)));
+  const groups=window.NovaForceSalesLocation.clusterPresenceRows(userEntries,row=>projectPresencePosition(row._presencePosition),44);
   const activeGroupKeys=new Set(groups.map(group=>group.key));
   if(expandedPresenceClusterKey&&!activeGroupKeys.has(expandedPresenceClusterKey))expandedPresenceClusterKey=null;
   if(presenceClusterListOpen&&presenceClusterListGroupKey&&!activeGroupKeys.has(presenceClusterListGroupKey)){
@@ -5683,7 +5835,7 @@ function renderPresenceClusters(){
     infoWindow.close();
   }
   presenceClusterMarkers.forEach((marker,key)=>{if(!activeGroupKeys.has(key)){setNovaMarkerMap(marker,null);presenceClusterMarkers.delete(key)}});
-  const clusteredIds=new Set(groups.flatMap(group=>group.rows.map(row=>String(row.userId))));
+  const clusteredIds=new Set([...mixedUserIds,...groups.flatMap(group=>group.rows.map(row=>String(row.userId)))]);
   presenceMarkers.forEach((marker,id)=>{
     const clustered=clusteredIds.has(String(id));
     setNovaMarkerMap(marker,clustered?null:googleMap);
@@ -5696,6 +5848,26 @@ function renderPresenceClusters(){
     if(!displayPosition)return;
     setPresenceMarkerPosition(marker,displayPosition);
     drawPresenceSeparationLine(`business-overlap:${id}`,overlap.businessPosition,displayPosition);
+  });
+  businessMarkers.forEach(marker=>{
+    if(mixedBusinessIds.has(String(marker._b.id)))setNovaMarkerMap(marker,null);
+    else if(marker===focusedQuickPointMarker)setNovaMarkerMap(marker,googleMap);
+  });
+  mixedGroups.forEach(group=>{
+    let groupMarker=mixedClusterMarkers.get(group.key);
+    if(!groupMarker){
+      const clusterContent=createMixedClusterContent(group);
+      groupMarker=createMapMarker({position:group.position,title:mixedClusterLabel(group),content:clusterContent,zIndex:1500});
+      groupMarker._clusterContent=clusterContent;
+      const open=()=>openMixedClusterList(groupMarker);
+      if(typeof groupMarker.addEventListener==='function')groupMarker.addEventListener('gmp-click',open);else groupMarker.addListener?.('click',open);
+      mixedClusterMarkers.set(group.key,groupMarker);
+    }
+    groupMarker._mixedGroup=group;
+    groupMarker.title=mixedClusterLabel(group);
+    updateMixedClusterContent(groupMarker._clusterContent,group);
+    groupMarker.setPosition(group.position);
+    setNovaMarkerMap(groupMarker,googleMap);
   });
   groups.forEach(group=>{
     const overlapAnchor=unprojectPresencePosition(group.center.x,group.center.y);
@@ -5745,19 +5917,21 @@ function renderPresenceClusters(){
   });
 }
 function closeExpandedPresenceCluster(){
-  if(!expandedPresenceClusterKey&&!presenceClusterListOpen)return;
-  const closeList=presenceClusterListOpen;
+  if(!expandedPresenceClusterKey&&!presenceClusterListOpen&&!mixedClusterListOpen)return;
+  const closeList=presenceClusterListOpen||mixedClusterListOpen;
   pendingPresenceClosePointer=null;
   expandedPresenceClusterKey=null;
   presenceClusterListOpen=false;
   presenceClusterListGroupKey=null;
+  mixedClusterListOpen=false;
+  mixedClusterListGroupKey=null;
   if(closeList)infoWindow.close();
   renderPresenceClusters();
 }
 document.addEventListener('keydown',event=>{if(event.key==='Escape')closeExpandedPresenceCluster()});
 document.addEventListener('pointerdown',event=>{
-  if(!expandedPresenceClusterKey&&!presenceClusterListOpen)return;
-  if(event.target?.closest?.('.nova-presence-cluster-marker,.nova-presence-marker,.nova-presence-cluster-list,.gm-style-iw,.leaflet-popup-content')){pendingPresenceClosePointer=null;return}
+  if(!expandedPresenceClusterKey&&!presenceClusterListOpen&&!mixedClusterListOpen)return;
+  if(event.target?.closest?.('.nova-presence-cluster-marker,.nova-presence-marker,.nova-presence-cluster-list,.nova-mixed-cluster-marker,.nova-mixed-cluster-list,.gm-style-iw,.leaflet-popup-content')){pendingPresenceClosePointer=null;return}
   pendingPresenceClosePointer={pointerId:event.pointerId,x:event.clientX,y:event.clientY};
 });
 document.addEventListener('pointerup',event=>{
@@ -6390,8 +6564,6 @@ function render(){
     markerById.set(b.id, m);
     cluster.addLayer(m);
   });
-  cluster.refresh();
-  renderRouteMarkers();
   if(focusedQuickPointMarker && focusedQuickPointBusinessId){
     const focusedBusiness=findBusiness(focusedQuickPointBusinessId);
     if(focusedBusiness){
@@ -6400,6 +6572,9 @@ function render(){
       markerById.set(focusedBusiness.id,focusedQuickPointMarker);
     }else clearFocusedQuickPoint();
   }
+  renderPresenceClusters({refreshBusinessCluster:false});
+  cluster.refresh();
+  renderRouteMarkers();
   if(currentPopupBusinessId)refreshBusinessDetailOverlay();
   applyLabels();
   if(!initialFitDone&&ACTIVE_MODE!=='prospecting'&&!hasRestoredCamera&&filtered.length)fitMapToBusinessesOnce(filtered);

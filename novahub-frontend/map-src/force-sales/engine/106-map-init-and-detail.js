@@ -174,6 +174,8 @@ function openBusinessDetailPopup(marker){
   }
   presenceClusterListOpen=false;
   presenceClusterListGroupKey=null;
+  mixedClusterListOpen=false;
+  mixedClusterListGroupKey=null;
   currentPopupBusinessId=id;
   focusedQuickPointPopupOpen=marker===focusedQuickPointMarker;
   refreshBusinessDetailOverlay();
@@ -192,6 +194,7 @@ let closingInfoWindowForRefresh=false;
 infoWindow.addListener?.('close',()=>{
   nativeInfoWindowOpen=false;
   if(presenceClusterListOpen){presenceClusterListOpen=false;if(activeView==='map')requestAnimationFrame(()=>renderPresenceClusters())}
+  if(mixedClusterListOpen){mixedClusterListOpen=false;mixedClusterListGroupKey=null;if(activeView==='map')requestAnimationFrame(()=>renderPresenceClusters())}
   if(!closingInfoWindowForRefresh&&focusedQuickPointBusinessId){
     clearFocusedQuickPoint({closeWindow:false});
     if(activeView==='map')requestAnimationFrame(()=>render());

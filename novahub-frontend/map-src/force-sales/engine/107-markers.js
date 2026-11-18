@@ -122,14 +122,24 @@ function createGoogleMarker(coords, options){
 }
 const L={marker:createGoogleMarker};
 const cluster={
-  markers:[],clusterer:null,
+  markers:[],clusterer:null,excludedMarkerIds:new Set(),
   addLayer(marker){this.markers.push(marker)},
-  clearLayers(){this.clusterer?.clearMarkers();this.markers.forEach(marker=>setNovaMarkerMap(marker,null));this.markers=[]},
+  clearLayers(){this.clusterer?.clearMarkers();this.markers.forEach(marker=>setNovaMarkerMap(marker,null));this.markers=[];this.excludedMarkerIds=new Set()},
+  setExcludedMarkerIds(ids){
+    const next=new Set([...ids].map(String));
+    const changed=next.size!==this.excludedMarkerIds.size||[...next].some(id=>!this.excludedMarkerIds.has(id));
+    this.excludedMarkerIds=next;
+    return changed;
+  },
   refresh(){
     this.clusterer?.clearMarkers();
+    const visibleMarkers=this.markers.filter(marker=>!this.excludedMarkerIds.has(String(marker?._b?.id??'')));
     if(window.markerClusterer?.MarkerClusterer){
-       this.clusterer=new window.markerClusterer.MarkerClusterer({map:googleMap,markers:this.markers,renderer:{render:({count,position})=>createMapMarker({map:googleMap,position,icon:clusterSvg(count),label:NOVAHUB_ISOTIPO_URL?String(count):undefined,zIndex:1000+count})}});
-    }else this.markers.forEach(marker=>setNovaMarkerMap(marker,googleMap));
+       this.clusterer=new window.markerClusterer.MarkerClusterer({map:googleMap,markers:visibleMarkers,renderer:{render:({count,position})=>createMapMarker({map:googleMap,position,icon:clusterSvg(count),label:NOVAHUB_ISOTIPO_URL?String(count):undefined,zIndex:1000+count})}});
+    }else{
+      const visibleSet=new Set(visibleMarkers);
+      this.markers.forEach(marker=>setNovaMarkerMap(marker,visibleSet.has(marker)?googleMap:null));
+    }
   }
 };
 window.__novaRefreshClusters=()=>cluster.refresh();

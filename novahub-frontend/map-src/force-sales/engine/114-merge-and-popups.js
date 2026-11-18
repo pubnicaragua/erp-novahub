@@ -298,7 +298,13 @@ async function focusProspectFromNotification(rawId){
       const prospect=await forceSalesRequest(`/force-sales/prospects/${encodeURIComponent(targetId)}`);
       if(!prospect?.id)throw new Error('No se encontró el punto');
       business=remoteBusiness(prospect);
-      stateOf(business).remoteId=prospect.id;
+      Object.assign(stateOf(business),{
+        remoteId:prospect.id,
+        customerId:prospect.customerId||null,
+        customer:prospect.customer||null,
+        customerLinkedAt:prospect.customerLinkedAt||null,
+        customerLinkedBy:prospect.customerLinkedBy||null,
+      });
       remoteProspects=[...remoteProspects.filter(item=>String(item.id)!==String(business.id)),business];
       mergeBusinesses();populateFilters();render();
       business=businesses.find(item=>String(stateOf(item).remoteId||'')===targetId)||business;

@@ -105,6 +105,92 @@ function createPresenceClusterContent(count){
   Object.assign(badge.style,{width:'44px',height:'44px',display:'grid',placeItems:'center',border:'3px solid #fff',borderRadius:'50%',background:'#123f35',color:'#fff',boxShadow:'0 4px 14px rgba(12,53,43,.35)',font:'900 14px/1 Montserrat,Arial,sans-serif',pointerEvents:'none'});
   return badge;
 }
+function mixedClusterCounts(group){
+  const users=group?.rows?.filter(row=>row._mixedType==='user').length||0;
+  const points=group?.rows?.filter(row=>row._mixedType==='business').length||0;
+  return {users,points,total:users+points};
+}
+function mixedClusterLabel(group){
+  const {users,points}=mixedClusterCounts(group);
+  return `${users} ${users===1?'usuario':'usuarios'} y ${points} ${points===1?'punto comercial':'puntos comerciales'}; abrir grupo`;
+}
+function createMixedClusterContent(group){
+  const badge=document.createElement('div');
+  badge.className='nova-mixed-cluster-marker';
+  badge.setAttribute('role','img');
+  const total=document.createElement('span');
+  total.className='nova-mixed-cluster-total';
+  const breakdown=document.createElement('span');
+  breakdown.className='nova-mixed-cluster-breakdown';
+  badge.append(total,breakdown);
+  updateMixedClusterContent(badge,group);
+  return badge;
+}
+function updateMixedClusterContent(content,group){
+  if(!content)return;
+  const {users,points,total}=mixedClusterCounts(group);
+  const totalNode=content.querySelector('.nova-mixed-cluster-total');
+  const breakdownNode=content.querySelector('.nova-mixed-cluster-breakdown');
+  if(totalNode)totalNode.textContent=String(total);
+  if(breakdownNode)breakdownNode.textContent=`U${users} · P${points}`;
+  content.setAttribute('aria-label',mixedClusterLabel(group));
+  content.title=mixedClusterLabel(group);
+}
+function mixedClusterListContent(groupMarker){
+  const group=groupMarker?._mixedGroup;
+  const container=document.createElement('div');
+  container.className='nova-mixed-cluster-list';
+  const heading=document.createElement('strong');
+  const {users,points}=mixedClusterCounts(group);
+  heading.textContent=`${users} usuarios · ${points} puntos comerciales`;
+  container.appendChild(heading);
+  group?.rows?.forEach(entry=>{
+    const isUser=entry._mixedType==='user';
+    const user=entry._presenceRow;
+    const business=entry._business;
+    const button=document.createElement('button');
+    button.type='button';
+    button.className='nova-mixed-cluster-list-item';
+    button.setAttribute('aria-label',isUser?`Abrir usuario ${user?.name||'Colaborador'}`:`Abrir punto comercial ${business?.name||'Punto'}`);
+    const icon=document.createElement('span');
+    icon.className=isUser?'nova-mixed-cluster-list-avatar':'nova-mixed-cluster-list-point';
+    if(isUser){
+      icon.appendChild(presenceContent(user));
+    }else{
+      icon.textContent='P';
+      icon.setAttribute('aria-hidden','true');
+    }
+    const details=document.createElement('span');
+    details.className='nova-mixed-cluster-list-details';
+    const name=document.createElement('b');
+    name.textContent=String(isUser?user?.name||'Colaborador':business?.name||'Punto comercial');
+    const meta=document.createElement('span');
+    meta.textContent=isUser
+      ? `${user?.isOnline===false?'Sin conexión':'En línea'} · ${user?.gpsStatus==='recent'?'GPS reciente':user?.gpsStatus==='stale'?'sin lectura GPS reciente':'GPS sin confirmar'}`
+      : String(business?.address||`${Number(business?.lat).toFixed(5)}, ${Number(business?.lng).toFixed(5)}`);
+    details.append(name,meta);
+    button.append(icon,details);
+    button.addEventListener('click',()=>{
+      mixedClusterListOpen=false;
+      mixedClusterListGroupKey=null;
+      infoWindow.close();
+      if(isUser)openPresenceDetails(user,groupMarker);
+      else entry._businessMarker?.openPopup?.();
+    });
+    container.appendChild(button);
+  });
+  return container;
+}
+function openMixedClusterList(groupMarker){
+  mixedClusterListOpen=true;
+  mixedClusterListGroupKey=groupMarker?._mixedGroup?.key||null;
+  presenceClusterListOpen=false;
+  presenceClusterListGroupKey=null;
+  closeBusinessDetailPopup();
+  infoWindow.setContent(mixedClusterListContent(groupMarker));
+  try{infoWindow.open({map:googleMap,anchor:groupMarker})}catch(error){infoWindow.open(googleMap,groupMarker)}
+  nativeInfoWindowOpen=true;
+}
 function clearPresenceClusterLines(){
   presenceClusterLines.forEach(line=>line.setMap(null));
   presenceClusterLines.clear();
@@ -191,13 +277,17 @@ function showPresenceCluster(groupMarker){
   presenceClusterListOpen=false;
   renderPresenceClusters();
 }
-function renderPresenceClusters(){
+function renderPresenceClusters({refreshBusinessCluster=true}={}){
   presenceMarkers.forEach(marker=>setPresenceMarkerPosition(marker,marker._gpsPosition));
   clearPresenceClusterLines();
   if(activeView!=='map'||!mapLayers.users){
     presenceClusterMarkers.forEach(marker=>setNovaMarkerMap(marker,null));
+    mixedClusterMarkers.forEach(marker=>setNovaMarkerMap(marker,null));
     expandedPresenceClusterKey=null;
-    if(presenceClusterListOpen){presenceClusterListOpen=false;presenceClusterListGroupKey=null;infoWindow.close()}
+    if(presenceClusterListOpen||mixedClusterListOpen){presenceClusterListOpen=false;presenceClusterListGroupKey=null;mixedClusterListOpen=false;mixedClusterListGroupKey=null;infoWindow.close()}
+    const exclusionsChanged=cluster.setExcludedMarkerIds(new Set());
+    if(refreshBusinessCluster&&exclusionsChanged)cluster.refresh();
+    setNovaMarkerMap(focusedQuickPointMarker,activeView==='map'?googleMap:null);
     return;
   }
   const entries=[...presenceMarkers.values()].filter(marker=>marker._presenceRow&&marker._gpsPosition).map(marker=>({
@@ -206,7 +296,36 @@ function renderPresenceClusters(){
     _presencePosition:marker._gpsPosition,
     _presenceMarker:marker,
   }));
-  const groups=window.NovaForceSalesLocation.clusterPresenceRows(entries,row=>projectPresencePosition(row._presencePosition),44);
+  const businessMarkers=[...markerById.values()].filter(marker=>marker?._b&&Number.isFinite(Number(marker._b.lat))&&Number.isFinite(Number(marker._b.lng)));
+  const mixedEntries=[
+    ...entries.map(row=>({...row,userId:`user:${String(row.userId)}`,_mixedType:'user'})),
+    ...businessMarkers.map(marker=>({
+      userId:`business:${String(marker._b.id)}`,
+      _mixedType:'business',
+      _business:marker._b,
+      _businessMarker:marker,
+      _presencePosition:{lat:Number(marker._b.lat),lng:Number(marker._b.lng)},
+    })),
+  ];
+  const mixedCandidates=window.NovaForceSalesLocation.clusterPresenceRows(mixedEntries,row=>projectPresencePosition(row._presencePosition),44)
+    .filter(group=>group.rows.some(row=>row._mixedType==='user')&&group.rows.some(row=>row._mixedType==='business'));
+  const mixedGroups=mixedCandidates.map(group=>{
+    const position=unprojectPresencePosition(group.center.x,group.center.y);
+    return position?{...group,position}:null;
+  }).filter(Boolean);
+  const activeMixedKeys=new Set(mixedGroups.map(group=>group.key));
+  if(mixedClusterListOpen&&mixedClusterListGroupKey&&!activeMixedKeys.has(mixedClusterListGroupKey)){
+    mixedClusterListOpen=false;
+    mixedClusterListGroupKey=null;
+    infoWindow.close();
+  }
+  mixedClusterMarkers.forEach((marker,key)=>{if(!activeMixedKeys.has(key)){setNovaMarkerMap(marker,null);mixedClusterMarkers.delete(key)}});
+  const mixedUserIds=new Set(mixedGroups.flatMap(group=>group.rows.filter(row=>row._mixedType==='user').map(row=>String(row._presenceRow.userId))));
+  const mixedBusinessIds=new Set(mixedGroups.flatMap(group=>group.rows.filter(row=>row._mixedType==='business').map(row=>String(row._business.id))));
+  const exclusionsChanged=cluster.setExcludedMarkerIds(mixedBusinessIds);
+  if(refreshBusinessCluster&&exclusionsChanged)cluster.refresh();
+  const userEntries=entries.filter(row=>!mixedUserIds.has(String(row.userId)));
+  const groups=window.NovaForceSalesLocation.clusterPresenceRows(userEntries,row=>projectPresencePosition(row._presencePosition),44);
   const activeGroupKeys=new Set(groups.map(group=>group.key));
   if(expandedPresenceClusterKey&&!activeGroupKeys.has(expandedPresenceClusterKey))expandedPresenceClusterKey=null;
   if(presenceClusterListOpen&&presenceClusterListGroupKey&&!activeGroupKeys.has(presenceClusterListGroupKey)){
@@ -215,7 +334,7 @@ function renderPresenceClusters(){
     infoWindow.close();
   }
   presenceClusterMarkers.forEach((marker,key)=>{if(!activeGroupKeys.has(key)){setNovaMarkerMap(marker,null);presenceClusterMarkers.delete(key)}});
-  const clusteredIds=new Set(groups.flatMap(group=>group.rows.map(row=>String(row.userId))));
+  const clusteredIds=new Set([...mixedUserIds,...groups.flatMap(group=>group.rows.map(row=>String(row.userId)))]);
   presenceMarkers.forEach((marker,id)=>{
     const clustered=clusteredIds.has(String(id));
     setNovaMarkerMap(marker,clustered?null:googleMap);
@@ -228,6 +347,26 @@ function renderPresenceClusters(){
     if(!displayPosition)return;
     setPresenceMarkerPosition(marker,displayPosition);
     drawPresenceSeparationLine(`business-overlap:${id}`,overlap.businessPosition,displayPosition);
+  });
+  businessMarkers.forEach(marker=>{
+    if(mixedBusinessIds.has(String(marker._b.id)))setNovaMarkerMap(marker,null);
+    else if(marker===focusedQuickPointMarker)setNovaMarkerMap(marker,googleMap);
+  });
+  mixedGroups.forEach(group=>{
+    let groupMarker=mixedClusterMarkers.get(group.key);
+    if(!groupMarker){
+      const clusterContent=createMixedClusterContent(group);
+      groupMarker=createMapMarker({position:group.position,title:mixedClusterLabel(group),content:clusterContent,zIndex:1500});
+      groupMarker._clusterContent=clusterContent;
+      const open=()=>openMixedClusterList(groupMarker);
+      if(typeof groupMarker.addEventListener==='function')groupMarker.addEventListener('gmp-click',open);else groupMarker.addListener?.('click',open);
+      mixedClusterMarkers.set(group.key,groupMarker);
+    }
+    groupMarker._mixedGroup=group;
+    groupMarker.title=mixedClusterLabel(group);
+    updateMixedClusterContent(groupMarker._clusterContent,group);
+    groupMarker.setPosition(group.position);
+    setNovaMarkerMap(groupMarker,googleMap);
   });
   groups.forEach(group=>{
     const overlapAnchor=unprojectPresencePosition(group.center.x,group.center.y);
@@ -277,19 +416,21 @@ function renderPresenceClusters(){
   });
 }
 function closeExpandedPresenceCluster(){
-  if(!expandedPresenceClusterKey&&!presenceClusterListOpen)return;
-  const closeList=presenceClusterListOpen;
+  if(!expandedPresenceClusterKey&&!presenceClusterListOpen&&!mixedClusterListOpen)return;
+  const closeList=presenceClusterListOpen||mixedClusterListOpen;
   pendingPresenceClosePointer=null;
   expandedPresenceClusterKey=null;
   presenceClusterListOpen=false;
   presenceClusterListGroupKey=null;
+  mixedClusterListOpen=false;
+  mixedClusterListGroupKey=null;
   if(closeList)infoWindow.close();
   renderPresenceClusters();
 }
 document.addEventListener('keydown',event=>{if(event.key==='Escape')closeExpandedPresenceCluster()});
 document.addEventListener('pointerdown',event=>{
-  if(!expandedPresenceClusterKey&&!presenceClusterListOpen)return;
-  if(event.target?.closest?.('.nova-presence-cluster-marker,.nova-presence-marker,.nova-presence-cluster-list,.gm-style-iw,.leaflet-popup-content')){pendingPresenceClosePointer=null;return}
+  if(!expandedPresenceClusterKey&&!presenceClusterListOpen&&!mixedClusterListOpen)return;
+  if(event.target?.closest?.('.nova-presence-cluster-marker,.nova-presence-marker,.nova-presence-cluster-list,.nova-mixed-cluster-marker,.nova-mixed-cluster-list,.gm-style-iw,.leaflet-popup-content')){pendingPresenceClosePointer=null;return}
   pendingPresenceClosePointer={pointerId:event.pointerId,x:event.clientX,y:event.clientY};
 });
 document.addEventListener('pointerup',event=>{

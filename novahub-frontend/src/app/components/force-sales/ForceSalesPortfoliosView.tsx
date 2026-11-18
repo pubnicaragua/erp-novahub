@@ -717,7 +717,12 @@ export function ForceSalesPortfoliosView({
 
       <Dialog open={Boolean(locating)} onOpenChange={(open) => { if (!open) { setPointPickerOpen(false); setPointSearch(''); setLocating(null); } }}>
         <DialogContent className="max-h-[calc(100dvh-1rem)] w-[calc(100%-1rem)] max-w-lg overflow-y-auto p-4 sm:p-6">
-          <DialogHeader><DialogTitle className="nh-section-title flex items-center gap-2"><LocateFixed className="size-5" />Ubicar cliente en el mapa</DialogTitle><DialogDescription>{locating?.customerName}. GPS guarda y vincula el punto en tu ubicación con los datos de este cliente. Si prefieres marcarlo, el mapa te centra aquí sin colocar un pin; toca el lugar y confirma los datos para vincularlo. Ninguna opción registra una visita.</DialogDescription></DialogHeader>
+          <DialogHeader><DialogTitle className="nh-section-title flex items-center gap-2"><LocateFixed className="size-5" />Ubicar cliente en el mapa</DialogTitle><DialogDescription>El punto se vinculará automáticamente al cliente seleccionado cuando confirmes los datos. GPS muestra un pin en tu posición; Crear punto y ubicar centra el mapa aquí sin poner pin para que marques el lugar manualmente. Ninguna opción registra una visita.</DialogDescription></DialogHeader>
+          <div className="min-w-0 rounded-xl border border-primary/20 bg-primary/[0.045] p-3" aria-label="Cliente que se vinculará al punto">
+            <p className="text-[10px] font-bold uppercase tracking-wide text-muted-foreground">Cliente que quedará vinculado</p>
+            <p className="mt-1 break-words text-sm font-bold text-foreground">{locating?.customerName || 'Cliente seleccionado'}</p>
+            {locating?.customerAddress && <p className="mt-0.5 break-words text-xs text-muted-foreground">{locating.customerAddress}</p>}
+          </div>
           <div className="grid gap-2 sm:grid-cols-2"><Button variant="outline" onClick={() => startLocationPick('gps')}><LocateFixed className="mr-2 size-4" />Ubicación GPS actual</Button><Button variant="outline" onClick={() => startLocationPick('map')}><MapPin className="mr-2 size-4" />Crear punto y ubicar</Button></div>
           <div className="space-y-2 rounded-xl border border-border p-3">
             <p className="text-sm font-bold text-foreground">Vincular punto existente</p>
