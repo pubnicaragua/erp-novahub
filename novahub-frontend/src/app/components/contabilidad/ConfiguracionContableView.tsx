@@ -615,7 +615,7 @@ function AccountCodeInput({ code, field, moduleId, account, accountOptions, sugg
             aria-label={`Filtrar cuentas configuradas para ${field.label} por subtipo`}
             title="Filtrar por subtipo: auxiliares, detalle, grupos..."
           >
-            <option value="ALL">Todos los subtipos</option>
+            <option value="ALL">Todos</option>
             {availableSubtypes.map((s) => (
               <option key={s} value={s}>{subtypeLabel(s)}</option>
             ))}
@@ -706,11 +706,6 @@ function AccountMappingOptionsEditor({ codes, field, moduleId, accountsByCode, a
         <Badge variant="outline" className="max-w-full shrink-0 text-[10px] font-medium text-muted-foreground">
           {field.anyType ? 'Cualquier tipo de cuenta' : `Espera: ${accountTypeLabel(field.defaultType)}`}
         </Badge>
-      </div>
-      <div className="min-w-0 rounded-xl bg-muted/35 px-3 py-2 text-xs leading-5 text-muted-foreground">
-        <span className="font-semibold text-foreground">Referencia:</span>{' '}
-        <span className="font-mono font-semibold">{field.defaultCode || '—'}</span>
-        <span> · {field.defaultName}</span>
       </div>
       <p className="text-xs leading-5 text-muted-foreground">{field.description}</p>
       {isBankParentMapping(moduleId, field.key) && (
