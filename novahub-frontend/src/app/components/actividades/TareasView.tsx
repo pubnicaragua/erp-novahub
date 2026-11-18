@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
+import { useEffect, useMemo, useRef, useState, type ClipboardEvent as ReactClipboardEvent, type ReactNode } from 'react';
 import { useQueryClient } from '@tanstack/react-query';
 import { EditableDataTable } from '../ui/EditableDataTable';
 import { Task } from '../../types';
@@ -34,6 +34,8 @@ import {
   UserCheck,
   Gauge,
   Pencil,
+  ArrowUp,
+  ArrowDown,
 } from 'lucide-react';
 import { activityCategoriesService, activityFavoritesService, tasksService } from '../../services/actividades.service';
 import { usersService } from '../../services/users.service';
@@ -89,6 +91,8 @@ interface TareasViewProps {
 
 /** Valor centinela del selector de categoría del formulario (Radix no admite ''). */
 const CATEGORY_NONE = 'NONE';
+const MAX_TASK_EVIDENCE_FILES = 10;
+const TASK_EVIDENCE_IMAGE_TYPES = new Set(['image/jpeg', 'image/png', 'image/webp', 'image/gif', 'image/avif']);
 
 /** Subconjunto de `Task` que necesitan los filtros de identidad, responsable y estado. */
 type TaskLike = Pick<Task, 'id' | 'status' | 'assignedToId' | 'categoryId'> & {
@@ -124,6 +128,11 @@ export const TareasView: React.FC<TareasViewProps> = ({ data, loading, summaryEr
   const [kanbanGroupByCategory, setKanbanGroupByCategory] = useLocalStorageState<boolean>(
     'activities-task-kanban-group-by-category',
     true,
+    24 * 365,
+  );
+  const [kanbanCreatedAtOrder, setKanbanCreatedAtOrder] = useLocalStorageState<'newest' | 'oldest'>(
+    'activities-task-kanban-created-at-order',
+    'newest',
     24 * 365,
   );
   const isCompactViewport = useCardsOnlyBelowTableBreakpoint();
@@ -480,6 +489,44 @@ export const TareasView: React.FC<TareasViewProps> = ({ data, loading, summaryEr
         .filter((field) => Boolean(field.value.trim())) as ActivityCustomField[]
     );
 
+  const appendApprovalEvidenceFiles = (incoming: File[]) => {
+    if (incoming.length === 0) return;
+    const available = Math.max(0, MAX_TASK_EVIDENCE_FILES - evidenceFiles.length);
+    const accepted = incoming.slice(0, available);
+    if (accepted.length > 0) setEvidenceFiles((current) => [...current, ...accepted].slice(0, MAX_TASK_EVIDENCE_FILES));
+    if (accepted.length < incoming.length) toast.error('Puedes adjuntar hasta 10 archivos por envío.');
+    if (accepted.length > 0) toast.success(accepted.length === 1 ? 'Archivo agregado a la evidencia.' : `${accepted.length} archivos agregados a la evidencia.`);
+  };
+
+  const handleApprovalPaste = (event: ReactClipboardEvent<HTMLDivElement>) => {
+    if (actionLoading) return;
+    const filesFromItems = Array.from(event.clipboardData.items)
+      .filter((item) => item.kind === 'file' && item.type.toLowerCase().startsWith('image/'))
+      .map((item) => item.getAsFile())
+      .filter((file): file is File => Boolean(file));
+    const pastedImages = filesFromItems.length > 0
+      ? filesFromItems
+      : Array.from(event.clipboardData.files).filter((file) => file.type.toLowerCase().startsWith('image/'));
+    if (pastedImages.length === 0) return;
+
+    event.preventDefault();
+    const supportedImages = pastedImages
+      .filter((file) => TASK_EVIDENCE_IMAGE_TYPES.has(file.type.toLowerCase()))
+      .map((file, index) => {
+        if (file.name.trim()) return file;
+        const extension = file.type.toLowerCase().slice('image/'.length).replace('jpeg', 'jpg');
+        return new File([file], `captura-portapapeles-${Date.now()}-${index + 1}.${extension}`, {
+          type: file.type,
+          lastModified: Date.now(),
+        });
+      });
+
+    if (supportedImages.length < pastedImages.length) {
+      toast.error('Solo se aceptan capturas PNG, JPEG, WebP, GIF o AVIF.');
+    }
+    appendApprovalEvidenceFiles(supportedImages);
+  };
+
   const handleCreateTask = async () => {
     if (!newTask.title.trim()) {
       toast.error('El título es requerido');
@@ -829,6 +876,7 @@ export const TareasView: React.FC<TareasViewProps> = ({ data, loading, summaryEr
     <TareasKanban
       data={rows}
       compact={compact}
+      createdAtOrder={kanbanCreatedAtOrder}
       onEdit={(task) => setEditingTask(task)}
       canEditTask={canEditTask}
       onViewDetail={(task) => setDetailTask(task)}
@@ -958,28 +1006,60 @@ export const TareasView: React.FC<TareasViewProps> = ({ data, loading, summaryEr
             showKanban={true}
             showCategories={true}
           />
-          {viewLayout === 'kanban' && categoryFilter === 'ALL' && (
-            <div role="group" aria-label="Agrupar tablero Kanban" data-toolbar-role="layout" className="flex shrink-0 items-center gap-1 rounded-xl border border-border/50 bg-background/50 p-1">
-              <Button
-                type="button"
-                variant={kanbanGroupByCategory ? 'default' : 'ghost'}
-                aria-pressed={kanbanGroupByCategory}
-                data-testid="activities-kanban-grouping-category"
-                onClick={() => setKanbanGroupByCategory(true)}
-                className="h-8 gap-1.5 rounded-lg px-2.5 text-[10px] font-bold sm:px-3 sm:text-xs"
-              >
-                <Tag className="size-3.5" /> Por categoría
-              </Button>
-              <Button
-                type="button"
-                variant={!kanbanGroupByCategory ? 'default' : 'ghost'}
-                aria-pressed={!kanbanGroupByCategory}
-                data-testid="activities-kanban-grouping-status"
-                onClick={() => setKanbanGroupByCategory(false)}
-                className="h-8 gap-1.5 rounded-lg px-2.5 text-[10px] font-bold sm:px-3 sm:text-xs"
-              >
-                <ListTodo className="size-3.5" /> Solo estados
-              </Button>
+          {viewLayout === 'kanban' && (
+            <div className="flex shrink-0 flex-wrap items-center gap-2" data-toolbar-role="layout">
+              {categoryFilter === 'ALL' && (
+                <div role="group" aria-label="Agrupar tablero Kanban" className="flex items-center gap-1 rounded-xl border border-border/50 bg-background/50 p-1">
+                  <Button
+                    type="button"
+                    variant={kanbanGroupByCategory ? 'default' : 'ghost'}
+                    aria-pressed={kanbanGroupByCategory}
+                    data-testid="activities-kanban-grouping-category"
+                    onClick={() => setKanbanGroupByCategory(true)}
+                    className="h-8 gap-1.5 rounded-lg px-2.5 text-[10px] font-bold sm:px-3 sm:text-xs"
+                  >
+                    <Tag className="size-3.5" /> Categorías
+                  </Button>
+                  <Button
+                    type="button"
+                    variant={!kanbanGroupByCategory ? 'default' : 'ghost'}
+                    aria-pressed={!kanbanGroupByCategory}
+                    data-testid="activities-kanban-grouping-status"
+                    onClick={() => setKanbanGroupByCategory(false)}
+                    className="h-8 gap-1.5 rounded-lg px-2.5 text-[10px] font-bold sm:px-3 sm:text-xs"
+                  >
+                    <ListTodo className="size-3.5" /> Estados
+                  </Button>
+                </div>
+              )}
+              <div role="group" aria-label="Ordenar tareas por fecha de creación" className="flex items-center gap-1 rounded-xl border border-border/50 bg-background/50 p-1">
+                <Button
+                  type="button"
+                  size="icon"
+                  variant={kanbanCreatedAtOrder === 'oldest' ? 'default' : 'ghost'}
+                  aria-label="Más antiguos primero"
+                  aria-pressed={kanbanCreatedAtOrder === 'oldest'}
+                  title="Más antiguos primero"
+                  data-testid="activities-kanban-sort-oldest"
+                  onClick={() => setKanbanCreatedAtOrder('oldest')}
+                  className="size-8 rounded-lg"
+                >
+                  <ArrowUp className="size-4" />
+                </Button>
+                <Button
+                  type="button"
+                  size="icon"
+                  variant={kanbanCreatedAtOrder === 'newest' ? 'default' : 'ghost'}
+                  aria-label="Más recientes primero"
+                  aria-pressed={kanbanCreatedAtOrder === 'newest'}
+                  title="Más recientes primero"
+                  data-testid="activities-kanban-sort-newest"
+                  onClick={() => setKanbanCreatedAtOrder('newest')}
+                  className="size-8 rounded-lg"
+                >
+                  <ArrowDown className="size-4" />
+                </Button>
+              </div>
             </div>
           )}
           {activeFiltersCount > 0 && (
@@ -1830,7 +1910,7 @@ export const TareasView: React.FC<TareasViewProps> = ({ data, loading, summaryEr
 
       {/* Dialog: Submit Task for Approval */}
       <Dialog open={isApprovalOpen} onOpenChange={setIsApprovalOpen}>
-        <DialogContent className="w-[calc(100%-2rem)] max-h-[85vh] overflow-y-auto rounded-3xl border-border/60 bg-background/95 p-0 shadow-2xl sm:max-w-[480px]">
+        <DialogContent onPaste={handleApprovalPaste} className="w-[calc(100%-2rem)] max-h-[85vh] overflow-y-auto rounded-3xl border-border/60 bg-background/95 p-0 shadow-2xl sm:max-w-[480px]">
           <DialogHeader className="border-b border-border/50 bg-gradient-to-br from-primary/10 via-background to-background px-6 py-5 sm:px-8">
             <div className="flex items-start gap-3 pr-6">
               <div className="flex size-11 shrink-0 items-center justify-center rounded-2xl bg-primary/10 text-primary">
@@ -1864,9 +1944,27 @@ export const TareasView: React.FC<TareasViewProps> = ({ data, loading, summaryEr
               <Input
                 type="file"
                 multiple
-                onChange={(e) => setEvidenceFiles(Array.from(e.target.files || []).slice(0, 10))}
+                disabled={actionLoading}
+                onChange={(e) => {
+                  appendApprovalEvidenceFiles(Array.from(e.currentTarget.files || []));
+                  e.currentTarget.value = '';
+                }}
                 className="h-10 text-xs rounded-xl bg-background file:mr-3 file:rounded-lg file:border-0 file:bg-primary/10 file:px-2 file:py-1 file:text-xs file:font-bold file:text-primary"
               />
+              <p className="text-[10px] text-muted-foreground">También puedes copiar una captura y pegarla con Ctrl+V mientras este diálogo está abierto. Máximo 10 archivos.</p>
+              {evidenceFiles.length > 0 && <div aria-live="polite" className="space-y-1.5 rounded-xl border border-border/50 bg-muted/[0.12] p-2.5">
+                <p className="text-[10px] font-semibold text-muted-foreground">{evidenceFiles.length} de {MAX_TASK_EVIDENCE_FILES} archivos adjuntos</p>
+                <ul className="space-y-1">
+                  {evidenceFiles.map((file, index) => <li key={`${file.name}-${file.size}-${file.lastModified}-${index}`} className="flex min-w-0 items-center gap-2 rounded-lg bg-background/70 px-2 py-1.5">
+                    <Paperclip className="size-3.5 shrink-0 text-muted-foreground" />
+                    <span className="min-w-0 flex-1 truncate text-[11px] font-medium" title={file.name}>{file.name}</span>
+                    <span className="shrink-0 text-[10px] text-muted-foreground">{Math.max(1, Math.round(file.size / 1024))} KB</span>
+                    <Button type="button" variant="ghost" size="icon" className="size-7 shrink-0" aria-label={`Quitar ${file.name}`} disabled={actionLoading} onClick={() => setEvidenceFiles((current) => current.filter((_, fileIndex) => fileIndex !== index))}>
+                      <XCircle className="size-4" />
+                    </Button>
+                  </li>)}
+                </ul>
+              </div>}
               <Input
                 placeholder="O enlace externo https://..."
                 value={evidenceUrl}

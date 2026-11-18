@@ -37,6 +37,8 @@ interface TareasKanbanProps {
   canMoveToStatus: (task: Task, status: string) => boolean;
   /** Columnas más bajas cuando se muestra un tablero dentro de cada categoría. */
   compact?: boolean;
+  /** Orden de las tarjetas por fecha de creación en cada estado. */
+  createdAtOrder?: 'newest' | 'oldest';
   /** Abre la edición de la tarea (el botón solo aparece si se pasa). */
   onEdit?: (task: Task) => void;
   /** Por tarea: solo quien la creó o un administrador puede editarla. */
@@ -52,6 +54,7 @@ export const TareasKanban: React.FC<TareasKanbanProps> = ({
   onComplete,
   canMoveToStatus,
   compact = false,
+  createdAtOrder = 'newest',
   onEdit,
   canEditTask,
 }) => {
@@ -140,8 +143,25 @@ export const TareasKanban: React.FC<TareasKanbanProps> = ({
       }
     });
 
+    Object.values(grouped).forEach((tasks) => {
+      tasks.sort((left, right) => {
+        const leftCreatedAt = Date.parse(left.createdAt);
+        const rightCreatedAt = Date.parse(right.createdAt);
+        const leftIsValid = Number.isFinite(leftCreatedAt);
+        const rightIsValid = Number.isFinite(rightCreatedAt);
+
+        if (!leftIsValid && !rightIsValid) return 0;
+        if (!leftIsValid) return 1;
+        if (!rightIsValid) return -1;
+
+        return createdAtOrder === 'newest'
+          ? rightCreatedAt - leftCreatedAt
+          : leftCreatedAt - rightCreatedAt;
+      });
+    });
+
     return grouped;
-  }, [data]);
+  }, [data, createdAtOrder]);
   const columns = columnTasks.CANCELLED.length > 0 ? [...KANBAN_COLUMNS, CANCELLED_COLUMN] : KANBAN_COLUMNS;
 
   return (
