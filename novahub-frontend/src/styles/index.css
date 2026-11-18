@@ -1331,7 +1331,7 @@ th .column-filter-menu .column-filter-icon,
   position: sticky;
   top: var(--table-sticky-top, 0px);
   z-index: 20;
-  background-color: hsl(var(--muted) / 0.96);
+  background-color: var(--muted);
   background-clip: padding-box;
 }
 
