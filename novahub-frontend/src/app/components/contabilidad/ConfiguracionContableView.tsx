@@ -506,19 +506,22 @@ const SUBTYPE_LABELS: Record<string, string> = {
 const subtypeLabel = (value?: string) => SUBTYPE_LABELS[String(value || '').toUpperCase()] || String(value || '') || '—'
 
 function ModuleStatusBadge({ status }: { status: { total: number; defined: number; pct: number; complete: boolean } }) {
+  const missing = Math.max(0, status.total - status.defined)
+
   return (
-    <span className={cn(
-      'shrink-0 rounded-full px-2 py-0.5 text-[9px] font-black uppercase tracking-wider',
-      status.complete ? 'bg-emerald-500/15 text-emerald-700 dark:text-emerald-400' : status.pct > 0 ? 'bg-amber-500/15 text-amber-700 dark:text-amber-300' : 'bg-muted text-muted-foreground',
-    )}>
-      {status.complete ? (
-        <><Check className="mr-0.5 inline size-2.5" /> Listo</>
-      ) : status.total - status.defined === 0 ? (
-        <>Faltan asignaciones</>
-      ) : (
-        <>Faltan {status.total - status.defined} asignaciones</>
+    <div className="inline-flex shrink-0 items-center gap-1.5">
+      <span className={cn(
+        'shrink-0 rounded-full px-2 py-0.5 text-[9px] font-black uppercase tracking-wider',
+        status.complete ? 'bg-emerald-500/15 text-emerald-700 dark:text-emerald-400' : status.defined > 0 ? 'bg-amber-500/15 text-amber-700 dark:text-amber-300' : 'bg-muted text-muted-foreground',
+      )}>
+        {status.total === 0 ? 'Sin campos' : status.complete ? <><Check className="mr-0.5 inline size-2.5" /> Listo</> : `Faltan ${missing}`}
+      </span>
+      {status.total > 0 && (
+        <span className="whitespace-nowrap text-[10px] font-semibold text-muted-foreground">
+          {status.defined}/{status.total} configuradas
+        </span>
       )}
-    </span>
+    </div>
   )
 }
 
@@ -1089,7 +1092,7 @@ export function ConfiguracionContableView() {
   const [accountMappingsExpanded, setAccountMappingsExpanded] = useState(false)
 const [mappingsSearch, setMappingsSearch] = useState('')
   const [salesExpanded, setSalesExpanded] = useState(false)
-  const [collapsedSalesModules, setCollapsedSalesModules] = useState<Set<string>>(() => new Set())
+  const [expandedSalesModules, setExpandedSalesModules] = useState<Set<string>>(() => new Set())
   const [expandedGroups, setExpandedGroups] = useState<Set<string>>(new Set())
   const [activityExpanded, setActivityExpanded] = useState(false)
   const [openingCutoffDate, setOpeningCutoffDate] = useState(() => {
@@ -1279,11 +1282,16 @@ const [mappingsSearch, setMappingsSearch] = useState('')
   }
 
   const toggleSalesModule = (id: string) => {
-    setCollapsedSalesModules(prev => {
+    setExpandedSalesModules(prev => {
       const next = new Set(prev)
       if (next.has(id)) next.delete(id); else next.add(id)
       return next
     })
+  }
+
+  const toggleSalesSections = () => {
+    if (!salesExpanded) setExpandedSalesModules(new Set())
+    setSalesExpanded(!salesExpanded)
   }
 
   const removeCustomModule = (id: string) => {
@@ -1627,7 +1635,7 @@ const [mappingsSearch, setMappingsSearch] = useState('')
     const modMapping = accountMappings[mod.id] || {}
     const Icon = mod.icon
     const label = mod.id === 'payment' ? 'Cobros de facturas' : mod.label
-    const isExpanded = !collapsedSalesModules.has(mod.id)
+    const isExpanded = expandedSalesModules.has(mod.id)
     const contentId = `sales-account-mapping-${mod.id}-content`
 
     return (
@@ -2032,7 +2040,7 @@ const [mappingsSearch, setMappingsSearch] = useState('')
           <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
             <button
               type="button"
-              onClick={() => setSalesExpanded(value => !value)}
+              onClick={toggleSalesSections}
               className="flex min-w-0 items-start gap-3 text-left"
               aria-expanded={salesExpanded}
               aria-controls="ventas-cuentas-contables-content"
@@ -2054,7 +2062,7 @@ const [mappingsSearch, setMappingsSearch] = useState('')
                 variant="ghost"
                 size="icon"
                 className="size-8 shrink-0"
-                onClick={() => setSalesExpanded(value => !value)}
+                onClick={toggleSalesSections}
                 aria-label={salesExpanded ? 'Contraer cuentas de ventas' : 'Expandir cuentas de ventas'}
                 aria-expanded={salesExpanded}
                 aria-controls="ventas-cuentas-contables-content"
