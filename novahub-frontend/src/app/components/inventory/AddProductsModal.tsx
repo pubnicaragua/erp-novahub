@@ -1,4 +1,5 @@
 import { useState, useRef, useEffect, useMemo } from 'react';
+import { MeasureUnitItems, ProductClassFields, useProductCatalogOptions } from './ProductCatalogOptions';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from '@/app/components/ui/dialog';
 import { Button } from '@/app/components/ui/button';
 import { Input } from '@/app/components/ui/input';
@@ -49,6 +50,8 @@ const makeDefaultDraft = (categoryId: string, itemType: string) => ({
   costPrice: '',
   taxRate: '0.15',
   unit: 'unidad',
+  productClass: '',
+  presentation: '',
   brand: '',
   minStock: '',
   maxStock: '',
@@ -267,6 +270,7 @@ export function AddProductsModal({ open, onOpenChange, categories, warehouses, b
   const [newCategoryName, setNewCategoryName] = useState('');
   const [newCategoryDesc, setNewCategoryDesc] = useState('');
   const [creatingCategory, setCreatingCategory] = useState(false);
+  const catalogOptions = useProductCatalogOptions();
   const [catalogAttributes, setCatalogAttributes] = useState<any[]>([]);
   const [similarGroups, setSimilarGroups] = useState<SimilarProductGroup[]>([]);
   const [similarPendingProducts, setSimilarPendingProducts] = useState<any[]>([]);
@@ -820,6 +824,8 @@ export function AddProductsModal({ open, onOpenChange, categories, warehouses, b
           commercialNote: product.commercialNote || '',
           brand: product.brand || undefined,
           unit: product.unit || 'unidad',
+          productClass: product.productClass || undefined,
+          presentation: product.productClass ? (product.presentation || undefined) : undefined,
           minStock: Number(product.minStock || 0),
           maxStock: product.maxStock === '' ? undefined : Number(product.maxStock),
           itemType: product.itemType || 'PRODUCT',
@@ -1171,18 +1177,17 @@ export function AddProductsModal({ open, onOpenChange, categories, warehouses, b
                   <Select value={draftProduct.unit || 'unidad'} onValueChange={v => handleUpdateDraft('unit', v)}>
                     <SelectTrigger className="h-8 !rounded-none text-xs mt-1"><SelectValue placeholder="Unidad" /></SelectTrigger>
                     <SelectContent className="!rounded-none">
-                      <SelectItem value="unidad">Unidad</SelectItem>
-                      <SelectItem value="kilo">Kilo</SelectItem>
-                      <SelectItem value="libra">Libra</SelectItem>
-                      <SelectItem value="docena">Docena</SelectItem>
-                      <SelectItem value="caja">Caja</SelectItem>
-                      <SelectItem value="litro">Litro</SelectItem>
-                      <SelectItem value="metro">Metro</SelectItem>
-                      <SelectItem value="par">Par</SelectItem>
-                      <SelectItem value="rollo">Rollo</SelectItem>
-                      <SelectItem value="pieza">Pieza</SelectItem>
+                      <MeasureUnitItems units={catalogOptions.units} current={draftProduct.unit} />
                     </SelectContent>
                   </Select>
+                </div>
+                <div className="col-span-full grid grid-cols-2 gap-3 md:grid-cols-4">
+                  <ProductClassFields
+                    classes={catalogOptions.classes}
+                    productClass={draftProduct.productClass}
+                    presentation={draftProduct.presentation}
+                    onChange={(next) => setDraftProduct((prev: any) => ({ ...prev, ...next }))}
+                  />
                 </div>
               </>}
               {catalogItemType === 'SERVICE' && (

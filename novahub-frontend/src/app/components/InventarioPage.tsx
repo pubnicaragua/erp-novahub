@@ -129,6 +129,7 @@ export function InventarioPage({ activeSubModule, onSubModuleChange, isSidebarCo
   const [productStockStatusFilters, setProductStockStatusFilters] = useState<Record<string, string>>({});
   const [productSummaryLocalFilters, setProductSummaryLocalFilters] = useState<Record<string, {
     unit?: string;
+    productClass?: string;
     taxRate?: string;
     availability?: 'all' | 'available' | 'unavailable';
     showAllWarehouseProducts?: boolean;
@@ -176,6 +177,7 @@ export function InventarioPage({ activeSubModule, onSubModuleChange, isSidebarCo
 
   const updateProductSummaryLocalFilters = useCallback((section: string, filters: {
     unit?: string;
+    productClass?: string;
     taxRate?: string;
     availability?: 'all' | 'available' | 'unavailable';
     showAllWarehouseProducts?: boolean;
@@ -224,6 +226,7 @@ export function InventarioPage({ activeSubModule, onSubModuleChange, isSidebarCo
       categoryId: filters.categoryIds.join(',') || undefined,
       brand: activeTab === 'servicios' ? undefined : productBrandFilters[section]?.trim() || undefined,
       unit: local.unit || undefined,
+      productClass: local.productClass || undefined,
       taxRate: local.taxRate || undefined,
       warehouseId: requestedWarehouseIds.length > 0 ? requestedWarehouseIds.join(',') : (branchScopeEnabled ? '__none__' : undefined),
       linkedWarehouseIds: !selectedBranchId && local.showAllWarehouseProducts === false
@@ -338,7 +341,7 @@ export function InventarioPage({ activeSubModule, onSubModuleChange, isSidebarCo
             ...(selectedLinkedWarehouse ? localWarehouseFallbackIds : []),
           ])]
           : []);
-      return inventoryService.getProducts({ type: activeTab === 'servicios' ? 'SERVICE' : 'PRODUCT', light: true, page: page.page, pageSize: page.pageSize, search: searchFor(section), status, unit: localFilters.unit || undefined, taxRate: localFilters.taxRate || undefined, stockStatus: stockStatusFor(section), categoryId: filters.categoryIds.join(',') || undefined, brand: activeTab === 'servicios' ? undefined : productBrandFilters[section]?.trim() || undefined, warehouseId: requestedWarehouseIds.length > 0 ? requestedWarehouseIds.join(',') : (branchScopeEnabled ? '__none__' : undefined), includeInactive: true }, signal);
+      return inventoryService.getProducts({ type: activeTab === 'servicios' ? 'SERVICE' : 'PRODUCT', light: true, page: page.page, pageSize: page.pageSize, search: searchFor(section), status, unit: localFilters.unit || undefined, productClass: localFilters.productClass || undefined, taxRate: localFilters.taxRate || undefined, stockStatus: stockStatusFor(section), categoryId: filters.categoryIds.join(',') || undefined, brand: activeTab === 'servicios' ? undefined : productBrandFilters[section]?.trim() || undefined, warehouseId: requestedWarehouseIds.length > 0 ? requestedWarehouseIds.join(',') : (branchScopeEnabled ? '__none__' : undefined), includeInactive: true }, signal);
     },
     // Espera a que el alcance de sucursal y sus bodegas vinculadas estén
     // resueltos. Así evita pintar una página sin alcance y volver a pedirla

@@ -1,4 +1,5 @@
 import { memo, startTransition, useEffect, useMemo, useState, useRef, useCallback, type ComponentProps } from 'react';
+import { CatalogOptionsDialog, MeasureUnitItems, useProductCatalogOptions, visibleUnitsFor } from './ProductCatalogOptions';
 import { Search, Plus, Ban, X, Check, CheckCircle2, Package, Upload, FileSpreadsheet, AlertTriangle, Download, RefreshCw, Pencil, ChevronDown, ChevronLeft, ChevronRight, ChevronsLeft, ChevronsRight, Square, SquareCheckBig, Minus, Image as ImageIcon, ImageOff, CircleHelp, Loader2, Send, PackageSearch, Warehouse as WarehouseIcon, Store, Barcode, Tag, Tags, Columns, Filter } from 'lucide-react';
 import * as XLSX from 'xlsx';
 import { extractProductImageArchive, productImageKey, PRODUCT_IMAGE_ARCHIVE_EXTENSIONS } from '../../utils/product-image-archive';
@@ -67,19 +68,6 @@ const WAREHOUSE_TYPES = [
   { value: 'STORE', label: 'Tienda' },
   { value: 'DISTRIBUTION_CENTER', label: 'Centro de distribución' },
   { value: 'VIRTUAL', label: 'Virtual' },
-];
-
-const UNIT_OPTIONS = [
-  { value: 'unidad', label: 'Unidad' },
-  { value: 'kilo', label: 'Kilo' },
-  { value: 'libra', label: 'Libra' },
-  { value: 'docena', label: 'Docena' },
-  { value: 'caja', label: 'Caja' },
-  { value: 'litro', label: 'Litro' },
-  { value: 'metro', label: 'Metro' },
-  { value: 'par', label: 'Par' },
-  { value: 'rollo', label: 'Rollo' },
-  { value: 'pieza', label: 'Pieza' },
 ];
 
 const TAX_OPTIONS = [
@@ -330,6 +318,7 @@ interface ProductosViewProps {
   onLoadFullCatalog?: () => Promise<any[]>;
   onSummaryFiltersChange?: (filters: {
     unit: string;
+    productClass?: string;
     taxRate: string;
     availability: 'all' | 'available' | 'unavailable';
     showAllWarehouseProducts: boolean;
@@ -1276,6 +1265,11 @@ export function ProductosView({ products, summaryProducts, summaryProductsLoaded
   const [branchDetail, setBranchDetail] = useState<any | null>(null);
   const [localProductStatusFilter, setLocalProductStatusFilter] = useState<ProductStatusFilter>('ALL');
   const effectiveProductStatusFilter = controlledProductStatusFilter ?? localProductStatusFilter;
+  const catalogOptions = useProductCatalogOptions();
+  const [catalogOptionsOpen, setCatalogOptionsOpen] = useState(false);
+  const canEditCatalogOptions = canPerform('INVENTORY_CONFIG', 'edit');
+  const [localClassFilter, setLocalClassFilter] = useState('');
+  const effectiveClassFilter = localClassFilter;
   const [localUnitFilter, setLocalUnitFilter] = useState('');
   const effectiveUnitFilter = controlledUnitFilter ?? localUnitFilter;
   const [localBrandFilter, setLocalBrandFilter] = useState('');
@@ -1285,11 +1279,12 @@ export function ProductosView({ products, summaryProducts, summaryProductsLoaded
   useEffect(() => {
     onSummaryFiltersChange?.({
       unit: effectiveUnitFilter,
+      productClass: effectiveClassFilter,
       taxRate: effectiveTaxRateFilter,
       availability: availabilityFilter,
       showAllWarehouseProducts,
     });
-  }, [availabilityFilter, effectiveTaxRateFilter, effectiveUnitFilter, onSummaryFiltersChange, showAllWarehouseProducts]);
+  }, [availabilityFilter, effectiveClassFilter, effectiveTaxRateFilter, effectiveUnitFilter, onSummaryFiltersChange, showAllWarehouseProducts]);
   const [localStockStatusFilter, setLocalStockStatusFilter] = useState('');
   const effectiveStockStatusFilter = controlledStockStatusFilter ?? localStockStatusFilter;
   const [stockFilter, setStockFilter] = useState<'all' | 'available' | 'low' | 'out' | 'expiring'>(initialStockFilter || (effectiveStockStatusFilter as any) || 'all');
@@ -2013,9 +2008,10 @@ export function ProductosView({ products, summaryProducts, summaryProductsLoaded
       || (availabilityFilter === 'available' && p.isActive !== false)
       || (availabilityFilter === 'unavailable' && p.isActive === false);
     const matchesUnit = !effectiveUnitFilter || (p.unit || p.details?.unit || '') === effectiveUnitFilter;
+    const matchesClass = !effectiveClassFilter || (p.productClass || p.details?.productClass || '') === effectiveClassFilter;
     const matchesBrand = !normalizedBrandFilter || productBrand.toLowerCase() === normalizedBrandFilter;
     const matchesTaxRate = !effectiveTaxRateFilter || String(p.taxRate ?? '') === effectiveTaxRateFilter;
-    return matchesSearch && matchesCategory && matchesWarehouse && matchesLinkedScope && matchesType && matchesStock && matchesStatus && matchesAvailability && matchesUnit && matchesBrand && matchesTaxRate;
+    return matchesSearch && matchesCategory && matchesWarehouse && matchesLinkedScope && matchesType && matchesStock && matchesStatus && matchesAvailability && matchesUnit && matchesClass && matchesBrand && matchesTaxRate;
   };
   const matchesSummaryProductFilters = (p: any) => {
     const normalizedSearch = searchTerm.trim().toLowerCase();
@@ -2051,9 +2047,10 @@ export function ProductosView({ products, summaryProducts, summaryProductsLoaded
       || (availabilityFilter === 'available' && p.isActive !== false)
       || (availabilityFilter === 'unavailable' && p.isActive === false);
     const matchesUnit = !effectiveUnitFilter || (p.unit || p.details?.unit || '') === effectiveUnitFilter;
+    const matchesClass = !effectiveClassFilter || (p.productClass || p.details?.productClass || '') === effectiveClassFilter;
     const matchesBrand = !normalizedBrandFilter || productBrand.toLowerCase() === normalizedBrandFilter;
     const matchesTaxRate = !effectiveTaxRateFilter || String(p.taxRate ?? '') === effectiveTaxRateFilter;
-    return matchesSearch && matchesCategory && matchesWarehouse && matchesLinkedScope && matchesType && matchesStatus && matchesAvailability && matchesUnit && matchesBrand && matchesTaxRate;
+    return matchesSearch && matchesCategory && matchesWarehouse && matchesLinkedScope && matchesType && matchesStatus && matchesAvailability && matchesUnit && matchesClass && matchesBrand && matchesTaxRate;
   };
   const filteredProducts = products
     .filter(matchesProductFilters)
@@ -2869,16 +2866,7 @@ export function ProductosView({ products, summaryProducts, summaryProductsLoaded
               <SelectValue placeholder="Unidad" />
             </SelectTrigger>
             <SelectContent>
-              <SelectItem value="unidad">Unidad</SelectItem>
-              <SelectItem value="kilo">Kilo</SelectItem>
-              <SelectItem value="libra">Libra</SelectItem>
-              <SelectItem value="docena">Docena</SelectItem>
-              <SelectItem value="caja">Caja</SelectItem>
-              <SelectItem value="litro">Litro</SelectItem>
-              <SelectItem value="metro">Metro</SelectItem>
-              <SelectItem value="par">Par</SelectItem>
-              <SelectItem value="rollo">Rollo</SelectItem>
-              <SelectItem value="pieza">Pieza</SelectItem>
+              <MeasureUnitItems units={catalogOptions.units} current={product.unit} />
             </SelectContent>
           </Select>
         </TableCell>}
@@ -4337,10 +4325,27 @@ export function ProductosView({ products, summaryProducts, summaryProductsLoaded
               <SelectTrigger className="erp-filter-select h-10 min-w-[7.5rem] rounded-xl border border-border/50 bg-background/50 px-3 text-xs font-bold uppercase tracking-widest outline-none focus:border-primary" aria-label="Filtrar productos por unidad"><SelectValue /></SelectTrigger>
               <SelectContent align="end">
                 <SelectItem value="__all__">Unidad</SelectItem>
-                {UNIT_OPTIONS.map((opt) => (<SelectItem key={opt.value} value={opt.value}>{opt.label}</SelectItem>))}
+                {visibleUnitsFor(catalogOptions.units, effectiveUnitFilter).map((opt) => (<SelectItem key={opt.value} value={opt.value}>{opt.label}</SelectItem>))}
               </SelectContent>
             </Select>
           )}
+
+          {!isServiceView && catalogOptions.classes.length > 0 && (
+            <Select value={effectiveClassFilter || '__all__'} onValueChange={(value) => setLocalClassFilter(value === '__all__' ? '' : value)}>
+              <SelectTrigger className="erp-filter-select h-10 min-w-[8.5rem] rounded-xl border border-border/50 bg-background/50 px-3 text-xs font-bold uppercase tracking-widest outline-none focus:border-primary" aria-label="Filtrar productos por clasificación"><SelectValue /></SelectTrigger>
+              <SelectContent align="end">
+                <SelectItem value="__all__">Clasificación</SelectItem>
+                {catalogOptions.classes.filter((opt) => !opt.hidden || opt.value === effectiveClassFilter).map((opt) => (<SelectItem key={opt.value} value={opt.value}>{opt.label}</SelectItem>))}
+              </SelectContent>
+            </Select>
+          )}
+
+          {!isServiceView && canEditCatalogOptions && (
+            <Button type="button" size="sm" variant="outline" className="h-10 shrink-0 rounded-xl px-3 text-[10px] font-black uppercase tracking-widest" onClick={() => setCatalogOptionsOpen(true)} title="Editar, ocultar o agregar unidades de medida y clasificaciones">
+              <Tags className="mr-2 size-4" /> Unidades y clasificación
+            </Button>
+          )}
+          <CatalogOptionsDialog open={catalogOptionsOpen} onOpenChange={setCatalogOptionsOpen} />
 
           {!isServiceView && (
             <Select value={effectiveTaxRateFilter || '__all__'} onValueChange={(value) => { const v = value === '__all__' ? '' : value; setLocalTaxRateFilter(v); onTaxRateChange?.(v); }}>

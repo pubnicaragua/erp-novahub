@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react';
+import { MeasureUnitItems, ProductClassFields, useProductCatalogOptions } from './ProductCatalogOptions';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '../ui/dialog';
 import { Button } from '../ui/button';
 import { Input } from '../ui/input';
@@ -26,6 +27,7 @@ interface EditProductModalProps {
 
 export function EditProductModal({ product, categories, itemType = 'PRODUCT', baseCurrency, exchangeRate, onClose, onRefresh }: EditProductModalProps) {
   const { canPerform } = useAuth();
+  const catalogOptions = useProductCatalogOptions();
   const [draft, setDraft] = useState<any>(null);
   const [isSaving, setIsSaving] = useState(false);
   const [catalogAttributes, setCatalogAttributes] = useState<any[]>([]);
@@ -72,6 +74,8 @@ export function EditProductModal({ product, categories, itemType = 'PRODUCT', ba
           priceCurrency: String(product.priceCurrency || tenantBaseCurrency).toUpperCase(),
           isActive: product.isActive !== false,
           unit: product.unit || 'unidad',
+          productClass: product.productClass || product.details?.productClass || '',
+          presentation: product.presentation || product.details?.presentation || '',
           imageUrl: product.imageUrl,
           imageStorageUri: product.imageUrlStorageUri || (String(product.imageUrl || '').startsWith('storage://') ? product.imageUrl : undefined),
           imageFile: null,
@@ -276,6 +280,7 @@ export function EditProductModal({ product, categories, itemType = 'PRODUCT', ba
         isVariable: Boolean(draft.isVariable),
         ...(draft.isActive !== (product.isActive !== false) ? { isActive: draft.isActive !== false } : {}),
         unit: draft.unit,
+        ...(!isService ? { productClass: draft.productClass || '', presentation: draft.productClass ? (draft.presentation || '') : '' } : {}),
         ...(!isService ? { brand: draft.brand || '' } : {}),
         trackBatch: Boolean(draft.trackBatch),
         imageUrl: nextImageUrl,
@@ -474,19 +479,21 @@ export function EditProductModal({ product, categories, itemType = 'PRODUCT', ba
                   <Select value={draft.unit || 'unidad'} onValueChange={v => handleUpdate('unit', v)} disabled={isSaving}>
                     <SelectTrigger className="h-8 text-xs mt-1"><SelectValue placeholder="Unidad" /></SelectTrigger>
                     <SelectContent>
-                      <SelectItem value="unidad">Unidad</SelectItem>
-                      <SelectItem value="kilo">Kilo</SelectItem>
-                      <SelectItem value="libra">Libra</SelectItem>
-                      <SelectItem value="docena">Docena</SelectItem>
-                      <SelectItem value="caja">Caja</SelectItem>
-                      <SelectItem value="litro">Litro</SelectItem>
-                      <SelectItem value="metro">Metro</SelectItem>
-                      <SelectItem value="par">Par</SelectItem>
-                      <SelectItem value="rollo">Rollo</SelectItem>
-                      <SelectItem value="pieza">Pieza</SelectItem>
+                      <MeasureUnitItems units={catalogOptions.units} current={draft.unit} />
                     </SelectContent>
                   </Select>
                 </div>
+              )}
+
+              {!isService && (
+                <ProductClassFields
+                  classes={catalogOptions.classes}
+                  productClass={draft.productClass}
+                  presentation={draft.presentation}
+                  disabled={isSaving}
+                  compact
+                  onChange={(next) => setDraft((prev: any) => ({ ...prev, ...next }))}
+                />
               )}
 
               {!isService && <div className="col-span-1">
