@@ -1,7 +1,7 @@
 import { Fragment, useMemo, useState } from 'react';
 import { useQueryClient } from '@tanstack/react-query';
 import {
-  Landmark, Calendar, ChevronDown, ChevronLeft, ChevronRight, Banknote, AlertTriangle, Loader2, Network
+  Landmark, Calendar, ChevronDown, ChevronLeft, ChevronRight, Banknote, AlertTriangle, Loader2, Network, ArrowDownToLine
 } from 'lucide-react';
 import { Card, CardContent } from '../ui/card';
 import { Button } from '../ui/button';
@@ -17,6 +17,7 @@ import { api } from '../../services/api';
 import { toast } from '@/app/services/toast';
 import { accountingList, useAccountingQuery } from '../../hooks/useAccountingQuery';
 import { ViewConnectionsDialog, type ViewConnection } from './ViewConnectionsDialog';
+import { CashDepositDialog } from './CashDepositDialog';
 import { useAuth } from '../../contexts/AuthContext';
 import { todayIso } from '../../utils/dateFormat';
 import { getCurrencyDecimalPlaces } from '../../utils/currency';
@@ -87,7 +88,7 @@ const formatAmount = (value: any, currency?: string) => {
 };
 
 export function LibroBancosView({ onGoToSection }: { onGoToSection?: (sectionId: string) => void }) {
-  const { user } = useAuth();
+  const { user, canPerform } = useAuth();
   const timeZone = user?.clientTenant?.timeZone || 'America/Managua';
   const today = todayIso(timeZone);
   const currentMonth = today.slice(0, 7);
@@ -98,6 +99,8 @@ export function LibroBancosView({ onGoToSection }: { onGoToSection?: (sectionId:
   const [viewYear, setViewYear] = useState(() => Number(currentMonth.split('-')[0]));
   const [expandedDays, setExpandedDays] = useState<Set<string>>(new Set());
   const [connectionsOpen, setConnectionsOpen] = useState(false);
+  const [depositOpen, setDepositOpen] = useState(false);
+  const canDeposit = canPerform('ACCOUNTING_JOURNAL', 'create');
 
   const handleMonthOpenChange = (open: boolean) => {
     setMonthOpen(open);
@@ -228,6 +231,16 @@ export function LibroBancosView({ onGoToSection }: { onGoToSection?: (sectionId:
           >
             Actualizar
           </Button>
+          {canDeposit && (
+            <Button
+              variant="outline"
+              onClick={() => setDepositOpen(true)}
+              data-testid="accounting-open-cash-deposit"
+              className="col-span-2 h-10 w-full whitespace-nowrap gap-1.5 rounded-xl border-border/50 text-[10px] font-black uppercase tracking-widest sm:col-span-1 sm:w-auto sm:shrink-0"
+            >
+              <ArrowDownToLine className="size-4" /> Depositar efectivo
+            </Button>
+          )}
           <Button
             variant="outline"
             onClick={() => setConnectionsOpen(true)}
@@ -237,6 +250,13 @@ export function LibroBancosView({ onGoToSection }: { onGoToSection?: (sectionId:
           </Button>
         </div>
       </div>
+
+      <CashDepositDialog
+        open={depositOpen}
+        suggestedBankId={bankAccountId || undefined}
+        onClose={() => setDepositOpen(false)}
+        onDone={() => { setDepositOpen(false); void queryClient.invalidateQueries({ queryKey: ['accounting'] }); }}
+      />
 
       <ViewConnectionsDialog
         open={connectionsOpen}

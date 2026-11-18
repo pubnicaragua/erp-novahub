@@ -25,7 +25,15 @@ export type CostCenterReport = {
   totalIngresos: number; totalGastos: number; resultado: number
 }
 
+export interface CashDepositContext {
+  baseCurrency: string;
+  sourceAccount: { id: string; code: string; name: string; balance: number } | null;
+  banks: Array<{ id: string; label: string; bankName: string; accountNumber: string; currency: string; accountId: string | null; depositable: boolean }>;
+}
+
 export const contabilidadService = {
+  getCashDepositContext: (signal?: AbortSignal) => api.get<CashDepositContext>('/accounting/cash-deposits/context', { signal }),
+  depositCashToBank: (data: { bankAccountId: string; amount: number; date?: string; reference?: string; sourceAccountId?: string; requestId?: string }) => api.post<any>('/accounting/cash-deposits', data),
   // Centros de costo (por área): dimensión aparte del plan de cuentas
   getCostCenters: (signal?: AbortSignal) => api.get<CostCenter[]>('/accounting/cost-centers', { signal }),
   createCostCenter: (data: { code: string; name: string; type?: string }) => api.post<CostCenter>('/accounting/cost-centers', data),
