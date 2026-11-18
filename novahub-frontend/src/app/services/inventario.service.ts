@@ -333,4 +333,14 @@ export const inventoryService = {
   // ==================== PÉRDIDAS ====================
   getLosses: (filters?: ApiFilters & { dateFrom?: string; dateTo?: string }, signal?: AbortSignal) =>
     api.get<PaginatedResponse<any>>('/inventory/losses', { params: filters as any, signal }),
+
+  // ==================== FALTANTES DE ENTREGA ====================
+  getShortfalls: (filters?: Record<string, any>, signal?: AbortSignal) =>
+    api.get<PaginatedResponse<any>>('/inventory/losses/shortfalls', { params: filters as any, signal }),
+  getShortfallReport: (filters?: Record<string, any>, signal?: AbortSignal) =>
+    api.get<any>('/inventory/losses/shortfalls/report', { params: filters as any, signal }),
+  getShortfallInvoiceContext: (invoiceId: string, productId?: string, signal?: AbortSignal) =>
+    api.get<any>(`/inventory/losses/shortfalls/invoice-context/${invoiceId}`, { params: productId ? { productId } : undefined, signal }),
+  createShortfall: (data: Record<string, any>) => api.post<any>('/inventory/losses/shortfalls', data),
+  cancelShortfall: (id: string, reason: string) => api.post<any>(`/inventory/losses/shortfalls/${id}/cancel`, { reason }),
 };

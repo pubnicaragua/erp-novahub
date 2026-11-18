@@ -81,6 +81,8 @@ type ModuleField = {
   defaultCode: string
   defaultName: string
   defaultType: 'ASSET' | 'LIABILITY' | 'EQUITY' | 'INCOME' | 'EXPENSE'
+  /** Acepta cualquier tipo de cuenta (el contador decide). */
+  anyType?: boolean
 }
 
 type AccountSuggestion = { accountId: string; code: string; name: string; score: number; reason: string; autoSelect?: boolean; confidence?: 'CLEAR' | 'AMBIGUOUS' | 'POSSIBLE' }
@@ -208,6 +210,17 @@ const BUILTIN_MODULES: { id: string; label: string; icon: typeof FileText; descr
       { key: 'shortage', label: 'Faltantes', side: 'debit', description: 'Resultado por faltante de inventario', defaultCode: '5320', defaultName: 'Faltantes de Inventario', defaultType: 'EXPENSE' },
       { key: 'loss', label: 'Pérdidas', side: 'debit', description: 'Resultado por pérdida de inventario', defaultCode: '5300', defaultName: 'Pérdida de Inventario', defaultType: 'EXPENSE' },
       { key: 'deterioration', label: 'Deterioro', side: 'debit', description: 'Resultado por deterioro de inventario', defaultCode: '5330', defaultName: 'Deterioro de Inventario', defaultType: 'EXPENSE' },
+    ],
+  },
+  {
+    id: 'inventoryShortfall', label: 'Faltantes de entrega', icon: BarChart3,
+    description: 'Faltante ligado a producto, factura, cliente y conductor → según el tratamiento: cobro al conductor, descuento sobre ventas o consumo. Sin cuentas por defecto: elige las de tu empresa.',
+    fields: [
+      { key: 'driverReceivable', label: 'Cuentas por cobrar empleados', side: 'debit', description: 'Se debita cuando el faltante lo paga el conductor', defaultCode: '', defaultName: 'Cuentas por cobrar empleados', defaultType: 'ASSET', anyType: true },
+      { key: 'salesDiscount', label: 'Descuentos sobre ventas', side: 'debit', description: 'Se debita cuando la empresa asume el faltante y se acredita al cliente', defaultCode: '', defaultName: 'Descuentos sobre ventas', defaultType: 'INCOME', anyType: true },
+      { key: 'inventoryLoss', label: 'Pérdidas de inventario', side: 'debit', description: 'Se debita cuando el faltante se trata como consumo', defaultCode: '', defaultName: 'Pérdidas de inventario', defaultType: 'EXPENSE', anyType: true },
+      { key: 'customerReceivable', label: 'Cuentas por cobrar clientes', side: 'credit', description: 'Se acredita al dar crédito al cliente por el faltante (cobro al conductor o descuento)', defaultCode: '', defaultName: 'Cuentas por cobrar clientes', defaultType: 'ASSET', anyType: true },
+      { key: 'consumptionOffset', label: 'Contrapartida de consumo', side: 'credit', description: 'Se acredita en el tratamiento de consumo (inventario o costo de ventas)', defaultCode: '', defaultName: 'Contrapartida de consumo', defaultType: 'ASSET', anyType: true },
     ],
   },
   {
@@ -357,7 +370,7 @@ const ACCOUNTING_MODULE_GROUPS = [
     label: 'Cuentas contables de Inventario y operaciones',
     description: 'Inventario, costos de proyectos, ajustes, cierre de caja y diferencias cambiarias.',
     icon: Link2,
-    moduleIds: ['projects', 'inventory', 'inventoryAdjustment', 'cashRegister', 'currencyRevaluation', 'openingBalance'],
+    moduleIds: ['projects', 'inventory', 'inventoryAdjustment', 'inventoryShortfall', 'cashRegister', 'currencyRevaluation', 'openingBalance'],
   },
   {
     id: 'other',
@@ -458,7 +471,7 @@ function getAccountOptionStateForType(
 }
 
 function getAccountOptionState(account: AccountInfo, field: ModuleField, moduleId?: string, anyType = allowAnyAccountType) {
-  const state = getAccountOptionStateForType(account, field.defaultType, isBankParentMapping(moduleId, field.key), anyType)
+  const state = getAccountOptionStateForType(account, field.defaultType, isBankParentMapping(moduleId, field.key), anyType || Boolean(field.anyType))
   if (!state.disabled && field.key === 'ivaPayable' && !isSalesVatPayableAccount(account)) {
     return { disabled: true, label: 'No corresponde a IVA por pagar', className: 'text-red-500' }
   }
@@ -523,7 +536,7 @@ function AccountCodeInput({ code, field, moduleId, account, accountOptions, sugg
   const anyAccountType = useAllowAnyAccountType()
   const accountState = account ? getAccountOptionState(account, field, moduleId) : null
   const accountUnavailable = Boolean(accountState?.disabled)
-  const accountTypeMismatch = Boolean(account && String(account.type).toUpperCase() !== field.defaultType)
+  const accountTypeMismatch = Boolean(account && !field.anyType && String(account.type).toUpperCase() !== field.defaultType)
   const accountIsGroup = account ? isGroupingAccount(account) : false
   const effectiveAccountOptions = useMemo(() => accountOptions.map(accountOption => {
     const optionState = getAccountOptionState(accountOption, field, moduleId, anyAccountType)
@@ -684,7 +697,7 @@ function AccountMappingOptionsEditor({ codes, field, moduleId, accountsByCode, a
           <span className="min-w-0 truncate text-[11px] font-bold">{field.label}</span>
         </div>
         <span className="shrink-0 rounded-md border border-border/40 px-1.5 py-0.5 text-[9px] font-bold text-muted-foreground">
-          Espera: {accountTypeLabel(field.defaultType)}
+          {field.anyType ? 'Cualquier tipo de cuenta' : `Espera: ${accountTypeLabel(field.defaultType)}`}
         </span>
       </div>
       <div className="flex min-w-0 flex-wrap gap-x-2 gap-y-0.5 text-[9px] text-muted-foreground">
@@ -1405,12 +1418,12 @@ const [mappingsSearch, setMappingsSearch] = useState('')
 
   const accountsByCode = useMemo(() => new Map(allAccounts.map(account => [account.code, account])), [allAccounts])
   const accountOptionsByType = useMemo(() => {
-    const expectedTypes = new Set(allModuleDefs.flatMap(module => module.fields.map(field => field.defaultType)))
+    const expectedTypes = new Set<string>(allModuleDefs.flatMap(module => module.fields.map(field => field.anyType ? 'ANY' : field.defaultType)))
     return Object.fromEntries(Array.from(expectedTypes).map(expectedType => [
       expectedType,
       allAccounts
         .map(account => {
-          const optionState = getAccountOptionStateForType(account, expectedType)
+          const optionState = getAccountOptionStateForType(account, (expectedType === 'ANY' ? 'ASSET' : expectedType) as ModuleField['defaultType'], false, expectedType === 'ANY' ? true : undefined)
           return { ...account, disabled: optionState.disabled, optionState }
         })
         .sort((left, right) => Number(left.disabled) - Number(right.disabled) || left.code.localeCompare(right.code)),
@@ -1517,7 +1530,7 @@ const [mappingsSearch, setMappingsSearch] = useState('')
                 field={field}
                 moduleId={mod.id}
                 accountsByCode={accountsByCode}
-                accountOptions={accountOptionsByType[field.defaultType] || []}
+                accountOptions={accountOptionsByType[field.anyType ? 'ANY' : field.defaultType] || []}
                 suggestions={suggestionsForField(mod.id, field.key)}
                 configuredValid={suggestionDetailsForField(mod.id, field.key)?.configuredValid}
                 configuredReason={suggestionDetailsForField(mod.id, field.key)?.configuredReason}
@@ -1638,7 +1651,7 @@ const [mappingsSearch, setMappingsSearch] = useState('')
                 field={field}
                 moduleId={module.id}
                 accountsByCode={accountsByCode}
-                accountOptions={accountOptionsByType[field.defaultType] || []}
+                accountOptions={accountOptionsByType[field.anyType ? 'ANY' : field.defaultType] || []}
                 suggestions={suggestionsForField(module.id, field.key)}
                 configuredValid={suggestionDetailsForField(module.id, field.key)?.configuredValid}
                 configuredReason={suggestionDetailsForField(module.id, field.key)?.configuredReason}
@@ -1678,7 +1691,7 @@ const [mappingsSearch, setMappingsSearch] = useState('')
                 field={field}
                 moduleId={mod.id}
                 accountsByCode={accountsByCode}
-                accountOptions={accountOptionsByType[field.defaultType] || []}
+                accountOptions={accountOptionsByType[field.anyType ? 'ANY' : field.defaultType] || []}
                 suggestions={suggestionsForField(mod.id, field.key)}
                 configuredValid={suggestionDetailsForField(mod.id, field.key)?.configuredValid}
                 configuredReason={suggestionDetailsForField(mod.id, field.key)?.configuredReason}

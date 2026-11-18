@@ -13,6 +13,7 @@ import { useCurrency } from '../../contexts/CurrencyContext';
 import { normalizeCurrency, summarizeAmountsByCurrency, type SupportedCurrency } from '../../utils/currency';
 import { InventoryViewTutorial } from './InventoryViewTutorial';
 import { InventoryLossDetailSheet } from './InventoryLossDetailSheet';
+import { InventoryShortfallsPanel } from './InventoryShortfallsPanel';
 
 const REASON_LABELS: Record<string, string> = {
   DISCREPANCY: 'Discrepancia',
@@ -345,6 +346,7 @@ export function InventoryLossesView({ warehouses, warehouseId, active = true }: 
           <Button variant="outline" size="sm" className="h-8 w-full" disabled={page >= meta.totalPages} onClick={() => setPage((p) => p + 1)}>Siguiente</Button>
         </div>
       </div>
+      <InventoryShortfallsPanel active={active} />
       <InventoryLossDetailSheet row={detail} canViewInventoryCost={canViewInventoryCost} formatCurrentAmount={formatCurrentAmount} onClose={() => setDetail(null)} />
     </div>
   );
