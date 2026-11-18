@@ -83,6 +83,7 @@ export function FuerzaComercialPage({ activeSubModule, onSubModuleChange, isSide
   const pendingRouteTargetRef = useRef<string | null>(null);
   const pendingPortfolioLocationRef = useRef<PortfolioLocationRequest | null>(null);
   const portfolioLocationRequestSequenceRef = useRef(0);
+  const portfolioLocationSaveInFlightRef = useRef(false);
   const pendingPortfolioRouteRef = useRef<{ portfolioName: string; assignedToId: string | null; prospectIds: string[] } | null>(null);
   const streamStatusRef = useRef<'connected' | 'reconnecting'>('reconnecting');
   const searchQueryRef = useRef('');
@@ -241,6 +242,12 @@ export function FuerzaComercialPage({ activeSubModule, onSubModuleChange, isSide
         portfolioId: pendingLocation.portfolioId,
         customerId: pendingLocation.customerId,
         customerName: pendingLocation.customerName,
+        customerAddress: pendingLocation.customerAddress,
+        customerPhone: pendingLocation.customerPhone,
+        pointName: pendingLocation.initialPoint?.name || pendingLocation.customerName,
+        pointAddress: pendingLocation.initialPoint?.address || pendingLocation.customerAddress,
+        pointPhone: pendingLocation.initialPoint?.phone || pendingLocation.customerPhone,
+        pointCategory: pendingLocation.initialPoint?.category || 'Cliente',
         locationMode: pendingLocation.locationMode,
       });
       const pendingPortfolioRoute = pendingPortfolioRouteRef.current;
@@ -250,6 +257,57 @@ export function FuerzaComercialPage({ activeSubModule, onSubModuleChange, isSide
       }
     },
   });
+
+  const savePortfolioLocation = useCallback(async (
+    location: PortfolioLocationDraft,
+    pointDetails: PortfolioPointDetails,
+    showFormOnFailure = false,
+  ) => {
+    const target = pendingPortfolioLocationRef.current;
+    if (!target || portfolioLocationSaveInFlightRef.current) return;
+    const details = {
+      name: pointDetails.name.trim(),
+      address: pointDetails.address.trim(),
+      phone: pointDetails.phone.trim(),
+      category: pointDetails.category.trim(),
+    };
+    if (!details.name) {
+      toast.error('Escribe el nombre del punto antes de guardarlo.');
+      setPortfolioPointDetails(details);
+      setPortfolioLocationDraft(location);
+      return;
+    }
+    const requestId = target.requestId;
+    portfolioLocationSaveInFlightRef.current = true;
+    setSavingPortfolioLocation(true);
+    try {
+      const result = await forceSalesPortfoliosService.saveLocation(
+        target.portfolioId,
+        target.customerId,
+        { lat: location.lat, lng: location.lng, source: location.source },
+        details,
+      );
+      const isCurrentRequest = pendingPortfolioLocationRef.current?.requestId === requestId;
+      sendToMap('force-sales-refresh');
+      if (isCurrentRequest) {
+        pendingPortfolioLocationRef.current = null;
+        setPortfolioLocationDraft(null);
+        setPortfolioLocationTarget(null);
+        sendToMap('force-sales-finish-portfolio-location');
+        sendToMap('force-sales-focus-prospect', { targetId: result.id });
+      }
+      toast.success(`Punto guardado y vinculado a ${target.customerName}. No se registró una visita.`);
+    } catch (error: unknown) {
+      toast.error(forceSalesErrorMessage(error, 'No se pudo guardar la ubicación.'));
+      if (showFormOnFailure && pendingPortfolioLocationRef.current?.requestId === requestId) {
+        setPortfolioPointDetails(details);
+        setPortfolioLocationDraft(location);
+      }
+    } finally {
+      portfolioLocationSaveInFlightRef.current = false;
+      setSavingPortfolioLocation(false);
+    }
+  }, [sendToMap]);
 
   useEffect(() => {
     const onMapMessage = (event: MessageEvent) => {
@@ -267,6 +325,10 @@ export function FuerzaComercialPage({ activeSubModule, onSubModuleChange, isSide
         if (String(event.data.requestId || '') !== String(pendingLocation.requestId || '')
           || String(event.data.portfolioId || '') !== pendingLocation.portfolioId
           || String(event.data.customerId || '') !== pendingLocation.customerId) return;
+        if (portfolioLocationSaveInFlightRef.current) {
+          toast.error('Espera a que termine el guardado antes de elegir otra ubicación.');
+          return;
+        }
         const lat = Number(event.data.lat);
         const lng = Number(event.data.lng);
         if (!Number.isFinite(lat) || !Number.isFinite(lng)) {
@@ -274,12 +336,23 @@ export function FuerzaComercialPage({ activeSubModule, onSubModuleChange, isSide
           return;
         }
         const accuracy = Number(event.data.accuracy);
-        setPortfolioLocationDraft({
+        const location: PortfolioLocationDraft = {
           lat,
           lng,
           source: event.data.locationSource === 'gps' ? 'gps' : 'map',
           ...(Number.isFinite(accuracy) && accuracy > 0 ? { accuracy } : {}),
-        });
+        };
+        if (location.source === 'gps') {
+          const details = pendingLocation.initialPoint || {
+            name: pendingLocation.customerName,
+            address: pendingLocation.customerAddress,
+            phone: pendingLocation.customerPhone,
+            category: 'Cliente',
+          };
+          void savePortfolioLocation(location, details, true);
+        } else {
+          setPortfolioLocationDraft(location);
+        }
       }
       if (event.data?.type === 'force-sales-open-payment') {
         const recordId = String(event.data.recordId || '').trim();
@@ -322,7 +395,7 @@ export function FuerzaComercialPage({ activeSubModule, onSubModuleChange, isSide
     };
     window.addEventListener('message', onMapMessage);
     return () => window.removeEventListener('message', onMapMessage);
-  }, [canLinkCustomer, canPerform, sendToMap]);
+  }, [canLinkCustomer, canPerform, savePortfolioLocation, sendToMap]);
 
   useEffect(() => {
     if (activeSubModule === 'fuerza-comercial') return;
@@ -349,6 +422,10 @@ export function FuerzaComercialPage({ activeSubModule, onSubModuleChange, isSide
   };
 
   const startPortfolioLocation = (request: PortfolioLocationRequest) => {
+    if (portfolioLocationSaveInFlightRef.current) {
+      toast.error('Espera a que termine el guardado actual antes de iniciar otra ubicación.');
+      return false;
+    }
     const activeRequest = { ...request, requestId: String(++portfolioLocationRequestSequenceRef.current) };
     pendingPortfolioLocationRef.current = activeRequest;
     setPortfolioLocationTarget(activeRequest);
@@ -360,6 +437,7 @@ export function FuerzaComercialPage({ activeSubModule, onSubModuleChange, isSide
       category: activeRequest.initialPoint?.category || 'Cliente',
     });
     onSubModuleChange?.('fuerza-comercial');
+    return true;
   };
 
   const cancelPortfolioLocation = () => {
@@ -371,38 +449,9 @@ export function FuerzaComercialPage({ activeSubModule, onSubModuleChange, isSide
   };
 
   const saveConfirmedPortfolioLocation = async () => {
-    const target = pendingPortfolioLocationRef.current;
     const location = portfolioLocationDraft;
-    const details = {
-      name: portfolioPointDetails.name.trim(),
-      address: portfolioPointDetails.address.trim(),
-      phone: portfolioPointDetails.phone.trim(),
-      category: portfolioPointDetails.category.trim(),
-    };
-    if (!target || !location) return;
-    if (!details.name) {
-      toast.error('Escribe el nombre del punto antes de guardarlo.');
-      return;
-    }
-    setSavingPortfolioLocation(true);
-    try {
-      const result = await forceSalesPortfoliosService.saveLocation(
-        target.portfolioId,
-        target.customerId,
-        { lat: location.lat, lng: location.lng, source: location.source },
-        details,
-      );
-      pendingPortfolioLocationRef.current = null;
-      setPortfolioLocationDraft(null);
-      setPortfolioLocationTarget(null);
-      sendToMap('force-sales-finish-portfolio-location');
-      sendToMap('force-sales-focus-prospect', { targetId: result.id });
-      toast.success(`Punto guardado y vinculado a ${target.customerName}. No se registró una visita.`);
-    } catch (error: unknown) {
-      toast.error(forceSalesErrorMessage(error, 'No se pudo guardar la ubicación.'));
-    } finally {
-      setSavingPortfolioLocation(false);
-    }
+    if (!location) return;
+    await savePortfolioLocation(location, portfolioPointDetails, true);
   };
 
   if (!isAuthorizedUser) {
@@ -504,8 +553,8 @@ export function FuerzaComercialPage({ activeSubModule, onSubModuleChange, isSide
         )}
         {!mapConfig && <div className="flex h-full items-center justify-center text-sm font-semibold text-[#123f35]">Cargando configuración de mapas…</div>}
       </div>
-      <Dialog open={Boolean(portfolioLocationDraft)} onOpenChange={(open) => { if (!open && !savingPortfolioLocation) cancelPortfolioLocation(); }}>
-        <DialogContent className="w-[calc(100%-1rem)] max-w-xl gap-4 p-4 sm:p-6">
+      <Dialog open={Boolean(portfolioLocationDraft && (portfolioLocationDraft.source === 'map' || !savingPortfolioLocation))} onOpenChange={(open) => { if (!open && !savingPortfolioLocation) cancelPortfolioLocation(); }}>
+        <DialogContent className="max-h-[calc(100dvh-1rem)] w-[calc(100%-1rem)] max-w-xl gap-4 overflow-y-auto p-4 sm:p-6">
           <DialogHeader className="pr-8 text-left">
             <DialogTitle className="nh-section-title flex items-center gap-2"><MapPin className="size-5" />Confirmar ubicación del cliente</DialogTitle>
             <DialogDescription>

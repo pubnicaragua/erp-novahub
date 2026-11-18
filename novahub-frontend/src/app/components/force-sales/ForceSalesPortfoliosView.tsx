@@ -145,7 +145,7 @@ export function ForceSalesPortfoliosView({
   canLocate: boolean;
   canCreateRoute: boolean;
   onBuildRoute: (request: { portfolioName: string; assignedToId: string | null; prospectIds: string[] }) => void;
-  onPickLocation: (request: PortfolioLocationRequest) => void;
+  onPickLocation: (request: PortfolioLocationRequest) => boolean | void;
   isSidebarCollapsed?: boolean;
 }) {
   const [portfolios, setPortfolios] = useState<ForceSalesPortfolio[]>([]);
@@ -492,7 +492,7 @@ export function ForceSalesPortfoliosView({
 
   const startLocationPick = (locationMode: PortfolioLocationRequest['locationMode']) => {
     if (!locating) return;
-    onPickLocation({ ...locating, locationMode });
+    if (onPickLocation({ ...locating, locationMode }) === false) return;
     setLocating(null);
   };
 
@@ -716,8 +716,8 @@ export function ForceSalesPortfoliosView({
       </Dialog>
 
       <Dialog open={Boolean(locating)} onOpenChange={(open) => { if (!open) { setPointPickerOpen(false); setPointSearch(''); setLocating(null); } }}>
-        <DialogContent className="max-w-lg">
-          <DialogHeader><DialogTitle className="nh-section-title flex items-center gap-2"><LocateFixed className="size-5" />Ubicar cliente en el mapa</DialogTitle><DialogDescription>{locating?.customerName}. Revisa el lugar en el mapa y confirma los datos del punto antes de guardarlo. Quedará vinculado a este cliente y no registrará una visita.</DialogDescription></DialogHeader>
+        <DialogContent className="max-h-[calc(100dvh-1rem)] w-[calc(100%-1rem)] max-w-lg overflow-y-auto p-4 sm:p-6">
+          <DialogHeader><DialogTitle className="nh-section-title flex items-center gap-2"><LocateFixed className="size-5" />Ubicar cliente en el mapa</DialogTitle><DialogDescription>{locating?.customerName}. GPS guarda y vincula el punto en tu ubicación con los datos de este cliente. Si prefieres marcarlo, el mapa te centra aquí sin colocar un pin; toca el lugar y confirma los datos para vincularlo. Ninguna opción registra una visita.</DialogDescription></DialogHeader>
           <div className="grid gap-2 sm:grid-cols-2"><Button variant="outline" onClick={() => startLocationPick('gps')}><LocateFixed className="mr-2 size-4" />Ubicación GPS actual</Button><Button variant="outline" onClick={() => startLocationPick('map')}><MapPin className="mr-2 size-4" />Crear punto y ubicar</Button></div>
           <div className="space-y-2 rounded-xl border border-border p-3">
             <p className="text-sm font-bold text-foreground">Vincular punto existente</p>

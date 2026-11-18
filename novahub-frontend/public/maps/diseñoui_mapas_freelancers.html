@@ -3428,20 +3428,25 @@ document.addEventListener('click',event=>{
 function updateCustomerLookupAvailability(){document.querySelectorAll('[data-customer-link-panel]').forEach(setCustomerLookupAvailability)}
 window.addEventListener('online',updateCustomerLookupAvailability);
 window.addEventListener('offline',updateCustomerLookupAvailability);
-function showPortfolioLocationPreview(position){
+function showPortfolioLocationPreview(position,selection){
   const coordinates=window.NovaForceSalesLocation.normalizeCoordinates(position);
   if(!coordinates)return;
+  const pointName=String(selection?.pointName||selection?.customerName||'Ubicación por confirmar').trim();
   if(!portfolioLocationPreviewMarker){
     const content=document.createElement('div');
     content.setAttribute('role','img');
-    content.setAttribute('aria-label','Ubicación pendiente de confirmación');
+    content.setAttribute('aria-label',`${pointName}, ubicación pendiente de confirmación`);
     Object.assign(content.style,{width:'38px',height:'38px',display:'grid',placeItems:'center',border:'3px solid #fff',borderRadius:'50% 50% 50% 4px',transform:'rotate(-45deg)',background:'#246b52',color:'#fff',boxShadow:'0 4px 12px rgba(12,53,43,.34)',font:'900 17px/1 Arial,sans-serif',pointerEvents:'none'});
     const check=document.createElement('span');
     check.textContent='✓';
     Object.assign(check.style,{transform:'rotate(45deg)'});
     content.appendChild(check);
-    portfolioLocationPreviewMarker=createMapMarker({position:coordinates,title:'Ubicación por confirmar',content,zIndex:1600,clickable:false});
-  }else portfolioLocationPreviewMarker.setPosition(coordinates);
+    portfolioLocationPreviewMarker=createMapMarker({position:coordinates,title:pointName,content,zIndex:1600,clickable:false});
+  }else{
+    portfolioLocationPreviewMarker.setPosition(coordinates);
+    portfolioLocationPreviewMarker.title=pointName;
+    portfolioLocationPreviewMarker.content?.setAttribute('aria-label',`${pointName}, ubicación pendiente de confirmación`);
+  }
   setNovaMarkerMap(portfolioLocationPreviewMarker,googleMap);
 }
 function clearPortfolioLocationPreview(){
@@ -3451,7 +3456,7 @@ function clearPortfolioLocationPreview(){
 function publishPortfolioLocationPick(selection,position,locationSource,accuracy){
   const coordinates=window.NovaForceSalesLocation.normalizeCoordinates(position);
   if(!coordinates||!selection)return;
-  showPortfolioLocationPreview(coordinates);
+  showPortfolioLocationPreview(coordinates,selection);
   window.parent?.postMessage({
     source:'novahub-force-sales',
     type:'force-sales-portfolio-location-picked',
@@ -3475,7 +3480,13 @@ window.addEventListener('message',event=>{
     const requestId=String(event.data.requestId||'').trim();
     const locationMode=event.data.locationMode==='gps'?'gps':'map';
     if(!requestId)return;
-    pendingPortfolioLocationSelection={requestId,portfolioId,customerId,customerName,locationMode};
+    pendingPortfolioLocationSelection={
+      requestId,portfolioId,customerId,customerName,locationMode,
+      pointName:String(event.data.pointName||customerName).trim(),
+      pointAddress:String(event.data.pointAddress||event.data.customerAddress||'').trim(),
+      pointPhone:String(event.data.pointPhone||event.data.customerPhone||'').trim(),
+      pointCategory:String(event.data.pointCategory||'Cliente').trim(),
+    };
     const locationRequestId=++portfolioLocationRequestId;
     setActiveView('map');
     updateView();
