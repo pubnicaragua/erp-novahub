@@ -1089,6 +1089,7 @@ export function ConfiguracionContableView() {
   const [accountMappingsExpanded, setAccountMappingsExpanded] = useState(false)
 const [mappingsSearch, setMappingsSearch] = useState('')
   const [salesExpanded, setSalesExpanded] = useState(false)
+  const [collapsedSalesModules, setCollapsedSalesModules] = useState<Set<string>>(() => new Set())
   const [expandedGroups, setExpandedGroups] = useState<Set<string>>(new Set())
   const [activityExpanded, setActivityExpanded] = useState(false)
   const [openingCutoffDate, setOpeningCutoffDate] = useState(() => {
@@ -1271,6 +1272,14 @@ const [mappingsSearch, setMappingsSearch] = useState('')
 
   const toggleGroup = (id: string) => {
     setExpandedGroups(prev => {
+      const next = new Set(prev)
+      if (next.has(id)) next.delete(id); else next.add(id)
+      return next
+    })
+  }
+
+  const toggleSalesModule = (id: string) => {
+    setCollapsedSalesModules(prev => {
       const next = new Set(prev)
       if (next.has(id)) next.delete(id); else next.add(id)
       return next
@@ -1618,24 +1627,45 @@ const [mappingsSearch, setMappingsSearch] = useState('')
     const modMapping = accountMappings[mod.id] || {}
     const Icon = mod.icon
     const label = mod.id === 'payment' ? 'Cobros de facturas' : mod.label
+    const isExpanded = !collapsedSalesModules.has(mod.id)
+    const contentId = `sales-account-mapping-${mod.id}-content`
 
     return (
-      <Card key={mod.id} className="h-full min-w-0 overflow-hidden border-border/50 bg-card shadow-sm transition-colors hover:border-primary/30">
-        <CardHeader className="flex flex-col gap-3 border-b border-border/40 p-4 sm:flex-row sm:items-start sm:justify-between sm:p-5">
+      <Card key={mod.id} className="min-w-0 overflow-hidden border-border/50 bg-card shadow-sm transition-colors hover:border-primary/30">
+        <CardHeader className="border-b border-border/40 p-4 sm:p-5">
           <div className="flex min-w-0 items-start gap-3">
-            <span className="flex size-10 shrink-0 items-center justify-center rounded-xl border border-primary/15 bg-primary/10 text-primary">
+            <span className="flex size-10 shrink-0 items-center justify-center rounded-xl border border-primary/15 bg-primary/10 text-primary" aria-hidden="true">
               <Icon className="size-5" />
             </span>
-            <div className="min-w-0 space-y-1">
-              <CardTitle className="text-sm font-black uppercase tracking-tight text-foreground sm:text-base">{label}</CardTitle>
-              <p className="max-w-2xl text-xs leading-5 text-muted-foreground">{mod.description}</p>
+            <div className="min-w-0 flex-1 space-y-1">
+              <div className="flex min-w-0 flex-wrap items-center justify-between gap-2">
+                <CardTitle className="min-w-0 text-sm font-black uppercase tracking-tight text-foreground sm:text-base">{label}</CardTitle>
+                <div className="flex shrink-0 items-center gap-2">
+                  <ModuleStatusBadge status={modConfigStatus(mod)} />
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="icon"
+                    className="size-8 shrink-0"
+                    onClick={() => toggleSalesModule(mod.id)}
+                    aria-label={isExpanded ? `Contraer ${label}` : `Expandir ${label}`}
+                    aria-expanded={isExpanded}
+                    aria-controls={contentId}
+                  >
+                    {isExpanded ? <ChevronUp className="size-4" /> : <ChevronDown className="size-4" />}
+                  </Button>
+                </div>
+              </div>
+              <p className="max-w-4xl text-xs leading-5 text-muted-foreground">{mod.description}</p>
             </div>
           </div>
-          <div className="flex shrink-0 items-center gap-2 sm:pt-1">
-            <ModuleStatusBadge status={modConfigStatus(mod)} />
-          </div>
         </CardHeader>
-        <CardContent className="grid min-w-0 grid-cols-1 gap-3 p-4 sm:gap-4 sm:p-5 md:grid-cols-2">
+        <CardContent
+          id={contentId}
+          hidden={!isExpanded}
+          style={isExpanded ? undefined : { display: 'none' }}
+          className="grid min-w-0 grid-cols-1 gap-3 p-4 sm:gap-4 sm:p-5 md:grid-cols-2"
+        >
           {mod.fields.map(field => {
             return (
               <AccountMappingOptionsEditor
@@ -2034,7 +2064,7 @@ const [mappingsSearch, setMappingsSearch] = useState('')
             </div>
           </div>
         </CardHeader>
-        {salesExpanded && <CardContent id="ventas-cuentas-contables-content" className="grid min-w-0 grid-cols-1 gap-4 p-4 sm:p-5 xl:grid-cols-2">
+        {salesExpanded && <CardContent id="ventas-cuentas-contables-content" className="grid min-w-0 grid-cols-1 gap-4 p-4 sm:p-5">
           {orderedSalesModuleDefs.map(renderSalesModuleCard)}
         </CardContent>}
       </Card>
