@@ -215,6 +215,8 @@ export interface User {
   permissions: Permission[];
   platformPermissions: string[];
   enabledModules: string[];
+  /** Dashboard was granted explicitly by the assigned role, independently of tenant module scope. */
+  dashboardRoleAccess?: boolean;
   /** Audit se habilita únicamente para tenants cuyo giro corresponde a una firma auditora. */
   auditWorkspaceEnabled?: boolean;
   /** Políticas operativas heredadas del grupo, rubro y sucursal activa. */
@@ -717,6 +719,10 @@ const createUserObject = (apiPayload: any): User => {
       ? apiUser.platformPermissions.map((permission: unknown) => String(permission))
       : [],
     enabledModules: apiUser.enabledModules || [],
+    dashboardRoleAccess: serverPermissionsSnippet.some((permission: any) =>
+      String(permission?.module || permission?.id || '').trim().toUpperCase() === 'DASHBOARD'
+      && (permission.read === true || permission.view === true || permission.canView === true),
+    ),
     auditWorkspaceEnabled: Boolean(apiUser.auditWorkspaceEnabled),
     moduleAccessPolicies: apiUser.moduleAccessPolicies && typeof apiUser.moduleAccessPolicies === 'object'
       ? apiUser.moduleAccessPolicies as ModuleViewPolicies
@@ -1073,6 +1079,10 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
     const backendModuleName = moduleEnumMap[module] || module.toUpperCase();
     const isAdminControlModule = adminOnlyModules.includes(module) && user.isTenantAdmin;
+    const hasExplicitDashboardRoleGrant = backendModuleName.toUpperCase() === 'DASHBOARD'
+      && !user.isTenantAdmin
+      && !user.managerMode
+      && user.dashboardRoleAccess === true;
     const groupModules = moduleGroupMap[module] || [];
     
     // HR es especial: buscar cualquier submódulo HR_*
@@ -1082,7 +1092,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       : user.enabledModules;
     const cashViewHasSalesScope = ['RETAIL_POS', 'RETAIL_CASH_CONTROL'].includes(backendModuleName)
       && tenantEnabledModules.some((candidate) => candidate === 'SALES' || candidate.startsWith('SALES_'));
-    let isSubscribed = (user.managerMode
+    let isSubscribed = hasExplicitDashboardRoleGrant || (user.managerMode
       ? managerCanAdminBranch && coreModules.includes(module)
       : coreModules.includes(module))
       || (!user.managerMode && isAdminControlModule)
