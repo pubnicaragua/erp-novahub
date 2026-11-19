@@ -6,6 +6,7 @@ import {
 } from '../../src/app/utils/managerBranchPermissions.ts';
 
 const options = [
+  { id: 'DASHBOARD', label: 'Dashboard', parent: 'DASHBOARD' },
   { id: 'SALES', label: 'Ventas', parent: 'SALES' },
   { id: 'SALES_CLIENTS', label: 'Clientes', parent: 'SALES' },
   { id: 'SALES_INVOICES', label: 'Facturas', parent: 'SALES' },
@@ -33,6 +34,18 @@ assert.deepEqual(
   ).map(({ id }) => id),
   [],
   'a rubric or branch cannot expose modules that the enterprise group has not enabled',
+);
+
+assert.deepEqual(
+  filterManagerBranchViewOptionsForScopes(
+    options,
+    ['DASHBOARD'],
+    ['DASHBOARD'],
+    ['DASHBOARD'],
+    { DASHBOARD: { state: 'VISIBLE', viewIds: [] } },
+  ).map(({ id }) => id),
+  ['DASHBOARD'],
+  'Dashboard is assignable only when it is enabled across the group, rubric, and branch scopes',
 );
 
 const selected = [{ module: 'SALES_CLIENTS', read: true }];

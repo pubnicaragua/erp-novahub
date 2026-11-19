@@ -2,7 +2,6 @@ export type ManagerBranchViewOption = { id: string; parent: string };
 export type ManagerBranchViewPermission = Record<string, unknown> & { module?: string };
 export type ManagerBranchModulePolicy = { state?: unknown; viewIds?: unknown };
 
-const CORE_BRANCH_VIEWS = new Set(['DASHBOARD']);
 const NON_OPERATIONAL_BRANCH_VIEWS = new Set([
   'CONFIGURATION', 'CONFIG_USERS', 'CONFIG_ROLES', 'CONFIG_COMPANY', 'CONFIG_SECURITY',
   'CONFIG_BRANDING', 'CONFIG_PDF', 'CONFIG_CURRENCY', 'CONFIG_DOMAINS', 'CONFIG_DEPARTMENTS',
@@ -31,7 +30,7 @@ export function filterManagerBranchViewOptions<T extends ManagerBranchViewOption
     const id = String(option.id || '').toUpperCase();
     const parent = String(option.parent || '').toUpperCase();
     if (!isOperationalBranchView(id)) return false;
-    if (!enabled.has(parent) && !enabled.has(id) && !CORE_BRANCH_VIEWS.has(id)) return false;
+    if (!enabled.has(parent) && !enabled.has(id)) return false;
 
     const policy = modulePolicies[parent];
     const state = String(policy?.state || 'VISIBLE').toUpperCase();

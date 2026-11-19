@@ -654,12 +654,10 @@ export function ConfiguracionPage({ initialTab = 'branding', onTabChange, isSide
       .filter(Boolean);
     const enabled = new Set(sessionModules);
     const hasSalesScope = enabled.has('SALES') || sessionModules.some((candidate) => candidate.startsWith('SALES_'));
-    const hasParentScope = (moduleId: string) => enabled.has(moduleId)
-      || sessionModules.some((candidate) => candidate.startsWith(`${moduleId}_`));
 
     return ALL_PERM_MODULES
       .filter(m => !HIDDEN_PERMISSION_MODULE_IDS.has(String(m.id).toUpperCase()))
-      .filter((m) => user.managerCanAdminBranch || canAccessModuleView(user.moduleAccessPolicies, m.id))
+      .filter((m) => canAccessModuleView(user.roleModuleAccessPolicies || user.moduleAccessPolicies, m.id))
       .filter(m => {
         const moduleId = normalize(m.id);
         const parentMod = 'parent' in m ? normalize((m as any).parent) : null;
@@ -673,18 +671,6 @@ export function ConfiguracionPage({ initialTab = 'branding', onTabChange, isSide
 
         // Dashboard se habilita por el alcance del grupo y no por un precio
         // operativo; aun así, solo se ofrece en roles cuando está en alcance.
-        if (parentMod === 'CONFIGURATION' && (
-          user.isTenantAdmin || user.managerCanAdminBranch
-          || enabled.has('CONFIGURATION')
-        )) return true;
-        if (parentMod === 'MY_COMPANY' && (
-          enabled.has('MY_COMPANY')
-          || user.isTenantAdmin || user.managerCanAdminBranch
-        )) return true;
-
-        // Las vistas marcadas como internas comparten el alcance del módulo
-        // padre; no son módulos facturables independientes.
-        if (parentMod && (m as any).subscription === false && hasParentScope(parentMod)) return true;
         if (hasDirectAccess) return true;
         if (parentMod && enabled.has(parentMod)) return true;
 
