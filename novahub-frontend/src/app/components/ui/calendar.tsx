@@ -28,19 +28,19 @@ export function Calendar({
   maxDate,
   className,
 }: CalendarProps) {
-  const [viewMode, setViewMode] = React.useState<"days" | "months">("days");
+  const [viewMode, setViewMode] = React.useState<"days" | "months" | "years">("days");
   const [viewDate, setViewDate] = React.useState<Date>(() => selected || new Date());
-  const [yearDraft, setYearDraft] = React.useState(() => String((selected || new Date()).getFullYear()));
 
   React.useEffect(() => {
     if (selected && !isNaN(selected.getTime())) {
       setViewDate(selected);
-      setYearDraft(String(selected.getFullYear()));
     }
   }, [selected]);
 
   const year = viewDate.getFullYear();
   const month = viewDate.getMonth();
+  const minYear = minDate ? Number(minDate.slice(0, 4)) : 1000;
+  const maxYear = maxDate ? Number(maxDate.slice(0, 4)) : 9999;
 
   const isMonthInRange = (candidateYear: number, candidateMonth: number) => {
     if (candidateYear < minYear || candidateYear > maxYear) return false;
@@ -50,10 +50,17 @@ export function Calendar({
     return !((minDate && monthEnd < minDate) || (maxDate && monthStart > maxDate));
   };
 
-  const parsedYear = Number(yearDraft);
-  const minYear = minDate ? Number(minDate.slice(0, 4)) : 1000;
-  const maxYear = maxDate ? Number(maxDate.slice(0, 4)) : 9999;
-  const isYearDraftValid = /^\d{4}$/.test(yearDraft) && parsedYear >= minYear && parsedYear <= maxYear;
+  const isYearInRange = (candidateYear: number) =>
+    candidateYear >= minYear &&
+    candidateYear <= maxYear &&
+    Array.from({ length: 12 }, (_, monthIndex) => isMonthInRange(candidateYear, monthIndex)).some(Boolean);
+
+  const decadeStart = Math.floor(year / 10) * 10;
+  const yearOptions = Array.from({ length: 12 }, (_, index) => decadeStart - 1 + index);
+  const hasYearInDecade = (anchorYear: number) => {
+    const start = Math.floor(anchorYear / 10) * 10;
+    return Array.from({ length: 12 }, (_, index) => start - 1 + index).some(isYearInRange);
+  };
   const months = React.useMemo(
     () => Array.from({ length: 12 }, (_, index) => new Intl.DateTimeFormat("es", { month: "long" }).format(new Date(2020, index, 1))),
     []
@@ -144,7 +151,77 @@ export function Calendar({
         className
       )}
     >
-      {viewMode === "months" ? (
+      {viewMode === "years" ? (
+        <>
+          <div className="flex items-center justify-between gap-1 pb-3">
+            <Button
+              type="button"
+              variant="outline"
+              size="icon"
+              onClick={() => setViewMode("months")}
+              disabled={disabled}
+              className="size-7 h-7 w-7 shrink-0 rounded-md border border-border/60 p-0 hover:bg-muted/80"
+              aria-label="Volver a seleccionar mes"
+            >
+              <ChevronLeft className="size-4" />
+            </Button>
+            <div className="flex items-center gap-1">
+              <Button
+                type="button"
+                variant="outline"
+                size="icon"
+                onClick={() => setViewDate(new Date(year - 10, month, 1))}
+                disabled={disabled || !hasYearInDecade(year - 10)}
+                className="size-7 h-7 w-7 shrink-0 rounded-md border border-border/60 p-0 hover:bg-muted/80"
+                aria-label="Década anterior"
+              >
+                <ChevronLeft className="size-4" />
+              </Button>
+              <span className="min-w-16 text-center text-sm font-semibold tracking-wide text-foreground" aria-live="polite">
+                {decadeStart}–{decadeStart + 9}
+              </span>
+              <Button
+                type="button"
+                variant="outline"
+                size="icon"
+                onClick={() => setViewDate(new Date(year + 10, month, 1))}
+                disabled={disabled || !hasYearInDecade(year + 10)}
+                className="size-7 h-7 w-7 shrink-0 rounded-md border border-border/60 p-0 hover:bg-muted/80"
+                aria-label="Década siguiente"
+              >
+                <ChevronRight className="size-4" />
+              </Button>
+            </div>
+          </div>
+          <div className="grid grid-cols-3 gap-2" role="group" aria-label="Seleccionar año">
+            {yearOptions.map((yearOption) => {
+              const canSelectYear = isYearInRange(yearOption);
+              const outsideDecade = yearOption < decadeStart || yearOption > decadeStart + 9;
+              return (
+                <button
+                  key={yearOption}
+                  type="button"
+                  disabled={disabled || !canSelectYear}
+                  aria-pressed={yearOption === year}
+                  onClick={() => {
+                    if (!canSelectYear) return;
+                    setViewDate(new Date(yearOption, month, 1));
+                    setViewMode("months");
+                  }}
+                  className={cn(
+                    "h-9 rounded-md px-2 text-xs font-medium transition-colors hover:bg-muted/70 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
+                    yearOption === year && "bg-primary text-primary-foreground font-semibold hover:bg-primary",
+                    outsideDecade && yearOption !== year && "text-muted-foreground",
+                    (!canSelectYear || disabled) && "cursor-not-allowed opacity-40"
+                  )}
+                >
+                  {yearOption}
+                </button>
+              );
+            })}
+          </div>
+        </>
+      ) : viewMode === "months" ? (
         <>
           <div className="flex items-center justify-between gap-2 pb-3">
             <Button
@@ -158,53 +235,35 @@ export function Calendar({
             >
               <ChevronLeft className="size-4" />
             </Button>
-            <label className="flex items-center gap-2 text-xs font-medium text-muted-foreground">
-              Año
-              <input
-                type="text"
-                inputMode="numeric"
-                pattern="[0-9]{4}"
-                maxLength={4}
-                value={yearDraft}
-                disabled={disabled}
-                aria-label="Año del calendario"
-                aria-invalid={!isYearDraftValid}
-                onChange={(event) => {
-                  const nextDraft = event.target.value.replace(/\D/g, "").slice(0, 4);
-                  setYearDraft(nextDraft);
-                  const nextYear = Number(nextDraft);
-                  if (/^\d{4}$/.test(nextDraft) && nextYear >= minYear && nextYear <= maxYear) {
-                    setViewDate(new Date(nextYear, month, 1));
-                  }
-                }}
-                onBlur={() => {
-                  if (!isYearDraftValid) setYearDraft(String(year));
-                }}
-                className={cn(
-                  "h-8 w-20 rounded-md border border-border bg-background px-2 text-center text-sm font-semibold text-foreground outline-none focus-visible:ring-2 focus-visible:ring-ring",
-                  !isYearDraftValid && "border-destructive"
-                )}
-              />
-            </label>
+            <button
+              type="button"
+              onClick={() => setViewMode("years")}
+              disabled={disabled}
+              className="rounded-md px-2 py-1 text-sm font-semibold tracking-wide text-foreground hover:bg-muted/70 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+              aria-label={`Elegir año, actualmente ${year}`}
+              title="Elegir año"
+            >
+              {year}
+            </button>
             <span className="w-7 shrink-0" aria-hidden="true" />
           </div>
           <div className="grid grid-cols-3 gap-2" role="group" aria-label="Seleccionar mes">
             {months.map((monthName, monthIndex) => {
-              const canSelectMonth = isYearDraftValid && isMonthInRange(parsedYear, monthIndex);
+              const canSelectMonth = isMonthInRange(year, monthIndex);
               return (
                 <button
                   key={monthName}
                   type="button"
                   disabled={disabled || !canSelectMonth}
-                  aria-pressed={isYearDraftValid && parsedYear === year && monthIndex === month}
+                  aria-pressed={monthIndex === month}
                   onClick={() => {
                     if (!canSelectMonth) return;
-                    setViewDate(new Date(parsedYear, monthIndex, 1));
+                    setViewDate(new Date(year, monthIndex, 1));
                     setViewMode("days");
                   }}
                   className={cn(
                     "h-9 rounded-md px-2 text-xs capitalize font-medium transition-colors hover:bg-muted/70 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
-                    parsedYear === year && monthIndex === month && "bg-primary text-primary-foreground font-semibold hover:bg-primary",
+                    monthIndex === month && "bg-primary text-primary-foreground font-semibold hover:bg-primary",
                     (!canSelectMonth || disabled) && "cursor-not-allowed opacity-40"
                   )}
                 >
@@ -232,7 +291,6 @@ export function Calendar({
             <button
               type="button"
               onClick={() => {
-                setYearDraft(String(year));
                 setViewMode("months");
               }}
               disabled={disabled}
