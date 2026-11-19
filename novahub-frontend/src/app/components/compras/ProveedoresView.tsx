@@ -36,6 +36,8 @@ import { normalizeCurrency, summarizeAmountsByCurrency, type SupportedCurrency }
 import { fetchAllPaginatedRows } from '../../utils/export-utils';
 import { buildDatedDownloadFileName } from '../../utils/exportFileNames';
 import { createReportWorkbook } from '../../utils/reportWorkbook';
+import { isNicaraguanRucValid, normalizeNicaraguanRuc } from '../../utils/nicaraguan-ruc';
+import { NicaraguanRucInput } from '../ui/NicaraguanRucInput';
 
 interface ProveedoresViewProps { data: Supplier[]; loading: boolean; onRefresh: () => void; pagination?: SalesPaginationControls; onSearchChange?: (value: string) => void; summaryData?: SupplierKpiSummary; summaryLoading?: boolean; summaryError?: boolean; isSidebarCollapsed?: boolean; }
 
@@ -583,7 +585,7 @@ export function ProveedoresView({ data, loading, onRefresh, pagination, onSearch
       name: draft.name,
       type: draft.type,
       companyName: draft.type === 'COMPANY' ? draft.companyName.trim() || undefined : undefined,
-      ruc: draft.ruc.trim() || undefined,
+      ruc: normalizeNicaraguanRuc(draft.ruc) || undefined,
       contactName: draft.contactName || undefined,
       email: draft.email || undefined,
       phone: draft.phone || undefined,
@@ -597,12 +599,17 @@ export function ProveedoresView({ data, loading, onRefresh, pagination, onSearch
   };
 
   const handleSave = async () => {
+    const normalizedRuc = normalizeNicaraguanRuc(draft.ruc);
     if (!draft.name.trim()) {
       toast.error('El nombre del proveedor es obligatorio');
       return;
     }
-    if (draft.type === 'COMPANY' && !draft.ruc.trim()) {
+    if (draft.type === 'COMPANY' && !normalizedRuc) {
       toast.error('El RUC es obligatorio para un proveedor empresa');
+      return;
+    }
+    if (normalizedRuc && !isNicaraguanRucValid(normalizedRuc)) {
+      toast.error('El RUC debe tener 14 caracteres válidos sin guiones (ej. J0310000007669 o 0013007660022M)');
       return;
     }
     if (draft.email && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(draft.email)) {
@@ -822,7 +829,7 @@ export function ProveedoresView({ data, loading, onRefresh, pagination, onSearch
                 <div className="space-y-1.5 sm:col-span-2 xl:col-span-2"><label className="text-[10px] font-black uppercase tracking-widest text-muted-foreground">Nombre *</label><Input value={draft.name} onChange={(e) => setDraft({ ...draft, name: e.target.value })} placeholder="Nombre del proveedor" className="h-11 rounded-xl" autoFocus /></div>
                 <div className="space-y-1.5"><label className="text-[10px] font-black uppercase tracking-widest text-muted-foreground">Tipo</label><Select value={draft.type} onValueChange={(v) => setDraft({ ...draft, type: v as 'COMPANY' | 'INDIVIDUAL' })}><SelectTrigger className="h-11 rounded-xl"><SelectValue /></SelectTrigger><SelectContent><SelectItem value="COMPANY">Empresa</SelectItem><SelectItem value="INDIVIDUAL">Individual</SelectItem></SelectContent></Select></div>
                 {draft.type === 'COMPANY' && <div className="space-y-1.5 sm:col-span-2 xl:col-span-2"><label className="text-[10px] font-black uppercase tracking-widest text-muted-foreground">Nombre de empresa</label><Input value={draft.companyName} onChange={(e) => setDraft({ ...draft, companyName: e.target.value })} placeholder="Razón social" className="h-11 rounded-xl" /></div>}
-                <div className="space-y-1.5"><label className="text-[10px] font-black uppercase tracking-widest text-muted-foreground">RUC {draft.type === 'COMPANY' && <span className="text-destructive">*</span>}</label><Input value={draft.ruc} onChange={(e) => setDraft({ ...draft, ruc: e.target.value })} placeholder="J0310000000000" className="h-11 rounded-xl" /></div>
+                <NicaraguanRucInput id="supplier-create-ruc" value={draft.ruc} onChange={(ruc) => setDraft({ ...draft, ruc })} required={draft.type === 'COMPANY'} className="h-11 rounded-xl" />
               </div>
             </section>
             <section className="space-y-3 border-t border-border/40 pt-5" data-tour="purchases-form-summary">
@@ -844,7 +851,7 @@ export function ProveedoresView({ data, loading, onRefresh, pagination, onSearch
           </div>
           <DialogFooter className="flex-wrap gap-2 border-t border-border/40 px-5 py-4 sm:px-7" data-tour="purchases-form-actions">
             <Button variant="outline" onClick={() => setCreateOpen(false)} disabled={saving} className="w-full rounded-xl sm:w-auto">Cancelar</Button>
-            <Button onClick={handleSave} disabled={saving} className="w-full rounded-xl font-bold sm:w-auto">{saving ? 'Guardando...' : 'Guardar proveedor'}</Button>
+            <Button onClick={handleSave} disabled={saving || (draft.type === 'COMPANY' && !normalizeNicaraguanRuc(draft.ruc)) || (Boolean(normalizeNicaraguanRuc(draft.ruc)) && !isNicaraguanRucValid(draft.ruc))} className="w-full rounded-xl font-bold sm:w-auto">{saving ? 'Guardando...' : 'Guardar proveedor'}</Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
@@ -864,7 +871,7 @@ export function ProveedoresView({ data, loading, onRefresh, pagination, onSearch
                 <div className="space-y-1.5"><label className="text-[10px] font-black uppercase tracking-widest text-muted-foreground">Nombre *</label><Input value={draft.name} onChange={(e) => setDraft({ ...draft, name: e.target.value })} placeholder="Nombre del proveedor" className="h-11 rounded-xl" autoFocus /></div>
                 <div className="space-y-1.5"><label className="text-[10px] font-black uppercase tracking-widest text-muted-foreground">Tipo</label><Select value={draft.type} onValueChange={(v) => setDraft({ ...draft, type: v as 'COMPANY' | 'INDIVIDUAL' })}><SelectTrigger className="h-11 rounded-xl"><SelectValue /></SelectTrigger><SelectContent><SelectItem value="COMPANY">Empresa</SelectItem><SelectItem value="INDIVIDUAL">Individual</SelectItem></SelectContent></Select></div>
                 {draft.type === 'COMPANY' && <div className="space-y-1.5"><label className="text-[10px] font-black uppercase tracking-widest text-muted-foreground">Nombre de empresa</label><Input value={draft.companyName} onChange={(e) => setDraft({ ...draft, companyName: e.target.value })} placeholder="Razón social" className="h-11 rounded-xl" /></div>}
-                <div className="space-y-1.5"><label className="text-[10px] font-black uppercase tracking-widest text-muted-foreground">RUC {draft.type === 'COMPANY' && <span className="text-destructive">*</span>}</label><Input value={draft.ruc} onChange={(e) => setDraft({ ...draft, ruc: e.target.value })} placeholder="J0310000000000" className="h-11 rounded-xl" /></div>
+                <NicaraguanRucInput id="supplier-edit-ruc" value={draft.ruc} onChange={(ruc) => setDraft({ ...draft, ruc })} required={draft.type === 'COMPANY'} className="h-11 rounded-xl" />
               </div>
             </section>
             <section className="space-y-3 border-t border-border/40 pt-5" data-tour="purchases-form-summary">
@@ -886,7 +893,7 @@ export function ProveedoresView({ data, loading, onRefresh, pagination, onSearch
           </div>
           <DialogFooter className="flex-wrap gap-2 border-t border-border/40 px-5 py-4 sm:px-7" data-tour="purchases-form-actions">
             <Button variant="outline" onClick={() => setEditOpen(false)} disabled={saving} className="w-full rounded-xl sm:w-auto">Cancelar</Button>
-            <Button onClick={handleSave} disabled={saving} className="w-full rounded-xl font-bold sm:w-auto">{saving ? 'Guardando...' : 'Guardar cambios'}</Button>
+            <Button onClick={handleSave} disabled={saving || (draft.type === 'COMPANY' && !normalizeNicaraguanRuc(draft.ruc)) || (Boolean(normalizeNicaraguanRuc(draft.ruc)) && !isNicaraguanRucValid(draft.ruc))} className="w-full rounded-xl font-bold sm:w-auto">{saving ? 'Guardando...' : 'Guardar cambios'}</Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>

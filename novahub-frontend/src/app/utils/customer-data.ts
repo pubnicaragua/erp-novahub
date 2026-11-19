@@ -1,5 +1,6 @@
 import { formatIncompletePhoneNumber, getCountries, getCountryCallingCode, isValidPhoneNumber, parsePhoneNumberFromString, validatePhoneNumberLength, type CountryCode } from 'libphonenumber-js';
 import phoneMetadata from 'libphonenumber-js/metadata.min.json';
+import { isNicaraguanRucValid, normalizeNicaraguanRuc } from './nicaraguan-ruc';
 
 export type CustomerCountryOption = {
   code: string;
@@ -247,9 +248,9 @@ export function customerPhoneHint(value: string | null | undefined, countryCode:
 
 export function formatCustomerIdentifierInput(value: string, kind: 'taxId' | 'ruc', countryCode: string): string {
   const raw = String(value || '');
-  if (countryCode !== 'NI') return raw;
+  if (String(countryCode || '').trim().toUpperCase() !== 'NI') return raw;
+  if (kind === 'ruc') return normalizeNicaraguanRuc(raw);
   const compact = raw.replace(/[^0-9a-z]/gi, '').toUpperCase().slice(0, 14);
-  if (kind === 'ruc') return compact;
   if (compact.length <= 3) return compact;
   if (compact.length <= 9) return `${compact.slice(0, 3)}-${compact.slice(3)}`;
   return `${compact.slice(0, 3)}-${compact.slice(3, 9)}-${compact.slice(9)}`;
@@ -257,9 +258,10 @@ export function formatCustomerIdentifierInput(value: string, kind: 'taxId' | 'ru
 
 export function isCustomerIdentifierValid(value: string | null | undefined, kind: 'taxId' | 'ruc', countryCode: string): boolean {
   const raw = String(value || '').trim();
-  if (!raw || countryCode !== 'NI') return true;
+  if (!raw || String(countryCode || '').trim().toUpperCase() !== 'NI') return true;
+  if (kind === 'ruc') return isNicaraguanRucValid(raw);
   const compact = raw.replace(/[^0-9a-z]/gi, '').toUpperCase();
-  return kind === 'taxId' ? /^\d{13}[A-Z]$/.test(compact) : /^[A-Z]\d{13}$/.test(compact);
+  return /^\d{13}[A-Z]$/.test(compact);
 }
 
 export function customerIdentifierHint(value: string | null | undefined, kind: 'taxId' | 'ruc', countryCode: string): string {

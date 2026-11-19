@@ -40,6 +40,7 @@ import { normalizeCurrency, preserveCreditLimitCurrency, summarizeAmountsByCurre
 import { fetchAllReportPages, useTenantQuery } from '../../hooks/useTenantQuery';
 import { CustomerCountrySelect, CustomerIdentifierInput, CustomerPhoneInput, useCustomerFormOptions, countryNameForForm } from './CustomerContactFields';
 import { countryCodeFromLegacy, customerRucRequired, formatCustomerPhoneForDisplay, identifierComparisonKey, isCustomerIdentifierValid, isCustomerImportPhoneValid, isCustomerPhoneValid, normalizeCustomerPhone } from '../../utils/customer-data';
+import { normalizeNicaraguanRuc } from '../../utils/nicaraguan-ruc';
 import { resolveMissingRucCreditDecision } from '../../utils/customer-credit-confirmation';
 import { aggregateCustomerHistory, mergeCustomerHistoryByIdentifier, prepareCustomerHistoryForImport, type CustomerHistoryImportOptions, type CustomerHistorySourceRow } from '../../utils/customer-history-import';
 import { buildCustomerHistoryTemplateHeaders, DEFAULT_CUSTOMER_HISTORY_PROFILE, normalizeCustomerHistoryProfile, type CustomerHistoryProfile } from '../../utils/customer-history-profile';
@@ -124,6 +125,11 @@ const emptyCustomerDraft = (creditLimitCurrency: SupportedCurrency = 'NIO', coun
   taxId: '', ruc: '', email: '', phone: '', contactPhone: '', address: '', city: '', department: '',
   country, countryCode, creditLimit: '', creditLimitCurrency, creditDays: '', notes: '', status: 'ACTIVE', createdAt: '',
 });
+
+const isCustomerRucInvalid = (draft: Pick<CustomerDraft, 'ruc' | 'type' | 'countryCode'>, required = customerRucRequired(draft.type, draft.countryCode)) => {
+  const ruc = String(draft.ruc || '').trim();
+  return (required && !ruc) || (Boolean(ruc) && !isCustomerIdentifierValid(ruc, 'ruc', draft.countryCode));
+};
 
 const DEFAULT_CUSTOMER_COLUMN_KEYS = ['code', 'name', 'taxId', 'ruc', 'type', 'fiscalRegime', 'priceListId', 'email', 'phone', 'department', 'creditLimit', 'creditDays', 'balance', 'customerLoans', 'createdAt', 'status'];
 
@@ -1080,7 +1086,15 @@ export function ClientesView({ data, loading, error, onRefresh, pagination, onSe
         setPendingMissingRucConfirmation({ customerId: id, updates: effectiveUpdates, closeEditOnSuccess: false });
         throw new MissingRucConfirmationRequired('Falta confirmar que se guardará el límite sin RUC.');
       }
-      await customersService.update(id.toString(), effectiveUpdates);
+      const normalizedUpdates = effectiveUpdates.ruc === undefined
+        ? effectiveUpdates
+        : {
+          ...effectiveUpdates,
+          ruc: countryCode.toUpperCase() === 'NI'
+            ? normalizeNicaraguanRuc(effectiveUpdates.ruc)
+            : String(effectiveUpdates.ruc || '').trim(),
+        };
+      await customersService.update(id.toString(), normalizedUpdates);
       toast.success('Cliente actualizado correctamente');
       await onRefresh();
     } catch (e: any) {
@@ -1099,7 +1113,7 @@ export function ClientesView({ data, loading, error, onRefresh, pagination, onSe
     fiscalRegime: draft.fiscalRegime.trim() || undefined,
     priceListId: draft.priceListId || undefined,
     taxId: draft.taxId.trim() || undefined,
-    ruc: draft.ruc.trim() || undefined,
+    ruc: draft.countryCode.toUpperCase() === 'NI' ? normalizeNicaraguanRuc(draft.ruc) || undefined : draft.ruc.trim() || undefined,
     email: draft.email.trim() || undefined,
     phone: draft.phone.trim() ? normalizeCustomerPhone(draft.phone, draft.countryCode) || draft.phone.trim() : forUpdate ? null : undefined,
     contactPhone: draft.contactPhone.trim() ? normalizeCustomerPhone(draft.contactPhone, draft.countryCode) || draft.contactPhone.trim() : forUpdate ? null : undefined,
@@ -1129,7 +1143,7 @@ export function ClientesView({ data, loading, error, onRefresh, pagination, onSe
       return false;
     }
     if (draft.taxId.trim() && !isCustomerIdentifierValid(draft.taxId, 'taxId', draft.countryCode)) { toast.error('La identificación fiscal no es válida para el país seleccionado'); return false; }
-    if (draft.ruc.trim() && !isCustomerIdentifierValid(draft.ruc, 'ruc', draft.countryCode)) { toast.error('El RUC no es válido para el país seleccionado'); return false; }
+    if (draft.ruc.trim() && !isCustomerIdentifierValid(draft.ruc, 'ruc', draft.countryCode)) { toast.error('El RUC debe tener 14 caracteres válidos sin guiones (ej. J0310000007669 o 0013007660022M)'); return false; }
     if (draft.phone.trim() && !isCustomerPhoneValid(draft.phone, draft.countryCode)) { toast.error('El teléfono no es válido para el país seleccionado'); return false; }
     if (draft.contactPhone.trim() && !isCustomerPhoneValid(draft.contactPhone, draft.countryCode)) { toast.error('El teléfono del contacto no es válido para el país seleccionado'); return false; }
     const identifiers = [draft.taxId, draft.ruc].map((value) => identifierComparisonKey(value)).filter(Boolean);
@@ -1508,6 +1522,7 @@ export function ClientesView({ data, loading, error, onRefresh, pagination, onSe
       nextCreditLimitCurrency: editCustomer.creditLimitCurrency,
     })
     : 'block';
+  const editRucRequired = Boolean(editCustomer && customerRucRequired(editCustomer.type, editCustomer.countryCode) && editMissingRucDecision === 'block');
   const renderHistoryColumnSelector = (field: CustomerHistoryColumn, label: string, required = false) => (
     <label className="min-w-0 space-y-1.5">
       <span className="block text-[10px] font-black uppercase tracking-wider text-muted-foreground">{label}{required ? ' *' : ''}</span>
@@ -1909,8 +1924,8 @@ export function ClientesView({ data, loading, error, onRefresh, pagination, onSe
           <DialogFooter className="flex-col gap-2 border-t border-border/40 px-5 py-4 sm:flex-row sm:flex-wrap sm:justify-between sm:px-7" data-tour="sales-form-actions">
             <Button variant="outline" onClick={() => setCreateOpen(false)} disabled={creating} className="w-full rounded-xl sm:w-auto">Cerrar</Button>
             <div className="flex w-full flex-col gap-2 sm:w-auto sm:flex-row">
-              <Button variant="outline" onClick={handleAddPendingCustomer} disabled={creating || !newCustomer.name.trim()} className="w-full rounded-xl sm:w-auto">Agregar a la lista</Button>
-              <Button variant="outline" onClick={handleCreateClient} disabled={creating || !newCustomer.name.trim()} className="w-full rounded-xl sm:w-auto">{creating ? 'Guardando...' : 'Guardar'}</Button>
+              <Button variant="outline" onClick={handleAddPendingCustomer} disabled={creating || !newCustomer.name.trim() || isCustomerRucInvalid(newCustomer)} className="w-full rounded-xl sm:w-auto">Agregar a la lista</Button>
+              <Button variant="outline" onClick={handleCreateClient} disabled={creating || !newCustomer.name.trim() || isCustomerRucInvalid(newCustomer)} className="w-full rounded-xl sm:w-auto">{creating ? 'Guardando...' : 'Guardar'}</Button>
               {pendingCustomers.length > 0 && <Button onClick={handleSavePendingCustomers} disabled={creating} className="w-full rounded-xl font-bold sm:w-auto">{creating ? 'Guardando...' : `Guardar ${pendingCustomers.length} clientes`}</Button>}
             </div>
           </DialogFooter>
@@ -1931,7 +1946,7 @@ export function ClientesView({ data, loading, error, onRefresh, pagination, onSe
                 <div className="space-y-1.5"><label className="text-[10px] font-black uppercase tracking-widest text-muted-foreground">Tipo *</label><Select value={editCustomer.type} onValueChange={(value) => setEditCustomer({ ...editCustomer, type: value as CustomerDraft['type'] })}><SelectTrigger className="h-11 w-full rounded-xl border-border bg-background px-3 text-sm"><SelectValue /></SelectTrigger><SelectContent><SelectItem value="individual">Particular</SelectItem><SelectItem value="company">Empresa</SelectItem></SelectContent></Select></div>
                 {editCustomer.type === 'company' && <div className="space-y-1.5 sm:col-span-2 xl:col-span-2"><label className="text-[10px] font-black uppercase tracking-widest text-muted-foreground">Nombre de empresa</label><Input value={editCustomer.companyName} onChange={(e) => setEditCustomer({ ...editCustomer, companyName: e.target.value })} placeholder="Nombre comercial o corporativo" className="h-11 rounded-xl" /></div>}
                 <CustomerIdentifierInput id="edit-customer-tax-id" value={editCustomer.taxId} onChange={(value) => setEditCustomer({ ...editCustomer, taxId: value })} countryCode={editCustomer.countryCode} kind="taxId" className="h-11 rounded-xl" />
-                <CustomerIdentifierInput id="edit-customer-ruc" value={editCustomer.ruc} onChange={(value) => setEditCustomer({ ...editCustomer, ruc: value })} countryCode={editCustomer.countryCode} kind="ruc" required={customerRucRequired(editCustomer.type, editCustomer.countryCode) && editMissingRucDecision === 'block'} className="h-11 rounded-xl" />
+                <CustomerIdentifierInput id="edit-customer-ruc" value={editCustomer.ruc} onChange={(value) => setEditCustomer({ ...editCustomer, ruc: value })} countryCode={editCustomer.countryCode} kind="ruc" required={editRucRequired} className="h-11 rounded-xl" />
                 <div className="space-y-1.5"><label className="text-[10px] font-black uppercase tracking-widest text-muted-foreground">Estado</label><Select value={editCustomer.status} onValueChange={(value) => setEditCustomer({ ...editCustomer, status: value as CustomerDraft['status'] })}><SelectTrigger className="h-11 w-full rounded-xl border-border bg-background px-3 text-sm"><SelectValue /></SelectTrigger><SelectContent><SelectItem value="ACTIVE">Activo</SelectItem><SelectItem value="INACTIVE">Inactivo</SelectItem></SelectContent></Select></div>
               </div>
             </section>
@@ -1964,7 +1979,7 @@ export function ClientesView({ data, loading, error, onRefresh, pagination, onSe
           </div>
           <DialogFooter className="flex-wrap gap-2 border-t border-border/40 px-5 py-4 sm:px-7">
             <Button variant="outline" onClick={() => setEditOpen(false)} disabled={savingEdit} className="w-full rounded-xl sm:w-auto">Cancelar</Button>
-            <Button onClick={handleSaveEdit} disabled={savingEdit} className="w-full rounded-xl font-bold sm:w-auto">{savingEdit ? 'Guardando...' : 'Guardar cambios'}</Button>
+            <Button onClick={handleSaveEdit} disabled={savingEdit || isCustomerRucInvalid(editCustomer, editRucRequired)} className="w-full rounded-xl font-bold sm:w-auto">{savingEdit ? 'Guardando...' : 'Guardar cambios'}</Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>

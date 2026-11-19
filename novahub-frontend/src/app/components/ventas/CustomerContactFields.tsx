@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 import { Input } from '../ui/input';
 import { Label } from '../ui/label';
 import { Combobox } from '../ui/Combobox';
+import { NicaraguanRucInput } from '../ui/NicaraguanRucInput';
 import { customersService } from '../../services/ventas.service';
 import {
   customerIdentifierHint, customerPhoneHint, countryName, countryOption, DEFAULT_CUSTOMER_COUNTRIES,
@@ -70,6 +71,9 @@ export function CustomerIdentifierInput({ value, onChange, countryCode, kind, la
   const resolvedLabel = label || (kind === 'taxId' ? selected.taxIdLabel : selected.rucLabel);
   const hint = customerIdentifierHint(value, kind, countryCode);
   const { id, disabled, className, labelClassName } = props;
+  if (kind === 'ruc' && String(countryCode || '').trim().toUpperCase() === 'NI') {
+    return <NicaraguanRucInput id={id} value={value} onChange={onChange} required={required} label={resolvedLabel} disabled={disabled} className={className} labelClassName={labelClassName} showError={showHint} />;
+  }
   return <div className="min-w-0 space-y-1.5">
     <Label htmlFor={id} className={labelClassName || 'text-[10px] font-black uppercase tracking-widest text-muted-foreground'}>{resolvedLabel} {required && <span className="text-destructive">*</span>}</Label>
     <Input id={id} disabled={disabled} value={formatCustomerIdentifierInput(value, kind, countryCode)} onChange={(event) => onChange(formatCustomerIdentifierInput(event.target.value, kind, countryCode))} placeholder={countryCode === 'NI' ? (kind === 'taxId' ? '001-010190-1000A' : 'J0310000000000') : 'Identificación opcional'} required={required} className={className || 'h-11 rounded-xl'} />

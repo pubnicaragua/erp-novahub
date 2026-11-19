@@ -19,6 +19,7 @@ import { getApiErrorMessage } from '../services/api';
 import { normalizeCurrency } from '../utils/currency';
 import { CustomerCountrySelect, CustomerIdentifierInput, CustomerPhoneInput, useCustomerFormOptions, countryNameForForm } from './ventas/CustomerContactFields';
 import { countryCodeFromLegacy, customerRucRequired, formatCustomerPhoneForDisplay, isCustomerIdentifierValid, isCustomerPhoneValid } from '../utils/customer-data';
+import { normalizeNicaraguanRuc } from '../utils/nicaraguan-ruc';
 import { generateConfiguredReportSectionsPDF } from '../utils/pdfGenerator';
 import { downloadPdfBlob } from '../utils/pdfBrowserPreview';
 import type { PdfPaperFormat } from '../utils/pdfDownloadFormats';
@@ -162,21 +163,23 @@ export function ClientesPage() {
 
   const handleSave = async () => {
     const countryCode = String(formData.countryCode || defaultCountryCode);
+    const enteredRuc = String(formData.ruc || '').trim();
     if (!formData.name?.trim()) {
       toast.error('El nombre del cliente es obligatorio');
       return;
     }
-    if (customerRucRequired(formData.type, countryCode) && !formData.ruc?.trim()) {
+    if (customerRucRequired(formData.type, countryCode) && !enteredRuc) {
       toast.error('El RUC es obligatorio para una empresa');
       return;
     }
     if (formData.taxId && !isCustomerIdentifierValid(formData.taxId, 'taxId', countryCode)) { toast.error('La identificación fiscal no tiene un formato válido para el país seleccionado'); return; }
-    if (formData.ruc && !isCustomerIdentifierValid(formData.ruc, 'ruc', countryCode)) { toast.error('El RUC no tiene un formato válido para el país seleccionado'); return; }
+    if (enteredRuc && !isCustomerIdentifierValid(enteredRuc, 'ruc', countryCode)) { toast.error('El RUC debe tener 14 caracteres válidos sin guiones (ej. J0310000007669 o 0013007660022M)'); return; }
     if (formData.phone && !isCustomerPhoneValid(formData.phone, countryCode)) { toast.error('El teléfono no es válido para el país seleccionado'); return; }
     if (formData.contactPhone && !isCustomerPhoneValid(formData.contactPhone, countryCode)) { toast.error('El teléfono del contacto no es válido para el país seleccionado'); return; }
     try {
       const payload: Partial<Customer> = {
         ...formData,
+        ruc: countryCode.toUpperCase() === 'NI' ? normalizeNicaraguanRuc(formData.ruc) : enteredRuc,
         companyName: formData.type === 'company' ? String(formData.companyName || '').trim() || null : null,
       };
       if (editingCliente) {
@@ -272,7 +275,7 @@ export function ClientesPage() {
               </div>
               <DialogFooter>
                 <Button variant="outline" onClick={() => setIsDialogOpen(false)}>Cancelar</Button>
-                <Button onClick={handleSave} data-testid="customer-save">Guardar Cambios</Button>
+                <Button onClick={handleSave} disabled={(customerRucRequired(formData.type, formData.countryCode || defaultCountryCode) && !String(formData.ruc || '').trim()) || (Boolean(String(formData.ruc || '').trim()) && !isCustomerIdentifierValid(formData.ruc, 'ruc', String(formData.countryCode || defaultCountryCode)))} data-testid="customer-save">Guardar Cambios</Button>
               </DialogFooter>
             </DialogContent>
           </Dialog>

@@ -21,6 +21,8 @@ import type { PdfPaperFormat } from '../utils/pdfDownloadFormats';
 import { ExportMenu } from './ui/ExportMenu';
 import { buildDatedDownloadFileName } from '../utils/exportFileNames';
 import { firstReadable } from '../utils/displayText';
+import { isNicaraguanRucValid, normalizeNicaraguanRuc } from '../utils/nicaraguan-ruc';
+import { NicaraguanRucInput } from './ui/NicaraguanRucInput';
 
 export function ProveedoresPage() {
   const { user, canPerform } = useAuth();
@@ -127,19 +129,25 @@ export function ProveedoresPage() {
 
   const handleSave = async () => {
     const isCompany = String(formData.type || 'COMPANY').toUpperCase() === 'COMPANY';
+    const ruc = normalizeNicaraguanRuc(formData.ruc);
     if (!formData.name?.trim()) {
       toast.error('El nombre del proveedor es obligatorio');
       return;
     }
-    if (isCompany && !formData.ruc?.trim()) {
+    if (isCompany && !ruc) {
       toast.error('El RUC es obligatorio para un proveedor empresa');
       return;
     }
+    if (ruc && !isNicaraguanRucValid(ruc)) {
+      toast.error('El RUC debe tener 14 caracteres válidos sin guiones (ej. J0310000007669 o 0013007660022M)');
+      return;
+    }
     try {
+      const payload = { ...formData, ruc };
       if (editingProveedor) {
-        await suppliersService.update(editingProveedor.id, formData);
+        await suppliersService.update(editingProveedor.id, payload);
       } else {
-        await suppliersService.create(formData);
+        await suppliersService.create(payload);
       }
       await fetchProveedores();
       setIsDialogOpen(false);
@@ -187,8 +195,7 @@ export function ProveedoresPage() {
                     </Select>
                   </div>
                   <div className="grid gap-2">
-                    <Label htmlFor="ruc">RUC {formData.type === 'COMPANY' && <span className="text-destructive">*</span>}</Label>
-                    <Input id="ruc" value={formData.ruc || ''} onChange={e => setFormData({ ...formData, ruc: e.target.value })} data-testid="supplier-ruc" />
+                    <NicaraguanRucInput id="ruc" value={formData.ruc || ''} onChange={(ruc) => setFormData({ ...formData, ruc })} required={formData.type === 'COMPANY'} data-testid="supplier-ruc" />
                   </div>
                 </div>
                 <div className="grid gap-2">
@@ -217,7 +224,7 @@ export function ProveedoresPage() {
               </div>
               <DialogFooter>
                 <Button variant="outline" onClick={() => setIsDialogOpen(false)}>Cancelar</Button>
-                <Button onClick={handleSave} className="bg-blue-600 hover:bg-blue-700 text-white" data-testid="supplier-save">Guardar Detalles</Button>
+                <Button onClick={handleSave} disabled={(formData.type === 'COMPANY' && !normalizeNicaraguanRuc(formData.ruc)) || (Boolean(normalizeNicaraguanRuc(formData.ruc)) && !isNicaraguanRucValid(formData.ruc))} className="bg-blue-600 hover:bg-blue-700 text-white" data-testid="supplier-save">Guardar Detalles</Button>
               </DialogFooter>
             </DialogContent>
           </Dialog>

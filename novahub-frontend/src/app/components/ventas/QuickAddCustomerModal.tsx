@@ -12,6 +12,7 @@ import { customersService } from '@/app/services/ventas.service';
 import { SalesViewTutorial } from './SalesViewTutorial';
 import { CustomerCountrySelect, CustomerIdentifierInput, CustomerPhoneInput, useCustomerFormOptions, countryNameForForm } from './CustomerContactFields';
 import { customerRucRequired, isCustomerIdentifierValid, isCustomerPhoneValid, normalizeCustomerPhone } from '../../utils/customer-data';
+import { normalizeNicaraguanRuc } from '../../utils/nicaraguan-ruc';
 
 interface QuickAddCustomerModalProps {
   open: boolean;
@@ -93,7 +94,7 @@ export function QuickAddCustomerModal({ open, onOpenChange, onSuccess }: QuickAd
     event.preventDefault();
     const name = form.name.trim();
     const taxId = form.identificationNumber.trim();
-    const ruc = form.ruc.trim();
+    const ruc = form.countryCode.toUpperCase() === 'NI' ? normalizeNicaraguanRuc(form.ruc) : form.ruc.trim();
 
     if (!name) {
       toast.error('El nombre del cliente es obligatorio');
@@ -225,7 +226,7 @@ export function QuickAddCustomerModal({ open, onOpenChange, onSuccess }: QuickAd
             <p className="order-2 text-center text-[11px] text-muted-foreground sm:order-1 sm:text-left"><span className="font-bold text-foreground">Consejo:</span> podrás completar o editar estos datos desde Clientes.</p>
             <div className="order-1 flex w-full gap-2 sm:order-2 sm:w-auto">
               <Button type="button" variant="outline" onClick={handleClose} disabled={isSaving} className="h-10 flex-1 rounded-xl sm:flex-none">Cancelar</Button>
-              <Button type="submit" disabled={isSaving || !form.name.trim() || (customerRucRequired(form.type, form.countryCode) && !form.ruc.trim())} className="h-10 flex-1 rounded-xl bg-primary font-bold text-primary-foreground shadow-sm shadow-primary/20 hover:bg-primary/90 sm:flex-none">
+              <Button type="submit" disabled={isSaving || !form.name.trim() || (customerRucRequired(form.type, form.countryCode) && !form.ruc.trim()) || (Boolean(form.ruc.trim()) && !isCustomerIdentifierValid(form.ruc, 'ruc', form.countryCode))} className="h-10 flex-1 rounded-xl bg-primary font-bold text-primary-foreground shadow-sm shadow-primary/20 hover:bg-primary/90 sm:flex-none">
                 {isSaving ? <Loader2 className="mr-2 size-4 animate-spin" /> : <UserPlus className="mr-2 size-4" />}
                 {isSaving ? 'Guardando...' : 'Guardar cliente'}
               </Button>
