@@ -67,6 +67,8 @@ export function canAccessModuleView(policies: unknown, moduleOrView: unknown): b
   if (!policy) return true;
   if (policy.state !== 'VISIBLE') return false;
   if (!Array.isArray(policy.viewIds)) return true;
+  // Dashboard is the root view itself; it has no child view ids to select.
+  if (normalized === 'DASHBOARD') return true;
   if (normalized === parent) return false;
   return policy.viewIds.some((viewId) => String(viewId).toUpperCase() === normalized);
 }
@@ -92,6 +94,7 @@ export function canAccessModuleShell(policies: unknown, moduleOrView: unknown): 
   const policy = records[parent];
   if (!policy) return true;
   if (policy.state !== 'VISIBLE') return false;
+  if (normalized === 'DASHBOARD') return true;
   if (!Array.isArray(policy.viewIds)) return true;
   if (normalized === 'IMPORT_INTL') {
     return policy.viewIds.some((viewId) => IMPORT_INTL_VIEW_IDS.has(String(viewId).toUpperCase()));

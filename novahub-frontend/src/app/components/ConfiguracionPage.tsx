@@ -671,9 +671,8 @@ export function ConfiguracionPage({ initialTab = 'branding', onTabChange, isSide
           || directAliases.some((alias) => enabled.has(normalize(alias)))
           || (['RETAIL_POS', 'RETAIL_CASH_CONTROL'].includes(moduleId) && hasSalesScope);
 
-        // Dashboard y los permisos administrativos internos pertenecen a la
-        // sucursal aunque no tengan una fila de suscripción operativa.
-        if (moduleId === 'DASHBOARD') return true;
+        // Dashboard se habilita por el alcance del grupo y no por un precio
+        // operativo; aun así, solo se ofrece en roles cuando está en alcance.
         if (parentMod === 'CONFIGURATION' && (
           user.isTenantAdmin || user.managerCanAdminBranch
           || enabled.has('CONFIGURATION')

@@ -274,7 +274,6 @@ export interface User {
  * capacidades internas del tenant y no dependen de una suscripción operativa.
  */
 const TENANT_SYSTEM_PERMISSION_MODULES = new Set([
-  'DASHBOARD',
   'CONFIGURATION', 'MY_COMPANY', 'SUBSCRIPTIONS',
   'CONFIG_COMPANY', 'CONFIG_BRANDING', 'CONFIG_PDF', 'CONFIG_SECURITY',
   'CONFIG_CURRENCY', 'CONFIG_USERS', 'CONFIG_ROLES', 'CONFIG_DOMAINS',
@@ -335,7 +334,7 @@ function tenantPermissionSubscriptionCandidates(module: string): string[] {
 function tenantAdminHasModuleEnabled(user: User, module: string): boolean {
   const normalized = String(module || '').toUpperCase();
   if (TENANT_SYSTEM_PERMISSION_MODULES.has(normalized)
-    && (!user.managerMode || user.managerCanAdminBranch || normalized === 'DASHBOARD')) return true;
+    && (!user.managerMode || user.managerCanAdminBranch)) return true;
   const sourceModules = user.managerMode && Array.isArray(user.managerEnabledModules)
     ? user.managerEnabledModules
     : user.enabledModules || [];
@@ -951,7 +950,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     // 1. Verificar si el módulo está habilitado para el tenant (Suscripción)
     // Algunos módulos de sistema siempre están activos
     const coreModules = [
-      'configuracion', 'dashboard', 'suscripciones', 'notificaciones',
+      'configuracion', 'suscripciones', 'notificaciones',
       'auditoria',
     ];
     const moduleEnumMap: Record<string, string> = {
@@ -1084,7 +1083,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     const cashViewHasSalesScope = ['RETAIL_POS', 'RETAIL_CASH_CONTROL'].includes(backendModuleName)
       && tenantEnabledModules.some((candidate) => candidate === 'SALES' || candidate.startsWith('SALES_'));
     let isSubscribed = (user.managerMode
-      ? module === 'dashboard' || (managerCanAdminBranch && coreModules.includes(module))
+      ? managerCanAdminBranch && coreModules.includes(module)
       : coreModules.includes(module))
       || (!user.managerMode && isAdminControlModule)
       || cashViewHasSalesScope
