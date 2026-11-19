@@ -44,6 +44,11 @@ export function FinanceReceivablesView() {
   const loading = invoicesQuery.isLoading
 
   const pending = invoices.filter((inv: any) => { const s = String(inv.status || '').toUpperCase(); return s !== 'PAID' && s !== 'CANCELLED' && s !== 'CANCELED' })
+  const documentLabel = (document: any) => document.documentType === 'CUSTOMER_CREDIT'
+    ? 'Crédito'
+    : document.documentType === 'CUSTOMER_LOAN'
+      ? 'Préstamo'
+      : 'Factura'
   const balanceOf = (inv: any) => {
     const amount = Number(inv.balance ?? inv.balanceDue ?? (Number(inv.total || 0) - Number(inv.amountPaid || 0)))
     return valuationMode === 'CURRENT' ? convertCurrentAmount(amount, inv.currency) : convertAmount(amount, inv.currency, inv.exchangeRate)
@@ -79,7 +84,7 @@ export function FinanceReceivablesView() {
       <div className="mb-2 flex flex-wrap items-center gap-2">
         <AlertTriangle className="size-5 text-primary" />
         <h3 className="text-lg font-black uppercase tracking-tight text-foreground">Cuentas por Cobrar{valuationModeSuffix}</h3>
-        <Badge variant="outline" className="text-xs">{pending.length} facturas pendientes</Badge>
+        <Badge variant="outline" className="text-xs">{pending.length} documentos pendientes</Badge>
       </div>
 
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
@@ -88,7 +93,7 @@ export function FinanceReceivablesView() {
         {renderMoneyKpi('Por Vencer', notDue, 'text-emerald-500', (currency) => originalPending(currency) - originalOverdue(currency))}
         <Card className="min-w-0 rounded-2xl border-border/40 bg-card shadow-sm">
           <CardContent className="p-4">
-            <p className="text-[10px] font-black uppercase tracking-widest text-muted-foreground">Facturas</p>
+            <p className="text-[10px] font-black uppercase tracking-widest text-muted-foreground">Documentos</p>
             <p className="text-2xl font-black tabular-nums text-foreground">{pending.length} / {invoices.length}</p>
             <p className="text-[9px] text-muted-foreground">pendientes / totales</p>
           </CardContent>
@@ -99,7 +104,7 @@ export function FinanceReceivablesView() {
         <Card className="min-w-0 rounded-2xl border-border/40 bg-card shadow-sm">
           <CardHeader className="pb-0 px-5 pt-4">
             <CardTitle className="text-sm font-black uppercase tracking-tight text-foreground">Antigüedad de Saldos</CardTitle>
-            <p className="text-[10px] text-muted-foreground">Distribución de facturas vencidas por rango de días</p>
+            <p className="text-[10px] text-muted-foreground">Distribución de documentos vencidos por rango de días</p>
           </CardHeader>
           <CardContent className="min-w-0 overflow-visible px-2 pb-3">
             <ResponsiveContainer width="100%" height={280}>
@@ -141,20 +146,20 @@ export function FinanceReceivablesView() {
 
       <Card className="rounded-2xl border-border/40 bg-card shadow-sm">
         <CardHeader className="pb-2 px-5 pt-4">
-          <CardTitle className="text-sm font-black uppercase tracking-tight text-foreground">Facturas Pendientes</CardTitle>
+          <CardTitle className="text-sm font-black uppercase tracking-tight text-foreground">Documentos Pendientes</CardTitle>
         </CardHeader>
         <CardContent className="px-5 pb-4">
           {loading ? (
             <div className="text-center py-8 text-sm text-muted-foreground">Cargando...</div>
           ) : pending.length === 0 ? (
-            <div className="text-center py-8 text-sm text-muted-foreground"><CheckCircle2 className="size-8 mx-auto mb-2 text-emerald-500/50" /><p>No hay facturas pendientes de cobro.</p></div>
+            <div className="text-center py-8 text-sm text-muted-foreground"><CheckCircle2 className="size-8 mx-auto mb-2 text-emerald-500/50" /><p>No hay documentos pendientes de cobro.</p></div>
           ) : (
             <div className="space-y-3">
             <div className="hidden overflow-x-auto md:block">
               <table className="w-full text-xs">
                 <thead><tr className="border-b border-border text-muted-foreground">
                   <th className="text-left py-2 font-bold uppercase tracking-wider">Cliente</th>
-                  <th className="text-left py-2 font-bold uppercase tracking-wider">Factura</th>
+                  <th className="text-left py-2 font-bold uppercase tracking-wider">Documento</th>
                   <th className="text-left py-2 font-bold uppercase tracking-wider">Emisión</th>
                   <th className="text-left py-2 font-bold uppercase tracking-wider">Vencimiento</th>
                   <th className="text-right py-2 font-bold uppercase tracking-wider">Monto</th>
@@ -168,7 +173,12 @@ export function FinanceReceivablesView() {
                     return (
                       <tr key={inv.id} className="border-b border-border/20">
                         <td className="py-2 font-medium text-foreground">{inv.client?.name || inv.customerName || inv.customer?.name || '—'}</td>
-                        <td className="py-2 font-mono text-primary">{inv.number || inv.code || '—'}</td>
+                        <td className="py-2">
+                          <div className="flex min-w-0 flex-wrap items-center gap-1.5">
+                            <Badge variant="outline" className="shrink-0 text-[9px]">{documentLabel(inv)}</Badge>
+                            <span className="break-all font-mono text-primary">{inv.number || inv.code || '—'}</span>
+                          </div>
+                        </td>
                         <td className="py-2 text-muted-foreground">{inv.date ? new Date(inv.date).toLocaleDateString('es-NI') : '—'}</td>
                         <td className="py-2 text-muted-foreground">{due ? due.toLocaleDateString('es-NI') : '—'}</td>
                         <td className="py-2 text-right font-mono text-foreground">{fmt(toDisplayAmount(Number(inv.total || 0), inv.currency, inv.exchangeRate))}</td>
@@ -191,7 +201,10 @@ export function FinanceReceivablesView() {
                     <div className="flex min-w-0 items-start justify-between gap-3">
                       <div className="min-w-0">
                         <p className="break-words text-xs font-bold text-foreground">{inv.client?.name || inv.customerName || inv.customer?.name || '—'}</p>
-                        <p className="mt-1 text-[10px] font-mono text-primary">{inv.number || inv.code || '—'}</p>
+                        <div className="mt-1 flex min-w-0 flex-wrap items-center gap-1.5">
+                          <Badge variant="outline" className="shrink-0 text-[9px]">{documentLabel(inv)}</Badge>
+                          <p className="break-all text-[10px] font-mono text-primary">{inv.number || inv.code || '—'}</p>
+                        </div>
                       </div>
                       {daysOverdue > 0 ? <Badge variant="destructive" className="shrink-0 text-[9px]">{daysOverdue}d vencido</Badge> : <Badge variant="secondary" className="shrink-0 text-[9px]">Al día</Badge>}
                     </div>

@@ -40,6 +40,7 @@ export function FinanceCashView() {
   const paymentsQuery = useQuery({ queryKey: ['finance', 'payments-made', tenantKey], queryFn: ({ signal }) => paymentsMadeService.getAll({ page: 1, pageSize: 200 }, signal), enabled: canReadPurchases, staleTime: 30_000, gcTime: 5 * 60_000, refetchOnWindowFocus: false, retry: 1 })
   const bankAccounts = toList(accountsQuery.data).filter((a: any) => ['CASH', 'BANK'].includes(String(a.subtype || '').toUpperCase()) || String(a.name || '').toUpperCase().includes('CAJA') || String(a.name || '').toUpperCase().includes('BANCO'))
   const salesInvoices = toList(salesInvoicesQuery.data)
+    .filter((document: any) => !['CUSTOMER_CREDIT', 'CUSTOMER_LOAN'].includes(String(document.documentType || '').toUpperCase()))
   const supplierInvoices = toList(supplierInvoicesQuery.data)
   const paymentsMade = toList(paymentsQuery.data)
   const loading = [accountsQuery, salesInvoicesQuery, supplierInvoicesQuery, paymentsQuery].some(query => query.isLoading)

@@ -21,6 +21,7 @@ export interface FinanceSourceDocumentLookup {
   supplierId?: string | null;
   supplierCode?: string | null;
   supplierName?: string | null;
+  documentType?: 'INVOICE' | 'CUSTOMER_CREDIT' | 'CUSTOMER_LOAN';
   origin: 'SALES' | 'PURCHASES';
 }
 

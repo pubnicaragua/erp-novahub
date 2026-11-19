@@ -37,6 +37,8 @@ const DEFAULT_ACCOUNTS: Record<string, Record<string, AccountMapping>> = {
   },
   creditNote: {
     income: { code: '4000', name: 'Ingresos por Ventas' },
+    extraCost: { code: '4010', name: 'Costos adicionales cobrados' },
+    delivery: { code: '4020', name: 'Ingresos por Delivery' },
     ivaPayable: { code: '2100', name: 'IVA por Pagar' },
     receivable: { code: '1100', name: 'Cuentas por Cobrar' },
   },
@@ -101,6 +103,8 @@ export function SalesAccountingLegend({ flow, paymentMethod, compact = true, pre
   };
   const configuredCredit = {
     income: normalizeAccount(mappings?.creditNote?.income, DEFAULT_ACCOUNTS.creditNote.income),
+    extraCost: normalizeAccount(mappings?.creditNote?.extraCost, DEFAULT_ACCOUNTS.creditNote.extraCost),
+    delivery: normalizeAccount(mappings?.creditNote?.delivery, DEFAULT_ACCOUNTS.creditNote.delivery),
     receivable: normalizeAccount(mappings?.creditNote?.receivable, DEFAULT_ACCOUNTS.creditNote.receivable),
     ivaPayable: normalizeAccount(mappings?.creditNote?.ivaPayable, DEFAULT_ACCOUNTS.creditNote.ivaPayable),
   };
@@ -125,7 +129,7 @@ export function SalesAccountingLegend({ flow, paymentMethod, compact = true, pre
       : flow === 'return'
         ? 'Devolución: aplica el ajuste configurado al procesarse.'
         : flow === 'creditNote'
-          ? `Crédito directo: un asiento → CxC, reversión de ingresos netos, IVA y entrada de inventario (${configuredCredit.income.code}).`
+          ? `Crédito directo: un asiento → CxC, ingresos netos, IVA y salida de inventario (${configuredCredit.income.code}).`
           : method
             ? `Factura: un asiento por el total · ${method.label} → ${effectivePayment.code}; Ingresos netos + IVA + salida de inventario.`
             : `Factura: un asiento por el total con CxC, IVA y salida de inventario; cada cobro posterior cancela CxC.`;
@@ -224,10 +228,12 @@ export function SalesAccountingLegend({ flow, paymentMethod, compact = true, pre
                 ) : flow === 'creditNote' ? (
                   <div>
                     <p className="mb-1 text-[9px] font-black uppercase tracking-widest text-muted-foreground">Crédito directo · asiento comercial</p>
-                    <AccountLine label="Disminución de Cuentas por Cobrar" side="credit" account={configuredCredit.receivable} />
-                    <AccountLine label="Reversión de Ingresos · neta del costo" side="debit" account={configuredCredit.income} />
+                    <AccountLine label="Cuentas por Cobrar" side="debit" account={configuredCredit.receivable} />
+                    <AccountLine label="Ingresos por Ventas · netos del costo" side="credit" account={configuredCredit.income} />
+                    <AccountLine label="Costos adicionales · si aplica" side="credit" account={configuredCredit.extraCost} />
+                    <AccountLine label="Delivery · si aplica" side="credit" account={configuredCredit.delivery} />
                     <AccountLine label="IVA por pagar" side="credit" account={configuredCredit.ivaPayable} />
-                    <AccountLine label="Entrada de Inventario · almacén" side="debit" account={{ code: 'ALMACÉN', name: 'Cuenta configurada en el almacén' }} />
+                    <AccountLine label="Salida de Inventario · almacén" side="credit" account={{ code: 'ALMACÉN', name: 'Cuenta configurada en el almacén' }} />
                   </div>
                 ) : null}
                 <p className="rounded-lg bg-muted/30 p-2.5 text-[10px] leading-relaxed text-muted-foreground">
@@ -236,7 +242,7 @@ export function SalesAccountingLegend({ flow, paymentMethod, compact = true, pre
                     : flow === 'return'
                       ? 'La devolución usa un solo asiento: reduce CxC, separa IVA, resta el costo de la cuenta de devoluciones y carga lo reintegrado al almacén o lo descartado a Pérdida.'
                       : flow === 'creditNote'
-                        ? 'El crédito directo usa un solo asiento: disminuye CxC, revierte IVA e ingresos por el importe neto del costo y carga la entrada de inventario.'
+                        ? 'El crédito directo reconoce la venta y el saldo del cliente en CxC. El asiento registra ingresos e IVA; los productos salen del inventario y los cobros posteriores reducen CxC. Los intereses se reconocen en un asiento separado.'
                       : 'El asiento conserva el total comercial. En productos, el costo real se resta de Ingresos por Ventas y la salida de inventario se incluye en el mismo asiento; el cobro posterior solo cancela CxC.'}
                 </p>
               </>

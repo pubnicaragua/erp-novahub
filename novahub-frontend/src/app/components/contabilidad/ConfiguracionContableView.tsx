@@ -225,11 +225,13 @@ const BUILTIN_MODULES: { id: string; label: string; icon: typeof FileText; descr
   },
   {
     id: 'creditNote', label: 'Créditos', icon: RotateCcw,
-    description: 'Crédito al cliente → un solo asiento revierte CxC, IVA e ingresos netos y reintegra el inventario',
+    description: 'Venta a crédito directa → reconoce CxC, IVA e ingresos netos y descuenta el inventario',
     fields: [
-      { key: 'income', label: 'Ingresos por Ventas', side: 'debit', description: 'Se debita para revertir los ingresos reconocidos en la venta', defaultCode: '4000', defaultName: 'Ingresos por Ventas', defaultType: 'INCOME' },
-      { key: 'ivaPayable', label: 'IVA por Pagar', side: 'debit', description: 'Se debita para revertir el IVA de la venta', defaultCode: '2100', defaultName: 'IVA por Pagar', defaultType: 'LIABILITY' },
-      { key: 'receivable', label: 'Cuenta por Cobrar', side: 'credit', description: 'Se acredita la CxC (disminuye)', defaultCode: '1100', defaultName: 'Cuentas por Cobrar', defaultType: 'ASSET' },
+      { key: 'income', label: 'Ingresos por Ventas', side: 'credit', description: 'Se acredita al reconocer la venta a crédito', defaultCode: '4000', defaultName: 'Ingresos por Ventas', defaultType: 'INCOME' },
+      { key: 'extraCost', label: 'Costos adicionales cobrados', side: 'credit', description: 'Se acredita si el crédito incluye cargos adicionales', defaultCode: '4010', defaultName: 'Costes extra de venta', defaultType: 'INCOME' },
+      { key: 'delivery', label: 'Ingresos por Delivery', side: 'credit', description: 'Se acredita si el crédito incluye delivery', defaultCode: '4020', defaultName: 'Ingresos por Delivery', defaultType: 'INCOME' },
+      { key: 'ivaPayable', label: 'IVA por Pagar', side: 'credit', description: 'Se acredita el IVA generado por la venta', defaultCode: '2100', defaultName: 'IVA por Pagar', defaultType: 'LIABILITY' },
+      { key: 'receivable', label: 'Cuenta por Cobrar', side: 'debit', description: 'Se debita para aumentar el saldo pendiente del cliente', defaultCode: '1100', defaultName: 'Cuentas por Cobrar', defaultType: 'ASSET' },
     ],
   },
   {
