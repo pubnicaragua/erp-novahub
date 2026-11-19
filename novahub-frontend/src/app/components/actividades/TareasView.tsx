@@ -433,6 +433,9 @@ export const TareasView: React.FC<TareasViewProps> = ({ data, loading, summaryEr
   const currentFilters: TaskViewFilters = {
     status: statusFilter, priority: priorityFilter, assigned: assignedFilter, category: categoryFilter,
     dateFrom, dateTo, search: searchTerm, mine: mineOnly,
+    layout: viewLayout,
+    kanbanGroupByCategory,
+    kanbanCreatedAtOrder,
   };
   const applyFilters = (filters: TaskViewFilters) => {
     setStatusFilter(filters.status);
@@ -443,6 +446,9 @@ export const TareasView: React.FC<TareasViewProps> = ({ data, loading, summaryEr
     setDateTo(filters.dateTo);
     setSearchTerm(filters.search);
     setMineOnly(filters.mine);
+    if (filters.layout) setViewLayout(filters.layout);
+    if (typeof filters.kanbanGroupByCategory === 'boolean') setKanbanGroupByCategory(filters.kanbanGroupByCategory);
+    if (filters.kanbanCreatedAtOrder) setKanbanCreatedAtOrder(filters.kanbanCreatedAtOrder);
   };
 
   const statusOpts = [

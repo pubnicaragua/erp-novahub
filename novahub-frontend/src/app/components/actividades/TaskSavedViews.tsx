@@ -3,6 +3,7 @@ import { Bookmark, BookmarkPlus, Trash2 } from 'lucide-react';
 import { Button } from '../ui/button';
 import { Input } from '../ui/input';
 import { Popover, PopoverContent, PopoverTrigger } from '../ui/popover';
+import type { ViewLayoutMode } from '../ui/ViewLayoutSelect';
 
 /** Filtros de la lista de tareas que se pueden guardar como «vista». */
 export interface TaskViewFilters {
@@ -14,6 +15,10 @@ export interface TaskViewFilters {
   dateTo: string;
   search: string;
   mine: boolean;
+  /** Distribución y preferencias del tablero restauradas al aplicar una vista guardada. */
+  layout?: ViewLayoutMode;
+  kanbanGroupByCategory?: boolean;
+  kanbanCreatedAtOrder?: 'newest' | 'oldest';
 }
 
 export const EMPTY_TASK_FILTERS: TaskViewFilters = { status: 'ALL', priority: 'ALL', assigned: 'ALL', category: 'ALL', dateFrom: '', dateTo: '', search: '', mine: false };
@@ -40,7 +45,20 @@ export function readSavedTaskViews(userId: string | null): SavedView[] {
     if (!Array.isArray(parsed)) return [];
     return parsed
       .filter((view) => view && typeof view.id === 'string' && typeof view.name === 'string' && view.filters && typeof view.filters === 'object')
-      .map((view) => ({ id: view.id, name: String(view.name).slice(0, 40), filters: { ...EMPTY_TASK_FILTERS, ...view.filters } }))
+      .map((view) => {
+        const filters: TaskViewFilters = { ...EMPTY_TASK_FILTERS, ...view.filters };
+        const layout = String(view.filters.layout || '');
+        if (['table', 'cards', 'kanban', 'categories'].includes(layout)) {
+          filters.layout = layout as ViewLayoutMode;
+        } else {
+          delete filters.layout;
+        }
+        if (typeof view.filters.kanbanGroupByCategory !== 'boolean') delete filters.kanbanGroupByCategory;
+        if (view.filters.kanbanCreatedAtOrder !== 'newest' && view.filters.kanbanCreatedAtOrder !== 'oldest') {
+          delete filters.kanbanCreatedAtOrder;
+        }
+        return { id: view.id, name: String(view.name).slice(0, 40), filters };
+      })
       .slice(0, MAX_SAVED_VIEWS);
   } catch {
     return [];
@@ -106,7 +124,7 @@ export function TaskSavedViews({ userId, current, onApply }: TaskSavedViewsProps
         <div className="space-y-1 border-t border-border/50 pt-2">
           <p className="px-1 text-[10px] font-black uppercase tracking-widest text-muted-foreground">Mis vistas guardadas</p>
           {views.length === 0 ? (
-            <p className="px-1 text-[11px] text-muted-foreground">Guarda tus filtros actuales para volver a ellos con un clic.</p>
+            <p className="px-1 text-[11px] text-muted-foreground">Guarda los filtros, la distribución y el orden del Kanban para volver a ellos con un clic.</p>
           ) : views.map((view) => (
             <div key={view.id} className="flex items-center gap-1">
               <button type="button" onClick={() => apply(view.filters)} className="min-w-0 flex-1 truncate rounded-lg px-2 py-1.5 text-left text-xs font-semibold hover:bg-muted">{view.name}</button>
@@ -116,7 +134,7 @@ export function TaskSavedViews({ userId, current, onApply }: TaskSavedViewsProps
         </div>
         <form className="flex items-center gap-2 border-t border-border/50 pt-2" onSubmit={(event) => { event.preventDefault(); save(); }}>
           <Input value={name} onChange={(event) => setName(event.target.value)} maxLength={40} placeholder="Nombre de la vista" aria-label="Nombre de la vista" className="h-9 rounded-lg text-xs" />
-          <Button type="submit" size="icon" className="size-9 shrink-0 rounded-lg" disabled={!name.trim()} title="Guardar filtros actuales" aria-label="Guardar filtros actuales"><BookmarkPlus className="size-4" /></Button>
+          <Button type="submit" size="icon" className="size-9 shrink-0 rounded-lg" disabled={!name.trim()} title="Guardar vista actual" aria-label="Guardar vista actual"><BookmarkPlus className="size-4" /></Button>
         </form>
         <p className="px-1 text-[10px] text-muted-foreground">Se guardan en este navegador.</p>
       </PopoverContent>
