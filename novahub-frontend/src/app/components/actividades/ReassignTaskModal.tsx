@@ -4,7 +4,6 @@ import { toast } from 'sonner';
 import { Button } from '../ui/button';
 import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from '../ui/dialog';
 import { Label } from '../ui/label';
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../ui/select';
 import { Textarea } from '../ui/textarea';
 import { asList, useTenantQuery } from '../../hooks/useTenantQuery';
 import { tasksService } from '../../services/actividades.service';
@@ -35,6 +34,11 @@ export interface ReassignTaskModalProps {
 const getUserLabel = (user: ReassignUserOption): string =>
   user.name?.trim() || user.email?.trim() || 'Usuario sin nombre';
 
+const getAssignedUserIds = (task: Task | null): string[] => [...new Set([
+  task?.assignedToId,
+  ...(Array.isArray(task?.assignments) ? task.assignments.map((assignment) => assignment.userId || assignment.user?.id) : []),
+].map((id) => String(id || '').trim()).filter(Boolean))];
+
 const getErrorMessage = (error: unknown): string => {
   const payload = (error as { response?: { data?: { message?: unknown; error?: unknown } } } | null)?.response?.data;
   const raw = payload?.message ?? payload?.error ?? (error as { message?: unknown } | null)?.message;
@@ -49,7 +53,7 @@ const ReassignForm: React.FC<Omit<ReassignTaskModalProps, 'open'>> = ({
   onOpenChange,
   onReassigned,
 }) => {
-  const [newAssigneeId, setNewAssigneeId] = useState('');
+  const [newAssigneeIds, setNewAssigneeIds] = useState(() => getAssignedUserIds(task));
   const [reason, setReason] = useState('');
   const [isSaving, setIsSaving] = useState(false);
   const [error, setError] = useState('');
@@ -67,16 +71,25 @@ const ReassignForm: React.FC<Omit<ReassignTaskModalProps, 'open'>> = ({
   const options = useMemo(() => catalog.filter((user) => user.isActive !== false), [catalog]);
   const isLoadingUsers = users === undefined && usersQuery.isLoading;
 
-  const currentAssigneeId = task?.assignments?.[0]?.userId || task?.assignedToId || null;
+  const currentAssigneeIds = useMemo(() => getAssignedUserIds(task), [task]);
+  const currentAssigneeSet = useMemo(() => new Set(currentAssigneeIds), [currentAssigneeIds]);
   const trimmedReason = reason.trim();
   const isReasonValid = trimmedReason.length >= REASSIGN_REASON_MIN_LENGTH;
-  const isSameAssignee = Boolean(newAssigneeId) && newAssigneeId === currentAssigneeId;
-  const canSubmit = Boolean(task?.id) && Boolean(newAssigneeId) && isReasonValid && !isSameAssignee && !isSaving;
+  const isSameAssignee = newAssigneeIds.length === currentAssigneeIds.length
+    && newAssigneeIds.every((id) => currentAssigneeSet.has(id));
+  const canSubmit = Boolean(task?.id) && newAssigneeIds.length > 0 && isReasonValid && !isSameAssignee && !isSaving;
+
+  const toggleAssignee = (assigneeId: string) => {
+    setNewAssigneeIds((current) => current.includes(assigneeId)
+      ? current.filter((id) => id !== assigneeId)
+      : [...current, assigneeId]);
+    setError('');
+  };
 
   const handleSubmit = async () => {
     if (!task?.id) return;
-    if (!newAssigneeId) {
-      setError('Selecciona el nuevo responsable.');
+    if (newAssigneeIds.length === 0) {
+      setError('Selecciona al menos un responsable.');
       return;
     }
     if (!isReasonValid) {
@@ -86,9 +99,12 @@ const ReassignForm: React.FC<Omit<ReassignTaskModalProps, 'open'>> = ({
     setIsSaving(true);
     setError('');
     try {
-      const updated = await tasksService.reassign(task.id, { newAssigneeId, reason: trimmedReason });
-      const target = options.find((user) => user.id === newAssigneeId);
-      toast.success(`Tarea reasignada a ${target ? getUserLabel(target) : 'otro responsable'}`);
+      const updated = await tasksService.reassign(task.id, { newAssigneeIds, reason: trimmedReason });
+      const targetNames = newAssigneeIds.map((id) => {
+        const target = options.find((user) => user.id === id);
+        return target ? getUserLabel(target) : 'otro responsable';
+      });
+      toast.success(`Tarea reasignada a ${targetNames.join(', ')}`);
       onReassigned?.(updated as Task);
       onOpenChange(false);
     } catch (e: unknown) {
@@ -125,37 +141,39 @@ const ReassignForm: React.FC<Omit<ReassignTaskModalProps, 'open'>> = ({
         )}
 
         <div className="min-w-0 space-y-1.5">
-          <Label htmlFor="reassign-new-assignee" className="text-xs font-bold text-foreground">
-            Nuevo responsable <span className="text-destructive">*</span>
+          <Label id="reassign-new-assignees-label" className="text-xs font-bold text-foreground">
+            Responsables <span className="text-destructive">*</span>
           </Label>
-          <Select
-            value={newAssigneeId}
-            onValueChange={(value) => {
-              setNewAssigneeId(value);
-              setError('');
-            }}
-            disabled={isSaving}
-          >
-            <SelectTrigger id="reassign-new-assignee" data-testid="reassign-assignee" className="h-11 w-full text-sm">
-              <SelectValue placeholder="Selecciona un responsable" />
-            </SelectTrigger>
-            <SelectContent>
-              {isLoadingUsers && <div className="px-2 py-1.5 text-xs text-muted-foreground">Cargando usuarios...</div>}
-              {!isLoadingUsers && options.length === 0 && (
-                <div className="px-2 py-1.5 text-xs text-muted-foreground">No hay usuarios disponibles</div>
-              )}
-              {options.map((user) => (
-                <SelectItem key={user.id} value={user.id}>
-                  {getUserLabel(user)}
-                  {user.department?.name ? ` · ${user.department.name}` : ''}
-                  {user.id === currentAssigneeId ? ' (actual)' : ''}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
+          <div role="group" aria-labelledby="reassign-new-assignees-label" data-testid="reassign-assignees" className="max-h-56 space-y-1 overflow-y-auto rounded-xl border border-input bg-muted/[0.12] p-2">
+            {isLoadingUsers && <p className="px-2 py-1.5 text-xs text-muted-foreground">Cargando usuarios...</p>}
+            {!isLoadingUsers && options.length === 0 && <p className="px-2 py-1.5 text-xs text-muted-foreground">No hay usuarios disponibles</p>}
+            {options.map((user) => {
+              const checked = newAssigneeIds.includes(user.id);
+              return (
+                <label key={user.id} htmlFor={`reassign-user-${user.id}`} className={`flex cursor-pointer items-center gap-3 rounded-lg px-3 py-2.5 transition-colors hover:bg-background ${checked ? 'bg-primary/10' : ''}`}>
+                  <input
+                    type="checkbox"
+                    id={`reassign-user-${user.id}`}
+                    data-testid={`reassign-user-${user.id}`}
+                    checked={checked}
+                    onChange={() => toggleAssignee(user.id)}
+                    disabled={isSaving}
+                    className="size-4 shrink-0 rounded border-input accent-primary"
+                  />
+                  <span className="min-w-0 flex-1">
+                    <span className="block break-words text-sm font-semibold [overflow-wrap:anywhere]">{getUserLabel(user)}</span>
+                    {user.email && <span className="block truncate text-[11px] text-muted-foreground">{user.email}</span>}
+                    {user.department?.name && <span className="block truncate text-[10px] text-muted-foreground">{user.department.name}</span>}
+                  </span>
+                  {currentAssigneeSet.has(user.id) && <span className="shrink-0 text-[10px] font-semibold text-muted-foreground">actual</span>}
+                </label>
+              );
+            })}
+          </div>
+          <p className="text-[11px] text-muted-foreground">Selecciona uno o varios responsables para la tarea.</p>
           {isSameAssignee && (
             <p className="text-[11px] text-amber-600 dark:text-amber-400">
-              Ese usuario ya es el responsable actual de la tarea.
+              La tarea ya está asignada a esta misma selección.
             </p>
           )}
         </div>

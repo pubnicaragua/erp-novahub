@@ -29,6 +29,7 @@ import { detectMeetingUrl } from '../../utils/meetingLink';
 import type { ActivityCustomField, ActivityReassignmentEntry, Task } from '../../types';
 import { getCurrencyDecimalPlaces } from '../../utils/currency';
 import { firstReadable } from '../../utils/displayText';
+import { ReportFileChip } from './ReportEntry';
 
 export type ActivityDetailKind = 'task' | 'event' | 'meeting' | 'reminder' | 'log';
 
@@ -451,13 +452,22 @@ function TaskDetails({ item, onUpdate, canEdit, canReassign, canManageSubtasks, 
 }) {
   const now = new Date();
   const assignments = item.assignments || [];
-  const evidence = item.evidences?.[0];
+  const evidences = Array.isArray(item.evidences) ? item.evidences : [];
   const subtasks = item.subtasks || [];
   const timeEntries = item.timeEntries || [];
   const displayStatus = getTaskDisplayStatus(item);
   const isOverdue = displayStatus === 'OVERDUE';
   return (
     <>
+      <DetailSection title="Descripción de la tarea" icon={FileText}>
+        <p
+          className="break-words whitespace-pre-wrap text-sm leading-6 text-muted-foreground [overflow-wrap:anywhere]"
+          data-testid="activities-task-detail-description"
+        >
+          {String(item.description || '').trim() || 'Esta tarea no tiene descripción.'}
+        </p>
+      </DetailSection>
+
       <div className="grid grid-cols-2 gap-3">
         <DetailItem label="Estado" value={<StatusBadge value={displayStatus} kind="task" />} icon={CheckCircle2} />
         <DetailItem label="Prioridad" value={formatLabel(item.priority)} icon={Flag} />
@@ -539,7 +549,22 @@ function TaskDetails({ item, onUpdate, canEdit, canReassign, canManageSubtasks, 
       <ReassignmentHistorySection task={item} />
 
       <TaskCustomFieldsSection task={item} canEdit={canEdit} onTaskSaved={onUpdate} />
-      {evidence ? <DetailSection title="Evidencia de cierre" icon={Paperclip}><div className="flex items-center justify-between gap-3 rounded-xl border border-border/40 bg-muted/[0.14] p-3"><div className="min-w-0"><p className="truncate text-sm font-semibold">{evidence.fileName || 'Archivo de evidencia'}</p><p className="mt-1 text-xs text-muted-foreground">{formatFileType(evidence.fileType)}{evidence.fileSize ? ` · ${formatFileSize(evidence.fileSize)}` : ''} · {formatDate(evidence.uploadedAt)}</p></div><a className="shrink-0 rounded-lg bg-primary/10 px-3 py-2 text-xs font-bold text-primary hover:bg-primary/15" href={evidence.fileUrl} target="_blank" rel="noreferrer">Abrir</a></div></DetailSection> : <DetailSection title="Evidencia de cierre" icon={Paperclip}><p className="text-sm text-muted-foreground">Aún no hay evidencia adjunta para esta tarea.</p></DetailSection>}
+      <DetailSection title="Archivos adjuntos" icon={Paperclip}>
+        {evidences.length > 0 ? (
+          <ul className="space-y-2">
+            {evidences.map((file: any) => (
+              <li key={file.id} className="min-w-0 rounded-xl border border-border/40 bg-muted/[0.14] p-3">
+                <ReportFileChip file={{ ...file, fileUrl: file.fileUrlStorageUri || file.fileUrl }} />
+                <p className="mt-1 text-[11px] text-muted-foreground">
+                  {formatFileType(file.fileType)}{file.fileSize ? ` · ${formatFileSize(file.fileSize)}` : ''} · {formatDate(file.uploadedAt)}
+                </p>
+              </li>
+            ))}
+          </ul>
+        ) : (
+          <p className="text-sm text-muted-foreground">Aún no hay archivos adjuntos para esta tarea.</p>
+        )}
+      </DetailSection>
     </>
   );
 }
@@ -922,22 +947,13 @@ export function ActivityDetailSheet({ kind, item, users, accounts, linkedExpense
   return (
     <>
     <Sheet open={Boolean(item)} onOpenChange={onOpenChange}>
-      <SheetContent side="right" className="erp-detail-panel w-full gap-0 overflow-hidden border-l border-border/50 bg-background p-0 sm:max-w-xl">
+      <SheetContent side="right" className="activities-detail-panel erp-detail-panel w-full gap-0 overflow-hidden border-l border-border/50 bg-background p-0 sm:max-w-xl">
         <SheetHeader className="sticky top-0 z-10 space-y-3 border-b border-border/50 bg-background/95 px-5 py-5 backdrop-blur-md sm:px-6">
           <div className="flex items-start gap-3 pr-8">
             <div className={cn('flex size-12 shrink-0 items-center justify-center rounded-2xl', config.accent)}><FileText className="size-6" /></div>
             <div className="min-w-0 flex-1">
-              <SheetTitle className="truncate text-lg font-black tracking-tight">{title}</SheetTitle>
-              <SheetDescription
-                className={cn(
-                  'mt-1 text-xs',
-                  isTask && 'max-h-28 overflow-y-auto whitespace-pre-wrap break-words pr-1 text-sm leading-5 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/50',
-                )}
-                data-testid={isTask ? 'activities-task-detail-description' : undefined}
-                tabIndex={isTask ? 0 : undefined}
-              >
-                {isTask ? String(item?.description || '').trim() || 'Esta tarea no tiene descripción.' : `${config.singular} · ${description}`}
-              </SheetDescription>
+              <SheetTitle className="break-words text-lg font-black tracking-tight [overflow-wrap:anywhere]">{title}</SheetTitle>
+              {!isTask && <SheetDescription className="mt-1 text-xs">{`${config.singular} · ${description}`}</SheetDescription>}
             </div>
           </div>
           <div className="flex flex-wrap items-center gap-2"><Badge variant="outline" className="rounded-lg border-border/50 text-[10px] font-bold uppercase tracking-wider">ID {item?.id || '—'}</Badge>{displayStatus && <StatusBadge value={displayStatus} kind={kind} />}</div>

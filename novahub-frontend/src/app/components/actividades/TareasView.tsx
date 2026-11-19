@@ -123,6 +123,11 @@ const getTaskAssigneeId = (task?: TaskLike | null): string => {
   return String(fromAssignments?.userId || '').trim();
 };
 
+const getTaskAssigneeIds = (task?: TaskLike | null): string[] => [...new Set([
+  task?.assignedToId,
+  ...(Array.isArray(task?.assignments) ? task.assignments.map((assignment) => assignment?.userId) : []),
+].map((value) => String(value || '').trim()).filter(Boolean))];
+
 export const TareasView: React.FC<TareasViewProps> = ({ data, loading, summaryError = false, onRefresh, notificationTargetId, onClearNotificationTarget }) => {
   const { user, canPerform } = useAuth();
   const currentUserId = user?.id ? String(user.id) : null;
@@ -174,6 +179,7 @@ export const TareasView: React.FC<TareasViewProps> = ({ data, loading, summaryEr
   const [favoritesOnly, setFavoritesOnly] = useState<boolean>(false);
   /** Subtareas escritas al crear la tarea: una por línea. */
   const [newSubtasksText, setNewSubtasksText] = useState('');
+  const [newTaskFiles, setNewTaskFiles] = useState<File[]>([]);
   const [isCategoryManagerOpen, setIsCategoryManagerOpen] = useState(false);
   const [isCreateCategoryOpen, setIsCreateCategoryOpen] = useState(false);
   const [newCategoryName, setNewCategoryName] = useState('');
@@ -324,14 +330,12 @@ export const TareasView: React.FC<TareasViewProps> = ({ data, loading, summaryEr
   const canClaimTask = (task?: TaskLike | null): boolean => {
     if (!currentUserId || isClosedTaskStatus(task)) return false;
     if (String(task?.status || '').toUpperCase() === 'WAITING_APPROVAL') return false;
-    const assigneeId = getTaskAssigneeId(task);
-    return !assigneeId || assigneeId !== currentUserId;
+    return !getTaskAssigneeIds(task).includes(currentUserId);
   };
 
   const isTaskMine = (task?: TaskLike | null): boolean => {
     if (!currentUserId) return false;
-    const assigneeId = getTaskAssigneeId(task);
-    return Boolean(assigneeId) && assigneeId === currentUserId;
+    return getTaskAssigneeIds(task).includes(currentUserId);
   };
 
   const canMoveTaskToStatus = (task: Task, targetStatus: string): boolean => {
@@ -391,6 +395,7 @@ export const TareasView: React.FC<TareasViewProps> = ({ data, loading, summaryEr
       assignedTo: [],
     });
     setNewSubtasksText('');
+    setNewTaskFiles([]);
   };
 
   const handleCreateCategory = async () => {
@@ -508,6 +513,14 @@ export const TareasView: React.FC<TareasViewProps> = ({ data, loading, summaryEr
     if (accepted.length > 0) toast.success(accepted.length === 1 ? 'Archivo agregado a la evidencia.' : `${accepted.length} archivos agregados a la evidencia.`);
   };
 
+  const appendNewTaskFiles = (incoming: File[]) => {
+    if (incoming.length === 0) return;
+    const available = Math.max(0, MAX_TASK_EVIDENCE_FILES - newTaskFiles.length);
+    const accepted = incoming.slice(0, available);
+    if (accepted.length > 0) setNewTaskFiles((current) => [...current, ...accepted].slice(0, MAX_TASK_EVIDENCE_FILES));
+    if (accepted.length < incoming.length) toast.error('Puedes adjuntar hasta 10 archivos a la tarea.');
+  };
+
   const handleApprovalPaste = (event: ReactClipboardEvent<HTMLDivElement>) => {
     if (actionLoading) return;
     const filesFromItems = Array.from(event.clipboardData.items)
@@ -542,8 +555,15 @@ export const TareasView: React.FC<TareasViewProps> = ({ data, loading, summaryEr
       toast.error('El título es requerido');
       return;
     }
+    const uploadedTaskFiles: Array<{ url: string; name: string; size: number; type: string }> = [];
+    let createdTask = false;
     try {
       setIsCreating(true);
+      const uploadFolder = `task-creation-${Date.now()}-${Math.random().toString(36).slice(2)}`;
+      for (const file of newTaskFiles) {
+        const uploaded = await storageService.uploadFile('task-evidence', file, { folder: uploadFolder });
+        uploadedTaskFiles.push({ url: uploaded.uri, name: file.name, size: file.size, type: file.type });
+      }
       const created = await tasksService.create({
         title: newTask.title.trim(),
         description: newTask.description,
@@ -552,7 +572,9 @@ export const TareasView: React.FC<TareasViewProps> = ({ data, loading, summaryEr
         assignedTo: newTask.assignedTo as any,
         categoryId: (newTask.categoryId === CATEGORY_NONE ? null : newTask.categoryId) as ActivityCategory | null,
         customFields: buildCustomFieldsPayload(newTask.customFields),
+        files: uploadedTaskFiles,
       });
+      createdTask = true;
       // Título + subpuntos: cada línea del campo «Subtareas» queda como una subtarea de la tarea recién creada.
       const subtaskTitles = newSubtasksText.split(String.fromCharCode(10)).map((line) => line.trim().replace(/^[-*• ]+/, '').trim()).filter(Boolean).slice(0, 30);
       let failedSubtasks = 0;
@@ -569,6 +591,9 @@ export const TareasView: React.FC<TareasViewProps> = ({ data, loading, summaryEr
       resetNewTaskForm();
       onRefresh();
     } catch (e: any) {
+      if (!createdTask && uploadedTaskFiles.length > 0) {
+        await Promise.allSettled(uploadedTaskFiles.map((file) => storageService.deleteFile(file.url)));
+      }
       toast.error(e?.response?.data?.message || e?.message || 'Error al crear tarea');
     } finally {
       setIsCreating(false);
@@ -1794,6 +1819,42 @@ export const TareasView: React.FC<TareasViewProps> = ({ data, loading, summaryEr
               <p className="text-[11px] text-muted-foreground">
                 Selecciona uno o varios usuarios para dar seguimiento.
               </p>
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="activities-task-files" className="flex items-center gap-2 text-xs font-bold text-foreground">
+                <Paperclip className="size-3.5 text-primary" />
+                Archivos adjuntos <span className="font-normal text-muted-foreground">(opcional)</span>
+              </Label>
+              <Input
+                id="activities-task-files"
+                data-testid="activities-task-files"
+                type="file"
+                multiple
+                disabled={isCreating}
+                onChange={(event) => {
+                  appendNewTaskFiles(Array.from(event.currentTarget.files || []));
+                  event.currentTarget.value = '';
+                }}
+                className="h-10 rounded-xl bg-background text-xs file:mr-3 file:rounded-lg file:border-0 file:bg-primary/10 file:px-2 file:py-1 file:text-xs file:font-bold file:text-primary"
+              />
+              <p className="text-[10px] text-muted-foreground">Puedes adjuntar hasta {MAX_TASK_EVIDENCE_FILES} archivos. Se mostrarán en el detalle de la tarea.</p>
+              {newTaskFiles.length > 0 && (
+                <div aria-live="polite" className="space-y-1.5 rounded-xl border border-border/50 bg-muted/[0.12] p-2.5">
+                  <p className="text-[10px] font-semibold text-muted-foreground">{newTaskFiles.length} de {MAX_TASK_EVIDENCE_FILES} archivos seleccionados</p>
+                  <ul className="space-y-1">
+                    {newTaskFiles.map((file, index) => (
+                      <li key={`${file.name}-${file.size}-${file.lastModified}-${index}`} className="flex min-w-0 items-center gap-2 rounded-lg bg-background/70 px-2 py-1.5">
+                        <Paperclip className="size-3.5 shrink-0 text-muted-foreground" />
+                        <span className="min-w-0 flex-1 break-words text-[11px] font-medium [overflow-wrap:anywhere]" title={file.name}>{file.name}</span>
+                        <span className="shrink-0 text-[10px] text-muted-foreground">{Math.max(1, Math.round(file.size / 1024))} KB</span>
+                        <Button type="button" variant="ghost" size="icon" className="size-7 shrink-0" aria-label={`Quitar ${file.name}`} disabled={isCreating} onClick={() => setNewTaskFiles((current) => current.filter((_, fileIndex) => fileIndex !== index))}>
+                          <XCircle className="size-4" />
+                        </Button>
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+              )}
             </div>
           </div>
           <DialogFooter className="border-t border-border/50 bg-muted/[0.12] px-6 py-4 sm:px-8">

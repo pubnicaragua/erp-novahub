@@ -57,10 +57,10 @@ export function ReportFileChip({ file }: { file: ActivityReportFile }) {
       onClick={() => void open()}
       disabled={opening}
       title={`Abrir ${file.fileName}`}
-      className="inline-flex max-w-full min-w-0 items-center gap-2 rounded-lg border border-border/50 bg-background px-2.5 py-1.5 text-left text-xs font-semibold transition-colors hover:border-primary/40 hover:bg-primary/5 disabled:opacity-60"
+      className="inline-flex max-w-full min-w-0 flex-wrap items-center gap-2 rounded-lg border border-border/50 bg-background px-2.5 py-1.5 text-left text-xs font-semibold transition-colors hover:border-primary/40 hover:bg-primary/5 disabled:opacity-60"
     >
       {opening ? <Loader2 className="size-3.5 shrink-0 animate-spin text-primary" /> : <FileText className="size-3.5 shrink-0 text-primary" />}
-      <span className="min-w-0 truncate">{file.fileName}</span>
+      <span className="min-w-0 break-words [overflow-wrap:anywhere]">{file.fileName}</span>
       {meta && <span className="shrink-0 text-[10px] font-medium text-muted-foreground">{meta}</span>}
       <ExternalLink className="size-3 shrink-0 text-muted-foreground" />
     </button>

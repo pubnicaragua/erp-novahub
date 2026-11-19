@@ -96,7 +96,7 @@ export const SubtasksManager: React.FC<SubtasksManagerProps> = ({
         )}
       </div>
 
-      <div className="space-y-1.5 max-h-48 overflow-y-auto pr-1">
+      <div className="space-y-1.5 pr-1">
         {subtasks.length === 0 && (
           <p className="text-xs italic text-muted-foreground py-2 text-center">
             No hay subtareas registradas.
@@ -123,7 +123,7 @@ export const SubtasksManager: React.FC<SubtasksManagerProps> = ({
               ) : (
                 <Circle className="size-4 text-muted-foreground/50 shrink-0" />
               )}
-              <span className={cn('truncate font-medium', st.isCompleted && 'line-through')}>
+              <span className={cn('min-w-0 break-words whitespace-normal font-medium [overflow-wrap:anywhere]', st.isCompleted && 'line-through')}>
                 {st.title}
               </span>
             </button>

@@ -2730,6 +2730,13 @@ th .column-filter-menu .column-filter-icon,
   touch-action: pan-x pan-y pinch-zoom;
 }
 
+/* En el detalle de Actividades el cuerpo ya tiene su propio ScrollArea.
+   Evita un segundo scrollbar exterior que desplaza también encabezado y pie. */
+.activities-detail-panel > [data-slot="sheet-scroll-content"] {
+  overflow-y: hidden;
+  scrollbar-gutter: auto;
+}
+
 main.module-notificaciones:has([data-message-scroll-layout="contained"]) {
   overflow-y: hidden !important;
   overscroll-behavior-y: none;

@@ -159,8 +159,8 @@ export const storageService = {
       notifyErpMutation('end', 'PUT', `/storage/uploads/${purpose}/signed`);
     }
 
-    // Los adjuntos de Estrategias se abren con su propia ruta (según quién puede ver la idea); resolverlos aquí exigiría el permiso de Documentos.
-    const url = prepared.publicUrl || (purpose === 'strategy-attachment' || purpose === 'hr-documents' || purpose === 'client-contract' ? '' : await this.resolveUrl(prepared.uri));
+    // Estos archivos privados se resuelven solo al abrirlos, con los permisos de su módulo.
+    const url = prepared.publicUrl || (purpose === 'strategy-attachment' || purpose === 'hr-documents' || purpose === 'client-contract' || purpose === 'task-evidence' ? '' : await this.resolveUrl(prepared.uri));
     return { uri: prepared.uri, url, bucket: prepared.bucket, path: prepared.path };
   },
 

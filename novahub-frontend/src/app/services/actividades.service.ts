@@ -27,6 +27,8 @@ const createCrudService = <T>(endpoint: string) => ({
 
 export const tasksService = {
   ...createCrudService<Task>('/activities/tasks'),
+  create: async (payload: Partial<Task> & { files?: Array<{ url: string; name: string; size?: number; type?: string }> }) =>
+    await api.post('/activities/tasks', payload) as Task,
   complete: async (id: string, evidenceData?: any) => {
     return await api.post(`/activities/tasks/${id}/complete`, evidenceData || {});
   },
@@ -43,7 +45,7 @@ export const tasksService = {
   rate: async (id: string, payload: { rating: number; comment?: string }) => {
     return await api.post(`/activities/tasks/${id}/rate`, payload);
   },
-  reassign: async (id: string, payload: { newAssigneeId: string; reason: string }) => {
+  reassign: async (id: string, payload: { newAssigneeIds: string[]; reason: string }) => {
     return await api.post(`/activities/tasks/${id}/reassign`, payload) as Task;
   },
   claim: async (id: string) => {
