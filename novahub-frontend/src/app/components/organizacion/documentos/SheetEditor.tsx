@@ -1,5 +1,5 @@
 import { forwardRef, useCallback, useEffect, useImperativeHandle, useMemo, useRef, useState } from 'react';
-import { AlignCenter, AlignLeft, AlignRight, BarChart3, Bold, Eraser, Filter, Grid3x3, Italic, Merge, MoreHorizontal, PaintBucket, Plus, Redo2, Trash2, Type, Underline, Undo2 } from 'lucide-react';
+import { AlignCenter, AlignLeft, AlignRight, BarChart3, Bold, WrapText, Eraser, Filter, Grid3x3, Italic, Merge, MoreHorizontal, PaintBucket, Plus, Redo2, Trash2, Type, Underline, Undo2 } from 'lucide-react';
 import { cn } from '../../ui/utils';
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator, DropdownMenuTrigger } from '../../ui/dropdown-menu';
 import { toast } from '../../../services/toast';
@@ -29,6 +29,7 @@ interface Editing { col: number; row: number; value: string; fromBar?: boolean }
 interface Clip { text: string; col: number; row: number; cells: Array<Array<SheetCell | null>> }
 
 const ROW_H = 28;
+const PX_PER_PT = 4 / 3;
 const HEADER_W = 48;
 const MAX_ROWS = 5000;
 const MAX_COLS = 100;
@@ -188,6 +189,13 @@ export const SheetEditor = forwardRef<SheetEditorHandle, Props>(function SheetEd
       };
       if (s.merges) {
         next.merges = s.merges.flatMap((range) => { const rc = parseRange(range); const m = rc && moveRect(rc); return m && (m.c1 > m.c0 || m.r1 > m.r0) ? [rangeText(m)] : []; });
+      }
+      if (axis === 'row' && s.rowHeights) {
+        next.rowHeights = Object.fromEntries(Object.entries(s.rowHeights).flatMap(([i, h]) => { const moved = remap(Number(i)); return moved === null ? [] : [[moved, h]]; }));
+      }
+      if (s.table) {
+        const rc = parseRange(s.table.ref); const m = rc && moveRect(rc);
+        next.table = m ? { ...s.table, ref: rangeText(m) } : undefined;
       }
       if (s.filter) {
         const m = moveRect({ c0: s.filter.c0, c1: s.filter.c1, r0: s.filter.row, r1: s.filter.row });
@@ -401,9 +409,14 @@ export const SheetEditor = forwardRef<SheetEditorHandle, Props>(function SheetEd
   // ───────────── Pintado ─────────────
   // Filas que oculta el filtro; la tabla se pinta solo con las visibles (y con la ventana de desplazamiento).
   const hiddenRows = useMemo(() => filterHiddenRows(sheet, evaluator), [sheet, evaluator]);
-  const rowsList = useMemo(() => (hiddenRows.size ? Array.from({ length: sheet.rowCount }, (_, i) => i).filter((r) => !hiddenRows.has(r)) : null), [hiddenRows, sheet.rowCount]);
-  const total = rowsList ? rowsList.length : sheet.rowCount;
-  const rowAt = (p: number) => (rowsList ? rowsList[Math.max(0, Math.min(p, total - 1))] : p) ?? 0;
+  // Posición vertical de cada fila (las ocultas miden 0 y las filas con tamaño propio, el suyo).
+  const offsets = useMemo(() => {
+    const out = new Array<number>(sheet.rowCount + 1); out[0] = 0;
+    for (let r = 0; r < sheet.rowCount; r++) out[r + 1] = out[r] + (hiddenRows.has(r) ? 0 : (sheet.rowHeights?.[r] ?? ROW_H));
+    return out;
+  }, [sheet.rowCount, sheet.rowHeights, hiddenRows]);
+  const total = sheet.rowCount - hiddenRows.size;
+  const findRow = (y: number) => { let lo = 0; let hi = sheet.rowCount - 1; while (lo < hi) { const mid = (lo + hi + 1) >> 1; if (offsets[mid] <= y) lo = mid; else hi = mid - 1; } return lo; };
   const cols = Array.from({ length: sheet.colCount }, (_, c) => c);
   const widthOf = (c: number) => sheet.colWidths[c] ?? DEFAULT_COL_WIDTH;
   const tableWidth = HEADER_W + cols.reduce((sum, c) => sum + widthOf(c), 0);
@@ -418,21 +431,22 @@ export const SheetEditor = forwardRef<SheetEditorHandle, Props>(function SheetEd
     }
     return { starts, covered, rects };
   }, [sheet.merges]);
+  const freezeRows = Math.min(sheet.freeze?.rows ?? 0, sheet.rowCount); const freezeCols = Math.min(sheet.freeze?.cols ?? 0, sheet.colCount);
+  const leftOf = (c: number) => HEADER_W + cols.slice(0, c).reduce((sum, i) => sum + widthOf(i), 0);
   // La ventana se amplía para no cortar una combinación vertical por la mitad.
-  let rFirst = rowAt(Math.max(0, Math.floor(scroll.top / ROW_H) - 6));
-  let rLast = rowAt(Math.min(total - 1, Math.ceil((scroll.top + scroll.height) / ROW_H) + 6));
+  let rFirst = Math.max(freezeRows, findRow(Math.max(0, scroll.top)) - 6);
+  let rLast = Math.min(sheet.rowCount - 1, findRow(scroll.top + scroll.height) + 6);
   for (const m of merged.rects) {
-    if (m.r0 < rFirst && m.r1 >= rFirst) rFirst = m.r0;
-    if (m.r0 <= rLast && m.r1 > rLast) rLast = m.r1;
+    if (m.r0 < rFirst && m.r1 >= rFirst) rFirst = Math.max(freezeRows, m.r0);
+    if (m.r0 <= rLast && m.r1 > rLast) rLast = Math.min(sheet.rowCount - 1, m.r1);
   }
-  const frozen = Boolean(sheet.freezeRow);
-  const pinned = frozen && rFirst > 0 && (!rowsList || rowsList[0] === 0); // la fila 1 fija se pinta aparte cuando el resto se desplazó
-  const visibleRows: number[] = pinned ? [0] : [];
-  for (let r = rFirst; r <= rLast && r < sheet.rowCount; r++) if (!hiddenRows.has(r) && !(pinned && r === 0)) visibleRows.push(r);
-  const rowsBefore = rowsList ? rowsList.filter((r) => r < rFirst).length : rFirst;
-  const rowsAfter = rowsList ? rowsList.filter((r) => r > rLast).length : Math.max(0, sheet.rowCount - 1 - rLast);
-  const topSpacer = Math.max(0, rowsBefore - (pinned ? 1 : 0)) * ROW_H;
+  const visibleRows: number[] = [];
+  for (let r = 0; r < freezeRows; r++) if (!hiddenRows.has(r)) visibleRows.push(r);
+  for (let r = rFirst; r <= rLast; r++) if (!hiddenRows.has(r)) visibleRows.push(r);
+  const topSpacer = Math.max(0, offsets[rFirst] - offsets[freezeRows]);
+  const bottomSpacer = Math.max(0, offsets[sheet.rowCount] - offsets[Math.min(sheet.rowCount, rLast + 1)]);
   const spanOf = (r0: number, r1: number) => { let n = r1 - r0 + 1; for (const h of hiddenRows) if (h >= r0 && h <= r1) n--; return Math.max(1, n); };
+  const tableRect = useMemo(() => (sheet.table ? parseRange(sheet.table.ref) : null), [sheet.table]);
   const filter = sheet.filter;
   const [filterMenu, setFilterMenu] = useState<{ col: number; left: number; top: number } | null>(null);
   const filterValues = useMemo(() => {
@@ -506,7 +520,11 @@ export const SheetEditor = forwardRef<SheetEditorHandle, Props>(function SheetEd
           className="ml-1 h-8 rounded-md border border-border bg-background px-2 text-[12px] disabled:opacity-40">
           <option value="general">General</option><option value="integer">Entero (1,235)</option><option value="number">Número (1,234.50)</option><option value="currency">Moneda (C$)</option><option value="usd">Dólares ($)</option><option value="percent">Porcentaje</option><option value="date">Fecha</option>
         </select>
-        {btn('Bordes', <Grid3x3 className="size-4" />, () => patchFormat({ bd: !active?.bd }), !!active?.bd)}
+        <select aria-label="Tamaño de letra" disabled={readOnly} value={active?.fs ? String(active.fs) : ''} onChange={(e) => patchFormat({ fs: e.target.value ? Number(e.target.value) : undefined })} className="h-8 w-16 rounded-md border border-border bg-background px-1 text-[12px] disabled:opacity-40">
+          <option value="">Auto</option>{[8, 9, 10, 11, 12, 14, 16, 18, 20, 24, 28, 36].map((n) => <option key={n} value={n}>{n}</option>)}
+        </select>
+        {btn('Ajustar el texto en la celda', <WrapText className="size-4" />, () => patchFormat({ wr: !active?.wr }), !!active?.wr)}
+        {btn('Bordes', <Grid3x3 className="size-4" />, () => patchFormat({ bs: active?.bs ? undefined : 'LRTB', bc: undefined }), !!active?.bs)}
         {btn('Combinar o separar celdas', <Merge className="size-4" />, toggleMerge)}
         {btn(sheet.filter ? 'Quitar el filtro' : 'Activar el filtro por columnas', <Filter className="size-4" />, toggleFilter, !!sheet.filter)}
         {btn('Crear un gráfico con la selección', <BarChart3 className="size-4" />, addChart)}
@@ -526,7 +544,8 @@ export const SheetEditor = forwardRef<SheetEditorHandle, Props>(function SheetEd
                 <DropdownMenuItem onSelect={() => sortRows(false)}>Ordenar de Z a A (mayor a menor)</DropdownMenuItem>
                 <DropdownMenuItem onSelect={() => fill('down')}>Rellenar hacia abajo (Ctrl+D)</DropdownMenuItem>
                 <DropdownMenuItem onSelect={() => fill('right')}>Rellenar a la derecha (Ctrl+R)</DropdownMenuItem>
-                <DropdownMenuItem onSelect={() => mapSheet((s) => ({ ...s, freezeRow: !s.freezeRow }))}>{sheet.freezeRow ? 'Soltar la primera fila' : 'Inmovilizar la primera fila'}</DropdownMenuItem>
+                <DropdownMenuItem onSelect={() => mapSheet((s) => ({ ...s, freeze: s.freeze ? undefined : { rows: sel.fr > 0 || sel.fc > 0 ? Math.min(20, sel.fr) : 1, cols: Math.min(10, sel.fc) } }))}>{sheet.freeze ? 'Soltar los paneles fijos' : 'Inmovilizar filas y columnas antes de la celda activa'}</DropdownMenuItem>
+                <DropdownMenuItem onSelect={() => mapSheet((s) => ({ ...s, hideGrid: !s.hideGrid }))}>{sheet.hideGrid ? 'Mostrar las líneas de la cuadrícula' : 'Ocultar las líneas de la cuadrícula'}</DropdownMenuItem>
                 <DropdownMenuSeparator />
               </>
             )}
@@ -552,7 +571,7 @@ export const SheetEditor = forwardRef<SheetEditorHandle, Props>(function SheetEd
         className="min-w-0 rounded-xl border border-border bg-card outline-none focus-visible:ring-2 focus-visible:ring-primary/30">
         <div ref={scroller} onScroll={(e) => setScroll({ top: e.currentTarget.scrollTop, height: e.currentTarget.clientHeight })}
           className="overflow-auto" style={{ height: 'min(62vh, 640px)', scrollPaddingTop: ROW_H, scrollPaddingLeft: HEADER_W }}>
-          <table className="org-sheet-grid" style={{ width: tableWidth }}>
+          <table className={cn('org-sheet-grid', sheet.hideGrid && 'org-sheet-nogrid')} style={{ width: tableWidth }}>
             <colgroup><col style={{ width: HEADER_W }} />{cols.map((c) => <col key={c} style={{ width: widthOf(c) }} />)}</colgroup>
             <thead>
               <tr>
@@ -569,13 +588,20 @@ export const SheetEditor = forwardRef<SheetEditorHandle, Props>(function SheetEd
             <tbody>
               {topSpacer > 0 && <tr aria-hidden="true" style={{ height: topSpacer }}><td colSpan={sheet.colCount + 1} style={{ padding: 0, border: 0 }} /></tr>}
               {visibleRows.map((r) => (
-                <tr key={r} aria-rowindex={r + 1}>
-                  <th scope="row" style={frozen && r === 0 ? { top: ROW_H, zIndex: 3 } : undefined} className={cn(r >= rect.r0 && r <= rect.r1 && 'bg-primary/15 text-primary dark:text-accent')} onClick={() => setSel({ ac: 0, ar: r, fc: sheet.colCount - 1, fr: r })}>{r + 1}</th>
+                <tr key={r} aria-rowindex={r + 1} style={{ height: offsets[r + 1] - offsets[r] }}>
+                  <th scope="row" style={r < freezeRows ? { top: ROW_H + offsets[r], zIndex: 3 } : undefined} className={cn(r >= rect.r0 && r <= rect.r1 && 'bg-primary/15 text-primary dark:text-accent')} onClick={() => setSel({ ac: 0, ar: r, fc: sheet.colCount - 1, fr: r })}>{r + 1}</th>
                   {cols.map((c) => {
                     const key = cellKey(c, r); const cell = sheet.cells[key]; const f = cell?.f;
                     if (merged.covered.has(key)) return null;
                     const span = merged.starts.get(key);
-                    const pin = frozen && r === 0;
+                    const pinRow = r < freezeRows; const pinCol = c < freezeCols;
+                    const rowH = offsets[r + 1] - offsets[r];
+                    const inTable = !!tableRect && c >= tableRect.c0 && c <= tableRect.c1 && r >= tableRect.r0 && r <= tableRect.r1;
+                    const tableHead = inTable && r === tableRect.r0;
+                    const stripe = inTable && !tableHead && sheet.table?.stripes && (r - tableRect.r0) % 2 === 1;
+                    const sides = f?.bs ?? ''; const edge = f?.bc ?? 'var(--foreground)';
+                    const shadows = [sides.includes('T') && `inset 0 1px 0 0 ${edge}`, sides.includes('B') && `inset 0 -1px 0 0 ${edge}`, sides.includes('L') && `inset 1px 0 0 0 ${edge}`, sides.includes('R') && `inset -1px 0 0 0 ${edge}`].filter(Boolean).join(', ');
+                    const fill = f?.bg ?? (tableHead ? 'var(--primary)' : stripe ? 'color-mix(in srgb, var(--primary) 9%, var(--card))' : (pinRow || pinCol) ? 'var(--card)' : undefined);
                     const isActive = c === sel.fc && r === sel.fr; const isEditing = editing && editing.col === c && editing.row === r && !editing.fromBar;
                     const value = cell?.v ? evaluator.value(sheet.name, c, r) : null;
                     const isError = value instanceof FormulaError;
@@ -583,7 +609,7 @@ export const SheetEditor = forwardRef<SheetEditorHandle, Props>(function SheetEd
                     return (
                       <td key={c} data-cell={key} role="gridcell" colSpan={span?.cols} rowSpan={span ? spanOf(span.r0, span.r1) : undefined} aria-selected={inRange(c, r)} onMouseDown={(e) => onCellDown(e, c, r)} onMouseEnter={() => { if (dragging.current) setSel((s) => ({ ...s, fc: c, fr: r })); }} onDoubleClick={() => startEdit(c, r)}
                         className={cn('cursor-cell', filter && r === filter.row && c >= filter.c0 && c <= filter.c1 && 'relative pr-7', inRange(c, r) && !isActive && 'bg-primary/10', isActive && 'outline outline-2 -outline-offset-2 outline-primary', isError && 'text-destructive')}
-                        style={{ textAlign: align, fontWeight: f?.b ? 700 : undefined, fontStyle: f?.i ? 'italic' : undefined, textDecoration: f?.u ? 'underline' : undefined, color: isError ? undefined : f?.fg, backgroundColor: inRange(c, r) && !isActive ? undefined : f?.bg ?? (pin ? 'var(--card)' : undefined), padding: isEditing ? 0 : undefined, boxShadow: f?.bd ? 'inset 0 0 0 1px var(--foreground)' : undefined, ...(pin ? { position: 'sticky' as const, top: ROW_H, zIndex: 1 } : {}) }}>
+                        style={{ textAlign: align, fontWeight: f?.b ? 700 : undefined, fontStyle: f?.i ? 'italic' : undefined, textDecoration: f?.u ? 'underline' : undefined, color: isError ? undefined : f?.fg ?? (tableHead ? 'var(--primary-foreground)' : undefined), fontSize: f?.fs ? f.fs * PX_PER_PT : undefined, fontFamily: f?.ff, verticalAlign: f?.va === 'center' ? 'middle' : f?.va, backgroundColor: inRange(c, r) && !isActive ? undefined : fill, padding: isEditing ? 0 : undefined, boxShadow: shadows || undefined, whiteSpace: f?.wr ? 'normal' : undefined, ...(tableHead && !f?.b ? { fontWeight: 700 } : {}), ...(pinRow || pinCol ? { position: 'sticky' as const, top: pinRow ? ROW_H + offsets[r] : undefined, left: pinCol ? leftOf(c) : undefined, zIndex: pinRow && pinCol ? 3 : pinRow ? 2 : 1 } : {}) }}>
                         {isEditing ? (
                           <input autoFocus value={editing.value} spellCheck={false} aria-label={`Editar ${key}`}
                             onChange={(e) => setEditing({ ...editing, value: e.target.value })} onBlur={() => endEdit(true)}
@@ -592,7 +618,7 @@ export const SheetEditor = forwardRef<SheetEditorHandle, Props>(function SheetEd
                               if (e.key === 'Enter') { e.preventDefault(); endEdit(true, 'down'); } else if (e.key === 'Tab') { e.preventDefault(); endEdit(true, e.shiftKey ? 'left' : 'right'); } else if (e.key === 'Escape') { e.preventDefault(); endEdit(false); }
                             }}
                             className="h-full w-full bg-background px-1.5 text-[13px] outline-none" style={{ textAlign: align }} />
-                        ) : formatValue(value, f?.nf)}
+                        ) : f?.wr ? <div style={{ maxHeight: Math.max(14, rowH - 2), overflow: 'hidden', overflowWrap: 'anywhere', lineHeight: 1.25 }}>{formatValue(value, f?.nf)}</div> : formatValue(value, f?.nf)}
                         {filter && r === filter.row && c >= filter.c0 && c <= filter.c1 && (
                           <button type="button" aria-label={`Filtrar la columna ${colToLetters(c)}`} aria-haspopup="dialog" onMouseDown={(e) => e.stopPropagation()}
                             onClick={(e) => { const box = e.currentTarget.getBoundingClientRect(); setFilterMenu({ col: c, left: box.left, top: box.bottom + 4 }); }}
@@ -605,7 +631,7 @@ export const SheetEditor = forwardRef<SheetEditorHandle, Props>(function SheetEd
                   })}
                 </tr>
               ))}
-              {rowsAfter > 0 && <tr aria-hidden="true" style={{ height: rowsAfter * ROW_H }}><td colSpan={sheet.colCount + 1} style={{ padding: 0, border: 0 }} /></tr>}
+              {bottomSpacer > 0 && <tr aria-hidden="true" style={{ height: bottomSpacer }}><td colSpan={sheet.colCount + 1} style={{ padding: 0, border: 0 }} /></tr>}
             </tbody>
           </table>
         </div>

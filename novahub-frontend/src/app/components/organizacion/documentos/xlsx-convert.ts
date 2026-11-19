@@ -15,8 +15,12 @@ export interface CellFormat {
   al?: 'left' | 'center' | 'right';
   bg?: string; fg?: string;
   nf?: NumberFormat;
-  /** Borde fino alrededor de la celda. */
-  bd?: boolean;
+  /** Lados con borde fino (letras L, R, T, B) y su color. */
+  bs?: string; bc?: string;
+  /** Ajustar el texto dentro de la celda y alineación vertical. */
+  wr?: boolean; va?: 'top' | 'center' | 'bottom';
+  /** Tamaño (pt) y tipo de letra, cuando no son los predeterminados. */
+  fs?: number; ff?: string;
 }
 export interface SheetCell { v: string; f?: CellFormat }
 export interface SheetData {
@@ -28,8 +32,14 @@ export interface SheetData {
   colCount: number;
   /** Celdas combinadas («A1:C3»). */
   merges?: string[];
-  /** Deja la primera fila fija al desplazarse. */
-  freezeRow?: boolean;
+  /** Filas y columnas fijas al desplazarse. */
+  freeze?: { rows: number; cols: number };
+  /** Altura de filas con tamaño propio (px). */
+  rowHeights?: Record<number, number>;
+  /** Oculta las líneas de la cuadrícula. */
+  hideGrid?: boolean;
+  /** Tabla de Excel (estilo con filas alternadas). */
+  table?: { ref: string; style: string; stripes: boolean };
   /** Filtro por columnas: `row` es la fila de títulos y `rules` los valores visibles de cada columna filtrada. */
   filter?: SheetFilter;
   /** Gráficos de la hoja (se guardan dentro del .xlsx, en una parte propia). */
@@ -68,7 +78,12 @@ function numFmtToFormat(fmt: string | undefined): NumberFormat | undefined {
 const NUM_FMT: Record<Exclude<NumberFormat, 'general'>, string> = {
   integer: '#,##0', number: '#,##0.00', currency: '"C$"#,##0.00', usd: '"$"#,##0.00', percent: '0.00%', date: 'dd/mm/yyyy',
 };
-const THIN: Partial<ExcelJS.Borders> = { top: { style: 'thin' }, left: { style: 'thin' }, bottom: { style: 'thin' }, right: { style: 'thin' } };
+function bordersOf(f: CellFormat): Partial<ExcelJS.Borders> {
+  const edge: Partial<ExcelJS.Border> = { style: 'thin', ...(hexToArgb(f.bc) ? { color: { argb: hexToArgb(f.bc) } } : {}) };
+  const sides = f.bs ?? '';
+  return { ...(sides.includes('T') ? { top: edge } : {}), ...(sides.includes('L') ? { left: edge } : {}), ...(sides.includes('B') ? { bottom: edge } : {}), ...(sides.includes('R') ? { right: edge } : {}) } as Partial<ExcelJS.Borders>;
+}
+const PX_PER_PT = 4 / 3;
 const dateToSerial = (d: Date) => d.getTime() / 86_400_000 + 25_569;
 const serialToDate = (n: number) => new Date(Math.round((n - 25_569) * 86_400_000));
 
@@ -87,9 +102,64 @@ function cellText(value: ExcelJS.CellValue): { v: string; date?: boolean } | nul
   return null;
 }
 
+/**
+ * Algunos programas (Open XML SDK, ClosedXML y similares) escriben el .xlsx con un prefijo de espacio de nombres
+ * (`<x:workbook>`) o con rutas absolutas en las relaciones (`/xl/tables/table1.xml`), que Excel lee bien pero exceljs no.
+ * Si la lectura directa falla, se quita el prefijo, se vuelven relativas las rutas y se reintenta.
+ */
+async function repairPackage(buffer: ArrayBuffer): Promise<ArrayBuffer | null> {
+  const zip = await JSZip.loadAsync(buffer);
+  let changed = false;
+  for (const name of Object.keys(zip.files)) {
+    if (!name.endsWith('.xml') && !name.endsWith('.rels')) continue;
+    const xml = await zip.file(name)?.async('string');
+    if (!xml) continue;
+    if (name.endsWith('.rels')) {
+      const fixedRels = relativizeTargets(name, xml);
+      if (fixedRels !== xml) { zip.file(name, fixedRels); changed = true; }
+      continue;
+    }
+    const declared = /<([A-Za-z_][\w.-]*):[A-Za-z_][\w.-]*[^>]*\sxmlns:\1="http:\/\/schemas\.openxmlformats\.org\/(?:spreadsheetml\/2006\/main|drawingml\/2006\/main)"/.exec(xml);
+    if (!declared) continue;
+    const prefix = declared[1].replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+    const fixed = xml
+      .replace(new RegExp(`xmlns:${prefix}=`, 'g'), 'xmlns=')
+      .replace(new RegExp(`<(/?)${prefix}:`, 'g'), '<$1');
+    if (fixed !== xml) { zip.file(name, fixed); changed = true; }
+  }
+  return changed ? zip.generateAsync({ type: 'arraybuffer' }) : null;
+}
+
+/** Convierte los destinos absolutos de un archivo de relaciones («/xl/tables/t.xml») en rutas relativas a su parte. */
+function relativizeTargets(relsPath: string, xml: string): string {
+  const owner = relsPath.replace(/_rels\/[^/]+$/, '').replace(/\/$/, ''); // carpeta de la parte dueña
+  const from = owner ? owner.split('/') : [];
+  return xml.replace(/<Relationship\b[^>]*>/g, (tag) => {
+    if (/TargetMode="External"/i.test(tag)) return tag;
+    return tag.replace(/Target="\/([^"]+)"/, (_all, target: string) => {
+      const to = target.split('/'); let i = 0;
+      while (i < from.length && i < to.length - 1 && from[i] === to[i]) i++;
+      return `Target="${[...Array(from.length - i).fill('..'), ...to.slice(i)].join('/')}"`;
+    });
+  });
+}
+
+async function loadWorkbook(buffer: ArrayBuffer): Promise<ExcelJS.Workbook> {
+  try {
+    const wb = new ExcelJS.Workbook();
+    await wb.xlsx.load(buffer);
+    return wb;
+  } catch (error) {
+    const fixed = await repairPackage(buffer).catch(() => null);
+    if (!fixed) throw error;
+    const wb = new ExcelJS.Workbook();
+    await wb.xlsx.load(fixed);
+    return wb;
+  }
+}
+
 export async function xlsxToWorkbook(source: Blob): Promise<{ data: WorkbookData; searchText: string; truncated: boolean }> {
-  const wb = new ExcelJS.Workbook();
-  await wb.xlsx.load(await source.arrayBuffer());
+  const wb = await loadWorkbook(await source.arrayBuffer());
   const sheets: SheetData[] = [];
   let total = 0; let truncated = false;
   const words: string[] = [];
@@ -111,8 +181,17 @@ export async function xlsxToWorkbook(source: Blob): Promise<{ data: WorkbookData
         const fill = cell.fill as ExcelJS.FillPattern | undefined;
         const bg = fill?.type === 'pattern' ? argbToHex(fill.fgColor?.argb) : undefined; if (bg && bg !== '#ffffff') f.bg = bg;
         const al = cell.alignment?.horizontal; if (al === 'left' || al === 'center' || al === 'right') f.al = al;
+        if (cell.alignment?.wrapText) f.wr = true;
+        const va = cell.alignment?.vertical; if (va === 'top' || va === 'bottom') f.va = va; else if (va === 'middle') f.va = 'center';
+        const size = cell.font?.size; if (size && size !== 11) f.fs = size;
+        const face = cell.font?.name; if (face && !/^(calibri|carlito)$/i.test(face)) f.ff = face;
         const nf = text?.date ? 'date' : numFmtToFormat(cell.numFmt); if (nf) f.nf = nf;
-        const bd = cell.border; if (bd && (bd.top || bd.left || bd.bottom || bd.right)) f.bd = true;
+        const bd = cell.border;
+        if (bd) {
+          const sides = [['T', bd.top], ['L', bd.left], ['B', bd.bottom], ['R', bd.right]] as const;
+          const present = sides.filter(([, edge]) => edge?.style);
+          if (present.length) { f.bs = present.map(([letter]) => letter).join(''); const color = argbToHex(present[0][1]?.color?.argb); if (color) f.bc = color; }
+        }
         if (!text && !Object.keys(f).length) return;
         sheet.cells[cellKey(colNumber - 1, rowNumber - 1)] = { v: text?.v ?? '', ...(Object.keys(f).length ? { f } : {}) };
         if (text?.v && !text.v.startsWith('=') && words.join(' ').length < 20_000) words.push(text.v);
@@ -129,7 +208,18 @@ export async function xlsxToWorkbook(source: Blob): Promise<{ data: WorkbookData
     const autoRange = typeof auto === 'string' ? parseRange(auto) : auto && typeof auto === 'object' && 'from' in auto && 'to' in auto
       ? parseRange(`${cellKey(Number((auto as { from: { column: number } }).from.column) - 1, Number((auto as { from: { row: number } }).from.row) - 1)}:${cellKey(Number((auto as { to: { column: number } }).to.column) - 1, Number((auto as { to: { row: number } }).to.row) - 1)}`) : null;
     if (autoRange && autoRange.c1 < MAX_COLS) sheet.filter = { row: autoRange.r0, c0: autoRange.c0, c1: autoRange.c1, rules: {} };
-    if (ws.views?.some((view) => view.state === 'frozen' && (view.ySplit ?? 0) >= 1)) sheet.freezeRow = true;
+    const view = ws.views?.[0];
+    if (view?.state === 'frozen' && ((view.ySplit ?? 0) >= 1 || (view.xSplit ?? 0) >= 1)) sheet.freeze = { rows: Math.min(20, Math.round(view.ySplit ?? 0)), cols: Math.min(10, Math.round(view.xSplit ?? 0)) };
+    if (view && view.showGridLines === false) sheet.hideGrid = true;
+    ws.eachRow({ includeEmpty: true }, (row, rowNumber) => {
+      if (rowNumber <= MAX_ROWS && row.height && row.height > 0 && Math.abs(row.height - 21) > 0.5) (sheet.rowHeights ??= {})[rowNumber - 1] = Math.round(Math.min(409, row.height) * PX_PER_PT);
+    });
+    const tableModel = (ws.model as { tables?: Array<{ tableRef?: string; ref?: string; style?: { theme?: string; showRowStripes?: boolean } }> }).tables?.[0];
+    const tableRef = tableModel && parseRange(tableModel.tableRef ?? tableModel.ref ?? '');
+    if (tableModel && tableRef && tableRef.c1 < MAX_COLS) {
+      sheet.table = { ref: `${cellKey(tableRef.c0, tableRef.r0)}:${cellKey(tableRef.c1, tableRef.r1)}`, style: tableModel.style?.theme ?? 'TableStyleMedium2', stripes: tableModel.style?.showRowStripes !== false };
+      sheet.filter ??= { row: tableRef.r0, c0: tableRef.c0, c1: tableRef.c1, rules: {} };
+    }
     sheet.rowCount = Math.max(DEFAULT_ROWS, maxRow + 20);
     sheet.colCount = Math.max(DEFAULT_COLS, maxCol + 2);
     sheets.push(sheet);
@@ -177,16 +267,35 @@ export async function workbookToXlsx(data: WorkbookData, title: string): Promise
       }
       const f = cell.f;
       if (f) {
-        if (f.b || f.i || f.u || f.fg) target.font = { bold: f.b, italic: f.i, underline: f.u, color: f.fg ? { argb: hexToArgb(f.fg) } : undefined };
+        if (f.b || f.i || f.u || f.fg || f.fs || f.ff) target.font = { bold: f.b, italic: f.i, underline: f.u, color: f.fg ? { argb: hexToArgb(f.fg) } : undefined, size: f.fs, name: f.ff };
         if (f.bg) target.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: hexToArgb(f.bg) } };
-        if (f.al) target.alignment = { horizontal: f.al };
+        if (f.al || f.wr || f.va) target.alignment = { horizontal: f.al, wrapText: f.wr, vertical: f.va === 'center' ? 'middle' : f.va };
         if (format && format !== 'general') target.numFmt = NUM_FMT[format];
-        if (f.bd) target.border = THIN;
+        if (f.bs) target.border = bordersOf(f);
       }
     }
     for (const range of sheet.merges ?? []) { try { ws.mergeCells(range); } catch { /* combinación inválida: se omite */ } }
-    if (sheet.freezeRow) ws.views = [{ state: 'frozen', ySplit: 1 }];
-    if (sheet.filter) {
+    const freeze = sheet.freeze && (sheet.freeze.rows > 0 || sheet.freeze.cols > 0) ? sheet.freeze : null;
+    if (freeze || sheet.hideGrid) {
+      ws.views = [freeze
+        ? { state: 'frozen', xSplit: freeze.cols, ySplit: freeze.rows, showGridLines: !sheet.hideGrid }
+        : { state: 'normal', showGridLines: !sheet.hideGrid }];
+    }
+    for (const [index, px] of Object.entries(sheet.rowHeights ?? {})) ws.getRow(Number(index) + 1).height = Math.round((px / PX_PER_PT) * 100) / 100;
+    const tableRect = sheet.table ? parseRange(sheet.table.ref) : null;
+    if (sheet.table && tableRect) {
+      // La tabla se vuelve a declarar con los mismos datos; las celdas conservan su formato.
+      const header = Array.from({ length: tableRect.c1 - tableRect.c0 + 1 }, (_, i) => String(ev.value(sheet.name, tableRect.c0 + i, tableRect.r0) ?? '').trim() || `Columna${i + 1}`);
+      const unique = header.every((h, i) => header.indexOf(h) === i);
+      if (unique) {
+        try {
+          const rows: ExcelJS.CellValue[][] = [];
+          for (let r = tableRect.r0 + 1; r <= tableRect.r1; r++) rows.push(Array.from({ length: header.length }, (_, i) => ws.getCell(r + 1, tableRect.c0 + i + 1).value));
+          ws.addTable({ name: `Tabla${data.sheets.indexOf(sheet) + 1}`, ref: sheet.table.ref.split(':')[0], headerRow: true, totalsRow: false, style: { theme: sheet.table.style as ExcelJS.TableStyleProperties['theme'], showRowStripes: sheet.table.stripes }, columns: header.map((h) => ({ name: h, filterButton: true })), rows: rows.length ? rows : [header.map(() => null)] });
+        } catch { /* sin tabla: los datos y el formato de las celdas se conservan */ }
+      }
+    }
+    if (sheet.filter && !sheet.table) {
       const last = Math.max(sheet.filter.row + 1, filterLastRow(sheet));
       ws.autoFilter = `${cellKey(sheet.filter.c0, sheet.filter.row)}:${cellKey(sheet.filter.c1, last)}`;
       for (const row of filterHiddenRows(sheet, ev)) ws.getRow(row + 1).hidden = true;

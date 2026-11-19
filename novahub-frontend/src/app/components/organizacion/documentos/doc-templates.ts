@@ -106,7 +106,7 @@ export const SHEET_TEMPLATES: SheetTemplate[] = [
         rows.push([concept, ['0', money], ['0', money], [`=C${r}-B${r}`, money], [`=SI(B${r}=0;0;C${r}/B${r})`, pct]]);
       });
       rows.push([['Total', { b: true }], [`=SUMA(B4:B${concepts.length + 3})`, { ...money, b: true }], [`=SUMA(C4:C${concepts.length + 3})`, { ...money, b: true }], [`=SUMA(D4:D${concepts.length + 3})`, { ...money, b: true }], [`=SI(B${concepts.length + 4}=0;0;C${concepts.length + 4}/B${concepts.length + 4})`, { ...pct, b: true }]]);
-      return { sheets: [makeSheet('Presupuesto', rows, { 0: 180, 1: 130, 2: 130, 3: 130, 4: 130 }, { freezeRow: false })] };
+      return { sheets: [makeSheet('Presupuesto', rows, { 0: 180, 1: 130, 2: 130, 3: 130, 4: 130 })] };
     },
   },
   {
@@ -132,7 +132,7 @@ export const SHEET_TEMPLATES: SheetTemplate[] = [
         [['Código', HEAD], ['Producto', HEAD], ['Categoría', HEAD], ['Cantidad', HEAD], ['Costo unitario', HEAD], ['Valor total', HEAD], ['Mínimo', HEAD], ['Estado', HEAD]],
       ];
       for (let r = 5; r <= 24; r++) rows.push(['', '', '', '', ['', money], [`=SI(B${r}="";"";D${r}*E${r})`, money], '', [`=SI(B${r}="";"";SI(D${r}<=G${r};"Reponer";"OK"))`, { al: 'center' }]]);
-      return { sheets: [makeSheet('Inventario', rows, { 0: 90, 1: 200, 2: 130, 3: 90, 4: 120, 5: 130, 6: 90, 7: 100 }, { freezeRow: false })] };
+      return { sheets: [makeSheet('Inventario', rows, { 0: 90, 1: 200, 2: 130, 3: 90, 4: 120, 5: 130, 6: 90, 7: 100 })] };
     },
   },
 ];
