@@ -182,7 +182,7 @@ export async function xlsxToWorkbook(source: Blob): Promise<{ data: WorkbookData
         const bg = fill?.type === 'pattern' ? argbToHex(fill.fgColor?.argb) : undefined; if (bg && bg !== '#ffffff') f.bg = bg;
         const al = cell.alignment?.horizontal; if (al === 'left' || al === 'center' || al === 'right') f.al = al;
         if (cell.alignment?.wrapText) f.wr = true;
-        const va = cell.alignment?.vertical; if (va === 'top' || va === 'bottom') f.va = va; else if (va === 'middle') f.va = 'center';
+        const va = cell.alignment?.vertical as string | undefined; if (va === 'top' || va === 'bottom') f.va = va; else if (va === 'middle' || va === 'center') f.va = 'center';
         const size = cell.font?.size; if (size && size !== 11) f.fs = size;
         const face = cell.font?.name; if (face && !/^(calibri|carlito)$/i.test(face)) f.ff = face;
         const nf = text?.date ? 'date' : numFmtToFormat(cell.numFmt); if (nf) f.nf = nf;

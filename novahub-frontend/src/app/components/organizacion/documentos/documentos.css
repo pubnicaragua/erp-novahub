@@ -56,3 +56,4 @@
 .org-doc-hf { margin: 0 auto 0.6rem; max-width: 52rem; text-align: center; font-size: 12px; color: #6b7280; }
 .org-doc-hf:last-child { margin: 0.6rem auto 0; }
 .org-sheet-grid.org-sheet-nogrid tbody td { border-right-color: transparent; border-bottom-color: transparent; }
+.org-fullscreen .org-doc-scroll { max-height: calc(100vh - 12rem); }

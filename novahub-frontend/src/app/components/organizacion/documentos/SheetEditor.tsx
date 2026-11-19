@@ -22,6 +22,8 @@ interface Props {
   initial: WorkbookData;
   readOnly: boolean;
   onChange: () => void;
+  /** Ocupa toda la altura disponible de la ventana. */
+  fullscreen?: boolean;
 }
 
 interface Sel { ac: number; ar: number; fc: number; fr: number }
@@ -49,7 +51,7 @@ function renameRefs(formula: string, from: string, to: string): string {
   return formula.replace(new RegExp(`(^|[^A-Za-z0-9_'])(?:${fromPattern})!`, 'g'), (_all, prefix: string) => `${prefix}${quoteSheet(to)}!`);
 }
 
-export const SheetEditor = forwardRef<SheetEditorHandle, Props>(function SheetEditor({ title, initial, readOnly, onChange }, ref) {
+export const SheetEditor = forwardRef<SheetEditorHandle, Props>(function SheetEditor({ title, initial, readOnly, onChange, fullscreen = false }, ref) {
   const [wb, setWb] = useState<WorkbookData>(initial);
   const [tab, setTab] = useState(0);
   const [sel, setSel] = useState<Sel>({ ac: 0, ar: 0, fc: 0, fr: 0 });
@@ -59,6 +61,7 @@ export const SheetEditor = forwardRef<SheetEditorHandle, Props>(function SheetEd
   const history = useRef<{ undo: WorkbookData[]; redo: WorkbookData[] }>({ undo: [], redo: [] });
   const [, bump] = useState(0);
   const scroller = useRef<HTMLDivElement>(null);
+  const scrollFrame = useRef(0);
   const root = useRef<HTMLDivElement>(null);
   const dragging = useRef(false);
   const clip = useRef<Clip | null>(null);
@@ -118,10 +121,6 @@ export const SheetEditor = forwardRef<SheetEditorHandle, Props>(function SheetEd
       return extend ? { ...s, fc, fr } : { ac: fc, ar: fr, fc, fr };
     });
   };
-  useEffect(() => {
-    const key = cellKey(sel.fc, sel.fr);
-    root.current?.querySelector<HTMLElement>(`[data-cell="${key}"]`)?.scrollIntoView({ block: 'nearest', inline: 'nearest' });
-  }, [sel.fc, sel.fr]);
 
   const clearSelection = () => {
     mapSheet((s) => {
@@ -330,8 +329,30 @@ export const SheetEditor = forwardRef<SheetEditorHandle, Props>(function SheetEd
   };
 
   // ───────────── Teclado ─────────────
+  const filledAt = (c: number, r: number) => (sheet.cells[cellKey(c, r)]?.v ?? '') !== '';
+  const lastCell = () => {
+    let col = 0; let row = 0;
+    for (const [key, cell] of Object.entries(sheet.cells)) { const pos = parseCellKey(key); if (pos && cell.v !== '') { col = Math.max(col, pos.col); row = Math.max(row, pos.row); } }
+    return { col, row };
+  };
+  /** Ctrl+flecha: salta al borde del bloque de datos, como en Excel. */
+  const edgeJump = (dir: 'up' | 'down' | 'left' | 'right', extend: boolean) => {
+    const dc = dir === 'left' ? -1 : dir === 'right' ? 1 : 0; const dr = dir === 'up' ? -1 : dir === 'down' ? 1 : 0;
+    let c = sel.fc; let r = sel.fr;
+    const inside = (cc: number, rr: number) => cc >= 0 && rr >= 0 && cc < sheet.colCount && rr < sheet.rowCount;
+    const startFilled = filledAt(c, r); const nextFilled = inside(c + dc, r + dr) && filledAt(c + dc, r + dr);
+    if (startFilled && nextFilled) { while (inside(c + dc, r + dr) && filledAt(c + dc, r + dr)) { c += dc; r += dr; } }
+    else { c += dc; r += dr; while (inside(c, r) && !filledAt(c, r)) { c += dc; r += dr; } if (!inside(c, r)) { c = Math.min(sheet.colCount - 1, Math.max(0, c - dc)); r = Math.min(sheet.rowCount - 1, Math.max(0, r - dr)); } }
+    setSel((cur) => (extend ? { ...cur, fc: c, fr: r } : { ac: c, ar: r, fc: c, fr: r }));
+  };
   const onKeyDown = (e: React.KeyboardEvent) => {
-    if (editing) return;
+    if (editing) {
+      // La primera tecla abre el editor de la celda y el cuadro de texto tarda un instante en recibir el foco: se anota aquí.
+      const typing = !(e.target instanceof HTMLInputElement) && !e.ctrlKey && !e.metaKey && !e.altKey;
+      if (typing && e.key.length === 1) { e.preventDefault(); setEditing((cur) => (cur ? { ...cur, value: cur.value + e.key } : cur)); }
+      else if (typing && e.key === 'Backspace') { e.preventDefault(); setEditing((cur) => (cur ? { ...cur, value: cur.value.slice(0, -1) } : cur)); }
+      return;
+    }
     const mod = e.ctrlKey || e.metaKey;
     if (mod && !e.altKey) {
       const k = e.key.toLowerCase();
@@ -340,6 +361,9 @@ export const SheetEditor = forwardRef<SheetEditorHandle, Props>(function SheetEd
       if (k === 'b' || k === 'i' || k === 'u') { e.preventDefault(); toggle(k); return; }
       if ((k === 'd' || k === 'r') && !readOnly) { e.preventDefault(); fill(k === 'd' ? 'down' : 'right'); return; }
       if (k === 'a') { e.preventDefault(); setSel({ ac: 0, ar: 0, fc: sheet.colCount - 1, fr: sheet.rowCount - 1 }); return; }
+      if (k === 'home') { e.preventDefault(); setSel({ ac: 0, ar: 0, fc: 0, fr: 0 }); return; }
+      if (k === 'end') { e.preventDefault(); const last = lastCell(); setSel({ ac: last.col, ar: last.row, fc: last.col, fr: last.row }); return; }
+      if (k.startsWith('arrow')) { e.preventDefault(); edgeJump(k.slice(5) as 'up' | 'down' | 'left' | 'right', e.shiftKey); return; }
       return;
     }
     const jump = e.key === 'PageDown' ? 20 : e.key === 'PageUp' ? -20 : 0;
@@ -432,7 +456,8 @@ export const SheetEditor = forwardRef<SheetEditorHandle, Props>(function SheetEd
     return { starts, covered, rects };
   }, [sheet.merges]);
   const freezeRows = Math.min(sheet.freeze?.rows ?? 0, sheet.rowCount); const freezeCols = Math.min(sheet.freeze?.cols ?? 0, sheet.colCount);
-  const leftOf = (c: number) => HEADER_W + cols.slice(0, c).reduce((sum, i) => sum + widthOf(i), 0);
+  const colLefts = useMemo(() => { const out = [HEADER_W]; for (let c = 0; c < sheet.colCount; c++) out.push(out[c] + (sheet.colWidths[c] ?? DEFAULT_COL_WIDTH)); return out; }, [sheet.colCount, sheet.colWidths]);
+  const leftOf = (c: number) => colLefts[c] ?? HEADER_W;
   // La ventana se amplía para no cortar una combinación vertical por la mitad.
   let rFirst = Math.max(freezeRows, findRow(Math.max(0, scroll.top)) - 6);
   let rLast = Math.min(sheet.rowCount - 1, findRow(scroll.top + scroll.height) + 6);
@@ -445,6 +470,23 @@ export const SheetEditor = forwardRef<SheetEditorHandle, Props>(function SheetEd
   for (let r = rFirst; r <= rLast; r++) if (!hiddenRows.has(r)) visibleRows.push(r);
   const topSpacer = Math.max(0, offsets[rFirst] - offsets[freezeRows]);
   const bottomSpacer = Math.max(0, offsets[sheet.rowCount] - offsets[Math.min(sheet.rowCount, rLast + 1)]);
+  const layout = useRef({ offsets, colLefts, freezeRows, freezeCols });
+  useEffect(() => { layout.current = { offsets, colLefts, freezeRows, freezeCols }; });
+  // Al mover la selección, el cuadro se desplaza justo lo necesario (sin quedar tapada por las filas o columnas fijas).
+  useEffect(() => {
+    const box = scroller.current; if (!box) return;
+    const { offsets: o, colLefts: lefts, freezeRows: fr, freezeCols: fc } = layout.current;
+    if (sel.fr >= fr) {
+      const rowTop = ROW_H + o[sel.fr]; const rowBottom = ROW_H + o[sel.fr + 1]; const pinned = o[fr];
+      if (rowTop < box.scrollTop + ROW_H + pinned) box.scrollTop = Math.max(0, rowTop - ROW_H - pinned);
+      else if (rowBottom > box.scrollTop + box.clientHeight) box.scrollTop = rowBottom - box.clientHeight;
+    }
+    if (sel.fc >= fc) {
+      const left = lefts[sel.fc]; const right = lefts[sel.fc + 1] ?? left; const pinned = lefts[fc] ?? HEADER_W;
+      if (left < box.scrollLeft + pinned) box.scrollLeft = Math.max(0, left - pinned);
+      else if (right > box.scrollLeft + box.clientWidth) box.scrollLeft = right - box.clientWidth;
+    }
+  }, [sel.fr, sel.fc]);
   const spanOf = (r0: number, r1: number) => { let n = r1 - r0 + 1; for (const h of hiddenRows) if (h >= r0 && h <= r1) n--; return Math.max(1, n); };
   const tableRect = useMemo(() => (sheet.table ? parseRange(sheet.table.ref) : null), [sheet.table]);
   const filter = sheet.filter;
@@ -569,8 +611,8 @@ export const SheetEditor = forwardRef<SheetEditorHandle, Props>(function SheetEd
 
       <div ref={root} tabIndex={0} role="grid" aria-label={`Hoja ${sheet.name}`} aria-rowcount={total} aria-colcount={sheet.colCount} onKeyDown={onKeyDown} onCopy={(e) => onCopy(e)} onCut={(e) => onCopy(e, true)} onPaste={onPaste}
         className="min-w-0 rounded-xl border border-border bg-card outline-none focus-visible:ring-2 focus-visible:ring-primary/30">
-        <div ref={scroller} onScroll={(e) => setScroll({ top: e.currentTarget.scrollTop, height: e.currentTarget.clientHeight })}
-          className="overflow-auto" style={{ height: 'min(62vh, 640px)', scrollPaddingTop: ROW_H, scrollPaddingLeft: HEADER_W }}>
+        <div ref={scroller} onScroll={(e) => { const box = e.currentTarget; if (scrollFrame.current) return; scrollFrame.current = window.requestAnimationFrame(() => { scrollFrame.current = 0; setScroll((prev) => (Math.abs(prev.top - box.scrollTop) < 24 && prev.height === box.clientHeight ? prev : { top: box.scrollTop, height: box.clientHeight })); }); }}
+          className="overflow-auto" style={{ height: fullscreen ? 'calc(100vh - 230px)' : 'min(62vh, 640px)', scrollPaddingTop: ROW_H, scrollPaddingLeft: HEADER_W }}>
           <table className={cn('org-sheet-grid', sheet.hideGrid && 'org-sheet-nogrid')} style={{ width: tableWidth }}>
             <colgroup><col style={{ width: HEADER_W }} />{cols.map((c) => <col key={c} style={{ width: widthOf(c) }} />)}</colgroup>
             <thead>

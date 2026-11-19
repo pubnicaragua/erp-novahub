@@ -1,5 +1,5 @@
 import { lazy, Suspense, useCallback, useEffect, useRef, useState } from 'react';
-import { AlertTriangle, ArrowLeft, Check, CloudOff, Download, FileSpreadsheet, FileText, History, Loader2, Share2 } from 'lucide-react';
+import { AlertTriangle, ArrowLeft, Check, CloudOff, Download, FileSpreadsheet, FileText, History, Loader2, Maximize2, Minimize2, Share2 } from 'lucide-react';
 import { Button } from '../../ui/button';
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from '../../ui/dialog';
 import { Skeleton } from '../../ui/skeleton';
@@ -66,6 +66,21 @@ function Session({ loaded, users, onClose, onChanged, onReload }: { loaded: Load
   const [history, setHistory] = useState(false);
   const [dismissed, setDismissed] = useState(false);
   const [title, setTitle] = useState(doc.title);
+  // Pantalla completa: ocupa toda la ventana (y, si el navegador lo permite, toda la pantalla). Escape la cierra.
+  const [full, setFull] = useState(false);
+  const toggleFull = () => {
+    const next = !full; setFull(next);
+    if (next) void document.documentElement.requestFullscreen?.().catch(() => undefined);
+    else if (document.fullscreenElement) void document.exitFullscreen().catch(() => undefined);
+  };
+  useEffect(() => {
+    if (!full) return undefined;
+    const onKey = (event: KeyboardEvent) => { if (event.key === 'Escape' && !(event.target instanceof HTMLInputElement) && !document.querySelector('[role=dialog]')) setFull(false); };
+    const onFullscreen = () => { if (!document.fullscreenElement) setFull(false); };
+    window.addEventListener('keydown', onKey); document.addEventListener('fullscreenchange', onFullscreen);
+    return () => { window.removeEventListener('keydown', onKey); document.removeEventListener('fullscreenchange', onFullscreen); };
+  }, [full]);
+  useEffect(() => () => { if (document.fullscreenElement) void document.exitFullscreen().catch(() => undefined); }, []);
 
   const build = useCallback(async (): Promise<BuiltFile> => {
     const handle = doc.kind === 'DOC' ? docEditor.current : sheetEditor.current;
@@ -98,7 +113,7 @@ function Session({ loaded, users, onClose, onChanged, onReload }: { loaded: Load
 
   const Icon = doc.kind === 'DOC' ? FileText : FileSpreadsheet;
   return (
-    <div className="min-w-0 max-w-full space-y-3">
+    <div className={cn('min-w-0 max-w-full space-y-3', full && 'org-fullscreen fixed inset-0 z-50 overflow-auto bg-background p-3')}>
       <div className="flex min-w-0 flex-wrap items-center gap-2">
         <Button type="button" variant="outline" size="sm" onClick={() => void close()}><ArrowLeft className="size-4" />Documentos</Button>
         <Icon className="size-5 shrink-0 text-primary dark:text-accent" aria-hidden="true" />
@@ -107,6 +122,7 @@ function Session({ loaded, users, onClose, onChanged, onReload }: { loaded: Load
         <SaveBadge state={save.state} savedAt={save.savedAt} error={save.error} onRetry={() => void save.saveNow()} />
         <div className="ml-auto flex flex-wrap items-center gap-2">
           <Button type="button" variant="outline" size="sm" onClick={() => setHistory(true)}><History className="size-4" />Historial</Button>
+          <Button type="button" variant="outline" size="sm" aria-pressed={full} onClick={toggleFull}>{full ? <Minimize2 className="size-4" /> : <Maximize2 className="size-4" />}{full ? 'Salir de pantalla completa' : 'Pantalla completa'}</Button>
           <Button type="button" variant="outline" size="sm" onClick={() => void download()}><Download className="size-4" />Descargar .{EXTENSION[doc.kind]}</Button>
           {doc.canManage && <Button type="button" size="sm" onClick={() => setSharing(true)}><Share2 className="size-4" />Compartir</Button>}
         </div>
@@ -120,7 +136,7 @@ function Session({ loaded, users, onClose, onChanged, onReload }: { loaded: Load
       <Suspense fallback={<Skeleton className="h-[480px] w-full" aria-busy="true" />}>
         {doc.kind === 'DOC'
           ? <DocEditor ref={docEditor} title={doc.title} source={loaded.blob} readOnly={readOnly} onChange={markDirty} />
-          : <SheetEditor ref={sheetEditor} title={doc.title} initial={loaded.workbook!} readOnly={readOnly} onChange={markDirty} />}
+          : <SheetEditor ref={sheetEditor} title={doc.title} initial={loaded.workbook!} readOnly={readOnly} onChange={markDirty} fullscreen={full} />}
       </Suspense>
 
       {sharing && <ShareDialog doc={doc} users={users} onClose={() => setSharing(false)} onSaved={(detail) => { setDoc((cur) => ({ ...detail, version: Math.max(cur.version, detail.version) })); setSharing(false); onChanged(); }} />}
