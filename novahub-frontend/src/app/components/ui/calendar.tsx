@@ -28,24 +28,44 @@ export function Calendar({
   maxDate,
   className,
 }: CalendarProps) {
+  const [viewMode, setViewMode] = React.useState<"days" | "months">("days");
   const [viewDate, setViewDate] = React.useState<Date>(() => selected || new Date());
+  const [yearDraft, setYearDraft] = React.useState(() => String((selected || new Date()).getFullYear()));
 
   React.useEffect(() => {
     if (selected && !isNaN(selected.getTime())) {
       setViewDate(selected);
+      setYearDraft(String(selected.getFullYear()));
     }
   }, [selected]);
 
   const year = viewDate.getFullYear();
   const month = viewDate.getMonth();
 
+  const isMonthInRange = (candidateYear: number, candidateMonth: number) => {
+    if (candidateYear < minYear || candidateYear > maxYear) return false;
+    const monthStart = `${candidateYear}-${String(candidateMonth + 1).padStart(2, "0")}-01`;
+    const monthEndDay = new Date(candidateYear, candidateMonth + 1, 0).getDate();
+    const monthEnd = `${candidateYear}-${String(candidateMonth + 1).padStart(2, "0")}-${String(monthEndDay).padStart(2, "0")}`;
+    return !((minDate && monthEnd < minDate) || (maxDate && monthStart > maxDate));
+  };
+
+  const parsedYear = Number(yearDraft);
+  const minYear = minDate ? Number(minDate.slice(0, 4)) : 1000;
+  const maxYear = maxDate ? Number(maxDate.slice(0, 4)) : 9999;
+  const isYearDraftValid = /^\d{4}$/.test(yearDraft) && parsedYear >= minYear && parsedYear <= maxYear;
+  const months = React.useMemo(
+    () => Array.from({ length: 12 }, (_, index) => new Intl.DateTimeFormat("es", { month: "long" }).format(new Date(2020, index, 1))),
+    []
+  );
+
   const prevMonth = () => {
-    if (disabled) return;
+    if (disabled || !isMonthInRange(year, month - 1)) return;
     setViewDate(new Date(year, month - 1, 1));
   };
 
   const nextMonth = () => {
-    if (disabled) return;
+    if (disabled || !isMonthInRange(year, month + 1)) return;
     setViewDate(new Date(year, month + 1, 1));
   };
 
@@ -124,87 +144,169 @@ export function Calendar({
         className
       )}
     >
-      {/* Header navegación */}
-      <div className="flex items-center justify-between gap-1 pb-3 relative">
-        <Button
-          type="button"
-          variant="outline"
-          size="icon"
-          onClick={prevMonth}
-          disabled={disabled}
-          className="size-7 h-7 w-7 p-0 rounded-md border border-border/60 hover:bg-muted/80 shrink-0"
-          aria-label="Mes anterior"
-        >
-          <ChevronLeft className="size-4" />
-        </Button>
-
-        <span className="text-sm font-semibold capitalize tracking-wide text-foreground">
-          {monthLabel}
-        </span>
-
-        <Button
-          type="button"
-          variant="outline"
-          size="icon"
-          onClick={nextMonth}
-          disabled={disabled}
-          className="size-7 h-7 w-7 p-0 rounded-md border border-border/60 hover:bg-muted/80 shrink-0"
-          aria-label="Mes siguiente"
-        >
-          <ChevronRight className="size-4" />
-        </Button>
-      </div>
-
-      {/* Días de la semana (Grid de 7 columnas estricto) */}
-      <div
-        style={{ display: "grid", gridTemplateColumns: "repeat(7, minmax(0, 1fr))" }}
-        className="gap-1 mb-1 text-center"
-      >
-        {WEEKDAYS.map((wd) => (
-          <div
-            key={wd}
-            className="h-8 flex items-center justify-center text-[11px] font-bold text-muted-foreground uppercase"
-          >
-            {wd}
-          </div>
-        ))}
-      </div>
-
-      {/* Días del mes (Grid de 7 columnas estricto) */}
-      <div
-        style={{ display: "grid", gridTemplateColumns: "repeat(7, minmax(0, 1fr))" }}
-        className="gap-1"
-      >
-        {calendarDays.map((item, idx) => {
-          const dateValue = `${item.date.getFullYear()}-${String(item.date.getMonth() + 1).padStart(2, "0")}-${String(item.date.getDate()).padStart(2, "0")}`;
-          const outsideDateRange = Boolean((minDate && dateValue < minDate) || (maxDate && dateValue > maxDate));
-          const dayDisabled = Boolean(disabled || outsideDateRange);
-          return (
-            <button
-              key={idx}
+      {viewMode === "months" ? (
+        <>
+          <div className="flex items-center justify-between gap-2 pb-3">
+            <Button
               type="button"
-              disabled={dayDisabled}
-              onClick={() => {
-                if (onSelect && !dayDisabled) {
-                  onSelect(item.date);
-                }
-              }}
-              style={{ borderRadius: "0.375rem" }}
-              className={cn(
-                "h-8 w-full flex items-center justify-center text-xs transition-colors font-medium",
-                !item.isCurrentMonth && "text-muted-foreground/35 hover:text-muted-foreground/60",
-                item.isCurrentMonth && !item.isSelected && "text-foreground hover:bg-muted/70",
-                item.isToday && !item.isSelected && "border border-primary/40 font-bold bg-accent/30",
-                item.isSelected &&
-                  "bg-primary text-primary-foreground hover:bg-primary font-bold shadow-xs",
-                dayDisabled && "opacity-40 cursor-not-allowed"
-              )}
+              variant="outline"
+              size="icon"
+              onClick={() => setViewMode("days")}
+              disabled={disabled}
+              className="size-7 h-7 w-7 shrink-0 rounded-md border border-border/60 p-0 hover:bg-muted/80"
+              aria-label="Volver a seleccionar día"
             >
-              {item.dayNumber}
+              <ChevronLeft className="size-4" />
+            </Button>
+            <label className="flex items-center gap-2 text-xs font-medium text-muted-foreground">
+              Año
+              <input
+                type="text"
+                inputMode="numeric"
+                pattern="[0-9]{4}"
+                maxLength={4}
+                value={yearDraft}
+                disabled={disabled}
+                aria-label="Año del calendario"
+                aria-invalid={!isYearDraftValid}
+                onChange={(event) => {
+                  const nextDraft = event.target.value.replace(/\D/g, "").slice(0, 4);
+                  setYearDraft(nextDraft);
+                  const nextYear = Number(nextDraft);
+                  if (/^\d{4}$/.test(nextDraft) && nextYear >= minYear && nextYear <= maxYear) {
+                    setViewDate(new Date(nextYear, month, 1));
+                  }
+                }}
+                onBlur={() => {
+                  if (!isYearDraftValid) setYearDraft(String(year));
+                }}
+                className={cn(
+                  "h-8 w-20 rounded-md border border-border bg-background px-2 text-center text-sm font-semibold text-foreground outline-none focus-visible:ring-2 focus-visible:ring-ring",
+                  !isYearDraftValid && "border-destructive"
+                )}
+              />
+            </label>
+            <span className="w-7 shrink-0" aria-hidden="true" />
+          </div>
+          <div className="grid grid-cols-3 gap-2" role="group" aria-label="Seleccionar mes">
+            {months.map((monthName, monthIndex) => {
+              const canSelectMonth = isYearDraftValid && isMonthInRange(parsedYear, monthIndex);
+              return (
+                <button
+                  key={monthName}
+                  type="button"
+                  disabled={disabled || !canSelectMonth}
+                  aria-pressed={isYearDraftValid && parsedYear === year && monthIndex === month}
+                  onClick={() => {
+                    if (!canSelectMonth) return;
+                    setViewDate(new Date(parsedYear, monthIndex, 1));
+                    setViewMode("days");
+                  }}
+                  className={cn(
+                    "h-9 rounded-md px-2 text-xs capitalize font-medium transition-colors hover:bg-muted/70 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
+                    parsedYear === year && monthIndex === month && "bg-primary text-primary-foreground font-semibold hover:bg-primary",
+                    (!canSelectMonth || disabled) && "cursor-not-allowed opacity-40"
+                  )}
+                >
+                  {monthName}
+                </button>
+              );
+            })}
+          </div>
+        </>
+      ) : (
+        <>
+          {/* Encabezado: permite abrir la selección directa de mes y año. */}
+          <div className="flex items-center justify-between gap-1 pb-3">
+            <Button
+              type="button"
+              variant="outline"
+              size="icon"
+              onClick={prevMonth}
+              disabled={disabled || !isMonthInRange(year, month - 1)}
+              className="size-7 h-7 w-7 shrink-0 rounded-md border border-border/60 p-0 hover:bg-muted/80"
+              aria-label="Mes anterior"
+            >
+              <ChevronLeft className="size-4" />
+            </Button>
+            <button
+              type="button"
+              onClick={() => {
+                setYearDraft(String(year));
+                setViewMode("months");
+              }}
+              disabled={disabled}
+              className="rounded-md px-2 py-1 text-sm font-semibold capitalize tracking-wide text-foreground hover:bg-muted/70 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+              aria-label={`Elegir mes y año, actualmente ${monthLabel}`}
+              title="Elegir mes y año"
+            >
+              {monthLabel}
             </button>
-          );
-        })}
-      </div>
+            <Button
+              type="button"
+              variant="outline"
+              size="icon"
+              onClick={nextMonth}
+              disabled={disabled || !isMonthInRange(year, month + 1)}
+              className="size-7 h-7 w-7 shrink-0 rounded-md border border-border/60 p-0 hover:bg-muted/80"
+              aria-label="Mes siguiente"
+            >
+              <ChevronRight className="size-4" />
+            </Button>
+          </div>
+
+          {/* Días de la semana (Grid de 7 columnas estricto) */}
+          <div
+            style={{ display: "grid", gridTemplateColumns: "repeat(7, minmax(0, 1fr))" }}
+            className="gap-1 mb-1 text-center"
+          >
+            {WEEKDAYS.map((wd) => (
+              <div
+                key={wd}
+                className="h-8 flex items-center justify-center text-[11px] font-bold text-muted-foreground uppercase"
+              >
+                {wd}
+              </div>
+            ))}
+          </div>
+
+          {/* Días del mes (Grid de 7 columnas estricto) */}
+          <div
+            style={{ display: "grid", gridTemplateColumns: "repeat(7, minmax(0, 1fr))" }}
+            className="gap-1"
+          >
+            {calendarDays.map((item, idx) => {
+              const dateValue = `${item.date.getFullYear()}-${String(item.date.getMonth() + 1).padStart(2, "0")}-${String(item.date.getDate()).padStart(2, "0")}`;
+              const outsideDateRange = Boolean((minDate && dateValue < minDate) || (maxDate && dateValue > maxDate));
+              const dayDisabled = Boolean(disabled || outsideDateRange);
+              return (
+                <button
+                  key={idx}
+                  type="button"
+                  disabled={dayDisabled}
+                  onClick={() => {
+                    if (onSelect && !dayDisabled) {
+                      onSelect(item.date);
+                    }
+                  }}
+                  style={{ borderRadius: "0.375rem" }}
+                  className={cn(
+                    "h-8 w-full flex items-center justify-center text-xs transition-colors font-medium",
+                    !item.isCurrentMonth && "text-muted-foreground/35 hover:text-muted-foreground/60",
+                    item.isCurrentMonth && !item.isSelected && "text-foreground hover:bg-muted/70",
+                    item.isToday && !item.isSelected && "border border-primary/40 font-bold bg-accent/30",
+                    item.isSelected &&
+                      "bg-primary text-primary-foreground hover:bg-primary font-bold shadow-xs",
+                    dayDisabled && "opacity-40 cursor-not-allowed"
+                  )}
+                >
+                  {item.dayNumber}
+                </button>
+              );
+            })}
+          </div>
+        </>
+      )}
     </div>
   );
 }
