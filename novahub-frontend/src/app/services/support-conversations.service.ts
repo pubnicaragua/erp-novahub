@@ -29,8 +29,6 @@ export interface SupportPreview {
 export interface SupportConversation extends Message {
   kind: 'SUPPORT';
   supportConversationId: string;
-  supportRoutingStatus?: 'UNASSIGNED' | 'AVAILABLE';
-  eligibleSupportUserCount?: number;
 }
 export interface UnassignedSupportConversation {
   id: string;
