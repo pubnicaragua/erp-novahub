@@ -1343,104 +1343,6 @@ export function NotasCreditoView({ data, summaryData, summaryLoading, summaryErr
           <Card className="rounded-2xl border-border/50"><CardContent className="space-y-4 p-6"><p className="text-xs font-black uppercase tracking-widest text-muted-foreground">Capacidad de pago</p><div className="grid min-w-0 grid-cols-[minmax(0,1fr)_minmax(0,1fr)] gap-3"><div className="min-w-0 rounded-xl border border-border/50 bg-muted/10 p-3"><p className="break-words text-[9px] font-black uppercase leading-tight text-muted-foreground">Límite de crédito <span className="whitespace-nowrap">({normalizeCurrency(selectedCustomer?.creditLimitCurrency, baseCurrency)})</span></p><p className="mt-1 break-words text-lg font-black leading-tight tabular-nums">{formatCurrencyAmount(Number(selectedCustomer?.creditLimit || 0), normalizeCurrency(selectedCustomer?.creditLimitCurrency, baseCurrency))}</p>{normalizeCurrency(selectedCustomer?.creditLimitCurrency, baseCurrency) !== baseCurrency && <p className="break-words text-[10px] text-muted-foreground">Equivale a {formatConvertedAmount(Number(selectedCustomer?.creditLimit || 0), normalizeCurrency(selectedCustomer?.creditLimitCurrency, baseCurrency), globalRate)}</p>}</div><div className="min-w-0 rounded-xl border border-border/50 bg-muted/10 p-3"><p className="break-words text-[9px] font-black uppercase leading-tight text-muted-foreground">Disponible</p><p className={cn('mt-1 break-words text-lg font-black leading-tight tabular-nums', availableCredit > 0 ? 'text-emerald-500' : 'text-rose-500')}>{formatConvertedAmount(availableCredit, baseCurrency)}</p></div></div><div className="grid gap-3 sm:grid-cols-2"><div className="rounded-xl border border-rose-500/20 bg-rose-500/5 p-4"><p className="text-[10px] font-black uppercase tracking-widest text-rose-600 dark:text-rose-400">Saldo pendiente</p><p className="mt-1 text-2xl font-black text-rose-600 dark:text-rose-400">{formatConvertedAmount(getCustomerDebtAmount(selectedCustomer), baseCurrency)}</p></div><div className="rounded-xl border border-emerald-500/20 bg-emerald-500/5 p-4"><p className="text-[10px] font-black uppercase tracking-widest text-emerald-600 dark:text-emerald-400">Saldo a favor</p><p className="mt-1 text-2xl font-black text-emerald-600 dark:text-emerald-400">{formatConvertedAmount(getCustomerFavorAmount(selectedCustomer), baseCurrency)}</p></div></div>{selectedCustomer && Number(selectedCustomer.creditLimit || 0) <= 0 && <div className="flex items-start gap-2 rounded-xl border border-amber-500/30 bg-amber-500/10 p-3 text-[10px] text-amber-700 dark:text-amber-300"><AlertTriangle className="mt-0.5 size-3.5 shrink-0" /><span>Este cliente no tiene límite de crédito. {customerCreditLimitInstruction()}</span></div>}<div className="flex items-start gap-2 text-[10px] text-muted-foreground"><AlertTriangle className="mt-0.5 size-3.5 shrink-0 text-amber-500" />La emisión valida que el total no supere el límite disponible.</div></CardContent></Card>
         </div>
         <div className="flex justify-end" data-tour="sales-form-actions"><SalesViewTutorial view="credit-notes" context="form" /></div>
-        <Card className="rounded-2xl border-border/50">
-          <CardContent className="space-y-4 p-4 sm:p-5">
-            <div className="flex flex-col gap-1 sm:flex-row sm:items-baseline sm:justify-between">
-              <p className="text-xs font-black uppercase tracking-widest text-muted-foreground">Interés y calendario opcionales</p>
-              <p className="text-[10px] text-muted-foreground">Configura el costo financiado y los abonos cuando aplique.</p>
-            </div>
-            <div className="grid min-w-0 gap-3 lg:grid-cols-12">
-              <div className={`min-w-0 space-y-1.5 ${interestMode === 'NONE' ? 'lg:col-span-4' : 'lg:col-span-3'}`}>
-                <Label htmlFor="credit-interest-mode" className="text-xs font-semibold">Interés</Label>
-                <Select value={interestMode} onValueChange={(value) => setLocalDoc({ ...localDoc, interestMode: value, interestValue: value === 'NONE' ? 0 : localDoc.interestValue || '' })}>
-                  <SelectTrigger id="credit-interest-mode" className="h-10 w-full"><SelectValue /></SelectTrigger>
-                  <SelectContent><SelectItem value="NONE">Sin interés</SelectItem><SelectItem value="FIXED_AMOUNT">Monto fijo</SelectItem><SelectItem value="PERCENTAGE">Porcentaje único</SelectItem></SelectContent>
-                </Select>
-              </div>
-              {interestMode !== 'NONE' && <div className="min-w-0 space-y-1.5 lg:col-span-3">
-                <Label htmlFor="credit-interest-value" className="text-xs font-semibold">{interestMode === 'PERCENTAGE' ? 'Porcentaje sobre el crédito (%)' : 'Interés fijo'}</Label>
-                <Input id="credit-interest-value" type="number" min="0" step="0.01" max={interestMode === 'PERCENTAGE' ? 100 : undefined} value={localDoc.interestValue ?? ''} onChange={(event) => setLocalDoc({ ...localDoc, interestValue: event.target.value })} className="h-10" />
-              </div>}
-              <div className={`min-w-0 ${interestMode === 'NONE' ? 'lg:col-span-8' : 'lg:col-span-6'}`}>
-                <div className="grid h-full min-w-0 gap-2 sm:grid-cols-2">
-                  <div className="flex min-w-0 flex-col justify-center rounded-xl border border-border/50 bg-muted/10 px-3 py-2.5">
-                    <p className="text-[9px] font-black uppercase tracking-wider text-muted-foreground">Interés estimado</p>
-                    <p className="mt-1 break-words text-sm font-bold tabular-nums text-foreground">{formatExplicitAmount(interestPreview, localDoc.currency || displayCurrency)}</p>
-                  </div>
-                  <div className="flex min-w-0 flex-col justify-center rounded-xl border border-primary/20 bg-primary/5 px-3 py-2.5">
-                    <p className="text-[9px] font-black uppercase tracking-wider text-muted-foreground">Total financiado</p>
-                    <p className="mt-1 break-words text-sm font-bold tabular-nums text-foreground">{formatExplicitAmount(Number(localDoc.total || 0) + interestPreview, localDoc.currency || displayCurrency)}</p>
-                  </div>
-                </div>
-              </div>
-            </div>
-            <div className="min-w-0 rounded-xl border border-border/60 bg-muted/10 p-3 sm:p-4">
-              <div className={`grid min-w-0 gap-3 ${localDoc.planEnabled ? 'sm:grid-cols-[minmax(0,1fr)_minmax(210px,260px)] sm:items-center' : ''}`}>
-                <div className="flex min-w-0 items-start gap-3">
-                  <input id="credit-plan-enabled" type="checkbox" className="mt-0.5 size-4 shrink-0 accent-primary" checked={Boolean(localDoc.planEnabled)} onChange={(event) => setLocalDoc({ ...localDoc, planEnabled: event.target.checked, planCalculationMode: localDoc.planCalculationMode || 'AMOUNT', firstInstallmentDate: event.target.checked ? (localDoc.firstInstallmentDate || localDoc.date) : localDoc.firstInstallmentDate, frequency: localDoc.frequency || 'WEEKLY' })} />
-                  <div className="min-w-0 flex-1">
-                    <Label htmlFor="credit-plan-enabled" className="cursor-pointer text-xs font-semibold">Definir un plan de abonos</Label>
-                    <p className="mt-1 text-[10px] leading-relaxed text-muted-foreground">{localDoc.planEnabled ? (planCalculationMode === 'MANUAL' ? 'Indica la fecha, el monto y el interés de cada abono.' : 'Elige cómo distribuir los abonos del crédito.') : 'Puedes programar cuotas automáticas o definir cada abono manualmente.'}</p>
-                  </div>
-                </div>
-                {localDoc.planEnabled && <div className="min-w-0 space-y-1.5">
-                  <Label className="text-xs font-semibold">Método de cálculo</Label>
-                  <Select value={planCalculationMode} onValueChange={(value) => { const mode = value as typeof planCalculationMode; const rows = manualInstallmentDrafts.length ? manualInstallmentDrafts : [{ dueDate: isoDate(localDoc.date), totalAmount: '', interestAmount: '' }]; const firstDate = isoDate(localDoc.firstInstallmentDate || localDoc.date); const requestedDate = installmentPlanEstimate?.finalDueDate || isoDate(localDoc.dueDate) || firstDate; setLocalDoc({ ...localDoc, planCalculationMode: mode, ...(mode === 'DEADLINE' ? { dueDate: requestedDate >= firstDate ? requestedDate : firstDate } : {}), ...(mode === 'MANUAL' ? { manualInstallments: rows.map((row, index) => index === 0 && !row.dueDate ? { ...row, dueDate: isoDate(localDoc.date) } : row) } : {}) }); }}>
-                    <SelectTrigger className="h-10 w-full"><SelectValue /></SelectTrigger>
-                    <SelectContent><SelectItem value="AMOUNT">Monto por abono</SelectItem><SelectItem value="DEADLINE">Fecha de vencimiento</SelectItem><SelectItem value="MANUAL">Manual</SelectItem></SelectContent>
-                  </Select>
-                </div>}
-              </div>
-              {localDoc.planEnabled && <div className="mt-3 grid min-w-0 gap-3 sm:grid-cols-2 xl:grid-cols-3">
-                {planCalculationMode !== 'MANUAL' && <div className="min-w-0 space-y-1.5">
-                  <Label className="text-xs font-semibold">Frecuencia</Label>
-                  <Select value={localDoc.frequency || 'WEEKLY'} onValueChange={(value) => setLocalDoc({ ...localDoc, frequency: value })}>
-                    <SelectTrigger className="h-10"><SelectValue /></SelectTrigger>
-                    <SelectContent><SelectItem value="DAILY">Diaria</SelectItem><SelectItem value="WEEKLY">Semanal</SelectItem><SelectItem value="BIWEEKLY">Cada 15 días</SelectItem><SelectItem value="MONTHLY">Mensual</SelectItem></SelectContent>
-                  </Select>
-                </div>}
-                {planCalculationMode !== 'MANUAL' && <div className="min-w-0 space-y-1.5"><Label htmlFor="credit-first-installment" className="text-xs font-semibold">Fecha del primer abono</Label><DateField id="credit-first-installment" ariaLabel="Fecha del primer abono" ariaRequired value={localDoc.firstInstallmentDate || isoDate(localDoc.dueDate)} onChange={(firstDate) => setLocalDoc({ ...localDoc, firstInstallmentDate: firstDate, ...(planCalculationMode === 'DEADLINE' && isoDate(localDoc.dueDate) < firstDate ? { dueDate: firstDate } : {}) })} className="h-10" /></div>}
-                {planCalculationMode === 'DEADLINE' && <div className="min-w-0 space-y-1.5"><Label htmlFor="credit-final-due-date" className="text-xs font-semibold">Fecha final de vencimiento *</Label><DateField id="credit-final-due-date" ariaLabel="Fecha final de vencimiento" ariaRequired minDate={isoDate(localDoc.firstInstallmentDate || localDoc.date)} value={isoDate(localDoc.dueDate)} onChange={(date) => setLocalDoc({ ...localDoc, dueDate: date })} className="h-10" /></div>}
-                {planCalculationMode === 'AMOUNT' && <div className="min-w-0 space-y-1.5"><Label htmlFor="credit-installment-amount" className="text-xs font-semibold">Monto por abono</Label><Input id="credit-installment-amount" type="number" min="0.01" step="0.01" value={localDoc.installmentAmount ?? ''} onChange={(event) => setLocalDoc({ ...localDoc, planCalculationMode: 'AMOUNT', installmentAmount: event.target.value })} currencyPrecision className="h-10" /></div>}
-                {planCalculationMode !== 'MANUAL' && <div className="sm:col-span-2 xl:col-span-3"><CustomerCreditCalendarSelector
-                  excludedWeekdays={localDoc.excludedWeekdays || []}
-                  holidayIds={localDoc.holidayIds || []}
-                  onChange={(value) => setLocalDoc({ ...localDoc, excludedWeekdays: value.excludedWeekdays, holidayIds: value.holidayIds })}
-                /></div>}
-                {planCalculationMode === 'AMOUNT' && String(localDoc.installmentAmount ?? '') !== String(deferredPlanInstallmentAmount ?? '') && <p className="text-[10px] text-muted-foreground sm:col-span-2 xl:col-span-3" role="status" aria-live="polite">Actualizando el calendario con el monto nuevo…</p>}
-                {installmentPlanEstimate && <div className="sm:col-span-2 xl:col-span-3"><CustomerCreditInstallmentSchedule
-                installments={installmentSchedule}
-                currency={localDoc.currency || displayCurrency}
-                formatAmount={(amount) => formatExplicitAmount(amount, localDoc.currency || displayCurrency)}
-                principalAmount={principalForInterest}
-                interestAmount={planInterestAmount}
-                totalAmount={installmentPlanEstimate.totalAmount}
-                installmentAmount={installmentPlanEstimate.installmentAmount}
-                finalDueDate={installmentPlanEstimate.finalDueDate}
-                frequencyLabel={planCalculationMode === 'MANUAL' ? undefined : ({ DAILY: 'Diaria', WEEKLY: 'Semanal', BIWEEKLY: 'Cada 15 días', MONTHLY: 'Mensual' } as const)[String(localDoc.frequency || 'WEEKLY').toUpperCase() as 'DAILY' | 'WEEKLY' | 'BIWEEKLY' | 'MONTHLY']}
-                manualInstallments={planCalculationMode === 'MANUAL' ? manualInstallmentDrafts : undefined}
-                manualValidation={planCalculationMode === 'MANUAL' ? installmentPlanEstimate : undefined}
-                onManualInstallmentChange={planCalculationMode === 'MANUAL' ? (index, field, value) => setLocalDoc({ ...localDoc, manualInstallments: manualInstallmentDrafts.map((item, itemIndex) => itemIndex === index ? { ...item, [field]: value } : item) }) : undefined}
-                onAddManualInstallment={planCalculationMode === 'MANUAL' ? () => setLocalDoc({ ...localDoc, manualInstallments: [...manualInstallmentDrafts, { dueDate: '', totalAmount: '', interestAmount: '' }] }) : undefined}
-                onRemoveManualInstallment={planCalculationMode === 'MANUAL' ? (index) => setLocalDoc({ ...localDoc, manualInstallments: manualInstallmentDrafts.filter((_, itemIndex) => itemIndex !== index) }) : undefined}
-                onPrint={() => void printInstallmentPlan()}
-                printDisabled={planCalculationMode === 'AMOUNT' && String(localDoc.installmentAmount ?? '') !== String(deferredPlanInstallmentAmount ?? '')}
-              /></div>}
-              </div>}
-            </div>
-          </CardContent>
-        </Card>
-        {installmentSchedule.length > 0 && !installmentPlanEstimate && <div><CustomerCreditInstallmentSchedule
-          installments={installmentSchedule}
-          currency={localDoc.currency || displayCurrency}
-          formatAmount={(amount) => formatExplicitAmount(amount, localDoc.currency || displayCurrency)}
-          principalAmount={principalForInterest}
-          interestAmount={planInterestAmount}
-          totalAmount={Number(localDoc.total || 0) + planInterestAmount}
-          finalDueDate={installmentSchedule[installmentSchedule.length - 1]?.dueDate}
-          frequencyLabel={localDoc.frequency ? String(localDoc.frequency) : undefined}
-          onPrint={() => void printInstallmentPlan()}
-        /></div>}
         <Card className="rounded-2xl border-border/50" data-tour="sales-form-items">
           <CardContent className="p-6">
             <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
@@ -1647,6 +1549,104 @@ export function NotasCreditoView({ data, summaryData, summaryLoading, summaryErr
             </div>
           </CardContent>
         </Card>
+        <Card className="rounded-2xl border-border/50">
+          <CardContent className="space-y-4 p-4 sm:p-5">
+            <div className="flex flex-col gap-1 sm:flex-row sm:items-baseline sm:justify-between">
+              <p className="text-xs font-black uppercase tracking-widest text-muted-foreground">Interés y calendario opcionales</p>
+              <p className="text-[10px] text-muted-foreground">Configura el costo financiado y los abonos cuando aplique.</p>
+            </div>
+            <div className="grid min-w-0 gap-3 lg:grid-cols-12">
+              <div className={`min-w-0 space-y-1.5 ${interestMode === 'NONE' ? 'lg:col-span-4' : 'lg:col-span-3'}`}>
+                <Label htmlFor="credit-interest-mode" className="text-xs font-semibold">Interés</Label>
+                <Select value={interestMode} onValueChange={(value) => setLocalDoc({ ...localDoc, interestMode: value, interestValue: value === 'NONE' ? 0 : localDoc.interestValue || '' })}>
+                  <SelectTrigger id="credit-interest-mode" className="h-10 w-full"><SelectValue /></SelectTrigger>
+                  <SelectContent><SelectItem value="NONE">Sin interés</SelectItem><SelectItem value="FIXED_AMOUNT">Monto fijo</SelectItem><SelectItem value="PERCENTAGE">Porcentaje único</SelectItem></SelectContent>
+                </Select>
+              </div>
+              {interestMode !== 'NONE' && <div className="min-w-0 space-y-1.5 lg:col-span-3">
+                <Label htmlFor="credit-interest-value" className="text-xs font-semibold">{interestMode === 'PERCENTAGE' ? 'Porcentaje sobre el crédito (%)' : 'Interés fijo'}</Label>
+                <Input id="credit-interest-value" type="number" min="0" step="0.01" max={interestMode === 'PERCENTAGE' ? 100 : undefined} value={localDoc.interestValue ?? ''} onChange={(event) => setLocalDoc({ ...localDoc, interestValue: event.target.value })} className="h-10" />
+              </div>}
+              <div className={`min-w-0 ${interestMode === 'NONE' ? 'lg:col-span-8' : 'lg:col-span-6'}`}>
+                <div className="grid h-full min-w-0 gap-2 sm:grid-cols-2">
+                  <div className="flex min-w-0 flex-col justify-center rounded-xl border border-border/50 bg-muted/10 px-3 py-2.5">
+                    <p className="text-[9px] font-black uppercase tracking-wider text-muted-foreground">Interés estimado</p>
+                    <p className="mt-1 break-words text-sm font-bold tabular-nums text-foreground">{formatExplicitAmount(interestPreview, localDoc.currency || displayCurrency)}</p>
+                  </div>
+                  <div className="flex min-w-0 flex-col justify-center rounded-xl border border-primary/20 bg-primary/5 px-3 py-2.5">
+                    <p className="text-[9px] font-black uppercase tracking-wider text-muted-foreground">Total financiado</p>
+                    <p className="mt-1 break-words text-sm font-bold tabular-nums text-foreground">{formatExplicitAmount(Number(localDoc.total || 0) + interestPreview, localDoc.currency || displayCurrency)}</p>
+                  </div>
+                </div>
+              </div>
+            </div>
+            <div className="min-w-0 rounded-xl border border-border/60 bg-muted/10 p-3 sm:p-4">
+              <div className={`grid min-w-0 gap-3 ${localDoc.planEnabled ? 'sm:grid-cols-[minmax(0,1fr)_minmax(210px,260px)] sm:items-center' : ''}`}>
+                <div className="flex min-w-0 items-start gap-3">
+                  <input id="credit-plan-enabled" type="checkbox" className="mt-0.5 size-4 shrink-0 accent-primary" checked={Boolean(localDoc.planEnabled)} onChange={(event) => setLocalDoc({ ...localDoc, planEnabled: event.target.checked, planCalculationMode: localDoc.planCalculationMode || 'AMOUNT', firstInstallmentDate: event.target.checked ? (localDoc.firstInstallmentDate || localDoc.date) : localDoc.firstInstallmentDate, frequency: localDoc.frequency || 'WEEKLY' })} />
+                  <div className="min-w-0 flex-1">
+                    <Label htmlFor="credit-plan-enabled" className="cursor-pointer text-xs font-semibold">Definir un plan de abonos</Label>
+                    <p className="mt-1 text-[10px] leading-relaxed text-muted-foreground">{localDoc.planEnabled ? (planCalculationMode === 'MANUAL' ? 'Indica la fecha, el monto y el interés de cada abono.' : 'Elige cómo distribuir los abonos del crédito.') : 'Puedes programar cuotas automáticas o definir cada abono manualmente.'}</p>
+                  </div>
+                </div>
+                {localDoc.planEnabled && <div className="min-w-0 space-y-1.5">
+                  <Label className="text-xs font-semibold">Método de cálculo</Label>
+                  <Select value={planCalculationMode} onValueChange={(value) => { const mode = value as typeof planCalculationMode; const rows = manualInstallmentDrafts.length ? manualInstallmentDrafts : [{ dueDate: isoDate(localDoc.date), totalAmount: '', interestAmount: '' }]; const firstDate = isoDate(localDoc.firstInstallmentDate || localDoc.date); const requestedDate = installmentPlanEstimate?.finalDueDate || isoDate(localDoc.dueDate) || firstDate; setLocalDoc({ ...localDoc, planCalculationMode: mode, ...(mode === 'DEADLINE' ? { dueDate: requestedDate >= firstDate ? requestedDate : firstDate } : {}), ...(mode === 'MANUAL' ? { manualInstallments: rows.map((row, index) => index === 0 && !row.dueDate ? { ...row, dueDate: isoDate(localDoc.date) } : row) } : {}) }); }}>
+                    <SelectTrigger className="h-10 w-full"><SelectValue /></SelectTrigger>
+                    <SelectContent><SelectItem value="AMOUNT">Monto por abono</SelectItem><SelectItem value="DEADLINE">Fecha de vencimiento</SelectItem><SelectItem value="MANUAL">Manual</SelectItem></SelectContent>
+                  </Select>
+                </div>}
+              </div>
+              {localDoc.planEnabled && <div className="mt-3 grid min-w-0 gap-3 sm:grid-cols-2 xl:grid-cols-3">
+                {planCalculationMode !== 'MANUAL' && <div className="min-w-0 space-y-1.5">
+                  <Label className="text-xs font-semibold">Frecuencia</Label>
+                  <Select value={localDoc.frequency || 'WEEKLY'} onValueChange={(value) => setLocalDoc({ ...localDoc, frequency: value })}>
+                    <SelectTrigger className="h-10"><SelectValue /></SelectTrigger>
+                    <SelectContent><SelectItem value="DAILY">Diaria</SelectItem><SelectItem value="WEEKLY">Semanal</SelectItem><SelectItem value="BIWEEKLY">Cada 15 días</SelectItem><SelectItem value="MONTHLY">Mensual</SelectItem></SelectContent>
+                  </Select>
+                </div>}
+                {planCalculationMode !== 'MANUAL' && <div className="min-w-0 space-y-1.5"><Label htmlFor="credit-first-installment" className="text-xs font-semibold">Fecha del primer abono</Label><DateField id="credit-first-installment" ariaLabel="Fecha del primer abono" ariaRequired value={localDoc.firstInstallmentDate || isoDate(localDoc.dueDate)} onChange={(firstDate) => setLocalDoc({ ...localDoc, firstInstallmentDate: firstDate, ...(planCalculationMode === 'DEADLINE' && isoDate(localDoc.dueDate) < firstDate ? { dueDate: firstDate } : {}) })} className="h-10" /></div>}
+                {planCalculationMode === 'DEADLINE' && <div className="min-w-0 space-y-1.5"><Label htmlFor="credit-final-due-date" className="text-xs font-semibold">Fecha final de vencimiento *</Label><DateField id="credit-final-due-date" ariaLabel="Fecha final de vencimiento" ariaRequired minDate={isoDate(localDoc.firstInstallmentDate || localDoc.date)} value={isoDate(localDoc.dueDate)} onChange={(date) => setLocalDoc({ ...localDoc, dueDate: date })} className="h-10" /></div>}
+                {planCalculationMode === 'AMOUNT' && <div className="min-w-0 space-y-1.5"><Label htmlFor="credit-installment-amount" className="text-xs font-semibold">Monto por abono</Label><Input id="credit-installment-amount" type="number" min="0.01" step="0.01" value={localDoc.installmentAmount ?? ''} onChange={(event) => setLocalDoc({ ...localDoc, planCalculationMode: 'AMOUNT', installmentAmount: event.target.value })} currencyPrecision className="h-10" /></div>}
+                {planCalculationMode !== 'MANUAL' && <div className="sm:col-span-2 xl:col-span-3"><CustomerCreditCalendarSelector
+                  excludedWeekdays={localDoc.excludedWeekdays || []}
+                  holidayIds={localDoc.holidayIds || []}
+                  onChange={(value) => setLocalDoc({ ...localDoc, excludedWeekdays: value.excludedWeekdays, holidayIds: value.holidayIds })}
+                /></div>}
+                {planCalculationMode === 'AMOUNT' && String(localDoc.installmentAmount ?? '') !== String(deferredPlanInstallmentAmount ?? '') && <p className="text-[10px] text-muted-foreground sm:col-span-2 xl:col-span-3" role="status" aria-live="polite">Actualizando el calendario con el monto nuevo…</p>}
+                {installmentPlanEstimate && <div className="sm:col-span-2 xl:col-span-3"><CustomerCreditInstallmentSchedule
+                installments={installmentSchedule}
+                currency={localDoc.currency || displayCurrency}
+                formatAmount={(amount) => formatExplicitAmount(amount, localDoc.currency || displayCurrency)}
+                principalAmount={principalForInterest}
+                interestAmount={planInterestAmount}
+                totalAmount={installmentPlanEstimate.totalAmount}
+                installmentAmount={installmentPlanEstimate.installmentAmount}
+                finalDueDate={installmentPlanEstimate.finalDueDate}
+                frequencyLabel={planCalculationMode === 'MANUAL' ? undefined : ({ DAILY: 'Diaria', WEEKLY: 'Semanal', BIWEEKLY: 'Cada 15 días', MONTHLY: 'Mensual' } as const)[String(localDoc.frequency || 'WEEKLY').toUpperCase() as 'DAILY' | 'WEEKLY' | 'BIWEEKLY' | 'MONTHLY']}
+                manualInstallments={planCalculationMode === 'MANUAL' ? manualInstallmentDrafts : undefined}
+                manualValidation={planCalculationMode === 'MANUAL' ? installmentPlanEstimate : undefined}
+                onManualInstallmentChange={planCalculationMode === 'MANUAL' ? (index, field, value) => setLocalDoc({ ...localDoc, manualInstallments: manualInstallmentDrafts.map((item, itemIndex) => itemIndex === index ? { ...item, [field]: value } : item) }) : undefined}
+                onAddManualInstallment={planCalculationMode === 'MANUAL' ? () => setLocalDoc({ ...localDoc, manualInstallments: [...manualInstallmentDrafts, { dueDate: '', totalAmount: '', interestAmount: '' }] }) : undefined}
+                onRemoveManualInstallment={planCalculationMode === 'MANUAL' ? (index) => setLocalDoc({ ...localDoc, manualInstallments: manualInstallmentDrafts.filter((_, itemIndex) => itemIndex !== index) }) : undefined}
+                onPrint={() => void printInstallmentPlan()}
+                printDisabled={planCalculationMode === 'AMOUNT' && String(localDoc.installmentAmount ?? '') !== String(deferredPlanInstallmentAmount ?? '')}
+              /></div>}
+              </div>}
+            </div>
+          </CardContent>
+        </Card>
+        {installmentSchedule.length > 0 && !installmentPlanEstimate && <div><CustomerCreditInstallmentSchedule
+          installments={installmentSchedule}
+          currency={localDoc.currency || displayCurrency}
+          formatAmount={(amount) => formatExplicitAmount(amount, localDoc.currency || displayCurrency)}
+          principalAmount={principalForInterest}
+          interestAmount={planInterestAmount}
+          totalAmount={Number(localDoc.total || 0) + planInterestAmount}
+          finalDueDate={installmentSchedule[installmentSchedule.length - 1]?.dueDate}
+          frequencyLabel={localDoc.frequency ? String(localDoc.frequency) : undefined}
+          onPrint={() => void printInstallmentPlan()}
+        /></div>}
         </fieldset>
       </div>
     );
