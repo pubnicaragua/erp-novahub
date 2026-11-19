@@ -1,6 +1,7 @@
 "use client";
 
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
+import type * as React from 'react';
 import { Calendar } from './calendar';
 import { Popover, PopoverContent, PopoverTrigger } from './popover';
 import { Button } from './button';
@@ -21,10 +22,21 @@ interface DateTimePickerFieldProps {
   minDate?: string;
   maxDate?: string;
   id?: string;
+  title?: string;
+  ariaLabel?: string;
+  ariaRequired?: boolean;
+  ariaInvalid?: boolean;
+  ariaDescribedBy?: string;
+  name?: string;
+  form?: string;
+  required?: boolean;
+  buttonRef?: React.Ref<HTMLButtonElement>;
+  buttonProps?: React.ButtonHTMLAttributes<HTMLButtonElement> & Record<string, unknown>;
+  onInvalid?: React.FormEventHandler<HTMLInputElement>;
+  minuteStep?: number;
 }
 
 const HOURS_12 = ['12', '01', '02', '03', '04', '05', '06', '07', '08', '09', '10', '11'];
-const MINUTES = ['00', '05', '10', '15', '20', '25', '30', '35', '40', '45', '50', '55'];
 
 export function DateTimePickerField({
   value,
@@ -36,8 +48,22 @@ export function DateTimePickerField({
   minDate,
   maxDate,
   id,
+  title,
+  ariaLabel,
+  ariaRequired,
+  ariaInvalid,
+  ariaDescribedBy,
+  name,
+  form,
+  required,
+  buttonRef,
+  buttonProps,
+  onInvalid,
+  minuteStep = 5,
 }: DateTimePickerFieldProps) {
   const [open, setOpen] = useState(false);
+  const [requiredInvalid, setRequiredInvalid] = useState(false);
+  const internalButtonRef = useRef<HTMLButtonElement>(null);
 
   // Parse current value
   let initialDate: Date | undefined = undefined;
@@ -66,6 +92,13 @@ export function DateTimePickerField({
   const [selectedMinute, setSelectedMinute] = useState<string>(initialMinute);
   const [selectedPeriod, setSelectedPeriod] = useState<'AM' | 'PM'>(initialPeriod);
   const [mobileTab, setMobileTab] = useState<'date' | 'time'>('date');
+  const normalizedMinuteStep = Number.isFinite(minuteStep) ? Math.max(1, Math.min(60, Math.floor(minuteStep))) : 1;
+  const minuteOptions = Array.from(
+    { length: Math.ceil(60 / normalizedMinuteStep) },
+    (_, index) => String(index * normalizedMinuteStep).padStart(2, '0')
+  );
+  if (!minuteOptions.includes(selectedMinute)) minuteOptions.push(selectedMinute);
+  minuteOptions.sort((left, right) => Number(left) - Number(right));
 
   // El valor puede llegar después de montar el selector (por ejemplo, al abrir la edición de una tarea).
   // Sin esto, la ventana se quedaba con la hora y el día por defecto y al elegir un día pisaba la hora real.
@@ -112,6 +145,7 @@ export function DateTimePickerField({
       return;
     }
 
+    setRequiredInvalid(false);
     onChange(isoString);
   };
 
@@ -188,21 +222,33 @@ export function DateTimePickerField({
   }
 
   return (
+    <div className="relative w-full">
     <Popover open={open} onOpenChange={setOpen}>
       <PopoverTrigger asChild>
         <Button
+          {...buttonProps}
+          ref={(node) => {
+            internalButtonRef.current = node;
+            if (typeof buttonRef === 'function') buttonRef(node);
+            else if (buttonRef) (buttonRef as React.MutableRefObject<HTMLButtonElement | null>).current = node;
+          }}
           type="button"
           variant="outline"
           id={id}
+          title={title}
           disabled={disabled}
+          aria-label={ariaLabel}
+          aria-required={ariaRequired || required || undefined}
+          aria-invalid={ariaInvalid || isInvalid || Boolean(required && requiredInvalid && !value) || undefined}
+          aria-describedby={ariaDescribedBy}
           className={cn(
             'h-11 w-full justify-start gap-2.5 rounded-xl border border-input bg-background px-3.5 text-xs font-medium transition-all hover:bg-muted/40 hover:border-primary/50 text-left',
             !value && 'text-muted-foreground',
-            isInvalid && 'border-rose-500/70 text-rose-500 bg-rose-500/5 hover:bg-rose-500/10 hover:border-rose-500',
+            (isInvalid || (required && requiredInvalid && !value)) && 'border-rose-500/70 text-rose-500 bg-rose-500/5 hover:bg-rose-500/10 hover:border-rose-500',
             className
           )}
         >
-          <CalendarDays className={cn('size-4 shrink-0', isInvalid ? 'text-rose-500' : value ? 'text-primary' : 'text-muted-foreground')} />
+          <CalendarDays className={cn('size-4 shrink-0', isInvalid || (required && requiredInvalid && !value) ? 'text-rose-500' : value ? 'text-primary' : 'text-muted-foreground')} />
           <span className="flex-1 truncate capitalize">
             {displayValue || placeholder}
           </span>
@@ -213,6 +259,7 @@ export function DateTimePickerField({
               className="rounded-full p-1 text-muted-foreground/60 hover:bg-muted hover:text-foreground"
               onClick={(e) => {
                 e.stopPropagation();
+                setRequiredInvalid(Boolean(required));
                 onChange('');
               }}
             >
@@ -370,8 +417,8 @@ export function DateTimePickerField({
                 <span className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground mb-1.5 text-center">
                   Minutos
                 </span>
-                <div className="grid grid-cols-3 gap-1">
-                  {MINUTES.map((m) => (
+                <div className="grid max-h-64 grid-cols-3 gap-1 overflow-y-auto overscroll-contain pr-1">
+                  {minuteOptions.map((m) => (
                     <button
                       key={m}
                       type="button"
@@ -411,6 +458,29 @@ export function DateTimePickerField({
         </div>
       </PopoverContent>
     </Popover>
+    {(name || required) && (
+      <input
+        type="datetime-local"
+        name={name}
+        form={form}
+        value={value || ''}
+        min={minDate}
+        max={maxDate}
+        required={required}
+        disabled={disabled}
+        tabIndex={-1}
+        aria-hidden="true"
+        onChange={() => undefined}
+        onInvalid={(event) => {
+          event.preventDefault();
+          setRequiredInvalid(Boolean(required));
+          internalButtonRef.current?.focus();
+          onInvalid?.(event);
+        }}
+        className="pointer-events-none absolute left-0 top-0 size-px opacity-0"
+      />
+    )}
+    </div>
   );
 }
 

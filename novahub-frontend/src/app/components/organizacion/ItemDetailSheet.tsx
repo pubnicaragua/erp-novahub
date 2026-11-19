@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { CheckCircle2, Loader2, Trash2 } from 'lucide-react';
 import { Sheet, SheetContent, SheetDescription, SheetFooter, SheetHeader, SheetTitle } from '../ui/sheet';
 import { Button } from '../ui/button';
+import { DateField } from '../ui/DateField';
 import { Input } from '../ui/input';
 import { Textarea } from '../ui/textarea';
 import { Badge } from '../ui/badge';
@@ -124,7 +125,7 @@ function ItemDetailForm({ item, readOnly, timezone, timezoneLabel, onClose, onCh
               <>
                 <Field label="Título" htmlFor="det-title"><Input id="det-title" value={title} onChange={(e) => setTitle(e.target.value)} disabled={!canEdit} /></Field>
                 <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
-                  <Field label="Fecha" htmlFor="det-date"><input id="det-date" type="date" className={controlClass} value={date} onChange={(e) => setDate(e.target.value)} disabled={!canEdit} /></Field>
+                  <Field label="Fecha" htmlFor="det-date"><DateField id="det-date" ariaLabel="Fecha del elemento" className={controlClass} value={date} onChange={setDate} disabled={!canEdit} /></Field>
                   <Field label="Hora" htmlFor="det-start">
                     <div className="flex items-center gap-2">
                       <input id="det-start" type="time" className={controlClass} value={startTime} onChange={(e) => setStartTime(e.target.value)} disabled={!canEdit} aria-label="Hora de inicio" />

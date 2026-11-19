@@ -1,6 +1,8 @@
 import { useMemo, useState, type ReactNode } from 'react';
 import { ChevronLeft, ChevronRight, Loader2, Search } from 'lucide-react';
 import { Button } from '../ui/button';
+import { DateField } from '../ui/DateField';
+import { DateTimePickerField } from '../ui/DateTimePickerField';
 import { Input } from '../ui/input';
 import { Skeleton } from '../ui/skeleton';
 import { Sheet, SheetContent, SheetDescription, SheetFooter, SheetHeader, SheetTitle } from '../ui/sheet';
@@ -166,9 +168,13 @@ function FormBody({ onOpenChange, title, description, fields, initial, submitLab
                       <option value="">{f.placeholder ?? 'Sin definir'}</option>
                       {f.options?.map((o) => <option key={o.value} value={o.value}>{o.label}</option>)}
                     </NativeSelect>
+                  ) : f.type === 'date' ? (
+                    <DateField id={id} ariaLabel={f.label} value={values[f.key]} onChange={(value) => set(f.key, value)} required={f.required} clearable={!f.required} />
+                  ) : f.type === 'datetime' ? (
+                    <DateTimePickerField id={id} value={values[f.key]} onChange={(value) => set(f.key, value)} required={f.required} minuteStep={1} />
                   ) : (
                     <input id={id} className={controlClass} value={values[f.key]} onChange={(e) => set(f.key, e.target.value)}
-                      type={f.type === 'number' ? 'number' : f.type === 'date' ? 'date' : f.type === 'datetime' ? 'datetime-local' : 'text'}
+                      type={f.type === 'number' ? 'number' : 'text'}
                       min={f.type === 'number' ? 0 : undefined} step={f.type === 'number' ? 'any' : undefined} placeholder={f.type === 'tags' ? 'Separados por coma' : undefined} />
                   )}
               </Field>

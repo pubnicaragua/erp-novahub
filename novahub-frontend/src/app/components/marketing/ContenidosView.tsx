@@ -5,6 +5,7 @@ import { es } from 'date-fns/locale';
 import { Archive, ChevronLeft, ChevronRight, Loader2, Plus, Send } from 'lucide-react';
 import { Button } from '../ui/button';
 import { Input } from '../ui/input';
+import { DateTimePickerField } from '../ui/DateTimePickerField';
 import { Sheet, SheetContent, SheetDescription, SheetHeader, SheetTitle } from '../ui/sheet';
 import { Skeleton } from '../ui/skeleton';
 import { Textarea } from '../ui/textarea';
@@ -204,7 +205,7 @@ function ContentBody({ id, channels }: { id: string; channels: string[] }) {
               <Field label="Título" htmlFor="ct-title" className="sm:col-span-2"><Input id="ct-title" disabled={!editable} value={val('title', c.title)} onChange={(e) => setEdits((s) => ({ ...s, title: e.target.value }))} /></Field>
               <Field label="Canal" htmlFor="ct-channel"><NativeSelect id="ct-channel" disabled={!editable} value={val('channel', c.channel)} onChange={(e) => setEdits((s) => ({ ...s, channel: e.target.value }))}>{[...new Set([c.channel, ...channels])].map((ch) => <option key={ch} value={ch}>{ch}</option>)}</NativeSelect></Field>
               <Field label="Responsable" htmlFor="ct-owner"><NativeSelect id="ct-owner" disabled={!editable} value={val('assigneeId', c.assigneeId ?? '')} onChange={(e) => setEdits((s) => ({ ...s, assigneeId: e.target.value }))}><option value="">Sin asignar</option>{userOptions(users.data).map((o) => <option key={o.value} value={o.value}>{o.label}</option>)}</NativeSelect></Field>
-              <Field label="Fecha objetivo" htmlFor="ct-date" className="sm:col-span-2"><input id="ct-date" type="datetime-local" className={controlClass} disabled={!editable} value={val('scheduledAt', toInputDateTime(c.scheduledAt))} onChange={(e) => setEdits((s) => ({ ...s, scheduledAt: e.target.value }))} /></Field>
+              <Field label="Fecha objetivo" htmlFor="ct-date" className="sm:col-span-2"><DateTimePickerField id="ct-date" className={controlClass} disabled={!editable} value={val('scheduledAt', toInputDateTime(c.scheduledAt))} onChange={(value) => setEdits((s) => ({ ...s, scheduledAt: value }))} minuteStep={1} /></Field>
               <Field label="Copy" htmlFor="ct-copy" className="sm:col-span-2" hint={editable && ['APPROVED', 'SCHEDULED'].includes(c.status) ? 'Editar el copy creará una nueva versión y requerirá una nueva revisión.' : undefined}>
                 <Textarea id="ct-copy" rows={5} disabled={!editable} value={val('copy', c.copy ?? '')} onChange={(e) => setEdits((s) => ({ ...s, copy: e.target.value }))} />
               </Field>
@@ -235,7 +236,7 @@ function ContentBody({ id, channels }: { id: string; channels: string[] }) {
 
               {canEdit && ['APPROVED', 'SCHEDULED'].includes(c.status) && (
                 <div className="mt-3 flex flex-wrap items-end gap-2">
-                  <Field label="Programar para" htmlFor="ct-sched"><input id="ct-sched" type="datetime-local" className={controlClass} value={scheduleAt || toInputDateTime(c.scheduledAt)} onChange={(e) => setScheduleAt(e.target.value)} /></Field>
+                  <Field label="Programar para" htmlFor="ct-sched"><DateTimePickerField id="ct-sched" className={controlClass} value={scheduleAt || toInputDateTime(c.scheduledAt)} onChange={setScheduleAt} minuteStep={1} /></Field>
                   <Button type="button" variant="outline" disabled={busy !== null || !(scheduleAt || c.scheduledAt)} onClick={() => void run('schedule', () => marketingApi.schedule(id, new Date(scheduleAt || c.scheduledAt!).toISOString()), 'Contenido programado (aún no publicado)')}>Programar</Button>
                 </div>
               )}

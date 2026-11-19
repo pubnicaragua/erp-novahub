@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { Gauge, Loader2 } from 'lucide-react';
 import { Button } from '../../ui/button';
 import { Card } from '../../ui/card';
+import { Input } from '../../ui/input';
 import { Skeleton } from '../../ui/skeleton';
 import { cn } from '../../ui/utils';
 import { useTenantQuery } from '../../../hooks/useTenantQuery';
@@ -44,7 +45,7 @@ export function EmployeeScorecardPanel({ employeeId, mine = false, canCreateRevi
     <Card className="space-y-4 rounded-2xl border-border/60 bg-card p-5 shadow-sm" data-testid="scorecard">
       <div className="flex flex-wrap items-center justify-between gap-2">
         <h3 className="flex items-center gap-2 text-xs font-black uppercase tracking-widest text-muted-foreground"><Gauge className="size-4 text-primary" aria-hidden /> Puntuación de desempeño</h3>
-        <input type="month" aria-label="Mes a evaluar" value={month} max={currentMonth()} onChange={(e) => e.target.value && setMonth(e.target.value)} className="h-8 rounded-md border border-input bg-background px-2 text-xs" />
+        <Input type="month" aria-label="Mes a evaluar" value={month} max={currentMonth()} onChange={(e) => e.target.value && setMonth(e.target.value)} className="h-8 w-auto rounded-md px-2 text-xs" />
       </div>
       {query.isLoading ? <Skeleton className="h-28 w-full" aria-busy="true" />
         : query.isError || !card ? <p className="text-sm text-muted-foreground" role="status">{mine ? 'Tu usuario no está vinculado a un empleado, así que no hay puntuación.' : 'No se pudo calcular la puntuación.'}</p>

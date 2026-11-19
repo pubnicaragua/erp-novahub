@@ -2,11 +2,170 @@ import * as React from "react";
 
 import { cn } from "./utils";
 import { resolveNumberInputStep } from "../../utils/inputStep";
+import { DateField } from "./DateField";
+import { DateTimePickerField } from "./DateTimePickerField";
+import { MonthField } from "./MonthField";
 
-type InputProps = React.ComponentProps<"input"> & { currencyPrecision?: boolean };
+type InputProps = React.ComponentProps<"input"> & { currencyPrecision?: boolean; clearable?: boolean };
+
+type SharedDateInputProps = {
+  props: InputProps;
+  type: 'date' | 'datetime-local' | 'month';
+  forwardedRef: React.ForwardedRef<HTMLInputElement>;
+};
+
+function createInputChangeEvent(value: string, name?: string, id?: string) {
+  const target = { value, name: name || '', id: id || '' } as HTMLInputElement;
+  return { target, currentTarget: target } as unknown as React.ChangeEvent<HTMLInputElement>;
+}
+
+function createInputBlurEvent(value: string, name?: string, id?: string) {
+  const target = { value, name: name || '', id: id || '' } as HTMLInputElement;
+  return { target, currentTarget: target } as unknown as React.FocusEvent<HTMLInputElement>;
+}
+
+function SharedDateInput({ props, type, forwardedRef }: SharedDateInputProps) {
+  const {
+    className,
+    value,
+    defaultValue,
+    onChange,
+    onBlur,
+    onClick,
+    onFocus,
+    onKeyDown,
+    onKeyUp,
+    onWheel,
+    onInvalid,
+    id,
+    name,
+    form,
+    title,
+    placeholder,
+    disabled,
+    readOnly,
+    required,
+    min,
+    max,
+    step,
+    autoFocus,
+    style,
+    currencyPrecision: _currencyPrecision,
+    ...rest
+  } = props;
+  const [uncontrolledValue, setUncontrolledValue] = React.useState(() => String(value ?? defaultValue ?? ''));
+  const currentValue = String(value !== undefined ? value ?? '' : uncontrolledValue);
+  const dateValue = type === 'date' && currentValue.includes('T') ? currentValue.slice(0, 10) : currentValue;
+  const dataProps = Object.fromEntries(
+    Object.entries(rest as Record<string, unknown>).filter(([key]) => key.startsWith('data-'))
+  );
+  const buttonProps = {
+    ...dataProps,
+    'data-slot': 'input',
+    autoFocus,
+    style,
+    onClick: onClick ? (event: React.MouseEvent<HTMLButtonElement>) => onClick(event as unknown as React.MouseEvent<HTMLInputElement>) : undefined,
+    onFocus: onFocus ? (event: React.FocusEvent<HTMLButtonElement>) => onFocus(event as unknown as React.FocusEvent<HTMLInputElement>) : undefined,
+    onKeyDown: onKeyDown ? (event: React.KeyboardEvent<HTMLButtonElement>) => onKeyDown(event as unknown as React.KeyboardEvent<HTMLInputElement>) : undefined,
+    onKeyUp: onKeyUp ? (event: React.KeyboardEvent<HTMLButtonElement>) => onKeyUp(event as unknown as React.KeyboardEvent<HTMLInputElement>) : undefined,
+    onWheel: onWheel ? (event: React.WheelEvent<HTMLButtonElement>) => onWheel(event as unknown as React.WheelEvent<HTMLInputElement>) : undefined,
+  } as React.ButtonHTMLAttributes<HTMLButtonElement> & Record<string, unknown>;
+  const notifyChange = (nextValue: string) => {
+    if (value === undefined) setUncontrolledValue(nextValue);
+    onChange?.(createInputChangeEvent(nextValue, name, id));
+    onBlur?.(createInputBlurEvent(nextValue, name, id));
+  };
+  const normalizedMin = typeof min === 'string' ? min : undefined;
+  const normalizedMax = typeof max === 'string' ? max : undefined;
+  const dateTimeStep = typeof step === 'number' ? step : Number(step || 60);
+  const minuteStep = Number.isFinite(dateTimeStep) && dateTimeStep >= 60 ? Math.floor(dateTimeStep / 60) : 1;
+
+  if (type === 'month') {
+    return (
+      <MonthField
+        value={currentValue}
+        onChange={notifyChange}
+        placeholder={placeholder}
+        className={className}
+        disabled={disabled || readOnly}
+        minMonth={normalizedMin}
+        maxMonth={normalizedMax}
+        id={id}
+        title={title}
+        ariaLabel={props['aria-label']}
+        ariaRequired={required || props['aria-required'] === true || props['aria-required'] === 'true'}
+        ariaInvalid={props['aria-invalid'] === true || props['aria-invalid'] === 'true'}
+        ariaDescribedBy={props['aria-describedby']}
+        name={name}
+        form={form}
+        required={required}
+        clearable={props.clearable ?? true}
+        buttonRef={forwardedRef as unknown as React.Ref<HTMLButtonElement>}
+        buttonProps={buttonProps}
+        onInvalid={onInvalid}
+      />
+    );
+  }
+
+  if (type === 'datetime-local') {
+    return (
+      <DateTimePickerField
+        value={currentValue}
+        onChange={notifyChange}
+        placeholder={placeholder}
+        className={className}
+        disabled={disabled || readOnly}
+        minDate={normalizedMin}
+        maxDate={normalizedMax}
+        id={id}
+        title={title}
+        ariaLabel={props['aria-label']}
+        ariaRequired={required || props['aria-required'] === true || props['aria-required'] === 'true'}
+        ariaInvalid={props['aria-invalid'] === true || props['aria-invalid'] === 'true'}
+        ariaDescribedBy={props['aria-describedby']}
+        name={name}
+        form={form}
+        required={required}
+        buttonRef={forwardedRef as unknown as React.Ref<HTMLButtonElement>}
+        buttonProps={buttonProps}
+        onInvalid={onInvalid}
+        minuteStep={minuteStep}
+      />
+    );
+  }
+
+  return (
+    <DateField
+      value={dateValue}
+      onChange={notifyChange}
+      placeholder={placeholder}
+      className={className}
+      disabled={disabled || readOnly}
+      minDate={normalizedMin}
+      maxDate={normalizedMax}
+      id={id}
+      title={title}
+      ariaLabel={props['aria-label']}
+      ariaRequired={required || props['aria-required'] === true || props['aria-required'] === 'true'}
+      ariaInvalid={props['aria-invalid'] === true || props['aria-invalid'] === 'true'}
+      ariaDescribedBy={props['aria-describedby']}
+      name={name}
+      form={form}
+      required={required}
+      clearable={props.clearable ?? true}
+      buttonRef={forwardedRef as unknown as React.Ref<HTMLButtonElement>}
+      buttonProps={buttonProps}
+      onInvalid={onInvalid}
+    />
+  );
+}
 
 const Input = React.forwardRef<HTMLInputElement, InputProps>(
-  ({ className, type, onClick, onWheel, currencyPrecision, step, ...props }, ref) => {
+  ({ className, type, onClick, onWheel, currencyPrecision, clearable, step, ...props }, ref) => {
+    if (type === 'date' || type === 'datetime-local' || type === 'month') {
+      return <SharedDateInput type={type} props={{ className, type, onClick, onWheel, currencyPrecision, clearable, step, ...props }} forwardedRef={ref} />;
+    }
+
     const opensNativePicker = type === 'date'
       || type === 'datetime-local'
       || type === 'month'

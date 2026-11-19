@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { ChevronLeft, ChevronRight, Loader2, Send, Star } from 'lucide-react';
 import { useQueryClient } from '@tanstack/react-query';
 import { Button } from '../ui/button';
+import { DateField } from '../ui/DateField';
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from '../ui/dialog';
 import { Skeleton } from '../ui/skeleton';
 import { Textarea } from '../ui/textarea';
@@ -44,8 +45,8 @@ export function RespuestasTab({ people }: { people: PersonOption[] }) {
       <div className="flex flex-wrap items-end gap-3">
         <Field label="Persona" className="min-w-44"><NativeSelect value={userId} onChange={(e) => reset(setUserId)(e.target.value)}><option value="">Todas</option>{people.map((p) => <option key={p.id} value={p.id}>{p.name}</option>)}</NativeSelect></Field>
         <Field label="Estado" className="min-w-40"><NativeSelect value={status} onChange={(e) => reset(setStatus)(e.target.value)}>{STATUS_FILTERS.map(([value, label]) => <option key={value} value={value}>{label}</option>)}</NativeSelect></Field>
-        <Field label="Desde"><input type="date" value={from} onChange={(e) => reset(setFrom)(e.target.value)} className={cn(controlClass, 'w-40')} /></Field>
-        <Field label="Hasta"><input type="date" value={to} onChange={(e) => reset(setTo)(e.target.value)} className={cn(controlClass, 'w-40')} /></Field>
+        <Field label="Desde"><DateField ariaLabel="Fecha desde" value={from} onChange={(value) => reset(setFrom)(value)} className={cn(controlClass, 'w-40')} /></Field>
+        <Field label="Hasta"><DateField ariaLabel="Fecha hasta" value={to} onChange={(value) => reset(setTo)(value)} className={cn(controlClass, 'w-40')} /></Field>
         <Button type="button" className="ml-auto" onClick={() => setAsking(true)} disabled={!people.length}><Send className="size-4" />Preguntar ahora</Button>
       </div>
 

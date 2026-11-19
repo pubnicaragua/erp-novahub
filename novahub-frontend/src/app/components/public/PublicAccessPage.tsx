@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import { useLocation } from 'react-router';
-import { CalendarDays, ChevronDown, FileDown, FileText, Loader2, LockKeyhole, Printer, ShieldCheck, WalletCards } from 'lucide-react';
+import { ChevronDown, FileDown, FileText, Loader2, LockKeyhole, Printer, ShieldCheck, WalletCards } from 'lucide-react';
+import { DateField } from '../ui/DateField';
 import { generateEstimatePDF } from '../../utils/pdfGenerator';
 import { getSalesAdditionalCharges } from '../../utils/salesCharges';
 import { formatPdfVariantAttributes } from '../../utils/pdf-line-details';
@@ -176,23 +177,6 @@ function AccessShell({ children, company }: { children: React.ReactNode; company
       .novahub-public-portal .portal-filter .text-slate-400, .novahub-public-portal .portal-filter .text-slate-500 { color: var(--portal-filter-muted) !important; }
       .novahub-public-portal .portal-filter input { color: var(--portal-card-text) !important; background-color: var(--portal-card) !important; }
       .novahub-public-portal .portal-filter input::placeholder { color: var(--portal-card-muted) !important; opacity: 1; }
-      .novahub-public-portal input[type="date"] { color: var(--portal-card-text) !important; -webkit-text-fill-color: var(--portal-card-text) !important; background-color: var(--portal-card) !important; font-weight: 600; color-scheme: var(--portal-color-scheme) !important; }
-      .novahub-public-portal input[type="date"]::-webkit-datetime-edit,
-      .novahub-public-portal input[type="date"]::-webkit-datetime-edit-text,
-      .novahub-public-portal input[type="date"]::-webkit-datetime-edit-fields-wrapper,
-      .novahub-public-portal input[type="date"]::-webkit-date-and-time-value,
-      .novahub-public-portal input[type="date"]::-webkit-datetime-edit-month-field,
-      .novahub-public-portal input[type="date"]::-webkit-datetime-edit-day-field,
-      .novahub-public-portal input[type="date"]::-webkit-datetime-edit-year-field { color: var(--portal-card-text) !important; -webkit-text-fill-color: var(--portal-card-text) !important; font-weight: 600; opacity: 1; }
-      .novahub-public-portal input[type="date"]::placeholder { color: var(--portal-card-muted) !important; opacity: 1; }
-      .novahub-public-portal input[type="date"].portal-date-input { color: transparent !important; -webkit-text-fill-color: transparent !important; caret-color: transparent !important; background-color: var(--portal-card) !important; color-scheme: var(--portal-color-scheme) !important; }
-      .novahub-public-portal input[type="date"].portal-date-input::-webkit-datetime-edit,
-      .novahub-public-portal input[type="date"].portal-date-input::-webkit-datetime-edit-text,
-      .novahub-public-portal input[type="date"].portal-date-input::-webkit-datetime-edit-fields-wrapper,
-      .novahub-public-portal input[type="date"].portal-date-input::-webkit-date-and-time-value,
-      .novahub-public-portal input[type="date"].portal-date-input::-webkit-datetime-edit-month-field,
-      .novahub-public-portal input[type="date"].portal-date-input::-webkit-datetime-edit-day-field,
-      .novahub-public-portal input[type="date"].portal-date-input::-webkit-datetime-edit-year-field { color: transparent !important; -webkit-text-fill-color: transparent !important; }
     `}</style>
     <div className="mx-auto max-w-5xl">
       <header className="portal-card-surface mb-6 flex items-center gap-3 rounded-2xl border bg-slate-900/90 p-5" style={{ borderColor: 'var(--portal-border)' }}>
@@ -295,32 +279,16 @@ function PortalPagination({ pagination, pageLoading, onPageChange }: { paginatio
   </div>;
 }
 
-const formatPortalInputDate = (value: string) => {
-  if (!value) return 'dd/mm/aaaa';
-  const [year, month, day] = value.split('-');
-  return year && month && day ? `${day}/${month}/${year}` : 'dd/mm/aaaa';
-};
-
 function PortalDateField({ label, value, onChange }: { label: string; value: string; onChange: (value: string) => void }) {
   return <label className="text-sm text-slate-300">
     <span>{label}</span>
-    <div className="relative mt-1">
-      <CalendarDays className="pointer-events-none absolute right-3 top-1/2 z-20 size-4 -translate-y-1/2 text-[var(--portal-primary)]" />
-      <span
-        aria-hidden="true"
-        className="pointer-events-none absolute inset-y-0 left-3 z-10 flex items-center text-sm font-semibold"
-        style={{ color: value ? 'var(--portal-card-text)' : 'var(--portal-card-muted)' }}
-      >
-        {formatPortalInputDate(value)}
-      </span>
-      <input
-        type="date"
-        aria-label={label}
-        value={value}
-        onChange={event => onChange(event.target.value)}
-        className="portal-date-input mt-1 block w-full appearance-none rounded-lg border border-slate-700 bg-slate-900 px-3 py-2 pr-10 text-transparent caret-transparent outline-none focus:border-[var(--portal-primary)] focus:ring-2 focus:ring-[var(--portal-primary)]/30 [&::-webkit-calendar-picker-indicator]:absolute [&::-webkit-calendar-picker-indicator]:inset-0 [&::-webkit-calendar-picker-indicator]:h-full [&::-webkit-calendar-picker-indicator]:w-full [&::-webkit-calendar-picker-indicator]:cursor-pointer [&::-webkit-calendar-picker-indicator]:opacity-0"
-      />
-    </div>
+    <DateField
+      ariaLabel={label}
+      value={value}
+      onChange={onChange}
+      placeholder="Seleccione fecha"
+      className="mt-1 h-10 w-full rounded-lg border-slate-700 bg-slate-900 text-sm text-[var(--portal-card-text)] hover:bg-slate-800"
+    />
   </label>;
 }
 

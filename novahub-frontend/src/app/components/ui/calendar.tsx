@@ -8,8 +8,10 @@ import { Button } from "./button";
 
 export interface CalendarProps {
   mode?: "single";
+  selectionMode?: "day" | "month";
   selected?: Date;
   onSelect?: (date: Date | undefined) => void;
+  onMonthSelect?: (month: string) => void;
   initialFocus?: boolean;
   disabled?: boolean;
   minDate?: string;
@@ -21,14 +23,16 @@ export interface CalendarProps {
 const WEEKDAYS = ["Lu", "Ma", "Mi", "Ju", "Vi", "Sá", "Do"];
 
 export function Calendar({
+  selectionMode = "day",
   selected,
   onSelect,
+  onMonthSelect,
   disabled,
   minDate,
   maxDate,
   className,
 }: CalendarProps) {
-  const [viewMode, setViewMode] = React.useState<"days" | "months" | "years">("days");
+  const [viewMode, setViewMode] = React.useState<"days" | "months" | "years">(selectionMode === "month" ? "months" : "days");
   const [viewDate, setViewDate] = React.useState<Date>(() => selected || new Date());
 
   React.useEffect(() => {
@@ -43,6 +47,9 @@ export function Calendar({
   const maxYear = maxDate ? Number(maxDate.slice(0, 4)) : 9999;
 
   const isMonthInRange = (candidateYear: number, candidateMonth: number) => {
+    const normalizedMonth = new Date(candidateYear, candidateMonth, 1);
+    candidateYear = normalizedMonth.getFullYear();
+    candidateMonth = normalizedMonth.getMonth();
     if (candidateYear < minYear || candidateYear > maxYear) return false;
     const monthStart = `${candidateYear}-${String(candidateMonth + 1).padStart(2, "0")}-01`;
     const monthEndDay = new Date(candidateYear, candidateMonth + 1, 0).getDate();
@@ -228,10 +235,10 @@ export function Calendar({
               type="button"
               variant="outline"
               size="icon"
-              onClick={() => setViewMode("days")}
+              onClick={() => setViewMode(selectionMode === "month" ? "years" : "days")}
               disabled={disabled}
               className="size-7 h-7 w-7 shrink-0 rounded-md border border-border/60 p-0 hover:bg-muted/80"
-              aria-label="Volver a seleccionar día"
+              aria-label={selectionMode === "month" ? "Volver a seleccionar año" : "Volver a seleccionar día"}
             >
               <ChevronLeft className="size-4" />
             </Button>
@@ -259,7 +266,11 @@ export function Calendar({
                   onClick={() => {
                     if (!canSelectMonth) return;
                     setViewDate(new Date(year, monthIndex, 1));
-                    setViewMode("days");
+                    if (selectionMode === "month") {
+                      onMonthSelect?.(`${year}-${String(monthIndex + 1).padStart(2, "0")}`);
+                    } else {
+                      setViewMode("days");
+                    }
                   }}
                   className={cn(
                     "h-9 rounded-md px-2 text-xs capitalize font-medium transition-colors hover:bg-muted/70 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",

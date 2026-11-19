@@ -304,7 +304,7 @@ export function EditableDataTable<T extends { [key: string]: any }>({
   useEffect(() => {
     if (editingCell && inputRef.current) {
       inputRef.current.focus();
-      inputRef.current.select();
+      inputRef.current.select?.();
     }
   }, [editingCell]);
 
@@ -777,7 +777,7 @@ export function EditableDataTable<T extends { [key: string]: any }>({
                                 type={col.type === 'datetime-local' ? 'datetime-local' : col.type === 'date' ? 'date' : col.type === 'number' ? 'number' : 'text'}
                                 value={editValue ?? ''}
                                 onChange={(e) => setEditValue(e.target.value)}
-                                onBlur={() => handleSave(rowId, colKey)}
+                                onBlur={(event) => handleSave(rowId, colKey, event.currentTarget.value)}
                                 onKeyDown={(e) => handleKeyDown(e, rowId, colKey)}
                                 className="h-full w-full border-none focus-visible:ring-0 text-[13px] font-medium px-2"
                               />
@@ -966,7 +966,7 @@ export function EditableDataTable<T extends { [key: string]: any }>({
                             type={col.type === 'datetime-local' ? 'datetime-local' : col.type === 'date' ? 'date' : col.type === 'number' ? 'number' : 'text'}
                             value={editValue ?? ''}
                             onChange={(event) => setEditValue(event.target.value)}
-                            onBlur={() => void handleSave(rowId, colKey)}
+                            onBlur={(event) => void handleSave(rowId, colKey, event.currentTarget.value)}
                             onKeyDown={(event) => handleKeyDown(event, rowId, colKey)}
                             onClick={(event) => event.stopPropagation()}
                             className="h-9 w-full min-w-0 rounded-lg border-primary text-sm font-medium"

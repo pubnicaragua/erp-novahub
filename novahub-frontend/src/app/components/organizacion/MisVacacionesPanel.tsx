@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { CalendarCheck, Loader2 } from 'lucide-react';
 import { useQueryClient } from '@tanstack/react-query';
 import { Button } from '../ui/button';
+import { DateField } from '../ui/DateField';
 import { Skeleton } from '../ui/skeleton';
 import { useTenantQuery } from '../../hooks/useTenantQuery';
 import { toast } from '../../services/toast';
@@ -57,8 +58,8 @@ export function MisVacacionesPanel() {
 
       <div className="mt-4 grid gap-3 sm:grid-cols-4">
         <Field label="Tipo" htmlFor="leave-type"><NativeSelect id="leave-type" value={leaveType} onChange={(e) => setLeaveType(e.target.value)}>{['VACATION', 'PERSONAL', 'SICK', 'BEREAVEMENT', 'UNPAID', 'OTHER'].map((value) => <option key={value} value={value}>{LEAVE_TYPE_LABEL[value]}</option>)}</NativeSelect></Field>
-        <Field label="Desde" htmlFor="leave-start"><input id="leave-start" type="date" value={startDate} min={isoDay(0)} onChange={(e) => { setStartDate(e.target.value); if (endDate < e.target.value) setEndDate(e.target.value); }} className={controlClass} /></Field>
-        <Field label="Hasta" htmlFor="leave-end"><input id="leave-end" type="date" value={endDate} min={startDate} onChange={(e) => setEndDate(e.target.value)} className={controlClass} /></Field>
+        <Field label="Desde" htmlFor="leave-start"><DateField id="leave-start" ariaLabel="Inicio de ausencia" value={startDate} minDate={isoDay(0)} onChange={(value) => { setStartDate(value); if (endDate < value) setEndDate(value); }} className={controlClass} /></Field>
+        <Field label="Hasta" htmlFor="leave-end"><DateField id="leave-end" ariaLabel="Fin de ausencia" value={endDate} minDate={startDate} onChange={setEndDate} className={controlClass} /></Field>
         <Field label={short ? 'Motivo (obligatorio)' : 'Motivo (opcional)'} htmlFor="leave-reason"><input id="leave-reason" value={reason} maxLength={500} onChange={(e) => setReason(e.target.value)} className={controlClass} /></Field>
       </div>
       <p className={`mt-2 text-[12px] ${short ? 'font-semibold text-amber-800' : 'text-muted-foreground'}`}>

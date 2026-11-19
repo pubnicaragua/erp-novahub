@@ -1,0 +1,28 @@
+<style>
+.nova-date-picker{position:relative;width:100%;min-width:0}
+.nova-date-picker>.nova-date-source{position:absolute!important;width:1px!important;height:1px!important;margin:0!important;padding:0!important;border:0!important;opacity:0!important;pointer-events:none!important;clip-path:inset(50%)!important}
+.nova-date-trigger{display:flex;width:100%;min-width:0;min-height:34px;align-items:center;gap:8px;border:1px solid #cfe2d9;border-radius:8px;background:#fff;color:#294c42;padding:6px 9px;font:inherit;font-size:10px;font-weight:700;text-align:left;cursor:pointer;touch-action:manipulation}
+.nova-date-trigger:hover{border-color:#70cbb0;background:#f8fcfa}
+.nova-date-trigger:focus-visible,.nova-date-calendar button:focus-visible{outline:3px solid #3287e8;outline-offset:2px}
+.nova-date-trigger:disabled{cursor:not-allowed;opacity:.55}
+.nova-date-trigger svg{width:15px;height:15px;flex:none;color:#08785a}
+.nova-date-trigger-label{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.nova-date-calendar{position:fixed;z-index:9000;width:280px;max-width:calc(100vw - 24px);padding:12px;border:1px solid #dce8e3;border-radius:12px;background:#fff;color:#183f30;box-shadow:0 14px 34px rgba(12,53,43,.2);font-family:Montserrat,system-ui,sans-serif;user-select:none}
+.nova-date-calendar[hidden]{display:none}
+.nova-date-calendar-header{display:flex;align-items:center;justify-content:space-between;gap:5px;padding-bottom:10px}
+.nova-date-calendar-header button,.nova-date-calendar-cell{min-width:0;border:0;border-radius:7px;background:transparent;color:inherit;font:inherit;cursor:pointer}
+.nova-date-calendar-header button{min-height:29px;padding:4px 7px;font-size:10px;font-weight:800}
+.nova-date-calendar-header button:hover,.nova-date-calendar-cell:hover{background:#edf8f3}
+.nova-date-calendar-header .nova-date-nav{width:28px;height:28px;padding:0;border:1px solid #dce8e3;font-size:15px}
+.nova-date-calendar-header button:disabled,.nova-date-calendar-cell:disabled{cursor:not-allowed;opacity:.35}
+.nova-date-calendar-heading{flex:1;text-transform:capitalize}
+.nova-date-calendar-weekdays,.nova-date-calendar-grid{display:grid;grid-template-columns:repeat(7,minmax(0,1fr));gap:3px}
+.nova-date-calendar-weekdays span{display:grid;height:25px;place-items:center;color:#71847d;font-size:9px;font-weight:900;text-transform:uppercase}
+.nova-date-calendar-cell{display:grid;height:30px;place-items:center;font-size:10px;font-weight:700}
+.nova-date-calendar-cell.is-outside{color:#9aa9a2;font-weight:500}
+.nova-date-calendar-cell.is-today{box-shadow:inset 0 0 0 1px #70cbb0}
+.nova-date-calendar-cell.is-selected{background:#08785a;color:white}
+.nova-date-calendar-months,.nova-date-calendar-years{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:6px}
+.nova-date-calendar-months .nova-date-calendar-cell,.nova-date-calendar-years .nova-date-calendar-cell{height:34px;padding:0 4px;font-size:9px;text-transform:capitalize}
+@media(max-width:520px){.nova-date-calendar{max-height:min(76vh,430px);overflow-y:auto}.nova-date-calendar-cell{height:34px}}
+</style>

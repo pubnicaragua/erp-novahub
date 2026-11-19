@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { CalendarDays, ChevronLeft, ChevronRight } from 'lucide-react';
 import { Button } from '../ui/button';
+import { DateField } from '../ui/DateField';
 import { Skeleton } from '../ui/skeleton';
 import { cn } from '../ui/utils';
 import { useTenantQuery } from '../../hooks/useTenantQuery';
@@ -53,7 +54,7 @@ export function TimelineTab({ people, selfId }: { people?: PersonOption[]; selfI
           <span className="block text-[12px] font-semibold">Día</span>
           <div className="flex items-center gap-1">
             <Button type="button" size="icon" variant="outline" aria-label="Día anterior" disabled={!current} onClick={() => setDate(shiftCivilDate(current as string, -1))}><ChevronLeft className="size-4" /></Button>
-            <input type="date" aria-label="Elegir un día" value={current ?? ''} onChange={(e) => e.target.value && setDate(e.target.value)} className={cn(controlClass, 'w-40')} />
+            <DateField ariaLabel="Elegir un día" value={current ?? ''} onChange={(value) => value && setDate(value)} className={cn(controlClass, 'w-40')} />
             <Button type="button" size="icon" variant="outline" aria-label="Día siguiente" disabled={!current} onClick={() => setDate(shiftCivilDate(current as string, 1))}><ChevronRight className="size-4" /></Button>
             <Button type="button" variant="ghost" size="sm" onClick={() => setDate(null)}>Hoy</Button>
           </div>

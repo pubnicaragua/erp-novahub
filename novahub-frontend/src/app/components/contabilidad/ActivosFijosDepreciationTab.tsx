@@ -198,13 +198,12 @@ export function ActivosFijosDepreciationTab() {
               )}
               <div className="flex items-center gap-2">
                 <Label htmlFor="dep-period" className="text-xs">Período</Label>
-                <input
+                <Input
                   id="dep-period"
                   type="month"
                   value={period}
                   onChange={(e) => setPeriod(e.target.value)}
-                  onClick={(e) => { try { e.currentTarget.showPicker?.(); } catch {} }}
-                  className="h-8 rounded-md border border-border bg-background px-2 text-xs"
+                  className="h-8 w-auto rounded-md px-2 text-xs"
                 />
               </div>
               {canExportAssets && <DropdownMenu>

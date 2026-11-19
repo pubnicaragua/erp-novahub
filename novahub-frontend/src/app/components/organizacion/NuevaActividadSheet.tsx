@@ -3,6 +3,7 @@ import { useQuery } from '@tanstack/react-query';
 import { Bell, CalendarDays, ListTodo, Loader2 } from 'lucide-react';
 import { Sheet, SheetContent, SheetDescription, SheetFooter, SheetHeader, SheetTitle } from '../ui/sheet';
 import { Button } from '../ui/button';
+import { DateField } from '../ui/DateField';
 import { Input } from '../ui/input';
 import { Textarea } from '../ui/textarea';
 import { Switch } from '../ui/switch';
@@ -216,7 +217,7 @@ function NuevaActividadForm({ onOpenChange, initialKind, initialDate, timezone, 
 
               <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
                 <Field label="Fecha" htmlFor="org-date" required>
-                  <input id="org-date" type="date" className={controlClass} value={date} onChange={(e) => setDate(e.target.value)} />
+                  <DateField id="org-date" ariaLabel="Fecha de la actividad" className={controlClass} value={date} onChange={setDate} />
                 </Field>
                 <Field label={kind === 'EVENT' ? 'Hora' : 'Hora límite'} htmlFor="org-start">
                   <div className="flex items-center gap-2">

@@ -2,6 +2,7 @@ import { useMemo, useState } from 'react';
 import { MARKETING_GUIDES } from './guides';
 import { Download, Plus } from 'lucide-react';
 import { Button } from '../ui/button';
+import { DateField } from '../ui/DateField';
 import { Skeleton } from '../ui/skeleton';
 import { cn } from '../ui/utils';
 import { useAuth } from '../../contexts/AuthContext';
@@ -162,8 +163,8 @@ function ReportsTab() {
   return (
     <div className="space-y-4">
       <div className="flex flex-wrap items-end gap-3 text-[12px]">
-        <label className="font-semibold">Desde<input type="date" value={from} max={to} onChange={(e) => setFrom(e.target.value)} className="ml-2 h-9 rounded-lg border border-border bg-background px-2" /></label>
-        <label className="font-semibold">Hasta<input type="date" value={to} min={from} onChange={(e) => setTo(e.target.value)} className="ml-2 h-9 rounded-lg border border-border bg-background px-2" /></label>
+        <label className="flex min-w-0 items-center gap-2 font-semibold">Desde<DateField ariaLabel="Fecha desde" value={from} maxDate={to || undefined} onChange={setFrom} className="ml-2 h-9 rounded-lg border border-border bg-background px-2" /></label>
+        <label className="flex min-w-0 items-center gap-2 font-semibold">Hasta<DateField ariaLabel="Fecha hasta" value={to} minDate={from || undefined} onChange={setTo} className="ml-2 h-9 rounded-lg border border-border bg-background px-2" /></label>
         <Button type="button" variant="outline" disabled={!d} onClick={exportExcel}><Download className="size-4" aria-hidden="true" />Exportar Excel</Button>
       </div>
       {q.isLoading ? <Skeleton className="h-64 w-full" /> : q.isError || !d ? <ErrorState message={errorMessage(q.error)} onRetry={() => void q.refetch()} /> : (

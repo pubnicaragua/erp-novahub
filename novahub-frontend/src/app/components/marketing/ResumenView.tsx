@@ -2,6 +2,7 @@ import { useMemo, useState } from 'react';
 import { MARKETING_GUIDES } from './guides';
 import { Activity, CalendarDays, CheckCircle2, FileCheck, Image as ImageIcon, Megaphone, Plus, TrendingUp, Upload, Users, Wallet } from 'lucide-react';
 import { Button } from '../ui/button';
+import { DateField } from '../ui/DateField';
 import { Skeleton } from '../ui/skeleton';
 import { useAuth } from '../../contexts/AuthContext';
 import { useTenantQuery } from '../../hooks/useTenantQuery';
@@ -43,8 +44,8 @@ export function ResumenView({ go }: { go: (sub: string, create?: boolean) => voi
         ))} />
 
       <div className="flex flex-wrap items-center gap-3 text-[12px]">
-        <label className="flex items-center gap-2 font-semibold">Desde<input type="date" value={from} max={to} onChange={(e) => setFrom(e.target.value)} className="h-9 rounded-lg border border-border bg-background px-2" /></label>
-        <label className="flex items-center gap-2 font-semibold">Hasta<input type="date" value={to} min={from} onChange={(e) => setTo(e.target.value)} className="h-9 rounded-lg border border-border bg-background px-2" /></label>
+        <label className="flex min-w-0 items-center gap-2 font-semibold">Desde<DateField ariaLabel="Fecha desde" value={from} maxDate={to || undefined} onChange={setFrom} className="h-9 rounded-lg border border-border bg-background px-2" /></label>
+        <label className="flex min-w-0 items-center gap-2 font-semibold">Hasta<DateField ariaLabel="Fecha hasta" value={to} minDate={from || undefined} onChange={setTo} className="h-9 rounded-lg border border-border bg-background px-2" /></label>
       </div>
 
       {q.isLoading ? (

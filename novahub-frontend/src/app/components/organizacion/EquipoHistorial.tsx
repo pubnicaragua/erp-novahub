@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { ChevronLeft, ChevronRight, Search, Star } from 'lucide-react';
 import { useQueryClient } from '@tanstack/react-query';
 import { Button } from '../ui/button';
+import { DateField } from '../ui/DateField';
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from '../ui/dialog';
 import { Input } from '../ui/input';
 import { Skeleton } from '../ui/skeleton';
@@ -48,8 +49,8 @@ export function EquipoHistorial({ members, initialUser }: { members: TeamMember[
         <NativeSelect aria-label="Estado" className="h-10 w-auto min-w-[150px]" value={status} onChange={(e) => reset(setStatus)(e.target.value)}>
           <option value="all">Todas</option><option value="open">Pendientes</option><option value="overdue">Vencidas</option><option value="done">Completadas</option>
         </NativeSelect>
-        <label className="font-semibold">Desde<input type="date" value={from} max={to || undefined} onChange={(e) => reset(setFrom)(e.target.value)} className="ml-2 h-10 rounded-lg border border-border bg-background px-2" /></label>
-        <label className="font-semibold">Hasta<input type="date" value={to} min={from || undefined} onChange={(e) => reset(setTo)(e.target.value)} className="ml-2 h-10 rounded-lg border border-border bg-background px-2" /></label>
+        <label className="font-semibold">Desde<DateField ariaLabel="Fecha desde" value={from} maxDate={to || undefined} onChange={(value) => reset(setFrom)(value)} className="ml-2 h-10 rounded-lg border border-border bg-background px-2" /></label>
+        <label className="font-semibold">Hasta<DateField ariaLabel="Fecha hasta" value={to} minDate={from || undefined} onChange={(value) => reset(setTo)(value)} className="ml-2 h-10 rounded-lg border border-border bg-background px-2" /></label>
         <div className="relative min-w-[180px] flex-1">
           <Search className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" aria-hidden="true" />
           <Input value={q} onChange={(e) => reset(setQ)(e.target.value)} placeholder="Buscar tarea…" aria-label="Buscar tarea" className="pl-9" />

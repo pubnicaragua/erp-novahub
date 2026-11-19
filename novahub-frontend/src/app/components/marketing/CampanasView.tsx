@@ -2,6 +2,7 @@ import { useMemo, useState } from 'react';
 import { MARKETING_GUIDES } from './guides';
 import { Loader2, Pencil, Plus, ShieldCheck } from 'lucide-react';
 import { Button } from '../ui/button';
+import { DateField } from '../ui/DateField';
 import { ConfirmDialog } from '../ui/ConfirmDialog';
 import { RequiredReasonField } from '../ui/RequiredReasonField';
 import { Input } from '../ui/input';
@@ -192,7 +193,7 @@ function DetailBody({ id, currency, canEdit, onEdit }: { id: string; currency: s
                   void run('task', async () => { await marketingApi.createCampaignTask(c.id, { title: taskTitle.trim(), dueDate: taskDue ? new Date(`${taskDue}T17:00:00`).toISOString() : undefined, assignedTo: taskUser ? [taskUser] : undefined }); setTaskTitle(''); setTaskDue(''); }, 'Tarea creada en Actividades');
                 }}>
                   <Field label="Nueva tarea" htmlFor="mk-task"><Input id="mk-task" value={taskTitle} onChange={(e) => setTaskTitle(e.target.value)} placeholder="Ej. Aprobar pauta en Meta" /></Field>
-                  <Field label="Vence" htmlFor="mk-task-due"><input id="mk-task-due" type="date" value={taskDue} onChange={(e) => setTaskDue(e.target.value)} className="h-10 w-full rounded-lg border border-border bg-background px-2 text-[13px]" /></Field>
+                  <Field label="Vence" htmlFor="mk-task-due"><DateField id="mk-task-due" ariaLabel="Vencimiento de la tarea" value={taskDue} onChange={setTaskDue} className="h-10 rounded-lg border-border px-2 text-[13px]" /></Field>
                   <Field label="Responsable" htmlFor="mk-task-user"><NativeSelect id="mk-task-user" value={taskUser} onChange={(e) => setTaskUser(e.target.value)}><option value="">Yo</option>{userOptions(users.data).map((o) => <option key={o.value} value={o.value}>{o.label}</option>)}</NativeSelect></Field>
                   <Button type="submit" className="self-end" disabled={busy !== null || !taskTitle.trim()}>{busy === 'task' ? <Loader2 className="size-4 animate-spin" /> : <Plus className="size-4" aria-hidden="true" />}Crear</Button>
                 </form>

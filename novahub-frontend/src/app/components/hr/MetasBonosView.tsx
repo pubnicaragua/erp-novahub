@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { Archive, Award, CheckCircle2, Loader2, Pencil, Plus, RotateCcw, Target, XCircle } from 'lucide-react';
 import { useQueryClient } from '@tanstack/react-query';
 import { Button } from '../ui/button';
+import { DateField } from '../ui/DateField';
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from '../ui/dialog';
 import { Skeleton } from '../ui/skeleton';
 import { Switch } from '../ui/switch';
@@ -276,8 +277,8 @@ function GoalDialog({ goal, people, departments, onClose, onSaved }: { goal: Goa
           {scopeType === 'USER' && <Field label="Persona" htmlFor="goal-user" required><NativeSelect id="goal-user" value={userId} onChange={(e) => setUserId(e.target.value)}><option value="">Elige una persona</option>{people.map((p) => <option key={p.id} value={p.id}>{p.name}</option>)}</NativeSelect></Field>}
           {scopeType === 'DEPARTMENT' && <Field label="Departamento" htmlFor="goal-dept" required><NativeSelect id="goal-dept" value={departmentId} onChange={(e) => setDepartmentId(e.target.value)}><option value="">Elige un departamento</option>{departments.map((d) => <option key={d.id} value={d.id}>{d.name}</option>)}</NativeSelect></Field>}
           <Field label="Período" htmlFor="goal-period"><NativeSelect id="goal-period" value={periodType} onChange={(e) => setPeriodType(e.target.value as GoalPeriodType)}>{PERIODS.map(([value, label]) => <option key={value} value={value}>{label}</option>)}</NativeSelect></Field>
-          <Field label={periodType === 'CUSTOM' ? 'Desde' : 'Fecha dentro del período'} htmlFor="goal-start"><input id="goal-start" type="date" value={startDate} onChange={(e) => setStartDate(e.target.value)} className={controlClass} /></Field>
-          {periodType === 'CUSTOM' && <Field label="Hasta" htmlFor="goal-end"><input id="goal-end" type="date" value={endDate} min={startDate} onChange={(e) => setEndDate(e.target.value)} className={controlClass} /></Field>}
+          <Field label={periodType === 'CUSTOM' ? 'Desde' : 'Fecha dentro del período'} htmlFor="goal-start"><DateField id="goal-start" ariaLabel="Inicio del período" value={startDate} onChange={setStartDate} className={controlClass} /></Field>
+          {periodType === 'CUSTOM' && <Field label="Hasta" htmlFor="goal-end"><DateField id="goal-end" ariaLabel="Fin del período" value={endDate} minDate={startDate} onChange={setEndDate} className={controlClass} /></Field>}
         </div>
 
         <fieldset className="rounded-xl border border-border p-3">

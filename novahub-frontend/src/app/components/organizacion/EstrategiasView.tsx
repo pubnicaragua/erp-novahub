@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from 'react';
 import { Bell, FileText, Image as ImageIcon, Lightbulb, Loader2, MessageSquare, Mic, Paperclip, Plus, Search, Square, ThumbsUp, Trash2, X } from 'lucide-react';
 import { useQueryClient } from '@tanstack/react-query';
 import { Button } from '../ui/button';
+import { DateField } from '../ui/DateField';
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from '../ui/dialog';
 import { Skeleton } from '../ui/skeleton';
 import { Switch } from '../ui/switch';
@@ -161,7 +162,7 @@ function IdeaDetail({ id, users, onClose, onChanged, onEdit }: { id: string; use
               {converting && (
                 <div className="flex flex-wrap items-end gap-3 rounded-xl border border-border p-3">
                   <Field label="Responsable" className="min-w-44"><NativeSelect value={assignee} onChange={(e) => setAssignee(e.target.value)}>{users.map((u) => <option key={u.id} value={u.id}>{u.name}</option>)}</NativeSelect></Field>
-                  <Field label="Fecha límite (opcional)"><input type="date" value={dueDate} onChange={(e) => setDueDate(e.target.value)} className={cn(controlClass, 'w-40')} /></Field>
+                  <Field label="Fecha límite (opcional)"><DateField ariaLabel="Fecha límite de la estrategia" value={dueDate} onChange={setDueDate} clearable className={cn(controlClass, 'w-40')} /></Field>
                   <Button type="button" disabled={busy || !assignee} onClick={() => void run(async () => { await strategiesService.convertToTask(id, { assigneeId: assignee, dueDate: dueDate ? `${dueDate}T23:59:00` : undefined }); setConverting(false); }, 'Tarea creada')}>Crear tarea</Button>
                 </div>
               )}
