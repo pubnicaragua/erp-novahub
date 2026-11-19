@@ -363,7 +363,17 @@ export const MensajesView: React.FC<MensajesViewProps> = ({ data, loading, onHel
       setMobileThreadOpen(true);
       setComposeOpen(false);
       resetComposer();
-      toast.success(composeMode === 'SUPPORT' ? 'Mensaje enviado a Soporte Técnico' : 'Mensaje enviado');
+      if (composeMode === 'SUPPORT') {
+        const supportConversation = created as SupportConversation;
+        const eligibleUsers = supportConversation.eligibleSupportUserCount;
+        toast.success(eligibleUsers === 0
+          ? 'Solicitud registrada. Aún no hay usuarios de soporte vinculados a esta sucursal; SuperAdmin podrá asignar cobertura.'
+          : typeof eligibleUsers === 'number'
+            ? `Solicitud registrada. ${eligibleUsers === 1 ? 'Hay un usuario de soporte vinculado' : `Hay ${eligibleUsers} usuarios de soporte vinculados`} a esta sucursal con acceso a la bandeja.`
+            : 'Solicitud registrada correctamente en la bandeja de soporte.');
+      } else {
+        toast.success('Mensaje enviado');
+      }
     } catch (error: any) {
       setComposeError(error?.message || 'No pudimos enviar el mensaje.');
     } finally {
@@ -518,6 +528,7 @@ export const MensajesView: React.FC<MensajesViewProps> = ({ data, loading, onHel
                         <span className="truncate text-xs font-medium text-foreground/80">{thread.title}</span>
                         {system && <span className="shrink-0 rounded bg-amber-500/10 px-1.5 py-0.5 text-[9px] font-semibold text-amber-600">Sistema</span>}
                         {support && <span className="shrink-0 rounded bg-primary/10 px-1.5 py-0.5 text-[9px] font-semibold text-primary">Soporte</span>}
+                        {support && (thread as SupportConversation).supportRoutingStatus === 'UNASSIGNED' && <span className="shrink-0 rounded bg-amber-500/10 px-1.5 py-0.5 text-[9px] font-semibold text-amber-700 dark:text-amber-300">Sin usuario vinculado</span>}
                       </span>
                       <span className="mt-1 flex items-center gap-2">
                         <span className="truncate text-xs text-muted-foreground">{thread.preview || 'Sin contenido'}</span>
@@ -581,6 +592,8 @@ export const MensajesView: React.FC<MensajesViewProps> = ({ data, loading, onHel
                   </p>
                 </div>
                 <Badge variant="outline" className="hidden shrink-0 sm:inline-flex">{selected.kind === 'SUPPORT' ? 'Soporte técnico' : selected.kind === 'DIRECT' ? 'Equipo' : 'Sistema'}</Badge>
+                {selected.kind === 'SUPPORT' && (selected as SupportConversation).supportRoutingStatus === 'UNASSIGNED' && <Badge variant="outline" className="hidden shrink-0 border-amber-500/30 text-amber-700 dark:text-amber-300 sm:inline-flex">Sin usuario vinculado</Badge>}
+                {selected.kind === 'SUPPORT' && (selected as SupportConversation).supportRoutingStatus === 'AVAILABLE' && typeof (selected as SupportConversation).eligibleSupportUserCount === 'number' && <Badge variant="outline" className="hidden shrink-0 sm:inline-flex">{(selected as SupportConversation).eligibleSupportUserCount} usuarios vinculados</Badge>}
                 {markingReadId === selected.id ? <Loader2 className="size-4 animate-spin text-muted-foreground" /> : <CheckCheck className="size-4 text-muted-foreground/60" aria-label="Conversación leída" />}
               </header>
 

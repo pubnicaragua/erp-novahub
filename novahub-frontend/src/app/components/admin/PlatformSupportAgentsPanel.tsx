@@ -11,6 +11,7 @@ import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, D
 import { Input } from '../ui/input';
 import { PasswordRequirements } from '../PasswordRequirements';
 import { getSupportAgentPasswordError } from './support-agent-password';
+import { UnassignedSupportQueue } from './UnassignedSupportQueue';
 import {
   filterSupportScopeTree,
   isSupportScopeChecked,
@@ -43,7 +44,10 @@ export function PlatformSupportAgentsPanel() {
   const [showPassword, setShowPassword] = useState(false);
 
   const refresh = async () => {
-    await queryClient.invalidateQueries({ queryKey: ['platform-support-agents'] });
+    await Promise.all([
+      queryClient.invalidateQueries({ queryKey: ['platform-support-agents'] }),
+      queryClient.invalidateQueries({ predicate: (query) => query.queryKey.includes('platform-support-unassigned-conversations') }),
+    ]);
   };
 
   const openCreate = () => {
@@ -115,6 +119,8 @@ export function PlatformSupportAgentsPanel() {
 
   return <section className="space-y-5">
     <Card className="rounded-3xl border-primary/20 bg-primary/[0.03] shadow-sm"><CardContent className="flex flex-col gap-4 p-5 sm:flex-row sm:items-center sm:justify-between sm:p-6"><div className="flex min-w-0 items-start gap-3"><div className="flex size-11 shrink-0 items-center justify-center rounded-2xl bg-primary/10 text-primary"><ShieldCheck className="size-5" /></div><div><h2 className="text-base font-black uppercase">Agentes externos de soporte</h2><p className="mt-1 max-w-3xl text-sm text-muted-foreground">Estas cuentas solo entran a la bandeja de soporte. Asigna grupos, rubros o sucursales para controlar dónde pueden iniciar y continuar conversaciones.</p></div></div><Button onClick={openCreate} className="shrink-0 rounded-xl"><Plus className="mr-2 size-4" /> Crear cuenta</Button></CardContent></Card>
+
+    <UnassignedSupportQueue />
 
     {agentsQuery.isLoading || scopesQuery.isLoading ? <div className="flex justify-center rounded-2xl border border-border bg-card p-12"><Loader2 className="size-5 animate-spin text-primary" /></div>
       : agentsQuery.isError || scopesQuery.isError ? <Card className="rounded-2xl"><CardContent className="p-8 text-center text-sm text-destructive">No pudimos cargar las cuentas o los alcances disponibles.</CardContent></Card>

@@ -26,7 +26,31 @@ export interface SupportPreview {
   branches: Array<{ id: string; name: string; recipientCount: number }>;
   branchesWithoutRecipients: Array<{ id: string; name: string; recipientCount: number }>;
 }
-export interface SupportConversation extends Message { kind: 'SUPPORT'; supportConversationId: string }
+export interface SupportConversation extends Message {
+  kind: 'SUPPORT';
+  supportConversationId: string;
+  supportRoutingStatus?: 'UNASSIGNED' | 'AVAILABLE';
+  eligibleSupportUserCount?: number;
+}
+export interface UnassignedSupportConversation {
+  id: string;
+  supportConversationId: string;
+  title: string;
+  branchId: string;
+  branchName: string;
+  businessUnitName: string;
+  enterpriseGroupName: string;
+  preview: string;
+  lastMessageAt: string;
+  latestMessage: {
+    content: string;
+    createdAt: string;
+    sender: { id: string; name: string };
+    attachments: SupportConversationAttachment[];
+  } | null;
+  supportRoutingStatus: 'UNASSIGNED';
+  eligibleSupportUserCount: 0;
+}
 export interface SupportConversationAttachment {
   id: string;
   fileName: string;
@@ -141,6 +165,11 @@ export const supportConversationsService = {
   getAttachmentUrl: (id: string, attachmentId: string, download = false) => api.get<SupportAttachmentDownload>(
     `/support-conversations/conversations/${encodeURIComponent(conversationId(id))}/attachments/${encodeURIComponent(attachmentId)}/url${download ? '?download=1' : ''}`,
   ),
+  getUnassignedConversations: (signal?: AbortSignal) => api.get<UnassignedSupportConversation[]>('/enterprise-groups/platform/support-agents/unassigned-conversations', { signal }),
+  getUnassignedConversation: (id: string, signal?: AbortSignal) => api.get<SupportConversation>(`/enterprise-groups/platform/support-agents/unassigned-conversations/${encodeURIComponent(conversationId(id))}`, { signal }),
+  getUnassignedAttachmentUrl: (id: string, attachmentId: string, download = false) => api.get<SupportAttachmentDownload>(
+    `/enterprise-groups/platform/support-agents/unassigned-conversations/${encodeURIComponent(conversationId(id))}/attachments/${encodeURIComponent(attachmentId)}/url${download ? '?download=1' : ''}`,
+  ),
   listAgents: (signal?: AbortSignal) => api.get<SupportAgent[]>('/enterprise-groups/platform/support-agents', { signal }),
   getScopeOptions: (signal?: AbortSignal) => api.get<{ groups: ScopeOptionsGroup[] }>('/enterprise-groups/platform/support-agents/scope-options', { signal }),
   createAgent: (payload: { name: string; email: string; password: string; scopes: SupportScope[] }) => api.post<SupportAgent>('/enterprise-groups/platform/support-agents', payload),
@@ -184,7 +213,50 @@ export function subscribeToSupportEvents(onEvent: (event: SupportStreamEvent) =>
             if (!data) continue;
             try {
               const event = JSON.parse(data) as SupportStreamEvent;
-              if (event.type === 'support-conversation-updated' && event.conversationId) onEvent(event);
+              if (event.type === 'support-conversations-resync') onEvent(event);
+              else if (event.type === 'support-conversation-updated' && event.conversationId) onEvent(event);
+            } catch { /* Ignora un evento dañado y conserva el stream. */ }
+          }
+        }
+      } catch {
+        if (controller.signal.aborted) return;
+      }
+      if (!controller.signal.aborted) await new Promise((resolve) => window.setTimeout(resolve, 1500));
+    }
+  };
+  void connect();
+  return () => controller.abort();
+}
+
+export function subscribeToSupportAdminQueue(onInvalidated: () => void): () => void {
+  const controller = new AbortController();
+  let hadConnection = false;
+  const connect = async () => {
+    while (!controller.signal.aborted) {
+      try {
+        const response = await fetch(getApiUrl('/enterprise-groups/platform/support-agents/unassigned-conversations/events'), {
+          headers: { Accept: 'text/event-stream', ...getAuthHeaders() },
+          cache: 'no-store',
+          signal: controller.signal,
+        });
+        if (!response.ok || !response.body) throw new Error(`Cola de soporte: HTTP ${response.status}`);
+        if (hadConnection) onInvalidated();
+        hadConnection = true;
+        const reader = response.body.getReader();
+        const decoder = new TextDecoder();
+        let buffer = '';
+        while (!controller.signal.aborted) {
+          const { done, value } = await reader.read();
+          if (done) break;
+          buffer += decoder.decode(value, { stream: true });
+          const frames = buffer.split(/\r?\n\r?\n/);
+          buffer = frames.pop() || '';
+          for (const frame of frames) {
+            const data = frame.split(/\r?\n/).filter((line) => line.startsWith('data:')).map((line) => line.slice(5).trimStart()).join('\n');
+            if (!data) continue;
+            try {
+              const event = JSON.parse(data) as { type?: string };
+              if (event.type === 'support-admin-queue-invalidated') onInvalidated();
             } catch { /* Ignora un evento dañado y conserva el stream. */ }
           }
         }

@@ -11,11 +11,13 @@ export function MessageAttachments({
   kind,
   attachments,
   mine,
+  attachmentAccess = 'standard',
 }: {
   threadId: string;
   kind: 'SUPPORT' | 'DIRECT';
   attachments?: MessageAttachment[];
   mine: boolean;
+  attachmentAccess?: 'standard' | 'superadmin-unassigned';
 }) {
   if (!attachments?.length) return null;
   return (
@@ -27,6 +29,7 @@ export function MessageAttachments({
           kind={kind}
           attachment={attachment}
           mine={mine}
+          attachmentAccess={attachmentAccess}
         />
       ))}
     </div>
@@ -38,11 +41,13 @@ function MessageAttachmentItem({
   kind,
   attachment,
   mine,
+  attachmentAccess,
 }: {
   threadId: string;
   kind: 'SUPPORT' | 'DIRECT';
   attachment: MessageAttachment;
   mine: boolean;
+  attachmentAccess: 'standard' | 'superadmin-unassigned';
 }) {
   const isImage = attachment.mimeType.startsWith('image/');
   const previewKey = `${kind}:${threadId}:${attachment.id}`;
@@ -57,12 +62,14 @@ function MessageAttachmentItem({
     let active = true;
     const request = kind === 'DIRECT'
       ? messagesService.getAttachmentUrl(threadId, attachment.id)
-      : supportConversationsService.getAttachmentUrl(threadId, attachment.id);
+      : attachmentAccess === 'superadmin-unassigned'
+        ? supportConversationsService.getUnassignedAttachmentUrl(threadId, attachment.id)
+        : supportConversationsService.getAttachmentUrl(threadId, attachment.id);
     void request
       .then((result) => { if (active) setPreviewResult({ key: previewKey, url: result.url, error: '' }); })
       .catch(() => { if (active) setPreviewResult({ key: previewKey, url: '', error: 'Vista previa no disponible' }); });
     return () => { active = false; };
-  }, [attachment.id, kind, threadId, isImage, previewKey]);
+  }, [attachment.id, attachmentAccess, kind, threadId, isImage, previewKey]);
 
   const download = async () => {
     setDownloadError('');
@@ -71,7 +78,9 @@ function MessageAttachmentItem({
     try {
       const result = kind === 'DIRECT'
         ? await messagesService.getAttachmentUrl(threadId, attachment.id, true)
-        : await supportConversationsService.getAttachmentUrl(threadId, attachment.id, true);
+        : attachmentAccess === 'superadmin-unassigned'
+          ? await supportConversationsService.getUnassignedAttachmentUrl(threadId, attachment.id, true)
+          : await supportConversationsService.getAttachmentUrl(threadId, attachment.id, true);
       if (newTab) newTab.location.href = result.url;
       else window.location.assign(result.url);
     } catch {
