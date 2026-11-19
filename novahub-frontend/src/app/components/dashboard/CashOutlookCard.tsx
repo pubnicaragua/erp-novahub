@@ -18,7 +18,16 @@ const dayText = (key: string) => new Date(`${key}T12:00:00`).toLocaleDateString(
 /** Cobertura de pagos: nómina, gastos recurrentes y proveedores de los próximos días frente al efectivo y lo que se espera cobrar. */
 export function CashOutlookCard() {
   const { canPerform } = useAuth();
-  const allowed = canPerform('HR_PAYROLL', 'view');
+  const sourcePermissionGroups = [
+    ['HR_PAYROLL'],
+    ['PURCHASES_EXPENSES_REC'],
+    ['FINANCIAL_EXPENSES_REC'],
+    ['PURCHASES_RECEIPTS', 'FINANCIAL_PAYABLES'],
+    ['SALES_INVOICES', 'FINANCIAL_RECEIVABLES'],
+    ['FINANCIAL_ACCOUNTS'],
+    ['SALES_PAYMENTS'],
+  ];
+  const allowed = sourcePermissionGroups.every((group) => group.some((module) => canPerform(module, 'view')));
   const [days, setDays] = useState(15);
   const query = useTenantQuery(['dashboard', 'cash-outlook', days], (signal) => getCashOutlook(days, signal), { enabled: allowed, staleTime: 60_000, retry: 0 });
   if (!allowed || query.isError) return null;

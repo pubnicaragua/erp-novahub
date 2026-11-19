@@ -51,7 +51,7 @@ import { Input } from './ui/input';
 import { DateField } from './ui/DateField';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from './ui/select';
 import { toast } from '@/app/services/toast';
-import { BLOCKS, changeLabel, chartRows, dashboardRange, DEFAULT_PREFERENCES, INDICATORS, normalizePreferences, type DashboardBlock, type DashboardPeriod, type DashboardPreferences, type IndicatorDefinition } from './dashboard/executive-model';
+import { BLOCKS, changeLabel, chartRows, dashboardItemsForAccess, dashboardRange, DEFAULT_PREFERENCES, INDICATORS, isDashboardItemAllowed, normalizePreferences, type DashboardBlock, type DashboardPeriod, type DashboardPreferences, type IndicatorDefinition } from './dashboard/executive-model';
 import { buildDatedDownloadFileName } from '../utils/exportFileNames';
 import type { PdfPaperFormat } from '../utils/pdfDownloadFormats';
 import { ExportMenu } from './ui/ExportMenu';
@@ -104,8 +104,8 @@ const formatDate = (value: string) => new Intl.DateTimeFormat('es-NI', { day: '2
 
 const safeNumber = (value: unknown) => Number.isFinite(Number(value)) ? Number(value) : 0;
 const COST_DERIVED_INDICATORS = ['operatingMargin', 'grossMargin', 'commercialMargin', 'netMargin', 'profitability', 'netProfit'];
-// Gastos, costos y utilidades: el servidor los omite a quien solo tiene Caja (sin permiso de Dashboard); aquí tampoco se muestran.
-const FINANCIAL_ONLY_INDICATORS = ['totalExpenses', 'operatingResult', 'topMarginProduct', ...COST_DERIVED_INDICATORS];
+// Estos indicadores dependen de la vista Gastos de Compras; la API los omite cuando falta ese permiso.
+const FINANCIAL_ONLY_INDICATORS = ['totalExpenses', 'operatingResult', 'operatingMargin', 'netMargin', 'profitability', 'netProfit'];
 
 const readPreferences = (key: string): DashboardPreferences => {
   const stored = safeGetItem(key);
@@ -200,11 +200,20 @@ function KpiIcon({ id }: { id: string }) {
 }
 
 export function ExecutiveTenantOverview({ onNavigate }: ExecutiveTenantOverviewProps) {
-  const { user, canPerform } = useAuth();
+  const { user, canPerform, hasAccess } = useAuth();
   const { baseCurrency, displayCurrency, displayMode, displayCurrencyLabel, valuationMode, formatConvertedAmount, convertDisplayAmount } = useCurrency();
   const { themeConfig } = useTheme();
-  const canViewPos = canPerform('RETAIL_POS', 'view') || canPerform('SALES', 'view');
+  const canViewDashboard = hasAccess('dashboard');
+  const canViewSalesMetrics = ['SALES_INVOICES', 'RETAIL_POS', 'RETAIL_CASH_CONTROL'].some((module) => canPerform(module, 'view'));
+  const canViewExpenseMetrics = canPerform('PURCHASES_EXPENSES', 'view');
+  const canViewRegisters = ['RETAIL_POS', 'RETAIL_CASH_CONTROL'].some((module) => canPerform(module, 'view'));
   const canViewInventory = canPerform('INVENTORY_PRODUCTS', 'view') || canPerform('INVENTORY', 'view');
+  const canViewInventoryCost = canPerform('INVENTORY_PRODUCTS', 'viewCost') || canPerform('INVENTORY', 'viewCost');
+  const canViewProductSales = canViewSalesMetrics && canViewInventory;
+  const canViewCostMetrics = canViewProductSales && canViewInventoryCost;
+  const hasMetricPermission = (module: string, action: 'view' | 'viewCost' = 'view') => canPerform(module, action);
+  const availableIndicators = INDICATORS.filter((definition) => isDashboardItemAllowed(definition, hasMetricPermission));
+  const availableBlocks = BLOCKS.filter((block) => isDashboardItemAllowed(block, hasMetricPermission));
   const tenantKey = user?.clientTenantId || user?.tenantId || 'current';
   const storageKey = `novahub.dashboard.executive.v4.${tenantKey}.${user?.id || 'user'}`;
   const [period, setPeriod] = useState<DashboardPeriod>('month');
@@ -228,6 +237,10 @@ export function ExecutiveTenantOverview({ onNavigate }: ExecutiveTenantOverviewP
   const dashboardLoadMeasured = useRef(false);
 
   const range = useMemo(() => dashboardRange(period, dateFrom, dateTo), [period, dateFrom, dateTo]);
+  const selectedIndicators = dashboardItemsForAccess(INDICATORS, preferences.indicators, hasMetricPermission);
+  const selectedBlocks = dashboardItemsForAccess(BLOCKS, preferences.blocks, hasMetricPermission, BLOCKS.length);
+  const selectedBlockIds = new Set(selectedBlocks.map((block) => block.id));
+  const hasAnyRoleMetric = availableIndicators.length > 0 || availableBlocks.length > 0;
   const openRangeEditor = () => {
     setDraftDateFrom(period === 'custom' ? dateFrom : range?.start || '');
     setDraftDateTo(period === 'custom' ? dateTo : range?.end || '');
@@ -244,12 +257,12 @@ export function ExecutiveTenantOverview({ onNavigate }: ExecutiveTenantOverviewP
     setRangeEditorOpen(false);
   };
   const fetchDashboard = (start: string, end: string, signal: AbortSignal) => cajaService.getDashboard('custom', undefined, start, end, signal, valuationMode).then((response: any) => response?.data ?? response);
-  const currentQuery = useTenantQuery<any>(['executive-dashboard', period, range?.start, range?.end, valuationMode], (signal) => fetchDashboard(range!.start, range!.end, signal), { enabled: canViewPos && Boolean(range) });
-  const previousQuery = useTenantQuery<any>(['executive-dashboard-previous', period, range?.previousStart, range?.previousEnd, valuationMode], (signal) => fetchDashboard(range!.previousStart, range!.previousEnd, signal), { enabled: canViewPos && Boolean(range) });
+  const currentQuery = useTenantQuery<any>(['executive-dashboard', period, range?.start, range?.end, valuationMode], (signal) => fetchDashboard(range!.start, range!.end, signal), { enabled: canViewDashboard && Boolean(range) });
+  const previousQuery = useTenantQuery<any>(['executive-dashboard-previous', period, range?.previousStart, range?.previousEnd, valuationMode], (signal) => fetchDashboard(range!.previousStart, range!.previousEnd, signal), { enabled: canViewDashboard && Boolean(range) });
   const inventoryQuery = useTenantQuery<any>(['executive-inventory-insights', tenantKey], (signal) => inventoryService.getDashboardInsights(signal).then((response: any) => response?.data ?? response), { enabled: canViewInventory });
-  const registersQuery = useTenantQuery<any[]>(['executive-dashboard-registers', tenantKey], (signal) => cajaService.getRegisters(true, signal).then((response: any) => response?.data ?? response), { enabled: canViewPos });
+  const registersQuery = useTenantQuery<any[]>(['executive-dashboard-registers', tenantKey], (signal) => cajaService.getRegisters(true, signal).then((response: any) => response?.data ?? response), { enabled: canViewRegisters });
   useEffect(() => {
-    if (!canViewPos || !range || dashboardLoadMeasured.current) return;
+    if (!canViewDashboard || !range || dashboardLoadMeasured.current) return;
     if (dashboardStartedAt.current === null) {
       dashboardStartedAt.current = window.performance.now();
       dashboardLoadSpan.current = Sentry.startInactiveSpan({ op: 'ui.load', name: 'Executive dashboard usable' });
@@ -269,7 +282,7 @@ export function ExecutiveTenantOverview({ onNavigate }: ExecutiveTenantOverviewP
       dashboardStartedAt.current = null;
       dashboardLoadMeasured.current = true;
     }
-  }, [canViewPos, currentQuery.isError, currentQuery.isSuccess, range]);
+  }, [canViewDashboard, currentQuery.isError, currentQuery.isSuccess, range]);
   const data = currentQuery.data && typeof currentQuery.data === 'object' ? currentQuery.data : null;
   const kpis = data?.kpis || {};
   const performance = useMemo(() => data?.productPerformance || {}, [data]);
@@ -386,8 +399,8 @@ export function ExecutiveTenantOverview({ onNavigate }: ExecutiveTenantOverviewP
 
   const savePreferences = () => {
     const next = normalizePreferences(draftPreferences);
-    if (!next.indicators.length) next.indicators = [...DEFAULT_PREFERENCES.indicators];
-    if (!next.blocks.length) next.blocks = [...DEFAULT_PREFERENCES.blocks];
+    next.indicators = dashboardItemsForAccess(INDICATORS, next.indicators, hasMetricPermission).map(({ id }) => id);
+    next.blocks = dashboardItemsForAccess(BLOCKS, next.blocks, hasMetricPermission, BLOCKS.length).map(({ id }) => id);
     setPreferences(next);
     setDraftPreferences(next);
     safeSetItem(storageKey, JSON.stringify(next));
@@ -405,43 +418,47 @@ export function ExecutiveTenantOverview({ onNavigate }: ExecutiveTenantOverviewP
         import('../utils/pdf-template-renderer'),
       ]);
       await pdfRenderer.yieldToBrowser();
-      const selectedKpis = preferences.indicators.map((id) => {
-        const definition = INDICATORS.find((item) => item.id === id);
+      const selectedKpis = selectedIndicators.map((definition) => {
+        const id = definition.id;
         const value = indicatorValue(id, kpis, performance, data);
         return {
-          label: definition?.label || id,
+          label: definition.label,
           value: id === 'netMargin'
             ? `${safeNumber(value).toFixed(1)}%`
             : typeof value === 'number' ? money(value) : String(value),
-          detail: definition?.description || '',
+          detail: definition.description,
         };
       });
       const sections: Array<{ id: string; title: string; headers: string[]; rows: Array<Array<string | number | null | undefined>>; widths?: number[] }> = [
         { id: 'dashboard-kpis', title: 'Indicadores seleccionados', headers: ['Indicador', 'Valor', 'Detalle'], rows: selectedKpis.map(item => [item.label, item.value, item.detail]), widths: [22, 18, 60] },
       ];
       const charts: PdfTemplateChart[] = [];
-      if (preferences.blocks.includes('trend')) {
-        charts.push({ id: 'dashboard.trend', title: 'Ventas y gastos', type: 'area', labels: trend.map(item => item.date.length > 7 ? item.date.slice(5) : formatDate(item.date)), valueFormat: 'currency', unitLabel: reportCurrency, series: [{ label: 'Ventas', values: trend.map(item => reportAmount(safeNumber(item.revenue))), color: CHART_COLORS[0] }, { label: 'Gastos', values: trend.map(item => reportAmount(safeNumber(item.expenses))), color: '#ef3340' }] });
+      if (selectedBlockIds.has('trend')) {
+        const series = [
+          ...(canViewSalesMetrics ? [{ label: 'Ventas', values: trend.map(item => reportAmount(safeNumber(item.revenue))), color: CHART_COLORS[0] }] : []),
+          ...(canViewExpenseMetrics ? [{ label: 'Gastos', values: trend.map(item => reportAmount(safeNumber(item.expenses))), color: '#ef3340' }] : []),
+        ];
+        charts.push({ id: 'dashboard.trend', title: canViewSalesMetrics && canViewExpenseMetrics ? 'Ventas y gastos' : canViewSalesMetrics ? 'Ventas' : 'Gastos', type: 'area', labels: trend.map(item => item.date.length > 7 ? item.date.slice(5) : formatDate(item.date)), valueFormat: 'currency', unitLabel: reportCurrency, series });
       }
-      if (preferences.blocks.includes('products') && canViewInventory) {
+      if (selectedBlockIds.has('products') && canViewProductSales) {
         charts.push({ id: 'dashboard.products-sales', title: 'Ventas por producto', type: 'bar', labels: productSalesChart.map((item: { name: string; value: number }) => item.name), values: productSalesChart.map((item: { name: string; value: number }) => productMetric === 'revenue' ? reportAmount(safeNumber(item.value)) : safeNumber(item.value)), valueFormat: productMetric === 'revenue' ? 'currency' : 'count', unitLabel: productMetric === 'revenue' ? reportCurrency : 'unidades', colors: CHART_COLORS });
-        charts.push({ id: 'dashboard.products-margin', title: 'Utilidad de referencia', type: 'bar', labels: productMarginChart.map((item: { name: string; value: number }) => item.name), values: productMarginChart.map((item: { name: string; value: number }) => reportAmount(safeNumber(item.value))), valueFormat: 'currency', unitLabel: reportCurrency, colors: CHART_COLORS });
+        if (canViewCostMetrics) charts.push({ id: 'dashboard.products-margin', title: 'Utilidad de referencia', type: 'bar', labels: productMarginChart.map((item: { name: string; value: number }) => item.name), values: productMarginChart.map((item: { name: string; value: number }) => reportAmount(safeNumber(item.value))), valueFormat: 'currency', unitLabel: reportCurrency, colors: CHART_COLORS });
         const productsById = new Map<string, any>();
-        [...(performance.topSelling || []), ...(performance.topMargin || [])].forEach((item: any) => {
+        [...(performance.topSelling || []), ...(canViewCostMetrics ? performance.topMargin || [] : [])].forEach((item: any) => {
           const key = getProductId(item) || getProductName(item);
           const current = productsById.get(key) || { name: getProductName(item), units: 0, revenue: 0, profit: 0 };
           current.units = Math.max(current.units, safeNumber(item.totalQty));
           current.revenue = Math.max(current.revenue, safeNumber(item.totalRevenue));
-          current.profit = Math.max(current.profit, safeNumber(item.profit));
+          if (canViewCostMetrics) current.profit = Math.max(current.profit, safeNumber(item.profit));
           productsById.set(key, current);
         });
-        const productRows = [...productsById.values()].map(item => [item.name, item.units, money(item.revenue), money(item.profit)]);
-        sections.push({ id: 'dashboard-products', title: 'Desempeño de productos', headers: ['Producto', 'Unidades', 'Venta pagada', 'Utilidad de referencia'], rows: productRows, widths: [42, 14, 22, 22] });
+        const productRows = [...productsById.values()].map(item => [item.name, item.units, money(item.revenue), ...(canViewCostMetrics ? [money(item.profit)] : [])]);
+        sections.push({ id: 'dashboard-products', title: 'Desempeño de productos', headers: ['Producto', 'Unidades', 'Venta pagada', ...(canViewCostMetrics ? ['Utilidad de referencia'] : [])], rows: productRows, widths: canViewCostMetrics ? [42, 14, 22, 22] : [48, 16, 36] });
       }
-      if (preferences.blocks.includes('registers')) {
+      if (selectedBlockIds.has('registers') && canViewRegisters) {
         sections.push({ id: 'dashboard-registers', title: 'Ventas por caja', headers: ['Caja', 'Operaciones', 'Ventas pagadas'], rows: registerSummary.slice(0, 8).map((item: any) => [item.registerName || item.registerCode || 'Caja', safeNumber(item.count), money(safeNumber(item.total))]), widths: [44, 20, 36] });
       }
-      if (preferences.blocks.includes('inventory') && canViewInventory) {
+      if (selectedBlockIds.has('inventory') && canViewInventory) {
         charts.push({ id: 'dashboard.inventory', title: 'Estado del inventario', type: 'donut', labels: inventoryChart.length ? inventoryChart.map(item => item.name) : ['Sin alertas'], values: inventoryChart.length ? inventoryChart.map(item => safeNumber(item.value)) : [0], valueFormat: 'count', unitLabel: 'productos', colors: inventoryChart.length ? inventoryChart.map(item => item.fill) : [CHART_COLORS[0]] });
       }
       const chartPanels = new Map(Array.from(document.querySelectorAll<HTMLElement>('[data-pdf-chart-id]')).map(panel => [panel.dataset.pdfChartId || '', panel]));
@@ -466,7 +483,7 @@ export function ExecutiveTenantOverview({ onNavigate }: ExecutiveTenantOverviewP
         periodLabel: `${rangeLabel} · Moneda: ${reportCurrencyLabel}`,
         kpis: selectedKpis,
         charts: exportCharts,
-        dashboardPreferences: { indicators: [...preferences.indicators], blocks: [...preferences.blocks] },
+        dashboardPreferences: { indicators: selectedIndicators.map(({ id }) => id), blocks: [...selectedBlockIds] },
         sections,
         fileName,
         format: paperFormat,
@@ -495,22 +512,46 @@ export function ExecutiveTenantOverview({ onNavigate }: ExecutiveTenantOverviewP
       const logoUrl = user?.sessionBranding?.logo || themeConfig.logo || user?.clientTenant?.logo || '';
       const logoBase64 = logoUrl ? await getBase64Image(logoUrl) : null;
       const currencyLabel = reportCurrencyLabel;
-      const selectedKpis = preferences.indicators.map((id) => {
-        const definition = INDICATORS.find((item) => item.id === id);
+      const selectedKpis = selectedIndicators.map((definition) => {
+        const id = definition.id;
         const value = indicatorValue(id, kpis, performance, data);
         const isMonetaryIndicator = ['totalRevenue', 'totalExpenses', 'averagePaidInvoice', 'operatingResult', 'netProfit'].includes(id);
-        return { Indicador: definition?.label || id, Valor: typeof value === 'number' ? (isMonetaryIndicator ? reportAmount(value) : value) : String(value), Detalle: definition?.description || '' };
+        return { Indicador: definition.label, Valor: typeof value === 'number' ? (isMonetaryIndicator ? reportAmount(value) : value) : String(value), Detalle: definition.description };
       });
       const productsById = new Map<string, any>();
-      [...(performance.topSelling || []), ...(performance.topMargin || [])].forEach((item: any) => {
+      [...(selectedBlockIds.has('products') ? performance.topSelling || [] : []), ...(selectedBlockIds.has('products') && canViewCostMetrics ? performance.topMargin || [] : [])].forEach((item: any) => {
         const key = getProductId(item) || getProductName(item);
         const current = productsById.get(key) || { Producto: getProductName(item), Unidades: 0, Venta: 0, Utilidad: 0 };
         current.Unidades = Math.max(current.Unidades, safeNumber(item.totalQty));
         current.Venta = Math.max(current.Venta, reportAmount(safeNumber(item.totalRevenue)));
-        current.Utilidad = Math.max(current.Utilidad, reportAmount(safeNumber(item.profit)));
+        if (canViewCostMetrics) current.Utilidad = Math.max(current.Utilidad, reportAmount(safeNumber(item.profit)));
         productsById.set(key, current);
       });
-      const productRows = [...productsById.values()];
+      const productRows = [...productsById.values()].map((item) => {
+        if (canViewCostMetrics) return item;
+        const { Utilidad: _profit, ...visibleItem } = item;
+        return visibleItem;
+      });
+      const sheets: Array<{ name: string; rows: Array<Record<string, unknown>> }> = [
+        { name: 'Indicadores', rows: selectedKpis },
+      ];
+      if (selectedBlockIds.has('trend')) sheets.push({
+        name: 'Tendencia',
+        rows: trend.map((item) => ({
+          Fecha: item.date,
+          ...(canViewSalesMetrics ? { Ventas: reportAmount(safeNumber(item.revenue)) } : {}),
+          ...(canViewExpenseMetrics ? { Gastos: reportAmount(safeNumber(item.expenses)) } : {}),
+        })),
+      });
+      if (selectedBlockIds.has('registers') && canViewRegisters) sheets.push({
+        name: 'Ventas por caja',
+        rows: registerSummary.map((item: any) => ({ Caja: item.registerName || item.registerCode || 'Caja', Operaciones: safeNumber(item.count), Ventas: reportAmount(safeNumber(item.total)) })),
+      });
+      if (selectedBlockIds.has('products') && canViewProductSales) sheets.push({ name: 'Productos', rows: productRows });
+      if (selectedBlockIds.has('inventory') && canViewInventory) sheets.push({
+        name: 'Inventario',
+        rows: inventoryChart.map((item) => ({ Estado: item.name, Productos: safeNumber(item.value) })),
+      });
       createReportWorkbook({
         fileName: buildDatedDownloadFileName(['resumen_gestion'], 'xlsx'),
         branding: {
@@ -520,12 +561,7 @@ export function ExecutiveTenantOverview({ onNavigate }: ExecutiveTenantOverviewP
           primaryColor: themeConfig.colors.primary,
           logoBase64,
         },
-        sheets: [
-          { name: 'Indicadores', rows: selectedKpis },
-          { name: 'Finanzas', rows: trend.map((item) => ({ Fecha: item.date, Ventas: reportAmount(safeNumber(item.revenue)), Gastos: reportAmount(safeNumber(item.expenses)) })) },
-          { name: 'Ventas por caja', rows: registerSummary.map((item: any) => ({ Caja: item.registerName || item.registerCode || 'Caja', Operaciones: safeNumber(item.count), Ventas: reportAmount(safeNumber(item.total)) })) },
-          { name: 'Productos', rows: productRows },
-        ],
+        sheets,
         filters: { Periodo: rangeLabel, Alcance: hasData ? 'Datos disponibles' : 'Sin datos para el periodo' },
       });
       toast.success('Resumen exportado en Excel');
@@ -569,12 +605,8 @@ export function ExecutiveTenantOverview({ onNavigate }: ExecutiveTenantOverviewP
     window.dispatchEvent(new CustomEvent('open-erp-chat', { detail: { message, context: { source: 'executive-dashboard', periodFrom: range?.start, periodTo: range?.end } } }));
   };
 
-  const visibleIndicators = INDICATORS.filter((definition) => !(data?.financialDataRestricted && FINANCIAL_ONLY_INDICATORS.includes(definition.id))).filter((definition) => definition.label.toLowerCase().includes(configSearch.toLowerCase()) || definition.description.toLowerCase().includes(configSearch.toLowerCase()));
+  const visibleIndicators = availableIndicators.filter((definition) => !(data?.financialDataRestricted && FINANCIAL_ONLY_INDICATORS.includes(definition.id))).filter((definition) => definition.label.toLowerCase().includes(configSearch.toLowerCase()) || definition.description.toLowerCase().includes(configSearch.toLowerCase()));
   const groupedIndicators = visibleIndicators.reduce<Record<string, IndicatorDefinition[]>>((groups, definition) => { (groups[definition.group] ||= []).push(definition); return groups; }, {});
-
-  if (!canViewPos) {
-    return <div className="space-y-4"><div className="executive-empty"><ShieldAlert /><h2>Resumen no disponible</h2><p>Tu usuario no tiene acceso al módulo de ventas y caja que alimenta este resumen.</p></div><DashboardGoals onOpen={() => navigate('organizacion', { subModule: 'mi-dia' })} /></div>;
-  }
 
   return (
     <div className="executive-dashboard">
@@ -588,8 +620,8 @@ export function ExecutiveTenantOverview({ onNavigate }: ExecutiveTenantOverviewP
             <SelectTrigger className="executive-period"><CalendarDays className="size-4" /><SelectValue /></SelectTrigger>
             <SelectContent>{Object.entries(PERIOD_LABELS).map(([value, label]) => <SelectItem key={value} value={value}>{label}</SelectItem>)}</SelectContent>
           </Select>
-          {canPerform('DASHBOARD', 'export') && <ExportMenu onPdf={(paperFormat) => void exportDashboard(paperFormat)} onExcel={() => void exportDashboardExcel()} disabled={isExporting || currentQuery.isFetching} className="executive-toolbar-button" />}
-          <Button variant="outline" className="executive-toolbar-button" onClick={() => { setDraftPreferences(preferences); setConfigOpen(true); }}><Settings2 className="size-4" /> Configurar</Button>
+          {canPerform('DASHBOARD', 'export') && hasAnyRoleMetric && <ExportMenu onPdf={(paperFormat) => void exportDashboard(paperFormat)} onExcel={() => void exportDashboardExcel()} disabled={isExporting || currentQuery.isFetching} className="executive-toolbar-button" />}
+          <Button variant="outline" className="executive-toolbar-button" onClick={() => { setDraftPreferences({ indicators: selectedIndicators.map(({ id }) => id), blocks: selectedBlocks.map(({ id }) => id) }); setConfigOpen(true); }}><Settings2 className="size-4" /> Configurar</Button>
           <Button className="executive-toolbar-button executive-ask-button" onClick={() => askNova()}><NovaHubLogo size={17} /> <span>Preguntar a Nova</span></Button>
           <Button variant="outline" size="icon" className="executive-toolbar-icon" onClick={() => void currentQuery.refetch()} aria-label="Actualizar dashboard"><RefreshCw className={`size-4 ${currentQuery.isFetching ? 'animate-spin' : ''}`} /></Button>
         </div>
@@ -598,15 +630,14 @@ export function ExecutiveTenantOverview({ onNavigate }: ExecutiveTenantOverviewP
       <div className="executive-meta-row"><span>Período: <strong>{rangeLabel}</strong></span><span className="executive-meta-separator">•</span><span>{data?.generatedAt ? `Actualizado ${new Date(data.generatedAt).toLocaleTimeString('es-NI', { hour: '2-digit', minute: '2-digit' })}` : 'Actualización automática'}</span><span className="executive-meta-spacer" /><span className="executive-live-dot" /> Datos del tenant actual</div>
       <CurrencyValuationBanner className="mb-5" compact />
 
-      {currentQuery.isPending && <div className="executive-loading"><Loader2 className="animate-spin" /><span>Preparando el resumen de gestión…</span></div>}
-      {currentQuery.isError && <div className="executive-error"><AlertTriangle /><div><strong>No pudimos cargar el resumen.</strong><span>La información operativa no se modificó. Intenta actualizar nuevamente.</span></div><Button variant="outline" onClick={() => void currentQuery.refetch()}>Reintentar</Button></div>}
-      {!currentQuery.isPending && !currentQuery.isError && !hasData && <div className="executive-empty"><CircleHelp /><h2>Sin datos para este período</h2><p>Prueba con otro período o registra una operación para comenzar a ver indicadores.</p></div>}
+      {!hasAnyRoleMetric && <div className="executive-empty"><ShieldAlert /><h2>No hay métricas disponibles</h2><p>Tu rol no tiene vistas habilitadas que aporten métricas a este resumen.</p></div>}
+      {hasAnyRoleMetric && currentQuery.isPending && <div className="executive-loading"><Loader2 className="animate-spin" /><span>Preparando las métricas disponibles para tu rol…</span></div>}
+      {hasAnyRoleMetric && currentQuery.isError && <div className="executive-error"><AlertTriangle /><div><strong>No pudimos cargar algunas métricas.</strong><span>Las demás vistas autorizadas siguen disponibles. Intenta actualizar nuevamente.</span></div><Button variant="outline" onClick={() => void currentQuery.refetch()}>Reintentar</Button></div>}
+      {hasAnyRoleMetric && !currentQuery.isPending && !currentQuery.isError && !hasData && <div className="executive-empty"><CircleHelp /><h2>Sin datos para este período</h2><p>Prueba con otro período o registra una operación para comenzar a ver indicadores.</p></div>}
 
-      {hasData && <>
-        <section className="executive-kpi-grid" aria-label="Indicadores principales">
-          {preferences.indicators.map((id) => {
-            const definition = INDICATORS.find((item) => item.id === id);
-            if (!definition) return null;
+      {hasData && selectedIndicators.length > 0 && <section className="executive-kpi-grid" aria-label="Indicadores principales">
+          {selectedIndicators.map((definition) => {
+            const id = definition.id;
             if (data?.financialDataRestricted && FINANCIAL_ONLY_INDICATORS.includes(id)) return null;
             const value = indicatorValue(id, kpis, performance, data);
             const previousValue = typeof value === 'number' && ['totalRevenue', 'totalExpenses', 'ordersCount', 'paidInvoicesCount', 'averagePaidInvoice', 'operatingMargin', 'grossMargin', 'commercialMargin', 'netMargin', 'profitability', 'netProfit'].includes(id) ? safeNumber(previous[id]) : undefined;
@@ -615,9 +646,9 @@ export function ExecutiveTenantOverview({ onNavigate }: ExecutiveTenantOverviewP
             const title = costDataUnavailable ? `${definition.label}: configura costos unitarios para calcularlo` : `Abrir detalle de ${definition.label}`;
             return <button type="button" key={id} className="executive-kpi" onClick={() => openKpi(definition)} title={title}><span className="executive-kpi-top"><span className="executive-kpi-icon"><KpiIcon id={id} /></span><span className="executive-kpi-label">{definition.label}</span><ArrowUpRight className="executive-kpi-arrow" /></span><KpiValue definition={definition} value={value} data={data} />{change && <span className={`executive-kpi-change ${change.startsWith('-') ? 'is-negative' : 'is-positive'}`}>{change} vs. período anterior</span>}</button>;
           })}
-        </section>
+        </section>}
 
-        {canViewInventory && <section className="executive-insights-panel" aria-labelledby="nova-insights-title">
+      {canViewInventory && <section className="executive-insights-panel" aria-labelledby="nova-insights-title">
           <div className="executive-insights-layout">
             <div className="executive-insights-heading">
               <img src={signalsAsset} alt="" className="executive-insights-image" />
@@ -629,11 +660,11 @@ export function ExecutiveTenantOverview({ onNavigate }: ExecutiveTenantOverviewP
               <span className="executive-panel-caption">Inventario · actualización automática</span>
             </div>
             {inventoryQuery.isPending ? <div className="executive-insights-loading executive-insights-loading-grid"><Loader2 className="animate-spin" /> Calculando inventario…</div> : inventoryQuery.isError ? <div className="executive-insights-loading executive-insights-loading-grid">No se pudo consultar el análisis de inventario. El resto del dashboard sigue disponible.</div> : <div className="executive-insights-grid">
-            <article className="executive-insight-card is-warning">
+          <article className="executive-insight-card is-warning">
               <img src={capitalAsset} alt="" className="executive-insight-asset" />
               <div className="executive-insight-copy">
                 <span>Capital inmovilizado</span>
-                <strong>{money(inventorySummary.stuckInventoryValue || 0)}</strong>
+                <strong>{canViewInventoryCost ? money(inventorySummary.stuckInventoryValue || 0) : `${safeNumber(inventorySummary.stuckProductsCount)} productos`}</strong>
                 <small>{safeNumber(inventorySummary.stuckProductsCount)} productos sin salidas de inventario en 90 días.</small>
               </div>
               <button type="button" onClick={() => navigate('inventario', { subModule: 'productos', stockFilter: 'no-sale' })}>Ver productos <ArrowUpRight /></button>
@@ -642,8 +673,8 @@ export function ExecutiveTenantOverview({ onNavigate }: ExecutiveTenantOverviewP
               <img src={reposicionAsset} alt="" className="executive-insight-asset" />
               <div className="executive-insight-copy">
                 <span>Reposición prioritaria</span>
-                <strong>{money(inventorySummary.lowStockValue || 0)} en stock bajo</strong>
-                <small>{safeNumber(alertCount)} productos con agotado, mínimo o reordenación detectada.</small>
+                <strong>{canViewInventoryCost ? `${money(inventorySummary.lowStockValue || 0)} en stock bajo` : `${safeNumber(alertCount)} productos`}</strong>
+                <small>Con agotado, mínimo o reordenación detectada.</small>
               </div>
               <button type="button" onClick={() => navigate('inventario', { subModule: 'productos', stockFilter: 'low' })}>Revisar stock <ArrowUpRight /></button>
             </article>
@@ -651,42 +682,40 @@ export function ExecutiveTenantOverview({ onNavigate }: ExecutiveTenantOverviewP
           </div>
         </section>}
 
-        <div className="executive-chart-wall" aria-label="Gráficas ejecutivas">
-          {preferences.blocks.includes('trend') && <section className="executive-panel executive-chart-card executive-chart-card-trend" data-pdf-chart-id="dashboard.trend">
-            <div className="executive-panel-heading"><div><span className="executive-section-kicker">Finanzas</span><h2 className="executive-editorial-title">{data?.financialDataRestricted ? 'Ventas' : 'Ventas y gastos'}</h2></div><div className="executive-chart-controls"><button type="button" className="executive-chart-range-button" onClick={openRangeEditor}><CalendarDays className="size-3.5" /> {period === 'custom' ? 'Editar rango' : 'Personalizar rango'}</button><span className="executive-chart-range">{rangeLabel}</span><Select value={trendGranularity} onValueChange={(value) => setTrendGranularity(value as 'day' | 'month')}><SelectTrigger className="executive-chart-filter"><SelectValue /></SelectTrigger><SelectContent><SelectItem value="day">Por día</SelectItem><SelectItem value="month">Por mes</SelectItem></SelectContent></Select></div></div>
-            <div className="executive-chart executive-chart-wall-trend"><ResponsiveContainer width="100%" height="100%"><AreaChart data={trend} margin={{ top: 8, right: 8, left: 0, bottom: 0 }}><defs><linearGradient id="executiveRevenue" x1="0" y1="0" x2="0" y2="1"><stop offset="0%" stopColor="var(--primary)" stopOpacity={0.28} /><stop offset="100%" stopColor="var(--primary)" stopOpacity={0.02} /></linearGradient><linearGradient id="executiveExpenses" x1="0" y1="0" x2="0" y2="1"><stop offset="0%" stopColor="#ef3340" stopOpacity={0.2} /><stop offset="100%" stopColor="#ef3340" stopOpacity={0.02} /></linearGradient></defs><CartesianGrid vertical={false} stroke="var(--border)" strokeDasharray="4 4" /><XAxis dataKey="date" tickFormatter={(value) => String(value).length > 7 ? String(value).slice(5) : formatDate(String(value))} tickLine={false} axisLine={false} tick={{ fill: 'var(--muted-foreground)', fontSize: 10 }} minTickGap={28} /><YAxis tickLine={false} axisLine={false} tick={{ fill: 'var(--muted-foreground)', fontSize: 10 }} tickFormatter={(value) => compactAxis(value)} /><Tooltip contentStyle={{ background: 'var(--card)', border: '1px solid var(--border)', borderRadius: 10, fontSize: 11 }} formatter={(value: number, name: string) => [money(value), name === 'revenue' ? 'Ventas' : 'Gastos']} labelFormatter={(label) => String(label).length > 7 ? String(label) : formatDate(String(label))} /><Area type="monotone" dataKey="revenue" name="revenue" stroke="var(--primary)" fill="url(#executiveRevenue)" strokeWidth={2.5} />{!data?.financialDataRestricted && <Area type="monotone" dataKey="expenses" name="expenses" stroke="#ef3340" fill="url(#executiveExpenses)" strokeWidth={2} />}</AreaChart></ResponsiveContainer></div><div className="executive-legend"><span><i className="legend-dot revenue" /> Ventas</span>{!data?.financialDataRestricted && <span><i className="legend-dot expenses" /> Gastos</span>}</div>
+      {hasData && <div className="executive-chart-wall" aria-label="Gráficas ejecutivas">
+          {selectedBlockIds.has('trend') && <section className="executive-panel executive-chart-card executive-chart-card-trend" data-pdf-chart-id="dashboard.trend">
+            <div className="executive-panel-heading"><div><span className="executive-section-kicker">{canViewSalesMetrics && canViewExpenseMetrics ? 'Resumen de operaciones' : canViewSalesMetrics ? 'Ventas' : 'Compras'}</span><h2 className="executive-editorial-title">{canViewSalesMetrics && canViewExpenseMetrics ? 'Ventas y gastos' : canViewSalesMetrics ? 'Ventas' : 'Gastos'}</h2></div><div className="executive-chart-controls"><button type="button" className="executive-chart-range-button" onClick={openRangeEditor}><CalendarDays className="size-3.5" /> {period === 'custom' ? 'Editar rango' : 'Personalizar rango'}</button><span className="executive-chart-range">{rangeLabel}</span><Select value={trendGranularity} onValueChange={(value) => setTrendGranularity(value as 'day' | 'month')}><SelectTrigger className="executive-chart-filter"><SelectValue /></SelectTrigger><SelectContent><SelectItem value="day">Por día</SelectItem><SelectItem value="month">Por mes</SelectItem></SelectContent></Select></div></div>
+            <div className="executive-chart executive-chart-wall-trend"><ResponsiveContainer width="100%" height="100%"><AreaChart data={trend} margin={{ top: 8, right: 8, left: 0, bottom: 0 }}><defs><linearGradient id="executiveRevenue" x1="0" y1="0" x2="0" y2="1"><stop offset="0%" stopColor="var(--primary)" stopOpacity={0.28} /><stop offset="100%" stopColor="var(--primary)" stopOpacity={0.02} /></linearGradient><linearGradient id="executiveExpenses" x1="0" y1="0" x2="0" y2="1"><stop offset="0%" stopColor="#ef3340" stopOpacity={0.2} /><stop offset="100%" stopColor="#ef3340" stopOpacity={0.02} /></linearGradient></defs><CartesianGrid vertical={false} stroke="var(--border)" strokeDasharray="4 4" /><XAxis dataKey="date" tickFormatter={(value) => String(value).length > 7 ? String(value).slice(5) : formatDate(String(value))} tickLine={false} axisLine={false} tick={{ fill: 'var(--muted-foreground)', fontSize: 10 }} minTickGap={28} /><YAxis tickLine={false} axisLine={false} tick={{ fill: 'var(--muted-foreground)', fontSize: 10 }} tickFormatter={(value) => compactAxis(value)} /><Tooltip contentStyle={{ background: 'var(--card)', border: '1px solid var(--border)', borderRadius: 10, fontSize: 11 }} formatter={(value: number, name: string) => [money(value), name === 'revenue' ? 'Ventas' : 'Gastos']} labelFormatter={(label) => String(label).length > 7 ? String(label) : formatDate(String(label))} />{canViewSalesMetrics && <Area type="monotone" dataKey="revenue" name="revenue" stroke="var(--primary)" fill="url(#executiveRevenue)" strokeWidth={2.5} />}{canViewExpenseMetrics && <Area type="monotone" dataKey="expenses" name="expenses" stroke="#ef3340" fill="url(#executiveExpenses)" strokeWidth={2} />}</AreaChart></ResponsiveContainer></div><div className="executive-legend">{canViewSalesMetrics && <span><i className="legend-dot revenue" /> Ventas</span>}{canViewExpenseMetrics && <span><i className="legend-dot expenses" /> Gastos</span>}</div>
           </section>}
 
-          {preferences.blocks.includes('products') && <section className="executive-panel executive-chart-card executive-chart-card-sales" data-pdf-chart-id="dashboard.products-sales">
+          {selectedBlockIds.has('products') && canViewProductSales && <section className="executive-panel executive-chart-card executive-chart-card-sales" data-pdf-chart-id="dashboard.products-sales">
             <div className="executive-panel-heading"><div><span className="executive-section-kicker">Volumen</span><h2 className="executive-editorial-title">Ventas por producto</h2></div><Select value={productMetric} onValueChange={(value) => setProductMetric(value as 'units' | 'revenue')}><SelectTrigger className="executive-chart-filter"><SelectValue /></SelectTrigger><SelectContent><SelectItem value="units">Unidades</SelectItem><SelectItem value="revenue">Ventas pagadas</SelectItem></SelectContent></Select></div>
             <div className="executive-mini-chart">{renderProductBars(productSalesChart, (value) => productMetric === 'revenue' ? compactAxis(value) : `${value.toLocaleString('es-NI')} uds.`, 'Sin ventas')}</div>
           </section>}
 
-          {preferences.blocks.includes('products') && <section className="executive-panel executive-chart-card executive-chart-card-margin" data-pdf-chart-id="dashboard.products-margin">
+          {selectedBlockIds.has('products') && canViewCostMetrics && <section className="executive-panel executive-chart-card executive-chart-card-margin" data-pdf-chart-id="dashboard.products-margin">
             <div className="executive-panel-heading"><div><span className="executive-section-kicker">Inventario</span><h2 className="executive-editorial-title">Utilidad por producto</h2></div><WalletCards className="executive-chart-heading-icon" /></div>
             <div className="executive-mini-chart">{renderProductBars(productMarginChart, (value) => compactAxis(value), 'Sin datos de utilidad', openMarginFormula)}</div>
           </section>}
 
-          {preferences.blocks.includes('registers') && <section className="executive-panel executive-chart-card executive-chart-card-registers"><div className="executive-panel-heading"><div><span className="executive-section-kicker">Puntos de venta</span><h2 className="executive-editorial-title">Ventas por caja</h2></div><button type="button" className="executive-text-button" onClick={() => navigate('ventas', { subModule: 'control-caja', section: 'history', registerId: 'ALL' })}>Ver control de caja <ArrowUpRight /></button></div><div className="executive-register-list">{registers.length ? registerSummary.slice(0, 6).map((register: any, index: number) => { const max = Math.max(...registerSummary.map((item: any) => safeNumber(item.total)), 1); const percent = Math.round(safeNumber(register.total) / max * 100); const label = register.registerName || `Caja ${register.registerCode}`; return <button type="button" className="executive-register-row" key={register.registerId || index} title={`Abrir historial de ${label}`} onClick={() => navigate('ventas', { subModule: 'control-caja', section: 'history', registerId: register.registerId })}><span className="executive-register-label"><span><Store className="size-4" /> <span className="executive-register-name">{label}</span></span><strong>{money(register.total)}</strong></span><span className="executive-progress"><i style={{ width: `${percent}%` }} /></span><small>{safeNumber(register.count)} operaciones · {percent}% de la caja líder</small></button>; }) : <div className="executive-register-empty"><img src={noSalesRegisterAsset} alt="" /><strong>Aún no hay ventas por caja</strong><span>Cuando registres ventas, aquí podrás comparar el rendimiento de cada caja.</span><button type="button" onClick={() => navigate('ventas', { subModule: 'control-caja', section: 'settings' })}>Configurar cajas</button></div>} {registerSummary.length > 0 && <div className="executive-register-chips" aria-label={`${registerSummary.length} cajas configuradas`}>{registerSummary.map((register: any, index: number) => { const label = register.registerName || `Caja ${register.registerCode}`; return <button type="button" className={`executive-register-chip tone-${index % 4}`} key={`chip-${register.registerId || index}`} title={`Abrir historial de ${label}`} onClick={() => navigate('ventas', { subModule: 'control-caja', section: 'history', registerId: register.registerId })}><span><Store className="size-3.5" /><span className="executive-register-chip-name">{label}</span></span><strong>{money(register.total)}</strong></button>; })}</div>}</div></section>}
+          {selectedBlockIds.has('registers') && canViewRegisters && <section className="executive-panel executive-chart-card executive-chart-card-registers"><div className="executive-panel-heading"><div><span className="executive-section-kicker">Puntos de venta</span><h2 className="executive-editorial-title">Ventas por caja</h2></div><button type="button" className="executive-text-button" onClick={() => navigate('ventas', { subModule: 'control-caja', section: 'history', registerId: 'ALL' })}>Ver control de caja <ArrowUpRight /></button></div><div className="executive-register-list">{registers.length ? registerSummary.slice(0, 6).map((register: any, index: number) => { const max = Math.max(...registerSummary.map((item: any) => safeNumber(item.total)), 1); const percent = Math.round(safeNumber(register.total) / max * 100); const label = register.registerName || `Caja ${register.registerCode}`; return <button type="button" className="executive-register-row" key={register.registerId || index} title={`Abrir historial de ${label}`} onClick={() => navigate('ventas', { subModule: 'control-caja', section: 'history', registerId: register.registerId })}><span className="executive-register-label"><span><Store className="size-4" /> <span className="executive-register-name">{label}</span></span><strong>{money(register.total)}</strong></span><span className="executive-progress"><i style={{ width: `${percent}%` }} /></span><small>{safeNumber(register.count)} operaciones · {percent}% de la caja líder</small></button>; }) : <div className="executive-register-empty"><img src={noSalesRegisterAsset} alt="" /><strong>Aún no hay ventas por caja</strong><span>Cuando registres ventas, aquí podrás comparar el rendimiento de cada caja.</span><button type="button" onClick={() => navigate('ventas', { subModule: 'control-caja', section: 'settings' })}>Configurar cajas</button></div>} {registerSummary.length > 0 && <div className="executive-register-chips" aria-label={`${registerSummary.length} cajas configuradas`}>{registerSummary.map((register: any, index: number) => { const label = register.registerName || `Caja ${register.registerCode}`; return <button type="button" className={`executive-register-chip tone-${index % 4}`} key={`chip-${register.registerId || index}`} title={`Abrir historial de ${label}`} onClick={() => navigate('ventas', { subModule: 'control-caja', section: 'history', registerId: register.registerId })}><span><Store className="size-3.5" /><span className="executive-register-chip-name">{label}</span></span><strong>{money(register.total)}</strong></button>; })}</div>}</div></section>}
 
-          {preferences.blocks.includes('inventory') && <section className="executive-panel executive-chart-card executive-chart-card-inventory" data-pdf-chart-id="dashboard.inventory">
+          {selectedBlockIds.has('inventory') && canViewInventory && <section className="executive-panel executive-chart-card executive-chart-card-inventory" data-pdf-chart-id="dashboard.inventory">
             <div className="executive-panel-heading"><div><span className="executive-section-kicker">Existencias</span><h2 className="executive-editorial-title">Estado del inventario</h2></div><Package className="executive-chart-heading-icon" /></div>
             <div className="executive-donut-wrap">{inventoryChart.length ? <><ResponsiveContainer width="100%" height="100%"><PieChart><Pie data={inventoryChart} dataKey="value" nameKey="name" cx="50%" cy="50%" innerRadius={53} outerRadius={79} paddingAngle={4} stroke="none">{inventoryChart.map((entry: any) => <Cell key={entry.name} fill={entry.fill} />)}</Pie><Tooltip contentStyle={{ background: 'var(--card)', border: '1px solid var(--primary)', borderRadius: 10, fontSize: 11, color: 'var(--foreground)', boxShadow: '0 10px 24px color-mix(in srgb, var(--foreground) 12%, transparent)' }} labelStyle={{ color: 'var(--foreground)', fontWeight: 800 }} itemStyle={{ color: 'var(--foreground)', fontWeight: 700 }} formatter={(value: number) => [`${safeNumber(value)} productos`, 'Cantidad']} /></PieChart></ResponsiveContainer><div className="executive-donut-center"><strong>{inventoryCriticalCount.toLocaleString('es-NI')}</strong><span>productos críticos</span></div></> : <div className="executive-no-data">Inventario sin alertas</div>}</div>
             <div className="executive-chart-legend executive-inventory-legend">{inventoryChart.map((entry: any) => <span key={entry.name}><i style={{ background: entry.fill }} /><span>{entry.name}</span><strong>{safeNumber(entry.value).toLocaleString('es-NI')}</strong></span>)}</div>
           </section>}
-        </div>
-
-      </>}
+        </div>}
 
       <CashOutlookCard />
 
-      <DashboardGoals onOpen={() => navigate('organizacion', { subModule: 'mi-dia' })} />
+      {canPerform('HR_PERFORMANCE', 'view') && <DashboardGoals onOpen={() => navigate('organizacion', { subModule: 'mi-dia' })} />}
 
-      <div className="executive-footnote"><CircleHelp className="size-4" /><span>Los importes de ventas y gastos provienen del resumen de Caja. Para utilidad contable, costo de ventas, cuentas por cobrar y cuentas por pagar, utiliza los reportes financieros y contables.</span></div>
+      {hasAnyRoleMetric && <div className="executive-footnote"><CircleHelp className="size-4" /><span>{canViewSalesMetrics && canViewExpenseMetrics ? 'Las métricas de ventas y gastos de Compras se limitan a las vistas habilitadas para tu rol.' : canViewSalesMetrics ? 'Las métricas mostradas provienen de las vistas de ventas habilitadas para tu rol.' : canViewExpenseMetrics ? 'Las métricas mostradas provienen de Gastos de Compras, vista habilitada para tu rol.' : 'Las métricas mostradas provienen de las vistas habilitadas para tu rol.'}</span></div>}
 
       <Dialog open={rangeEditorOpen} onOpenChange={setRangeEditorOpen}><DialogContent className="executive-range-dialog sm:!max-w-md"><DialogHeader><DialogTitle className="executive-dialog-title"><CalendarDays /> Personalizar rango</DialogTitle><DialogDescription>Elige las fechas que alimentan el resumen, las gráficas y la comparación del período anterior.</DialogDescription></DialogHeader><div className="executive-range-form"><label><span>Desde</span><DateField value={draftDateFrom} onChange={setDraftDateFrom} maxDate={draftDateTo || undefined} placeholder="Fecha inicial" /></label><span className="executive-range-separator">hasta</span><label><span>Hasta</span><DateField value={draftDateTo} onChange={setDraftDateTo} minDate={draftDateFrom || undefined} placeholder="Fecha final" /></label></div><DialogFooter><Button variant="outline" onClick={() => setRangeEditorOpen(false)}>Cancelar</Button><Button onClick={applyDateRange}>Aplicar rango</Button></DialogFooter></DialogContent></Dialog>
       <Dialog open={Boolean(formulaProduct)} onOpenChange={(open) => { if (!open) setFormulaProduct(null); }}><DialogContent className="executive-formula-dialog sm:!max-w-md"><DialogHeader><DialogTitle className="executive-dialog-title"><WalletCards /> Cómo se calcula la utilidad</DialogTitle><DialogDescription>Detalle de la fórmula aplicada a {getProductName(formulaProduct)}.</DialogDescription></DialogHeader><div className="executive-formula-card"><div><span>Precio de venta unitario</span><strong>{money(safeNumber(formulaProduct?.salePrice))}</strong></div><div><span>Costo unitario</span><strong>{money(safeNumber(formulaProduct?.costPrice))}</strong></div><div><span>Unidades vendidas</span><strong>{safeNumber(formulaProduct?.totalQty).toLocaleString('es-NI')}</strong></div><div className="executive-formula-total"><span>Utilidad estimada</span><strong>{money(safeNumber(formulaProduct?.profit))}</strong></div></div><p className="executive-formula-equation">(Precio de venta − costo unitario) × unidades vendidas</p><DialogFooter><Button variant="outline" onClick={() => setFormulaProduct(null)}>Cerrar</Button><Button onClick={() => { openProduct(formulaProduct); setFormulaProduct(null); }}>Ver producto <ArrowUpRight className="size-4" /></Button></DialogFooter></DialogContent></Dialog>
-      <Dialog open={configOpen} onOpenChange={setConfigOpen}><DialogContent className="executive-config-dialog sm:!max-w-3xl"><DialogHeader><DialogTitle className="executive-dialog-title"><Settings2 /> Configurar resumen de gestión</DialogTitle><DialogDescription>Elige los indicadores y bloques que ayudan a tu rol a decidir más rápido. Las selecciones se guardan para este usuario y tenant.</DialogDescription></DialogHeader><div className="executive-config-search"><Input placeholder="Buscar indicador…" value={configSearch} onChange={(event) => setConfigSearch(event.target.value)} /><span>{draftPreferences.indicators.length} indicadores seleccionados</span></div><div className="executive-config-body"><div className="executive-config-column"><h3>Indicadores</h3>{Object.entries(groupedIndicators).map(([group, definitions]) => <section key={group} className="executive-config-group"><div className="executive-config-group-title">{group}</div>{definitions.map((definition) => { const checked = draftPreferences.indicators.includes(definition.id); const allowed = !definition.permission || canPerform(definition.permission, 'view'); return <label key={definition.id} className={`executive-config-item ${!allowed ? 'disabled' : ''}`}><Checkbox checked={checked} disabled={!allowed} onCheckedChange={(value) => toggleIndicator(definition.id, value === true)} /><span><strong>{definition.label}</strong><small>{definition.description}</small><em>Decisión: {definition.decision}</em></span></label>; })}</section>)}</div><div className="executive-config-column"><h3>Bloques de información</h3>{BLOCKS.map((block) => { const allowed = !block.permission || canPerform(block.permission, 'view'); return <label key={block.id} className={`executive-config-item ${!allowed ? 'disabled' : ''}`}><Checkbox checked={draftPreferences.blocks.includes(block.id)} disabled={!allowed} onCheckedChange={(value) => toggleBlock(block.id, value === true)} /><span><strong>{block.label}</strong><small>{block.description}</small></span></label>; })}<div className="executive-config-callout"><CircleHelp /><span>Las gráficas de ventas, productos, utilidad, cajas e inventario se actualizan según el período y los datos disponibles.</span></div></div></div><DialogFooter><Button variant="outline" onClick={() => setDraftPreferences(DEFAULT_PREFERENCES)}>Restaurar recomendados</Button><Button onClick={savePreferences}><Check className="size-4" /> Aplicar cambios</Button></DialogFooter></DialogContent></Dialog>
+      <Dialog open={configOpen} onOpenChange={setConfigOpen}><DialogContent className="executive-config-dialog sm:!max-w-3xl"><DialogHeader><DialogTitle className="executive-dialog-title"><Settings2 /> Configurar resumen de gestión</DialogTitle><DialogDescription>Elige los indicadores y bloques disponibles para tu rol. Las selecciones se guardan para este usuario y tenant.</DialogDescription></DialogHeader><div className="executive-config-search"><Input placeholder="Buscar indicador…" value={configSearch} onChange={(event) => setConfigSearch(event.target.value)} /><span>{selectedIndicators.length} indicadores disponibles</span></div><div className="executive-config-body"><div className="executive-config-column"><h3>Indicadores</h3>{Object.entries(groupedIndicators).map(([group, definitions]) => <section key={group} className="executive-config-group"><div className="executive-config-group-title">{group}</div>{definitions.map((definition) => { const checked = draftPreferences.indicators.includes(definition.id); return <label key={definition.id} className="executive-config-item"><Checkbox checked={checked} onCheckedChange={(value) => toggleIndicator(definition.id, value === true)} /><span><strong>{definition.label}</strong><small>{definition.description}</small><em>Decisión: {definition.decision}</em></span></label>; })}</section>)}{groupedIndicators && Object.keys(groupedIndicators).length === 0 && <p className="text-sm text-muted-foreground">No hay indicadores disponibles según tu rol.</p>}</div><div className="executive-config-column"><h3>Bloques de información</h3>{availableBlocks.map((block) => <label key={block.id} className="executive-config-item"><Checkbox checked={draftPreferences.blocks.includes(block.id)} onCheckedChange={(value) => toggleBlock(block.id, value === true)} /><span><strong>{block.label}</strong><small>{block.description}</small></span></label>)}{availableBlocks.length === 0 && <p className="text-sm text-muted-foreground">No hay bloques disponibles según tu rol.</p>}<div className="executive-config-callout"><CircleHelp /><span>El Dashboard muestra y exporta únicamente los indicadores de las vistas permitidas.</span></div></div></div><DialogFooter><Button variant="outline" onClick={() => setDraftPreferences(DEFAULT_PREFERENCES)}>Restaurar recomendados</Button><Button onClick={savePreferences}><Check className="size-4" /> Aplicar cambios</Button></DialogFooter></DialogContent></Dialog>
       {productDrawerId && <Suspense fallback={null}><ProductDetailDrawer productId={productDrawerId} productSnapshot={productSnapshot} onOpenChange={(open) => { if (!open) { setProductDrawerId(null); setProductSnapshot(null); } }} /></Suspense>}
     </div>
   );
