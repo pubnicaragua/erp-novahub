@@ -1,5 +1,6 @@
 import { Input } from '../ui/input';
 import { Label } from '../ui/label';
+import { DateField } from '../ui/DateField';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../ui/select';
 import {
   type CustomerCreditFrequency,
@@ -110,11 +111,11 @@ export function CustomerCreditPlanEditor({
           </div>}
           {calculationMode !== 'MANUAL' && <div className="min-w-0 space-y-1.5">
             <Label htmlFor={`${idPrefix}-first-installment`} className="text-xs font-semibold">Fecha del primer abono</Label>
-            <Input id={`${idPrefix}-first-installment`} type="date" required min={minDate} value={firstInstallmentDate} onChange={(event) => onFirstInstallmentDateChange(event.target.value)} className="max-w-full" />
+            <DateField id={`${idPrefix}-first-installment`} ariaLabel="Fecha del primer abono" ariaRequired minDate={minDate} value={firstInstallmentDate} onChange={onFirstInstallmentDateChange} className="max-w-full" />
           </div>}
           {calculationMode === 'DEADLINE' && <div className="min-w-0 space-y-1.5">
             <Label htmlFor={`${idPrefix}-final-due-date`} className="text-xs font-semibold">Fecha final de vencimiento *</Label>
-            <Input id={`${idPrefix}-final-due-date`} type="date" required min={firstInstallmentDate || minDate} value={finalDueDate} onChange={(event) => onFinalDueDateChange(event.target.value)} className="max-w-full" />
+            <DateField id={`${idPrefix}-final-due-date`} ariaLabel="Fecha final de vencimiento" ariaRequired minDate={firstInstallmentDate || minDate} value={finalDueDate} onChange={onFinalDueDateChange} className="max-w-full" />
           </div>}
           {calculationMode === 'AMOUNT' && <div className="min-w-0 space-y-1.5">
             <Label htmlFor={`${idPrefix}-installment-amount`} className="text-xs font-semibold">Monto por abono</Label>

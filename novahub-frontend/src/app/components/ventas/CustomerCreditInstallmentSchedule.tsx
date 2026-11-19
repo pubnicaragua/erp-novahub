@@ -2,8 +2,10 @@ import { useEffect, useState } from 'react';
 import { Plus, Printer, Trash2 } from 'lucide-react';
 import { Button } from '../ui/button';
 import { Input } from '../ui/input';
+import { DateField } from '../ui/DateField';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '../ui/table';
 import { formatDateEs } from '../../utils/dateFormat';
+import { roundCurrencyNumber } from '../../utils/currency';
 import type { CustomerCreditManualInstallmentDraft, CustomerCreditPlanInstallment } from '../../utils/customerCreditInstallmentPlan';
 
 export type CustomerCreditScheduleRow = CustomerCreditPlanInstallment & {
@@ -82,7 +84,14 @@ export function CustomerCreditInstallmentSchedule({
     : scheduleRows;
   const principal = principalAmount ?? scheduleRows.reduce((sum, row) => sum + Number(row.principalAmount || 0), 0);
   const interest = interestAmount ?? scheduleRows.reduce((sum, row) => sum + Number(row.interestAmount || 0), 0);
-  const total = totalAmount ?? scheduleRows.reduce((sum, row) => sum + Number(row.totalAmount || 0), 0);
+  const total = totalAmount ?? roundCurrencyNumber(principal + interest);
+  let scheduledRunningTotal = 0;
+  const cumulativeInstallmentAmounts = scheduleRows.map((row) => {
+    scheduledRunningTotal = roundCurrencyNumber(scheduledRunningTotal + Number(row.totalAmount || 0));
+    return scheduledRunningTotal;
+  });
+  const scheduledTotal = scheduledRunningTotal;
+  const distributionDifference = roundCurrencyNumber(total - scheduledTotal);
   const endingDate = finalDueDate || scheduleRows[scheduleRows.length - 1]?.dueDate || '';
   const lastInstallment = scheduleRows[scheduleRows.length - 1];
   const lastWasAdjusted = installmentAmount != null
@@ -102,23 +111,34 @@ export function CustomerCreditInstallmentSchedule({
           </p>
         </div>
         <div className="flex shrink-0 flex-col gap-2 sm:flex-row">
-          {manualEditor && onAddManualInstallment && <Button type="button" variant="outline" size="sm" onClick={onAddManualInstallment} className="w-full gap-2 sm:w-auto">
-            <Plus className="size-4" /> Agregar abono
-          </Button>}
           {onPrint && <Button type="button" variant="outline" size="sm" onClick={onPrint} disabled={printDisabled || (manualEditor && !manualValidation?.isValid)} className="w-full gap-2 sm:w-auto">
             <Printer className="size-4" /> Imprimir plan
           </Button>}
         </div>
       </div>
 
-      <div className="grid min-w-0 grid-cols-2 gap-2 sm:grid-cols-3 xl:grid-cols-6">
+      <div className={`grid min-w-0 grid-cols-2 gap-2 sm:grid-cols-3 ${manualEditor ? 'xl:grid-cols-4' : 'xl:grid-cols-6'}`}>
         <SummaryValue label="Capital" value={formatAmount(principal)} />
         <SummaryValue label="Intereses" value={formatAmount(interest)} />
         <SummaryValue label="Total con intereses" value={formatAmount(total)} emphasis />
+        {manualEditor && <>
+          <SummaryValue label="Abonos programados" value={formatAmount(scheduledTotal)} />
+          <SummaryValue
+            label={distributionDifference < 0 ? 'Excedente sobre el contrato' : 'Pendiente por distribuir'}
+            value={formatAmount(Math.abs(distributionDifference))}
+            emphasis={distributionDifference !== 0}
+          />
+        </>}
         <SummaryValue label="Cantidad de abonos" value={String(scheduleRows.length)} />
         <SummaryValue label="Último abono" value={formatAmount(Number(lastInstallment.totalAmount || 0))} />
         <SummaryValue label="Vencimiento final" value={endingDate ? formatDateEs(endingDate) : 'Sin fecha'} />
       </div>
+
+      {manualEditor && onAddManualInstallment && <div className="flex min-w-0 justify-end">
+        <Button type="button" variant="outline" size="sm" onClick={onAddManualInstallment} className="w-full gap-2 sm:w-auto">
+          <Plus className="size-4" /> Agregar abono
+        </Button>
+      </div>}
 
       <div className="max-h-72 min-w-0 overflow-auto rounded-lg border border-border/50">
         <Table className="min-w-[720px] text-xs">
@@ -129,7 +149,7 @@ export function CustomerCreditInstallmentSchedule({
               {manualEditor ? <>
                 <TableHead className="text-right">Monto del abono <span className="text-destructive" aria-hidden="true">*</span></TableHead>
                 <TableHead className="text-right">Interés {manualInterestEditable && <span className="text-destructive" aria-hidden="true">*</span>}</TableHead>
-                <TableHead className="text-right">Capital calculado</TableHead>
+                <TableHead className="text-right">Abono acumulado</TableHead>
                 <TableHead className="w-12" />
               </> : <>
                 <TableHead className="text-right">Capital</TableHead>
@@ -152,10 +172,10 @@ export function CustomerCreditInstallmentSchedule({
                 <TableRow key={row.id || `${row.installmentNumber}-${row.dueDate}`}>
                   <TableCell className="whitespace-nowrap font-semibold">#{row.installmentNumber}{adjusted && <span className="ml-1 text-[10px] text-muted-foreground">Ajuste</span>}</TableCell>
                   {manualEditor ? <>
-                    <TableCell><Input type="date" required aria-label={`Fecha de vencimiento del abono ${index + 1}`} value={manualInstallments![index]?.dueDate || ''} onChange={(event) => onManualInstallmentChange!(index, 'dueDate', event.target.value)} className="h-8 min-w-36 text-xs" /></TableCell>
+                    <TableCell><DateField ariaLabel={`Fecha de vencimiento del abono ${index + 1}`} ariaRequired value={manualInstallments![index]?.dueDate || ''} onChange={(value) => onManualInstallmentChange!(index, 'dueDate', value)} className="h-8 min-w-36 text-xs" align="end" /></TableCell>
                     <TableCell><Input type="number" required min="0.01" step="0.01" currencyPrecision aria-label={`Monto total del abono ${index + 1}`} value={manualInstallments![index]?.totalAmount ?? ''} onChange={(event) => onManualInstallmentChange!(index, 'totalAmount', event.target.value)} className="h-8 min-w-32 text-right text-xs tabular-nums" /></TableCell>
                     <TableCell><Input type="number" required={manualInterestEditable} min="0" step="0.01" currencyPrecision aria-label={`Interés del abono ${index + 1}`} value={manualInterestEditable ? (manualInstallments![index]?.interestAmount ?? '') : '0'} onChange={(event) => onManualInstallmentChange!(index, 'interestAmount', event.target.value)} disabled={!manualInterestEditable} className="h-8 min-w-32 text-right text-xs tabular-nums" /></TableCell>
-                    <TableCell className="whitespace-nowrap text-right font-semibold tabular-nums">{formatAmount(Number(row.principalAmount || 0))}</TableCell>
+                    <TableCell className="whitespace-nowrap text-right font-semibold tabular-nums">{formatAmount(cumulativeInstallmentAmounts[index] || 0)}</TableCell>
                     <TableCell className="text-right"><Button type="button" size="icon" variant="ghost" aria-label={`Quitar abono ${index + 1}`} title={`Quitar abono ${index + 1}`} disabled={scheduleRows.length <= 1} onClick={() => onRemoveManualInstallment?.(index)} className="size-8"><Trash2 className="size-4" /></Button></TableCell>
                   </> : <>
                     <TableCell className="whitespace-nowrap">{formatDateEs(row.dueDate)}</TableCell>

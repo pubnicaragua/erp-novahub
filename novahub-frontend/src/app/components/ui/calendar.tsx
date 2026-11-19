@@ -12,6 +12,8 @@ export interface CalendarProps {
   onSelect?: (date: Date | undefined) => void;
   initialFocus?: boolean;
   disabled?: boolean;
+  minDate?: string;
+  maxDate?: string;
   locale?: any;
   className?: string;
 }
@@ -22,6 +24,8 @@ export function Calendar({
   selected,
   onSelect,
   disabled,
+  minDate,
+  maxDate,
   className,
 }: CalendarProps) {
   const [viewDate, setViewDate] = React.useState<Date>(() => selected || new Date());
@@ -172,13 +176,16 @@ export function Calendar({
         className="gap-1"
       >
         {calendarDays.map((item, idx) => {
+          const dateValue = `${item.date.getFullYear()}-${String(item.date.getMonth() + 1).padStart(2, "0")}-${String(item.date.getDate()).padStart(2, "0")}`;
+          const outsideDateRange = Boolean((minDate && dateValue < minDate) || (maxDate && dateValue > maxDate));
+          const dayDisabled = Boolean(disabled || outsideDateRange);
           return (
             <button
               key={idx}
               type="button"
-              disabled={disabled}
+              disabled={dayDisabled}
               onClick={() => {
-                if (onSelect) {
+                if (onSelect && !dayDisabled) {
                   onSelect(item.date);
                 }
               }}
@@ -190,7 +197,7 @@ export function Calendar({
                 item.isToday && !item.isSelected && "border border-primary/40 font-bold bg-accent/30",
                 item.isSelected &&
                   "bg-primary text-primary-foreground hover:bg-primary font-bold shadow-xs",
-                disabled && "opacity-40 cursor-not-allowed"
+                dayDisabled && "opacity-40 cursor-not-allowed"
               )}
             >
               {item.dayNumber}

@@ -21,6 +21,10 @@ interface DateFieldProps {
   maxDate?: string;
   id?: string;
   title?: string;
+  ariaLabel?: string;
+  ariaRequired?: boolean;
+  ariaInvalid?: boolean;
+  ariaDescribedBy?: string;
 }
 
 const localISO = (d: Date) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
@@ -36,6 +40,10 @@ export function DateField({
   maxDate,
   id,
   title,
+  ariaLabel,
+  ariaRequired,
+  ariaInvalid,
+  ariaDescribedBy,
 }: DateFieldProps) {
   const [open, setOpen] = useState(false);
 
@@ -57,6 +65,10 @@ export function DateField({
           variant="outline"
           id={id}
           title={title}
+          aria-label={ariaLabel}
+          aria-required={ariaRequired || undefined}
+          aria-invalid={ariaInvalid || isInvalid || undefined}
+          aria-describedby={ariaDescribedBy}
           disabled={disabled}
           className={cn(
             'h-9 w-full justify-start gap-2 px-3 text-xs font-normal transition-colors',
@@ -80,11 +92,11 @@ export function DateField({
             if (d) {
               const iso = localISO(d);
               if (minDate && iso < minDate) {
-                toast.error('No se puede filtrar a una fecha anterior a la fecha inicial');
+                toast.error('La fecha no puede ser anterior a la fecha inicial.');
                 return;
               }
               if (maxDate && iso > maxDate) {
-                toast.error('No se puede filtrar a una fecha posterior a la fecha final');
+                toast.error('La fecha no puede ser posterior a la fecha final.');
                 return;
               }
               onChange(iso);

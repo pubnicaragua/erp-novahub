@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { Bell, CalendarDays, Settings2, Trash2 } from 'lucide-react';
 import { Button } from '../ui/button';
+import { DateField } from '../ui/DateField';
 import { Input } from '../ui/input';
 import { Label } from '../ui/label';
 import { Card, CardContent } from '../ui/card';
@@ -115,7 +116,7 @@ export function CustomerCreditSettingsButton({ canEdit, canSend = false }: { can
         <DialogHeader><DialogTitle>Feriados de la sucursal</DialogTitle><DialogDescription>Las fechas afectan los planes nuevos de créditos y préstamos. Los contratos emitidos conservan su calendario.</DialogDescription></DialogHeader>
         {canEdit && <div className="grid gap-3 rounded-xl border border-border/50 bg-muted/10 p-3 sm:grid-cols-[minmax(0,1fr)_minmax(150px,190px)_auto] sm:items-end">
           <div className="space-y-1.5"><Label htmlFor="shared-credit-holiday-name">Nombre del feriado</Label><Input id="shared-credit-holiday-name" maxLength={120} value={holidayName} onChange={(event) => setHolidayName(event.target.value)} /></div>
-          <div className="space-y-1.5"><Label htmlFor="shared-credit-holiday-date">Fecha exacta</Label><Input id="shared-credit-holiday-date" type="date" value={holidayDate} onChange={(event) => setHolidayDate(event.target.value)} /></div>
+          <div className="space-y-1.5"><Label htmlFor="shared-credit-holiday-date">Fecha exacta</Label><DateField id="shared-credit-holiday-date" ariaLabel="Fecha exacta del feriado" value={holidayDate} onChange={setHolidayDate} /></div>
           <div className="flex gap-2"><Button type="button" onClick={() => void saveHoliday()} disabled={holidaySaving}>{editingHolidayId ? 'Actualizar' : 'Agregar'}</Button>{editingHolidayId && <Button type="button" variant="outline" onClick={() => { setEditingHolidayId(null); setHolidayName(''); setHolidayDate(''); }}>Cancelar</Button>}</div>
         </div>}
         <div className="max-h-72 space-y-2 overflow-y-auto">{holidays.length ? holidays.map((holiday) => <div key={holiday.id} className="flex min-w-0 flex-wrap items-center justify-between gap-2 rounded-xl border border-border/50 p-3"><div className="min-w-0"><p className="break-words text-sm font-semibold">{holiday.name}</p><p className="text-xs text-muted-foreground">{dateOnly(holiday.date)}</p></div>{canEdit && <div className="flex shrink-0 gap-2"><Button type="button" variant="outline" size="sm" onClick={() => { setEditingHolidayId(holiday.id); setHolidayName(holiday.name); setHolidayDate(dateOnly(holiday.date)); }}>Editar</Button><Button type="button" variant="ghost" size="icon" aria-label={`Eliminar feriado ${holiday.name}`} onClick={() => void deleteHoliday(holiday.id)}><Trash2 className="size-4" /></Button></div>}</div>) : <p className="rounded-xl border border-dashed border-border p-4 text-sm text-muted-foreground">No hay feriados para esta sucursal.</p>}</div>

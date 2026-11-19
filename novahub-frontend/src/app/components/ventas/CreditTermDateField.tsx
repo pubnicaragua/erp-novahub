@@ -1,6 +1,7 @@
 import { useId } from 'react';
 import { Checkbox } from '../ui/checkbox';
 import { Input } from '../ui/input';
+import { DateField } from '../ui/DateField';
 import { formatCreditTermDate, getCreditTermDeadline, getCreditTermExtensionDays } from '../../utils/creditTerms';
 
 interface CreditTermDateFieldProps {
@@ -39,19 +40,24 @@ export function CreditTermDateField({
       <label htmlFor={`${id}-date`} className="text-[10px] font-black uppercase tracking-widest text-muted-foreground">
         {label}
       </label>
-      <Input
+      {readOnly ? <Input
         id={`${id}-date`}
-        type={readOnly ? 'text' : 'date'}
-        min={readOnly ? undefined : minDate}
-        value={readOnly ? formatCreditTermDate(value) : value}
+        type="text"
+        value={formatCreditTermDate(value)}
         disabled={disabled}
-        readOnly={readOnly}
-        aria-readonly={readOnly || undefined}
-        onChange={(event) => {
+        readOnly
+        aria-readonly
+      /> : <DateField
+        id={`${id}-date`}
+        ariaLabel={label}
+        minDate={minDate}
+        value={value}
+        disabled={disabled}
+        onChange={(date) => {
           onOverrideConfirmedChange(false);
-          onChange(event.target.value);
+          onChange(date);
         }}
-      />
+      />}
       {deadline && (
         <p className="text-[10px] leading-4 text-muted-foreground">
           Fecha pactada según el plazo: <span className="font-bold text-foreground">{formatCreditTermDate(deadline)}</span>.

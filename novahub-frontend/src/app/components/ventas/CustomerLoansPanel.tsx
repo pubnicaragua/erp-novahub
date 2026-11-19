@@ -6,6 +6,7 @@ import { Button } from '../ui/button';
 import { Card } from '../ui/card';
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '../ui/dialog';
 import { Input } from '../ui/input';
+import { DateField } from '../ui/DateField';
 import { Label } from '../ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../ui/select';
 import { Combobox } from '../ui/Combobox';
@@ -338,6 +339,7 @@ export function CustomerLoansPanel({ customerId, customerName, customerOptions =
       })
       : null;
     if (form.planEnabled && (!currentInstallmentPlanEstimate || !currentInstallmentPlanEstimate.isValid)) { toast.error(currentInstallmentPlanEstimate?.validationErrors[0] || 'Completa los datos del plan de abonos para calcular el vencimiento.'); return; }
+    if (!form.planEnabled && !form.dueDate) { toast.error('Selecciona la fecha de vencimiento del préstamo.'); return; }
     if (form.disbursementSource === 'CASH' && !selectedCashSessionId) { toast.error('No hay una sesión abierta de Caja seleccionada.'); return; }
     if (form.disbursementSource === 'BANK' && !form.bankAccountId) { toast.error('Selecciona una cuenta bancaria.'); return; }
     setSaving(true);
@@ -442,10 +444,10 @@ export function CustomerLoansPanel({ customerId, customerName, customerOptions =
         </div>
         {form.planEnabled && <div className="grid min-w-0 gap-3 sm:grid-cols-2">
           {form.planCalculationMode !== 'MANUAL' && <div className="min-w-0 space-y-1.5"><Label className="text-xs">Frecuencia de pago *</Label><Select value={form.frequency} onValueChange={(value) => setForm({ ...form, frequency: value as LoanFrequency })}><SelectTrigger className="h-8 max-w-56 text-xs"><SelectValue /></SelectTrigger><SelectContent><SelectItem value="DAILY">Diaria</SelectItem><SelectItem value="WEEKLY">Semanal</SelectItem><SelectItem value="BIWEEKLY">Quincenal</SelectItem><SelectItem value="MONTHLY">Mensual</SelectItem></SelectContent></Select></div>}
-          {form.planCalculationMode !== 'MANUAL' && <div className="min-w-0 space-y-1.5"><Label htmlFor="loan-first-installment" className="text-xs">Fecha del primer abono *</Label><Input id="loan-first-installment" type="date" required min={new Date().toISOString().split('T')[0]} value={form.firstInstallmentDate} onChange={(event) => { const firstDate = event.target.value; setForm((current) => ({ ...current, firstInstallmentDate: firstDate, ...(current.planCalculationMode === 'DEADLINE' && firstDate && current.dueDate < firstDate ? { dueDate: firstDate } : {}) })); }} className="h-8 max-w-56 text-xs" /></div>}
+          {form.planCalculationMode !== 'MANUAL' && <div className="min-w-0 space-y-1.5"><Label htmlFor="loan-first-installment" className="text-xs">Fecha del primer abono *</Label><DateField id="loan-first-installment" ariaLabel="Fecha del primer abono" ariaRequired minDate={new Date().toISOString().split('T')[0]} value={form.firstInstallmentDate} onChange={(firstDate) => setForm((current) => ({ ...current, firstInstallmentDate: firstDate, ...(current.planCalculationMode === 'DEADLINE' && firstDate && current.dueDate < firstDate ? { dueDate: firstDate } : {}) }))} className="h-8 max-w-56 text-xs" /></div>}
           {form.planCalculationMode === 'AMOUNT'
             ? <div className="min-w-0 space-y-1.5"><Label htmlFor="loan-installment-amount" className="text-xs">Monto por abono *</Label><Input id="loan-installment-amount" type="number" min="0.01" step="0.01" required value={form.installmentAmount} onChange={(event) => setForm({ ...form, installmentAmount: event.target.value })} className="h-8 max-w-64 text-xs" currencyPrecision /></div>
-            : form.planCalculationMode === 'DEADLINE' ? <div className="min-w-0 space-y-1.5"><Label htmlFor="loan-final-due-date" className="text-xs">Fecha final de vencimiento *</Label><Input id="loan-final-due-date" type="date" required min={form.firstInstallmentDate || new Date().toISOString().split('T')[0]} value={form.dueDate} onChange={(event) => setForm((current) => ({ ...current, dueDate: event.target.value }))} className="h-8 max-w-56 text-xs" /><p className="text-[10px] text-muted-foreground">El plan calcula cuántos abonos caben hasta esta fecha.</p></div> : null}
+            : form.planCalculationMode === 'DEADLINE' ? <div className="min-w-0 space-y-1.5"><Label htmlFor="loan-final-due-date" className="text-xs">Fecha final de vencimiento *</Label><DateField id="loan-final-due-date" ariaLabel="Fecha final de vencimiento" ariaRequired minDate={form.firstInstallmentDate || new Date().toISOString().split('T')[0]} value={form.dueDate} onChange={(date) => setForm((current) => ({ ...current, dueDate: date }))} className="h-8 max-w-56 text-xs" /><p className="text-[10px] text-muted-foreground">El plan calcula cuántos abonos caben hasta esta fecha.</p></div> : null}
         </div>}
         {form.planEnabled && form.planCalculationMode !== 'MANUAL' && <CustomerCreditCalendarSelector
           excludedWeekdays={form.excludedWeekdays}
@@ -471,7 +473,7 @@ export function CustomerLoansPanel({ customerId, customerName, customerOptions =
           onPrint={() => void printInstallmentPlan({ installments: installmentPlanEstimate.schedule, principalAmount: installmentPlanEstimate.principalAmount, interestAmount: installmentPlanEstimate.interestAmount, currency: form.currency, contractNumber: `Préstamo · ${customerName}`, frequency: form.planCalculationMode === 'MANUAL' ? null : form.frequency })}
           printDisabled={form.planCalculationMode === 'AMOUNT' && form.installmentAmount !== deferredLoanInstallmentAmount}
         /></div>}
-        {!form.planEnabled && <div className="min-w-0 space-y-1.5"><Label htmlFor="loan-due-date" className="text-xs">Fecha de vencimiento *</Label><Input id="loan-due-date" type="date" required value={form.dueDate} onChange={(event) => setForm({ ...form, dueDate: event.target.value })} className="h-8 max-w-56 text-xs" /></div>}
+        {!form.planEnabled && <div className="min-w-0 space-y-1.5"><Label htmlFor="loan-due-date" className="text-xs">Fecha de vencimiento *</Label><DateField id="loan-due-date" ariaLabel="Fecha de vencimiento del préstamo" ariaRequired value={form.dueDate} onChange={(date) => setForm({ ...form, dueDate: date })} className="h-8 max-w-56 text-xs" /></div>}
       </div>
        <div className="min-w-0 space-y-1.5"><Label className="text-xs">Moneda *</Label><Select value={form.currency} onValueChange={(value) => setForm({ ...form, currency: value as LoanCurrency, bankAccountId: '' })}><SelectTrigger className="h-8 max-w-48 text-xs"><SelectValue /></SelectTrigger><SelectContent><SelectItem value="NIO">Córdoba (NIO)</SelectItem><SelectItem value="USD">Dólar (USD)</SelectItem></SelectContent></Select></div>
        <div className="min-w-0 space-y-1.5 sm:col-span-2"><Label className="text-xs">Desembolso desde *</Label><Select value={form.disbursementSource} onValueChange={(value) => setForm({ ...form, disbursementSource: value as 'CASH' | 'BANK', cashRegisterSessionId: '', bankAccountId: '' })}><SelectTrigger className="h-8 max-w-56 text-xs"><SelectValue /></SelectTrigger><SelectContent><SelectItem value="CASH">Caja</SelectItem><SelectItem value="BANK">Banco</SelectItem></SelectContent></Select></div>
@@ -561,7 +563,7 @@ export function CustomerLoansPanel({ customerId, customerName, customerOptions =
             </label>
             {!form.planEnabled && <div className="min-w-0 space-y-1.5">
               <Label htmlFor="loan-due-date-page" className="text-xs">Fecha de vencimiento *</Label>
-              <Input id="loan-due-date-page" type="date" required value={form.dueDate} onChange={(event) => setForm({ ...form, dueDate: event.target.value })} className="h-8 max-w-56 text-xs" />
+              <DateField id="loan-due-date-page" ariaLabel="Fecha de vencimiento del préstamo" ariaRequired value={form.dueDate} onChange={(date) => setForm({ ...form, dueDate: date })} className="h-8 max-w-56 text-xs" />
             </div>}
             <p className="text-[11px] leading-relaxed text-muted-foreground">El principal más el interés debe caber en el límite de crédito disponible. La clasificación de mora se administra manualmente en la ficha del cliente.</p>
           </section>
@@ -607,14 +609,14 @@ export function CustomerLoansPanel({ customerId, customerName, customerOptions =
             </div>
             <div className="min-w-0 space-y-1.5">
               <Label htmlFor="loan-first-installment-page" className="text-xs">Fecha del primer abono *</Label>
-              <Input id="loan-first-installment-page" type="date" required min={new Date().toISOString().split('T')[0]} value={form.firstInstallmentDate} onChange={(event) => { const firstDate = event.target.value; setForm((current) => ({ ...current, firstInstallmentDate: firstDate, ...(current.planCalculationMode === 'DEADLINE' && firstDate && current.dueDate < firstDate ? { dueDate: firstDate } : {}) })); }} className="h-8 max-w-56 text-xs" />
+              <DateField id="loan-first-installment-page" ariaLabel="Fecha del primer abono" ariaRequired minDate={new Date().toISOString().split('T')[0]} value={form.firstInstallmentDate} onChange={(firstDate) => setForm((current) => ({ ...current, firstInstallmentDate: firstDate, ...(current.planCalculationMode === 'DEADLINE' && firstDate && current.dueDate < firstDate ? { dueDate: firstDate } : {}) }))} className="h-8 max-w-56 text-xs" />
             </div>
             {form.planCalculationMode === 'AMOUNT' ? <div className="min-w-0 space-y-1.5">
               <Label htmlFor="loan-installment-amount-page" className="text-xs">Monto por abono *</Label>
               <Input id="loan-installment-amount-page" type="number" min="0.01" step="0.01" required value={form.installmentAmount} onChange={(event) => setForm({ ...form, installmentAmount: event.target.value })} className="h-8 max-w-64 text-xs" currencyPrecision />
             </div> : <div className="min-w-0 space-y-1.5">
               <Label htmlFor="loan-final-due-date-page" className="text-xs">Fecha final de vencimiento *</Label>
-              <Input id="loan-final-due-date-page" type="date" required min={form.firstInstallmentDate || new Date().toISOString().split('T')[0]} value={form.dueDate} onChange={(event) => setForm((current) => ({ ...current, dueDate: event.target.value }))} className="h-8 max-w-56 text-xs" />
+              <DateField id="loan-final-due-date-page" ariaLabel="Fecha final de vencimiento" ariaRequired minDate={form.firstInstallmentDate || new Date().toISOString().split('T')[0]} value={form.dueDate} onChange={(date) => setForm((current) => ({ ...current, dueDate: date }))} className="h-8 max-w-56 text-xs" />
             </div>}
           </>}
         </div>
@@ -654,7 +656,7 @@ export function CustomerLoansPanel({ customerId, customerName, customerOptions =
       </Card>}
     </form>
   );
-  const loanSubmitDisabled = !customerId || saving || (form.disbursementSource === 'CASH' && cashLoading) || (form.planEnabled && (!installmentPlanEstimate || !installmentPlanEstimate.isValid || (form.planCalculationMode === 'AMOUNT' && form.installmentAmount !== deferredLoanInstallmentAmount)));
+  const loanSubmitDisabled = !customerId || saving || (form.disbursementSource === 'CASH' && cashLoading) || (!form.planEnabled && !form.dueDate) || (form.planEnabled && (!installmentPlanEstimate || !installmentPlanEstimate.isValid || (form.planCalculationMode === 'AMOUNT' && form.installmentAmount !== deferredLoanInstallmentAmount)));
 
   return (
     <section className={fullPageCreate ? 'sales-document-editor min-w-0 max-w-full space-y-6 overflow-x-hidden animate-in slide-in-from-right duration-300' : dialogOnly ? 'hidden' : 'min-w-0 space-y-4'} aria-label={fullPageCreate ? 'Nuevo préstamo' : 'Préstamos del cliente'}>
