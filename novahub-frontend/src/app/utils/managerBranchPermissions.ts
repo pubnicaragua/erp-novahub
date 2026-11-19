@@ -2,6 +2,7 @@ export type ManagerBranchViewOption = { id: string; parent: string };
 export type ManagerBranchViewPermission = Record<string, unknown> & { module?: string };
 export type ManagerBranchModulePolicy = { state?: unknown; viewIds?: unknown };
 
+const CORE_BRANCH_VIEWS = new Set(['DASHBOARD']);
 const NON_OPERATIONAL_BRANCH_VIEWS = new Set([
   'CONFIGURATION', 'CONFIG_USERS', 'CONFIG_ROLES', 'CONFIG_COMPANY', 'CONFIG_SECURITY',
   'CONFIG_BRANDING', 'CONFIG_PDF', 'CONFIG_CURRENCY', 'CONFIG_DOMAINS', 'CONFIG_DEPARTMENTS',
@@ -30,7 +31,7 @@ export function filterManagerBranchViewOptions<T extends ManagerBranchViewOption
     const id = String(option.id || '').toUpperCase();
     const parent = String(option.parent || '').toUpperCase();
     if (!isOperationalBranchView(id)) return false;
-    if (!enabled.has(parent) && !enabled.has(id)) return false;
+    if (!enabled.has(parent) && !enabled.has(id) && !CORE_BRANCH_VIEWS.has(id)) return false;
 
     const policy = modulePolicies[parent];
     const state = String(policy?.state || 'VISIBLE').toUpperCase();
@@ -54,21 +55,16 @@ export function filterManagerBranchViewOptionsForScopes<T extends ManagerBranchV
   modulePolicies: Record<string, ManagerBranchModulePolicy> = {},
   overrides: { unit?: Record<string, unknown>; branch?: Record<string, unknown> } = {},
 ): T[] {
-  const groupDashboardEnabled = Array.isArray(groupModules)
-    && groupModules.some((module) => String(module || '').trim().toUpperCase() === 'DASHBOARD');
-  const includeGroupDashboard = (modules: unknown) => groupDashboardEnabled
-    ? [...new Set([...(Array.isArray(modules) ? modules : []), 'DASHBOARD'])]
-    : modules;
   const groupViews = new Set(filterManagerBranchViewOptions(options, groupModules, modulePolicies).map((view) => view.id));
   const unitViews = new Set(filterManagerBranchViewOptions(
     options,
-    includeGroupDashboard(unitModules),
+    unitModules,
     modulePolicies,
     [overrides.unit || {}],
   ).map((view) => view.id));
   return filterManagerBranchViewOptions(
     options,
-    includeGroupDashboard(branchModules),
+    branchModules,
     modulePolicies,
     [overrides.unit || {}, overrides.branch || {}],
   ).filter((view) => groupViews.has(view.id) && unitViews.has(view.id));
