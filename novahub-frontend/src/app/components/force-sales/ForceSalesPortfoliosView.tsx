@@ -570,6 +570,41 @@ export function ForceSalesPortfoliosView({
             : pendingLocations
               ? `Ubica los ${pendingLocations} pendientes para habilitar el armado.`
               : 'Se cargarán todos los puntos al planificador para revisar el orden, la fecha y el responsable antes de guardar.';
+          const customerRows = visibleCustomers.map((row) => {
+            const customer = row.customer;
+            const active = row.assignmentStatus === 'ACTIVE' && portfolio.status === 'ACTIVE';
+            const targets = activePortfolios.filter((target) => target.id !== portfolio.id);
+            const statusLabel = !active
+              ? 'Histórico'
+              : row.hasMapLocation
+                ? 'Ubicado'
+                : row.mapPointId
+                  ? 'Punto vinculado · sin ubicación'
+                  : 'Pendiente de ubicación';
+            const address = [customer.address, customer.city, customer.department].filter(Boolean).join(' · ') || 'Sin dirección';
+            return {
+              row,
+              customer,
+              active,
+              canOfferLocate: canLocate && active,
+              canOfferTransfer: canTransfer && active && targets.length > 0,
+              targets,
+              statusLabel,
+              address: customer.phone ? `${address} · ${customer.phone}` : address,
+            };
+          });
+          const renderCustomerActions = (record: (typeof customerRows)[number]) => (
+            <>
+              {record.canOfferLocate && <Button size="sm" variant="outline" className="h-9 min-w-[9rem] flex-1 shrink-0 sm:flex-none" onClick={() => void openLocateDialog(portfolio, record.row)}><MapPin className="mr-1.5 size-4" />Ubicar</Button>}
+              {record.canOfferTransfer && <div className="flex min-w-0 max-w-full flex-1 items-center gap-1.5 xl:flex-none">
+                <select aria-label={`Cartera destino para ${record.customer.name}`} className="h-9 min-w-0 max-w-[190px] flex-1 rounded-lg border border-input bg-background px-2 text-xs text-foreground" value={transferTarget[record.customer.id] || ''} onChange={(event) => setTransferTarget((current) => ({ ...current, [record.customer.id]: event.target.value }))}>
+                  <option value="">Mover a…</option>
+                  {record.targets.map((target) => <option key={target.id} value={target.id}>{target.assignedTo?.name} · {target.name}</option>)}
+                </select>
+                <Button size="sm" variant="outline" className="size-9 shrink-0 p-0" aria-label={`Transferir ${record.customer.name}`} onClick={() => void transferCustomer(portfolio, record.customer.id, record.customer.name)}><ArrowLeftRight className="size-4" /></Button>
+              </div>}
+            </>
+          );
           return (
             <article key={portfolio.id} className="overflow-hidden rounded-2xl border border-border bg-card shadow-sm">
               <div className="flex min-w-0 items-start gap-2 p-4 sm:items-center sm:p-5">
@@ -602,30 +637,56 @@ export function ForceSalesPortfoliosView({
                     <Route className="mr-2 size-4" />Armar ruta
                   </Button>
                 </div>}
-                {!visibleCustomers.length ? <p className="rounded-xl bg-muted/30 p-4 text-sm text-muted-foreground">No hay clientes que coincidan en esta cartera.</p> : <Table responsiveCards copyableCells={false} containerClassName="max-h-[min(58vh,34rem)] overflow-auto overscroll-contain" className="min-w-0 w-full xl:min-w-[720px]">
+                {!visibleCustomers.length ? <p className="rounded-xl bg-muted/30 p-4 text-sm text-muted-foreground">No hay clientes que coincidan en esta cartera.</p> : <>
+                  <section className="space-y-3 xl:hidden" aria-label={`Clientes de la cartera ${portfolio.name}`}>
+                    {customerRows.map((record) => (
+                      <article key={record.row.assignmentId} className="min-w-0 rounded-2xl border border-border/80 bg-card p-3.5 shadow-sm sm:p-4">
+                        <div className="flex min-w-0 items-start gap-2.5">
+                          <span className="mt-0.5 flex size-9 shrink-0 items-center justify-center rounded-xl bg-primary/10 text-primary"><UserRound className="size-4" /></span>
+                          <div className="min-w-0 flex-1">
+                            <h3 className="break-words text-sm font-bold leading-snug text-foreground">{record.customer.name}</h3>
+                            <p className="mt-1 break-words text-[11px] text-muted-foreground">{record.customer.code || 'Sin código'}{record.customer.balance !== undefined ? ` · Saldo ${formatBalance(record.customer.balance)} · moneda base` : ''}</p>
+                          </div>
+                        </div>
+
+                        <div className="mt-3 flex min-w-0 items-start gap-2.5 border-t border-border/50 pt-3">
+                          <MapPin className="mt-0.5 size-4 shrink-0 text-muted-foreground" />
+                          <div className="min-w-0">
+                            <p className="text-[10px] font-black uppercase tracking-wider text-muted-foreground">Dirección</p>
+                            <p className="mt-1 break-words text-xs leading-relaxed text-foreground">{record.address}</p>
+                          </div>
+                        </div>
+
+                        <div className="mt-3 flex min-w-0 flex-wrap items-center gap-2 border-t border-border/50 pt-3">
+                          <span className="shrink-0 text-[10px] font-black uppercase tracking-wider text-muted-foreground">Estado</span>
+                          <Badge variant={record.active && record.row.hasMapLocation ? 'default' : 'secondary'} className="max-w-full whitespace-normal">{record.statusLabel}</Badge>
+                        </div>
+
+                        {(record.canOfferLocate || record.canOfferTransfer) && <div className="mt-3 flex min-w-0 flex-wrap items-center gap-2 border-t border-border/50 pt-3" aria-label={`Acciones para ${record.customer.name}`}>
+                          {renderCustomerActions(record)}
+                        </div>}
+                      </article>
+                    ))}
+                  </section>
+
+                  <div className="hidden xl:block">
+                    <Table responsiveCards={false} copyableCells={false} containerClassName="max-h-[min(58vh,34rem)] overflow-auto overscroll-contain" className="min-w-[720px]">
                   <TableHeader className="sticky top-0 z-20 bg-card shadow-sm">
                     <TableRow className="hover:bg-card">
                       <TableHead>Cliente</TableHead><TableHead>Dirección</TableHead><TableHead>Estado</TableHead><TableHead className="text-right">Acciones</TableHead>
                     </TableRow>
                   </TableHeader>
                   <TableBody>
-                  {visibleCustomers.map((row) => {
-                    const customer = row.customer;
-                    const active = row.assignmentStatus === 'ACTIVE' && portfolio.status === 'ACTIVE';
-                    const canOfferLocate = canLocate && active;
-                    const targets = activePortfolios.filter((target) => target.id !== portfolio.id);
-                    return <TableRow key={row.assignmentId}>
-                      <TableCell className="max-w-[260px] whitespace-normal"><p className="break-words font-bold text-foreground">{customer.name}</p><p className="mt-0.5 text-xs text-muted-foreground">{customer.code || 'Sin código'}{customer.balance !== undefined ? ` · Saldo ${formatBalance(customer.balance)}` : ''}</p></TableCell>
-                      <TableCell className="max-w-[250px] whitespace-normal text-xs text-muted-foreground">{[customer.address, customer.city, customer.department].filter(Boolean).join(' · ') || 'Sin dirección'}{customer.phone ? ` · ${customer.phone}` : ''}</TableCell>
-                      <TableCell>{active && <Badge variant={row.hasMapLocation ? 'default' : 'secondary'}>{row.hasMapLocation ? 'Ubicado' : row.mapPointId ? 'Punto vinculado · sin ubicación' : 'Pendiente de ubicación'}</Badge>}{!active && <Badge variant="secondary">Histórico</Badge>}</TableCell>
-                      <TableCell className="text-right"><div className="flex min-w-0 flex-wrap justify-start gap-2 xl:justify-end">
-                        {canOfferLocate && <Button size="sm" variant="outline" className="shrink-0" onClick={() => void openLocateDialog(portfolio, row)}><MapPin className="mr-1.5 size-4" />Ubicar</Button>}
-                        {canTransfer && active && targets.length > 0 && <div className="flex min-w-0 max-w-full items-center gap-1.5"><select aria-label={`Cartera destino para ${customer.name}`} className="h-9 min-w-0 max-w-[190px] flex-1 rounded-lg border border-input bg-background px-2 text-xs text-foreground" value={transferTarget[customer.id] || ''} onChange={(event) => setTransferTarget((current) => ({ ...current, [customer.id]: event.target.value }))}><option value="">Mover a…</option>{targets.map((target) => <option key={target.id} value={target.id}>{target.assignedTo?.name} · {target.name}</option>)}</select><Button size="sm" variant="outline" className="shrink-0" aria-label={`Transferir ${customer.name}`} onClick={() => void transferCustomer(portfolio, customer.id, customer.name)}><ArrowLeftRight className="size-4" /></Button></div>}
-                      </div></TableCell>
-                    </TableRow>;
-                  })}
+                    {customerRows.map((record) => <TableRow key={record.row.assignmentId}>
+                      <TableCell className="max-w-[260px] whitespace-normal"><p className="break-words font-bold text-foreground">{record.customer.name}</p><p className="mt-0.5 text-xs text-muted-foreground">{record.customer.code || 'Sin código'}{record.customer.balance !== undefined ? ` · Saldo ${formatBalance(record.customer.balance)}` : ''}</p></TableCell>
+                      <TableCell className="max-w-[250px] whitespace-normal text-xs text-muted-foreground">{record.address}</TableCell>
+                      <TableCell><Badge variant={record.active && record.row.hasMapLocation ? 'default' : 'secondary'}>{record.statusLabel}</Badge></TableCell>
+                      <TableCell className="text-right"><div className="flex min-w-0 flex-wrap justify-end gap-2">{renderCustomerActions(record)}</div></TableCell>
+                    </TableRow>)}
                   </TableBody>
-                </Table>}
+                    </Table>
+                  </div>
+                </>}
               </div>}
             </article>
           );
