@@ -319,6 +319,9 @@ export function Billing() {
       const res = await logisticsService.billingCancel({ invoiceId: reversalPreview.invoice.id, reason: reversalReason.trim() });
       setReversalResult(res);
       toast.success(`Venta ${res.reversal.invoiceNumber} anulada; ${res.restoredPackages} paquete(s) disponibles`);
+      if (res.reversal.journalReversalPending) {
+        toast.info('La reversión contable quedó pendiente y se reintentará cuando Ventas→Contabilidad esté activa.');
+      }
       void load();
     } catch (error) {
       toast.error(getApiErrorMessage(error, 'No se pudo anular la venta'));

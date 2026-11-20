@@ -223,6 +223,7 @@ const PDF_STATUS_LABELS: Record<string, string> = {
   ASSIGNED: 'Asignado',
   IN_REPAIR: 'En reparación',
   EARNED: 'Devengada',
+  IN_PAYROLL: 'En nómina, pendiente de pago',
   PAID_IN_PAYROLL: 'Pagada en nómina',
   QUEUED: 'En cola',
   READ: 'Leído',

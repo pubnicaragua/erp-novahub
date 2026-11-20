@@ -55,6 +55,7 @@ import { CustomerLoansView } from './ventas/CustomerLoansView';
 import { FacturacionCajaView } from './ventas/FacturacionCajaView';
 import { ControlDashboardCajaView } from './ventas/ControlDashboardCajaView';
 import { PriceListsView } from './ventas/PriceListsView';
+import { VendedoresView } from './ventas/VendedoresView';
 
 const SALES_SECTIONS = [
   { id: 'clientes', label: 'Clientes', icon: Users, description: 'Directorio y datos comerciales', requiredModules: ['SALES_CLIENTS'] },
@@ -70,6 +71,7 @@ const SALES_SECTIONS = [
   { id: 'listas-precios', label: 'Listas de Precios', icon: Tags, description: 'Tarifas de venta', requiredModules: ['SALES_PRICE_LISTS'] },
   { id: 'facturacion-caja', label: 'Facturación por Caja', icon: Calculator, description: 'POS y facturación directa', requiredModules: ['SALES'] },
   { id: 'control-caja', label: 'Control de Caja', icon: Coins, description: 'Apertura, arqueo y dashboard', requiredModules: ['SALES'] },
+  { id: 'vendedores', label: 'Vendedores', icon: Users, description: 'Comisiones, metas y liquidaciones', requiredModules: ['SALES_COMMISSIONS'] },
 ];
 const VISIBLE_SALES_SECTIONS = SALES_SECTIONS.filter((section: any) => !section.hidden && !HIDDEN_DEFERRED_SALES_VIEW_IDS.has(section.id));
 
@@ -83,6 +85,8 @@ export function VentasPage({ activeSubModule, onSubModuleChange, isSidebarCollap
   const { user, canPerform } = useAuth();
   const { selectedBranchId, filterByBranch, isRestricted, accessibleBranches } = useBranchScope();
   const canReadHr = canPerform('HR', 'view');
+  const hrSellerDirectoryEnabled = Array.isArray(user?.enabledModules)
+    && user.enabledModules.some((module: string) => module === 'HR' || module.startsWith('HR_'));
   const leadCapabilities = useTenantQuery(['sales', 'business-leads-capabilities'], (signal) => businessLeadsService.getCapabilities(signal), { staleTime: 5 * 60_000, retry: 0, enabled: canPerform('SALES_LEADS', 'view') });
   const leadsEnabled = Boolean(leadCapabilities.data?.enabled);
   const customerLoansCapability = useTenantQuery<{ enabled: boolean }>(['sales', 'customer-loans-config', selectedBranchId || 'active-branch'], (signal) => customerLoansService.getConfig(signal), { staleTime: 60_000, retry: 0, enabled: canPerform('SALES_CUSTOMER_LOANS', 'view') });
@@ -725,6 +729,7 @@ export function VentasPage({ activeSubModule, onSubModuleChange, isSidebarCollap
                   initialSection={controlCajaTargetParams?.section}
                 />
               )}
+              {activeSection === 'vendedores' && <VendedoresView historicalOnly={hrSellerDirectoryEnabled} />}
             </motion.div>
           </AnimatePresence>
           </Tabs>

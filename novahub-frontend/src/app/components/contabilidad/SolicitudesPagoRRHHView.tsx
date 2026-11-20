@@ -45,6 +45,9 @@ import { getCurrencyDecimalPlaces } from '../../utils/currency';
 type PaymentRequest = {
   id: string;
   requestType: 'PAYROLL' | 'TRAINING' | 'BENEFIT' | string;
+  workflow?: 'ACCOUNTING' | 'HR_INTERNAL' | string;
+  canContinueInternally?: boolean;
+  internalBlockReason?: string;
   sourceId: string;
   amount: number | string;
   currency?: string;
@@ -88,6 +91,10 @@ function unwrap<T = any>(value: any): T {
   return value?.data && !Array.isArray(value.data) ? value.data : value;
 }
 
+function requestPermissionModule(requestType: string) {
+  return requestType === 'PAYROLL' ? 'HR_PAYROLL' : requestType === 'TRAINING' ? 'HR_TRAINING' : 'HR_BENEFITS';
+}
+
 function sourceLabel(request: PaymentRequest) {
   const source = request.source;
   if (request.requestType === 'PAYROLL') {
@@ -110,7 +117,7 @@ function formatPaymentInput(value: string | number) {
   return decimalPart === undefined ? whole : `${whole}.${decimalPart.slice(0, getCurrencyDecimalPlaces())}`;
 }
 
-export function SolicitudesPagoRRHHView() {
+export function SolicitudesPagoRRHHView({ workflow = 'ACCOUNTING' }: { workflow?: 'ACCOUNTING' | 'HR_INTERNAL' }) {
   const { canPerform, user } = useAuth();
   const { formatConvertedAmount, formatExplicitAmount, displayCurrency, baseCurrency, exchangeRate, toBaseAmount, convertBetweenCurrencies } = useCurrency();
   const queryClient = useQueryClient();
@@ -122,10 +129,13 @@ export function SolicitudesPagoRRHHView() {
   const [busyId, setBusyId] = useState<string | null>(null);
   const [newRequestCount, setNewRequestCount] = useState(0);
   const knownRequestIdsRef = useRef<Set<string> | null>(null);
-  const canApproveRequests = canPerform('ACCOUNTING_HR_PAYMENT_REQUESTS', 'approve');
-  const canRejectRequests = canPerform('ACCOUNTING_HR_PAYMENT_REQUESTS', 'reject');
-  const canPayRequests = canPerform('ACCOUNTING_HR_PAYMENT_REQUESTS', 'pay');
-  const canReadPaymentRequests = canPerform('ACCOUNTING_HR_PAYMENT_REQUESTS', 'view');
+  const canContinueRequest = (request: PaymentRequest) => workflow !== 'HR_INTERNAL' || request.canContinueInternally !== false;
+  const canApproveRequest = (request: PaymentRequest) => canContinueRequest(request) && canPerform(workflow === 'HR_INTERNAL' ? requestPermissionModule(request.requestType) : 'ACCOUNTING_HR_PAYMENT_REQUESTS', workflow === 'HR_INTERNAL' ? 'approvePayment' : 'approve');
+  const canRejectRequest = (request: PaymentRequest) => canContinueRequest(request) && canPerform(workflow === 'HR_INTERNAL' ? requestPermissionModule(request.requestType) : 'ACCOUNTING_HR_PAYMENT_REQUESTS', workflow === 'HR_INTERNAL' ? 'rejectPayment' : 'reject');
+  const canPayRequest = (request: PaymentRequest) => canPerform(workflow === 'HR_INTERNAL' ? requestPermissionModule(request.requestType) : 'ACCOUNTING_HR_PAYMENT_REQUESTS', workflow === 'HR_INTERNAL' ? 'registerPayment' : 'pay') && (workflow !== 'HR_INTERNAL' || request.canContinueInternally !== false);
+  const canReadPaymentRequests = workflow === 'HR_INTERNAL'
+    ? ['HR_PAYROLL', 'HR_TRAINING', 'HR_BENEFITS'].some((module) => canPerform(module, 'view'))
+    : canPerform('ACCOUNTING_HR_PAYMENT_REQUESTS', 'view');
   const paymentCurrency = paymentLines[0]?.currency || displayCurrency;
   const paymentLineRate = (currency: 'NIO' | 'USD') => currency === baseCurrency ? 1 : Number(exchangeRate || 1);
   const paymentLine = (method: string, amount = '0', currency: 'NIO' | 'USD' = displayCurrency): PaymentLine => ({
@@ -137,9 +147,12 @@ export function SolicitudesPagoRRHHView() {
   });
 
   const query = useQuery({
-    queryKey: ['hr-payment-requests', statusFilter, typeFilter],
+    queryKey: ['hr-payment-requests', workflow, statusFilter, typeFilter],
     queryFn: async ({ signal }) => {
-      const response: any = await hrService.getPaymentRequests({ page: 1, pageSize: 200, status: statusFilter, requestType: typeFilter }, signal);
+      const filters = { page: 1, pageSize: 200, status: statusFilter, requestType: typeFilter };
+      const response: any = workflow === 'HR_INTERNAL'
+        ? await hrService.getInternalPaymentRequests(filters, signal)
+        : await hrService.getPaymentRequests(filters, signal);
       const body = unwrap<any>(response);
       return Array.isArray(body) ? body : body?.data || [];
     },
@@ -182,8 +195,8 @@ export function SolicitudesPagoRRHHView() {
     [queryClient],
   );
   useNotificationDomainRefresh({
-    module: 'contabilidad',
-    subModules: ['solicitudes-pago'],
+    module: workflow === 'HR_INTERNAL' ? 'rh' : 'contabilidad',
+    subModules: [workflow === 'HR_INTERNAL' ? 'solicitudes-pago-interno' : 'solicitudes-pago'],
     onRefresh: refresh,
     enabled: canReadPaymentRequests,
   });
@@ -208,7 +221,7 @@ export function SolicitudesPagoRRHHView() {
   };
 
   const openPayment = (request: PaymentRequest) => {
-    if (!canPayRequests) return;
+    if (!canPayRequest(request)) return;
     const nextCurrency = displayCurrency;
     const sourceCurrency = request.currency === 'USD' ? 'USD' : 'NIO';
     const sourceRate = Number(request.exchangeRate || 1);
@@ -219,7 +232,8 @@ export function SolicitudesPagoRRHHView() {
     const initialAmount = convertBetweenCurrencies(remainingRequestBase, baseCurrency, nextCurrency, 1, nextRate);
 
     setPaymentRequest(request);
-    setPaymentLines([{ ...paymentLine('TRANSFER', formatPaymentInput(initialAmount.toFixed(getCurrencyDecimalPlaces())), nextCurrency), bankAccountId: '' }]);
+    const initialMethod = workflow === 'HR_INTERNAL' ? 'CASH' : 'TRANSFER';
+    setPaymentLines([{ ...paymentLine(initialMethod, formatPaymentInput(initialAmount.toFixed(getCurrencyDecimalPlaces())), nextCurrency), bankAccountId: '' }]);
   };
 
   const paymentTotalBase = paymentLines.reduce((sum, line) => sum + toBaseAmount(
@@ -242,14 +256,14 @@ export function SolicitudesPagoRRHHView() {
   const formatNativeAmount = (amount: number, currency: string) => `${currency === 'USD' ? '$' : 'C$'} ${Number(amount || 0).toLocaleString('en-US', { minimumFractionDigits: getCurrencyDecimalPlaces(), maximumFractionDigits: getCurrencyDecimalPlaces() })}`;
 
   const submitPayment = () => {
-    if (!canPayRequests) return;
-    if (!paymentRequest || !balanced) {
+    if (!paymentRequest || !canPayRequest(paymentRequest)) return;
+    if (!balanced) {
       toast.error(isPayrollPayment
         ? `Registra un abono mayor que cero y no superior al saldo pendiente (${requestRemainingBase.toFixed(getCurrencyDecimalPlaces())} ${baseCurrency}).`
         : `Distribuye exactamente el saldo convertido de la solicitud (${requestRemainingBase.toFixed(getCurrencyDecimalPlaces())} ${baseCurrency}).`);
       return;
     }
-    if (paymentLines.some((line) => isBankMethod(line.method) && !line.bankAccountId)) {
+    if (workflow === 'ACCOUNTING' && paymentLines.some((line) => isBankMethod(line.method) && !line.bankAccountId)) {
       toast.error('Selecciona la cuenta bancaria global para cada transferencia, tarjeta o cheque.');
       return;
     }
@@ -259,9 +273,11 @@ export function SolicitudesPagoRRHHView() {
     }
     runAction(
       paymentRequest.id,
-      () => hrService.payPaymentRequest(paymentRequest.id, paymentLines.map((line) => ({ ...line, amount: parsePaymentAmount(line.amount) })), paymentCurrency),
-      'Pago registrado y asiento contable generado.',
-      canPayRequests,
+      () => workflow === 'HR_INTERNAL'
+        ? hrService.payInternalPaymentRequest(paymentRequest.id, paymentLines.map((line) => ({ ...line, amount: parsePaymentAmount(line.amount), bankAccountId: undefined })), paymentCurrency)
+        : hrService.payPaymentRequest(paymentRequest.id, paymentLines.map((line) => ({ ...line, amount: parsePaymentAmount(line.amount) })), paymentCurrency),
+      workflow === 'HR_INTERNAL' ? 'Pago registrado en Recursos Humanos.' : 'Pago registrado y asiento contable generado.',
+      canPayRequest(paymentRequest),
     );
   };
 
@@ -274,7 +290,7 @@ export function SolicitudesPagoRRHHView() {
         <div className="relative flex min-w-0 flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
           <div className="min-w-0">
             <div className="mb-1.5 flex items-center gap-2 text-[10px] font-black uppercase tracking-[0.22em] text-primary">
-              <Inbox className="size-4" /> Cola de autorización · RR. HH.
+              <Inbox className="size-4" /> {workflow === 'HR_INTERNAL' ? 'Autorización interna · RR. HH.' : 'Cola de autorización · RR. HH.'}
             </div>
             <h2 className="nh-module-title">Solicitudes de pago</h2>
           </div>
@@ -326,8 +342,8 @@ export function SolicitudesPagoRRHHView() {
 
       <div className="space-y-3">
         {query.isLoading && <div className="flex items-center justify-center rounded-2xl border border-dashed border-border p-12 text-sm text-muted-foreground"><Loader2 className="mr-2 size-4 animate-spin" /> Cargando solicitudes...</div>}
-        {!query.isLoading && query.isError && <div className="rounded-2xl border border-rose-500/20 bg-rose-500/5 p-8 text-center text-sm text-rose-600">No se pudieron cargar las solicitudes. Revisa tu acceso a Contabilidad.</div>}
-        {!query.isLoading && !query.isError && filtered.length === 0 && <div className="rounded-2xl border border-dashed border-border p-12 text-center"><Inbox className="mx-auto size-10 text-muted-foreground/30" /><p className="mt-3 text-sm font-bold">No hay solicitudes en esta bandeja</p><p className="mt-1 text-xs text-muted-foreground">Las solicitudes con costo aparecerán cuando RR. HH. las envíe a Contabilidad.</p></div>}
+        {!query.isLoading && query.isError && <div className="rounded-2xl border border-rose-500/20 bg-rose-500/5 p-8 text-center text-sm text-rose-600">No se pudieron cargar las solicitudes de {workflow === 'HR_INTERNAL' ? 'Recursos Humanos' : 'Contabilidad'}.</div>}
+        {!query.isLoading && !query.isError && filtered.length === 0 && <div className="rounded-2xl border border-dashed border-border p-12 text-center"><Inbox className="mx-auto size-10 text-muted-foreground/30" /><p className="mt-3 text-sm font-bold">No hay solicitudes en esta bandeja</p><p className="mt-1 text-xs text-muted-foreground">{workflow === 'HR_INTERNAL' ? 'Las solicitudes asignadas al circuito interno aparecerán aquí.' : 'Las solicitudes con costo aparecerán aquí cuando RR. HH. las envíe a Contabilidad.'}</p></div>}
         {filtered.map((request) => {
           const type = typeMeta[request.requestType] || typeMeta.BENEFIT;
           const status = metaForStatus(request.status);
@@ -338,17 +354,18 @@ export function SolicitudesPagoRRHHView() {
               <CardContent className="p-3 sm:p-4">
                 <div className="flex min-w-0 flex-col gap-3 lg:flex-row lg:items-center">
                   <div className={cn('flex size-10 shrink-0 items-center justify-center rounded-xl', type.tint)}><TypeIcon className="size-4" /></div>
-                  <div className="min-w-0 flex-1"><div className="flex min-w-0 flex-wrap items-center gap-2"><Badge variant="outline" className="border-none px-2 text-[10px] font-black uppercase">{type.label}</Badge><span className="truncate text-xs text-muted-foreground">#{request.id.slice(0, 8)}</span></div><p className="mt-1 truncate text-base font-black">{sourceLabel(request)}</p><p className="mt-1 text-xs text-muted-foreground">Solicitada {request.requestedAt ? formatInstantDate(request.requestedAt, user?.clientTenant?.timeZone) : '—'}</p></div>
+                  <div className="min-w-0 flex-1"><div className="flex min-w-0 flex-wrap items-center gap-2"><Badge variant="outline" className="border-none px-2 text-[10px] font-black uppercase">{type.label}</Badge>{workflow === 'HR_INTERNAL' && <Badge variant="outline" className="text-[10px]">{request.workflow === 'HR_INTERNAL' ? 'Gestionada en RR. HH.' : request.canContinueInternally ? 'Puede continuar aquí' : 'Pendiente en Contabilidad'}</Badge>}<span className="truncate text-xs text-muted-foreground">#{request.id.slice(0, 8)}</span></div><p className="mt-1 truncate text-base font-black">{sourceLabel(request)}</p><p className="mt-1 text-xs text-muted-foreground">Solicitada {request.requestedAt ? formatInstantDate(request.requestedAt, user?.clientTenant?.timeZone) : '—'}</p></div>
                   <div className="min-w-[150px] lg:text-right"><p className="text-[10px] font-black uppercase tracking-widest text-muted-foreground">Monto solicitado</p><p className="mt-1 text-lg font-black text-primary">{formatConvertedAmount(Number(request.amount || 0), request.currency as any, Number(request.exchangeRate || 1))}</p><p className="text-[10px] text-muted-foreground">Pagado: {formatNativeAmount((request.payments || []).reduce((sum, payment) => sum + Number(payment.baseAmount || 0), 0), baseCurrency)} · Saldo: {formatNativeAmount(Math.max(Number(request.baseAmount || 0) - (request.payments || []).reduce((sum, payment) => sum + Number(payment.baseAmount || 0), 0), 0), baseCurrency)}</p></div>
                   <Badge variant="outline" className={cn('w-fit shrink-0 gap-1 rounded-md px-3 py-1 text-[10px] font-black', status.className)}><StatusIcon className="size-3.5" /> {status.label}</Badge>
                   <div className="flex shrink-0 flex-wrap items-center gap-2 lg:justify-end">
-                    {request.status === 'PENDING' && canApproveRequests && <Button size="sm" className="rounded-xl" disabled={busyId === request.id} onClick={() => runAction(request.id, () => hrService.approvePaymentRequest(request.id), 'Solicitud aprobada.', canApproveRequests) }><Check className="mr-1.5 size-4" /> Aprobar</Button>}
-                    {request.status === 'PENDING' && canRejectRequests && <Button size="sm" variant="outline" className="rounded-xl text-rose-600 hover:bg-rose-500/10" disabled={busyId === request.id} onClick={() => { if (!canRejectRequests) return; const reason = window.prompt('Motivo del rechazo (opcional):') || 'Rechazada por Contabilidad'; runAction(request.id, () => hrService.rejectPaymentRequest(request.id, reason), 'Solicitud rechazada.', canRejectRequests); }}><X className="mr-1.5 size-4" /> Rechazar</Button>}
-                    {(request.status === 'APPROVED' || request.status === 'PARTIAL') && canPayRequests && <Button size="sm" className="rounded-xl bg-primary text-primary-foreground hover:bg-primary/90" disabled={busyId === request.id} onClick={() => openPayment(request)}><Banknote className="mr-1.5 size-4" /> Registrar abono</Button>}
-                    {request.status === 'PAID' && <span className="inline-flex items-center gap-1 text-xs font-bold text-emerald-600"><FileCheck2 className="size-4" /> Contabilizada</span>}
+                    {request.status === 'PENDING' && canApproveRequest(request) && <Button size="sm" className="rounded-xl" disabled={busyId === request.id} onClick={() => runAction(request.id, () => workflow === 'HR_INTERNAL' ? hrService.approveInternalPaymentRequest(request.id) : hrService.approvePaymentRequest(request.id), 'Solicitud aprobada.', canApproveRequest(request))}><Check className="mr-1.5 size-4" /> Aprobar</Button>}
+                    {request.status === 'PENDING' && canRejectRequest(request) && <Button size="sm" variant="outline" className="rounded-xl text-rose-600 hover:bg-rose-500/10" disabled={busyId === request.id} onClick={() => { if (!canRejectRequest(request)) return; const reason = window.prompt('Motivo del rechazo (opcional):') || `Rechazada por ${workflow === 'HR_INTERNAL' ? 'Recursos Humanos' : 'Contabilidad'}`; runAction(request.id, () => workflow === 'HR_INTERNAL' ? hrService.rejectInternalPaymentRequest(request.id, reason) : hrService.rejectPaymentRequest(request.id, reason), 'Solicitud rechazada.', canRejectRequest(request)); }}><X className="mr-1.5 size-4" /> Rechazar</Button>}
+                    {(request.status === 'APPROVED' || request.status === 'PARTIAL') && canPayRequest(request) && <Button size="sm" className="rounded-xl bg-primary text-primary-foreground hover:bg-primary/90" disabled={busyId === request.id} onClick={() => openPayment(request)}><Banknote className="mr-1.5 size-4" /> {workflow === 'HR_INTERNAL' ? 'Registrar pago' : 'Registrar abono'}</Button>}
+                    {request.status === 'PAID' && <span className="inline-flex items-center gap-1 text-xs font-bold text-emerald-600"><FileCheck2 className="size-4" /> {workflow === 'HR_INTERNAL' ? 'Pagada' : 'Contabilizada'}</span>}
                     <ChevronRight className="hidden size-4 text-muted-foreground/40 lg:block" />
                   </div>
                 </div>
+                {workflow === 'HR_INTERNAL' && request.waitingForAccounting && request.internalBlockReason && <div className="mt-4 rounded-xl border border-amber-500/20 bg-amber-500/5 px-3 py-2 text-xs text-amber-700 dark:text-amber-300">{request.internalBlockReason}</div>}
                 {request.rejectionReason && <div className="mt-4 rounded-xl border border-rose-500/15 bg-rose-500/5 px-3 py-2 text-xs text-rose-600"><span className="font-black">Motivo:</span> {request.rejectionReason}</div>}
               </CardContent>
             </Card>
@@ -358,20 +375,20 @@ export function SolicitudesPagoRRHHView() {
 
       <Dialog open={Boolean(paymentRequest)} onOpenChange={(open) => !open && setPaymentRequest(null)}>
         <DialogContent className="max-h-[90vh] max-w-2xl overflow-y-auto rounded-2xl">
-          <DialogHeader><DialogTitle className="flex items-center gap-2"><Split className="size-5 text-primary" /> Registrar abono</DialogTitle><DialogDescription>{paymentRequest ? `${sourceLabel(paymentRequest)} · Saldo pendiente ${formatNativeAmount(requestRemainingBase, baseCurrency)}` : ''}</DialogDescription></DialogHeader>
+          <DialogHeader><DialogTitle className="flex items-center gap-2"><Split className="size-5 text-primary" /> {paymentRequest?.requestType === 'PAYROLL' && workflow === 'ACCOUNTING' ? 'Registrar abono' : 'Registrar pago'}</DialogTitle><DialogDescription>{paymentRequest ? `${sourceLabel(paymentRequest)} · Saldo pendiente ${formatNativeAmount(requestRemainingBase, baseCurrency)}` : ''}</DialogDescription></DialogHeader>
           <div className="space-y-3 py-2">
-             <div className="rounded-xl border border-primary/15 bg-primary/5 p-3 text-xs text-muted-foreground">Distribuye un abono entre efectivo, transferencia, tarjeta o cheque. Los montos se registran en la moneda elegida y se convierten con la tasa global; cada abono no puede superar el saldo pendiente.<span className="mt-1 block font-bold text-foreground">Saldo equivalente en la moneda de la solicitud: {formatExplicitAmount(convertBetweenCurrencies(requestRemainingBase, baseCurrency, requestCurrency, 1, requestRate), requestCurrency)}</span></div>
-             {paymentLines.map((line, index) => <div key={`${index}-${line.method}`} className="rounded-xl border border-border/60 p-3"><div className="grid grid-cols-1 gap-3 sm:grid-cols-[minmax(0,1fr)_minmax(8rem,10rem)_minmax(7rem,10rem)_auto] sm:items-end"><div><p className="mb-1 text-[10px] font-black uppercase tracking-widest text-muted-foreground">Método</p><Select value={line.method} onValueChange={(value) => setPaymentLines((current) => current.map((item, i) => i === index ? { ...item, method: value, bankAccountId: '', reference: '' } : item))}><SelectTrigger className="h-9 rounded-lg text-xs"><SelectValue /></SelectTrigger><SelectContent>{methods.map((method) => <SelectItem key={method.value} value={method.value}>{method.label}</SelectItem>)}</SelectContent></Select></div><CurrencySelector value={line.currency} baseCurrency={baseCurrency} exchangeRate={exchangeRate} label="Moneda" onChange={(nextCurrency) => setPaymentLines((current) => current.map((item, i) => { if (i !== index) return item; const previousRate = item.currency === baseCurrency ? 1 : Number(item.exchangeRate || exchangeRate); const nextRate = paymentLineRate(nextCurrency); return { ...item, amount: formatPaymentInput(convertBetweenCurrencies(parsePaymentAmount(item.amount), item.currency, nextCurrency, previousRate, nextRate).toFixed(getCurrencyDecimalPlaces())), currency: nextCurrency, exchangeRate: nextRate, bankAccountId: '' }; }))} /><div><p className="mb-1 text-[10px] font-black uppercase tracking-widest text-muted-foreground">Monto ({line.currency})</p><Input type="text" inputMode="decimal" min="0" step="0.01" value={line.amount} onChange={(event) => { const raw = event.target.value.replace(/,/g, ''); const decimals = getCurrencyDecimalPlaces(); if (!new RegExp(`^\\d*(?:\\.\\d{0,${decimals}})?$`).test(raw)) return; setPaymentLines((current) => current.map((item, i) => i === index ? { ...item, amount: formatPaymentInput(raw) } : item)); }} onBlur={(event) => setPaymentLines((current) => current.map((item, i) => i === index ? { ...item, amount: parsePaymentAmount(event.target.value).toFixed(getCurrencyDecimalPlaces()).replace(/\B(?=(\d{3})+(?!\d))/g, ',') } : item))} className="h-9 rounded-lg text-xs tabular-nums" currencyPrecision /></div><Button variant="ghost" size="icon" className="size-9 text-rose-500" disabled={paymentLines.length === 1} onClick={() => setPaymentLines((current) => current.filter((_, i) => i !== index))} aria-label="Eliminar medio de pago"><Trash2 className="size-4" /></Button></div>{line.currency !== requestCurrency && <p className="mt-1 text-[10px] font-bold text-muted-foreground">Equivalente solicitud: {formatExplicitAmount(getPaymentLineDocumentAmount(line, requestCurrency, requestRate, baseCurrency, convertBetweenCurrencies), requestCurrency)}</p>}{isBankMethod(line.method) && <BankAccountSelect currency={line.currency} value={line.bankAccountId} onChange={(value) => setPaymentLines((current) => current.map((item, i) => i === index ? { ...item, bankAccountId: value } : item))} label="Cuenta bancaria global" className="mt-3" />}{hasPaymentReferenceField(line.method) && <div className="mt-3"><p className="mb-1 text-[10px] font-black uppercase tracking-widest text-muted-foreground">Referencia *</p><Input value={line.reference || ''} onChange={(event) => setPaymentLines((current) => current.map((item, i) => i === index ? { ...item, reference: event.target.value } : item))} placeholder="Transferencia, voucher o cheque..." required={requiresPaymentReference(line.method)} className="h-9 text-xs" /></div>}</div>)}
+             <div className="rounded-xl border border-primary/15 bg-primary/5 p-3 text-xs text-muted-foreground">Distribuye el pago entre efectivo, transferencia, tarjeta o cheque. Los montos se registran en la moneda elegida y se convierten con la tasa global; cada abono no puede superar el saldo pendiente.<span className="mt-1 block font-bold text-foreground">Saldo equivalente en la moneda de la solicitud: {formatExplicitAmount(convertBetweenCurrencies(requestRemainingBase, baseCurrency, requestCurrency, 1, requestRate), requestCurrency)}</span></div>
+             {paymentLines.map((line, index) => <div key={`${index}-${line.method}`} className="rounded-xl border border-border/60 p-3"><div className="grid grid-cols-1 gap-3 sm:grid-cols-[minmax(0,1fr)_minmax(8rem,10rem)_minmax(7rem,10rem)_auto] sm:items-end"><div><p className="mb-1 text-[10px] font-black uppercase tracking-widest text-muted-foreground">Método</p><Select value={line.method} onValueChange={(value) => setPaymentLines((current) => current.map((item, i) => i === index ? { ...item, method: value, bankAccountId: '', reference: '' } : item))}><SelectTrigger className="h-9 rounded-lg text-xs"><SelectValue /></SelectTrigger><SelectContent>{methods.map((method) => <SelectItem key={method.value} value={method.value}>{method.label}</SelectItem>)}</SelectContent></Select></div><CurrencySelector value={line.currency} baseCurrency={baseCurrency} exchangeRate={exchangeRate} label="Moneda" onChange={(nextCurrency) => setPaymentLines((current) => current.map((item, i) => { if (i !== index) return item; const previousRate = item.currency === baseCurrency ? 1 : Number(item.exchangeRate || exchangeRate); const nextRate = paymentLineRate(nextCurrency); return { ...item, amount: formatPaymentInput(convertBetweenCurrencies(parsePaymentAmount(item.amount), item.currency, nextCurrency, previousRate, nextRate).toFixed(getCurrencyDecimalPlaces())), currency: nextCurrency, exchangeRate: nextRate, bankAccountId: '' }; }))} /><div><p className="mb-1 text-[10px] font-black uppercase tracking-widest text-muted-foreground">Monto ({line.currency})</p><Input type="text" inputMode="decimal" min="0" step="0.01" value={line.amount} onChange={(event) => { const raw = event.target.value.replace(/,/g, ''); const decimals = getCurrencyDecimalPlaces(); if (!new RegExp(`^\\d*(?:\\.\\d{0,${decimals}})?$`).test(raw)) return; setPaymentLines((current) => current.map((item, i) => i === index ? { ...item, amount: formatPaymentInput(raw) } : item)); }} onBlur={(event) => setPaymentLines((current) => current.map((item, i) => i === index ? { ...item, amount: parsePaymentAmount(event.target.value).toFixed(getCurrencyDecimalPlaces()).replace(/\B(?=(\d{3})+(?!\d))/g, ',') } : item))} className="h-9 rounded-lg text-xs tabular-nums" currencyPrecision /></div><Button variant="ghost" size="icon" className="size-9 text-rose-500" disabled={paymentLines.length === 1} onClick={() => setPaymentLines((current) => current.filter((_, i) => i !== index))} aria-label="Eliminar medio de pago"><Trash2 className="size-4" /></Button></div>{line.currency !== requestCurrency && <p className="mt-1 text-[10px] font-bold text-muted-foreground">Equivalente solicitud: {formatExplicitAmount(getPaymentLineDocumentAmount(line, requestCurrency, requestRate, baseCurrency, convertBetweenCurrencies), requestCurrency)}</p>}{workflow === 'ACCOUNTING' && isBankMethod(line.method) && <BankAccountSelect currency={line.currency} value={line.bankAccountId} onChange={(value) => setPaymentLines((current) => current.map((item, i) => i === index ? { ...item, bankAccountId: value } : item))} label="Cuenta bancaria global" className="mt-3" />}{hasPaymentReferenceField(line.method) && <div className="mt-3"><p className="mb-1 text-[10px] font-black uppercase tracking-widest text-muted-foreground">Referencia *</p><Input value={line.reference || ''} onChange={(event) => setPaymentLines((current) => current.map((item, i) => i === index ? { ...item, reference: event.target.value } : item))} placeholder="Transferencia, voucher o cheque..." required={requiresPaymentReference(line.method)} className="h-9 text-xs" /></div>}</div>)}
             <Button variant="outline" className="w-full rounded-xl border-dashed" onClick={() => setPaymentLines((current) => [...current, paymentLine('CASH')])}><Plus className="mr-2 size-4" /> Agregar otro medio</Button>
             <div className={cn('rounded-xl border px-4 py-3', balanced ? 'border-primary/20 bg-primary/5' : 'border-amber-500/20 bg-amber-500/5')}>
               <div className="grid gap-3 sm:grid-cols-2">
                 <div><p className="text-[10px] font-black uppercase tracking-widest text-muted-foreground">Monto aplicado (base)</p><p className="mt-1 text-base font-black tabular-nums">{formatNativeAmount(paymentTotalBase, baseCurrency)}</p></div>
                 <div><p className="text-[10px] font-black uppercase tracking-widest text-muted-foreground">{excessBase > 0.01 ? 'Vuelto por dar' : remainingBase > 0.01 ? 'Pendiente' : 'Saldo cubierto'}</p><p className={cn('mt-1 text-base font-black tabular-nums', balanced ? 'text-primary' : excessBase > 0.01 ? 'text-emerald-600' : 'text-amber-600')}>{formatNativeAmount(excessBase > 0.01 ? excessBase : remainingBase, baseCurrency)}</p></div>
               </div>
-              <p className="mt-2 text-[10px] text-muted-foreground">Saldo contable antes del abono: <span className="font-bold text-foreground">{formatNativeAmount(requestRemainingBase, baseCurrency)}</span></p>
+              <p className="mt-2 text-[10px] text-muted-foreground">{workflow === 'HR_INTERNAL' ? 'Saldo antes del pago' : 'Saldo contable antes del abono'}: <span className="font-bold text-foreground">{formatNativeAmount(requestRemainingBase, baseCurrency)}</span></p>
             </div>
           </div>
-          <DialogFooter><Button variant="outline" className="rounded-xl" onClick={() => setPaymentRequest(null)} disabled={busyId === paymentRequest?.id}>Cancelar</Button><Button className="rounded-xl bg-primary text-primary-foreground hover:bg-primary/90" disabled={!canPayRequests || !balanced || busyId === paymentRequest?.id || paymentLines.some((line) => requiresPaymentReference(line.method) && !line.reference?.trim()) || paymentLines.some((line) => isBankMethod(line.method) && !line.bankAccountId)} onClick={submitPayment}>{busyId === paymentRequest?.id ? <Loader2 className="mr-2 size-4 animate-spin" /> : <Banknote className="mr-2 size-4" />} Confirmar y contabilizar</Button></DialogFooter>
+          <DialogFooter><Button variant="outline" className="rounded-xl" onClick={() => setPaymentRequest(null)} disabled={busyId === paymentRequest?.id}>Cancelar</Button><Button className="rounded-xl bg-primary text-primary-foreground hover:bg-primary/90" disabled={!paymentRequest || !canPayRequest(paymentRequest) || !balanced || busyId === paymentRequest?.id || paymentLines.some((line) => requiresPaymentReference(line.method) && !line.reference?.trim()) || (workflow === 'ACCOUNTING' && paymentLines.some((line) => isBankMethod(line.method) && !line.bankAccountId))} onClick={submitPayment}>{busyId === paymentRequest?.id ? <Loader2 className="mr-2 size-4 animate-spin" /> : <Banknote className="mr-2 size-4" />} {workflow === 'HR_INTERNAL' ? 'Registrar pago' : 'Confirmar y contabilizar'}</Button></DialogFooter>
         </DialogContent>
       </Dialog>
     </div>

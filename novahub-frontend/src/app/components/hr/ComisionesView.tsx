@@ -46,6 +46,7 @@ type CommissionTab = 'sellers' | 'recent';
 const STATUS_LABELS: Record<string, string> = {
   PENDING: 'Pendiente de cobro',
   EARNED: 'Pendiente de nómina',
+  IN_PAYROLL: 'En nómina, pendiente de pago',
   PAID_IN_PAYROLL: 'Pagada en nómina',
   PAID: 'Pagada en nómina',
   PARTIAL: 'Pago parcial',
@@ -57,6 +58,7 @@ const STATUS_LABELS: Record<string, string> = {
 const STATUS_TONES: Record<string, string> = {
   PENDING: 'border-warning/20 bg-warning/10 text-warning dark:text-warning',
   EARNED: 'border-info/20 bg-info/10 text-info dark:text-info',
+  IN_PAYROLL: 'border-warning/20 bg-warning/10 text-warning dark:text-warning',
   PAID_IN_PAYROLL: 'border-success/20 bg-success/10 text-success dark:text-success',
   PAID: 'border-success/20 bg-success/10 text-success dark:text-success',
   CANCELLED: 'border-destructive/20 bg-destructive/10 text-destructive dark:text-destructive',

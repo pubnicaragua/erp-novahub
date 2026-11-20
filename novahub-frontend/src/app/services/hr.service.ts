@@ -68,11 +68,16 @@ export const hrService = {
   deletePayroll: (id: string) => api.delete(`/hr/payroll/${id}`),
 
   // ===== SOLICITUDES DE PAGO RR. HH. / CONTABILIDAD =====
+  getPaymentRequestIntegrationPolicy: () => api.get<{ accountingEnabled: boolean; workflow: 'ACCOUNTING' | 'HR_INTERNAL'; routes: Record<string, any> }>('/hr/integration-policy'),
   getPaymentRequests: (filters?: any, signal?: AbortSignal) => api.get('/hr/payment-requests', withSignal(filters, signal)),
+  getInternalPaymentRequests: (filters?: any, signal?: AbortSignal) => api.get('/hr/payment-requests/internal', withSignal(filters, signal)),
   createPaymentRequest: (data: any) => api.post('/hr/payment-requests', data),
   approvePaymentRequest: (id: string) => api.post(`/hr/payment-requests/${id}/approve`, {}),
   rejectPaymentRequest: (id: string, reason?: string) => api.post(`/hr/payment-requests/${id}/reject`, { reason }),
   payPaymentRequest: (id: string, payments: any[], currency?: string) => api.post(`/hr/payment-requests/${id}/pay`, { payments, ...(currency ? { currency } : {}) }),
+  approveInternalPaymentRequest: (id: string) => api.post(`/hr/payment-requests/${id}/internal/approve`, {}),
+  rejectInternalPaymentRequest: (id: string, reason?: string) => api.post(`/hr/payment-requests/${id}/internal/reject`, { reason }),
+  payInternalPaymentRequest: (id: string, payments: any[], currency?: string) => api.post(`/hr/payment-requests/${id}/internal/pay`, { payments, ...(currency ? { currency } : {}) }),
 
   // ===== ATTENDANCE =====
   clockIn: (data: any) => api.post('/hr/attendance/clock-in', data),

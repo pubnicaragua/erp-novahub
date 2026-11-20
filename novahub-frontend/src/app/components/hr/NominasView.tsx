@@ -337,8 +337,12 @@ export function NominasView({ payrolls, employees, onRefresh }: any) {
     if (!canPerform('HR_PAYROLL', 'requestPayment')) return;
     const actionToken = beginNotificationAction();
     try {
-      await hrService.createPaymentRequest({ requestType: 'PAYROLL', sourceId: id });
-      toast.success('Solicitud de pago enviada a Contabilidad');
+      const response: any = await hrService.createPaymentRequest({ requestType: 'PAYROLL', sourceId: id });
+      toast.success(!response?.sourcePaymentStatus
+        ? 'Ya existe una solicitud abierta; revisa la bandeja de pagos.'
+        : response.workflow === 'HR_INTERNAL'
+          ? 'Solicitud de pago enviada a Recursos Humanos'
+          : 'Solicitud de pago enviada a Contabilidad');
       completeNotificationAction(actionToken);
       onRefresh();
     } catch (e: any) {
@@ -374,14 +378,23 @@ export function NominasView({ payrolls, employees, onRefresh }: any) {
     const actionToken = beginNotificationAction();
     const notificationBatchId = globalThis.crypto.randomUUID();
     try {
-      await Promise.all(
+      const responses: any[] = await Promise.all(
         pendingPayrolls.map((p: any) => hrService.createPaymentRequest({
           requestType: 'PAYROLL',
           sourceId: p.id,
           notificationBatchId,
         }))
       );
-      toast.success(`${pendingPayrolls.length} solicitudes enviadas a Contabilidad`);
+      const workflows = new Set(responses.map((response) => response?.workflow));
+      const hasExistingRequest = responses.some((response) => !response?.sourcePaymentStatus);
+      const destination = workflows.size === 1 && workflows.has('HR_INTERNAL')
+        ? 'Recursos Humanos'
+        : workflows.size === 1 && workflows.has('ACCOUNTING')
+          ? 'Contabilidad'
+          : 'el circuito de pagos';
+      toast.success(hasExistingRequest
+        ? `${pendingPayrolls.length} solicitudes revisadas; algunas ya estaban abiertas. Revisa la bandeja de pagos.`
+        : `${pendingPayrolls.length} solicitudes registradas en ${destination}`);
       completeNotificationAction(actionToken);
       onRefresh();
     } catch (e: any) {

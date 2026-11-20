@@ -198,6 +198,7 @@ export function getNotificationDomainQueryKeys(navigation: NotificationNavigatio
       kpi: [['hr', 'kpi-data'], ['hr', 'kpi'], ['hr', 'dashboard']],
       capacitaciones: [['hr', 'capacitaciones'], ['hr', 'dashboard']],
       beneficios: [['hr', 'beneficios'], ['hr', 'dashboard']],
+      'solicitudes-pago-interno': [['hr-payment-requests']],
       'config-nomina': [['hr', 'payroll-config', 'active'], ['hr', 'nominas'], ['hr', 'dashboard']],
     };
     return hrKeys[subModule] || [];

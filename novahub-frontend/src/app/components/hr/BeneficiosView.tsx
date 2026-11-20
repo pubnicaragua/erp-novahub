@@ -127,8 +127,12 @@ export function BeneficiosView({ benefits, employees, onRefresh }: any) {
     if (!canPerform('HR_BENEFITS', 'requestPayment')) return;
     const actionToken = beginNotificationAction();
     try {
-      await hrService.createPaymentRequest({ requestType: 'BENEFIT', sourceId: benefit.id });
-      toast.success('Solicitud de pago enviada a Contabilidad');
+      const response: any = await hrService.createPaymentRequest({ requestType: 'BENEFIT', sourceId: benefit.id });
+      toast.success(!response?.sourcePaymentStatus
+        ? 'Ya existe una solicitud abierta; revisa la bandeja de pagos.'
+        : response.workflow === 'HR_INTERNAL'
+          ? 'Solicitud de pago enviada a Recursos Humanos'
+          : 'Solicitud de pago enviada a Contabilidad');
       completeNotificationAction(actionToken);
       onRefresh();
     } catch (e: any) {

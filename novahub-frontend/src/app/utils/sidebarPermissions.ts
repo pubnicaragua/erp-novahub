@@ -55,6 +55,7 @@ export const SIDEBAR_PERMISSION_SUBMODULES: SidebarPermissionDefinition[] = [
   { id: 'SALES_INVOICES', label: 'Facturas', parent: 'SALES' },
   { id: 'SALES_RECURRING', label: 'Facturas recurrentes', parent: 'SALES' },
   { id: 'SALES_PAYMENTS', label: 'Pagos recibidos', parent: 'SALES' },
+  { id: 'SALES_COMMISSIONS', label: 'Vendedores', parent: 'SALES' },
   { id: 'SALES_RETURNS', label: 'Notas de crédito', parent: 'SALES' },
   { id: 'SALES_CREDIT_NOTES', label: 'Créditos', parent: 'SALES' },
   { id: 'SALES_CUSTOMER_LOANS', label: 'Préstamos', parent: 'SALES', subscription: false },
@@ -282,6 +283,7 @@ export const SIDEBAR_SUBMENU_MODULE_REQUIREMENTS: Record<string, string[]> = {
   facturas: ['SALES_INVOICES'],
   'facturas-recurrentes': ['SALES_RECURRING'],
   'pagos-recibidos': ['SALES_PAYMENTS'],
+  vendedores: ['SALES_COMMISSIONS'],
   'devoluciones-venta': ['SALES_RETURNS'],
   'notas-credito': ['SALES_CREDIT_NOTES'],
   prestamos: ['SALES_CUSTOMER_LOANS'],
@@ -342,6 +344,7 @@ export const SIDEBAR_SUBMENU_MODULE_REQUIREMENTS: Record<string, string[]> = {
   capacitaciones: ['HR_TRAINING'],
   beneficios: ['HR_BENEFITS'],
   'config-nomina': ['HR_PAYROLL_CONFIG'],
+  'solicitudes-pago-interno': ['HR_PAYROLL', 'HR_TRAINING', 'HR_BENEFITS'],
 
   'resumen-financiero': ['FINANCIAL_DASHBOARD'],
   'caja-bancos': ['FINANCIAL_BANK', 'FINANCIAL_ACCOUNTS'],

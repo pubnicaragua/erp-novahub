@@ -19,6 +19,7 @@ import {
   BadgePercent,
   AlertTriangle,
   RefreshCw,
+  ClipboardCheck,
 } from 'lucide-react';
 import { hrService } from '../services/hr.service';
 import { useAuth } from '../contexts/AuthContext';
@@ -37,6 +38,7 @@ import { SeguimientoPanel } from './seguimiento/SeguimientoPanel';
 import { EvaluacionesView } from './hr/EvaluacionesView';
 import { CapacitacionesView } from './hr/CapacitacionesView';
 import { BeneficiosView } from './hr/BeneficiosView';
+import { SolicitudesPagoRRHHView } from './contabilidad/SolicitudesPagoRRHHView';
 import { ConfigNominaView } from './hr/ConfigNominaView';
 import { ComisionesView } from './hr/ComisionesView';
 import { CurrencyValuationBanner } from './ui/CurrencyValuation';
@@ -101,6 +103,7 @@ export function RecursosHumanosPage({ activeSubModule, onSubModuleChange, isSide
     'metas-bonos': 'metas-bonos',
     'capacitaciones': 'capacitaciones',
     'beneficios': 'beneficios',
+    'solicitudes-pago-interno': 'solicitudes-pago-interno',
   };
   
   const [activeTab, setActiveTab] = useState(() => 
@@ -470,14 +473,20 @@ export function RecursosHumanosPage({ activeSubModule, onSubModuleChange, isSide
     { id: 'capacitaciones', submodule: 'capacitaciones', label: 'Formación', icon: GraduationCap, module: 'HR_TRAINING' },
     { id: 'beneficios', submodule: 'beneficios', label: 'Beneficios', icon: HandHeart, module: 'HR_BENEFITS' },
     { id: 'config-nomina', submodule: 'config-nomina', label: 'Config', icon: Settings2, module: 'HR_PAYROLL_CONFIG' },
+    { id: 'solicitudes-pago-interno', submodule: 'solicitudes-pago-interno', label: 'Solicitudes de pago', icon: ClipboardCheck, module: 'HR_PAYROLL' },
   ];
   const visibleHrTabs = hrTabs.filter((tab) => {
-    const hasRequired = user?.enabledModules?.includes(tab.module);
+    const isPaymentRequestsTab = tab.id === 'solicitudes-pago-interno';
+    const hasRequired = isPaymentRequestsTab
+      ? user?.enabledModules?.some((module) => ['HR_PAYROLL', 'HR_TRAINING', 'HR_BENEFITS'].includes(module))
+      : user?.enabledModules?.includes(tab.module);
     const hasFallback = user?.enabledModules?.includes('HR');
     const isCommissionsTab = tab.id === 'comisiones';
     const hasCommissionSubscription = !user?.enabledModules || user.enabledModules.some((module) => ['HR', 'HR_PAYROLL', 'HR_COMMISSIONS'].includes(module));
     const hasSubscriptionAccess = isCommissionsTab ? hasCommissionSubscription : (!user?.enabledModules || hasRequired || hasFallback);
-    const hasPermission = isCommissionsTab
+    const hasPermission = isPaymentRequestsTab
+      ? canPerform('HR_PAYROLL', 'view') || canPerform('HR_TRAINING', 'view') || canPerform('HR_BENEFITS', 'view')
+      : isCommissionsTab
       ? canPerform('HR_COMMISSIONS', 'view') || canPerform('HR_COMMISSIONS_CONFIG', 'view')
       : canPerform(tab.module, 'view');
     return hasSubscriptionAccess && hasPermission;
@@ -640,6 +649,10 @@ export function RecursosHumanosPage({ activeSubModule, onSubModuleChange, isSide
 
               <TabsContent value="beneficios" className="m-0">
                 <BeneficiosView benefits={data.benefits} employees={data.employees} onRefresh={refreshData} />
+              </TabsContent>
+
+              <TabsContent value="solicitudes-pago-interno" className="m-0">
+                <SolicitudesPagoRRHHView workflow="HR_INTERNAL" />
               </TabsContent>
 
               <TabsContent value="comisiones" className="m-0">

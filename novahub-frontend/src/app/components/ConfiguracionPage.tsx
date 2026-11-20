@@ -108,6 +108,7 @@ export const LEGACY_SUBMODULES_FOR_PERMS = [
   { id: 'SALES_INVOICES', label: 'Facturas', parent: 'SALES' },
   { id: 'SALES_RECURRING', label: 'Facturas Recurrentes', parent: 'SALES' },
   { id: 'SALES_PAYMENTS', label: 'Pagos Recibidos', parent: 'SALES' },
+  { id: 'SALES_COMMISSIONS', label: 'Vendedores', parent: 'SALES' },
   { id: 'SALES_RETURNS', label: 'Notas de Crédito', parent: 'SALES' },
   { id: 'SALES_CREDIT_NOTES', label: 'Créditos', parent: 'SALES' },
   { id: 'SALES_PRICE_LISTS', label: 'Listas de precios', parent: 'SALES' },

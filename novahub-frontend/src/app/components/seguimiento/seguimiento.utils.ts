@@ -16,7 +16,7 @@ export const GOAL_PACE_TONE: Record<GoalPace, string> = {
   BEHIND: 'bg-amber-100 text-amber-900',
   MISSED: 'bg-red-100 text-red-900',
 };
-export const BONUS_STATUS_LABEL = { PENDING_APPROVAL: 'Por aprobar', APPROVED: 'Aprobado', REJECTED: 'Rechazado', PAID: 'Pagado en nómina' } as const;
+export const BONUS_STATUS_LABEL = { PENDING_APPROVAL: 'Por aprobar', APPROVED: 'Aprobado', IN_PAYROLL: 'En nómina, pendiente de pago', REJECTED: 'Rechazado', PAID: 'Pagado en nómina' } as const;
 
 export const GOAL_METRIC_OPTIONS: Array<{ key: GoalMetric; label: string; unit: GoalUnit; hint: string }> = [
   { key: 'SALES_AMOUNT', label: 'Ventas facturadas', unit: 'AMOUNT', hint: 'Suma de las facturas de venta de la persona en el período.' },

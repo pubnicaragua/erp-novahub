@@ -182,6 +182,7 @@ export function EnterpriseGroupSetupView({
     salesAccountingIntegrationOverride: "INHERIT" as "INHERIT" | "ENABLED" | "DISABLED",
     inventoryAccountingIntegrationOverride: "INHERIT" as "INHERIT" | "ENABLED" | "DISABLED",
     purchasesAccountingIntegrationOverride: "INHERIT" as "INHERIT" | "ENABLED" | "DISABLED",
+    hrAccountingIntegrationOverride: "INHERIT" as "INHERIT" | "ENABLED" | "DISABLED",
     purchasesFinanceIntegrationOverride: "INHERIT" as "INHERIT" | "ENABLED" | "DISABLED",
   });
   const [warehouseForm, setWarehouseForm] = useState({
@@ -209,6 +210,7 @@ export function EnterpriseGroupSetupView({
     salesAccountingIntegrationOverride: "INHERIT" as "INHERIT" | "ENABLED" | "DISABLED",
     inventoryAccountingIntegrationOverride: "INHERIT" as "INHERIT" | "ENABLED" | "DISABLED",
     purchasesAccountingIntegrationOverride: "INHERIT" as "INHERIT" | "ENABLED" | "DISABLED",
+    hrAccountingIntegrationOverride: "INHERIT" as "INHERIT" | "ENABLED" | "DISABLED",
     purchasesFinanceIntegrationOverride: "INHERIT" as "INHERIT" | "ENABLED" | "DISABLED",
   });
   const [branchAdminEmailStatus, setBranchAdminEmailStatus] = useState<
@@ -466,6 +468,7 @@ export function EnterpriseGroupSetupView({
         salesAccountingIntegrationOverride: "INHERIT",
         inventoryAccountingIntegrationOverride: "INHERIT",
         purchasesAccountingIntegrationOverride: "INHERIT",
+        hrAccountingIntegrationOverride: "INHERIT",
         purchasesFinanceIntegrationOverride: "INHERIT",
       });
       await refreshGroup();
@@ -481,6 +484,12 @@ export function EnterpriseGroupSetupView({
         salesAccountingIntegrationOverride,
         inventoryAccountingIntegrationOverride,
         purchasesAccountingIntegrationOverride,
+        hrAccountingIntegrationOverride,
+        hrFinanceIntegrationOverride,
+        financialAccountingIntegrationOverride,
+        projectsAccountingIntegrationOverride,
+        novachatFinanceIntegrationOverride,
+        novachatAccountingIntegrationOverride,
         purchasesFinanceIntegrationOverride,
         ...businessUnitBody
       } = body;
@@ -490,6 +499,12 @@ export function EnterpriseGroupSetupView({
         ["SALES_TO_ACCOUNTING", salesAccountingIntegrationOverride],
         ["INVENTORY_TO_ACCOUNTING", inventoryAccountingIntegrationOverride],
         ["PURCHASES_TO_ACCOUNTING", purchasesAccountingIntegrationOverride],
+        ["HR_TO_ACCOUNTING", hrAccountingIntegrationOverride],
+        ["HR_TO_FINANCE", hrFinanceIntegrationOverride],
+        ["FINANCIAL_TO_ACCOUNTING", financialAccountingIntegrationOverride],
+        ["PROJECTS_TO_ACCOUNTING", projectsAccountingIntegrationOverride],
+        ["NOVACHAT_TO_FINANCE", novachatFinanceIntegrationOverride],
+        ["NOVACHAT_TO_ACCOUNTING", novachatAccountingIntegrationOverride],
         ["PURCHASES_TO_FINANCE", purchasesFinanceIntegrationOverride],
       ].filter(([, value]) => value !== undefined);
       if (canManageIntegrationPolicies && policyEntries.length) {
@@ -588,6 +603,7 @@ export function EnterpriseGroupSetupView({
         salesAccountingIntegrationOverride: "INHERIT",
         inventoryAccountingIntegrationOverride: "INHERIT",
         purchasesAccountingIntegrationOverride: "INHERIT",
+        hrAccountingIntegrationOverride: "INHERIT",
         purchasesFinanceIntegrationOverride: "INHERIT",
       });
       await refreshGroup();
@@ -603,6 +619,12 @@ export function EnterpriseGroupSetupView({
         salesAccountingIntegrationOverride,
         inventoryAccountingIntegrationOverride,
         purchasesAccountingIntegrationOverride,
+        hrAccountingIntegrationOverride,
+        hrFinanceIntegrationOverride,
+        financialAccountingIntegrationOverride,
+        projectsAccountingIntegrationOverride,
+        novachatFinanceIntegrationOverride,
+        novachatAccountingIntegrationOverride,
         purchasesFinanceIntegrationOverride,
         ...branchBody
       } = body;
@@ -617,6 +639,12 @@ export function EnterpriseGroupSetupView({
         ["SALES_TO_ACCOUNTING", salesAccountingIntegrationOverride],
         ["INVENTORY_TO_ACCOUNTING", inventoryAccountingIntegrationOverride],
         ["PURCHASES_TO_ACCOUNTING", purchasesAccountingIntegrationOverride],
+        ["HR_TO_ACCOUNTING", hrAccountingIntegrationOverride],
+        ["HR_TO_FINANCE", hrFinanceIntegrationOverride],
+        ["FINANCIAL_TO_ACCOUNTING", financialAccountingIntegrationOverride],
+        ["PROJECTS_TO_ACCOUNTING", projectsAccountingIntegrationOverride],
+        ["NOVACHAT_TO_FINANCE", novachatFinanceIntegrationOverride],
+        ["NOVACHAT_TO_ACCOUNTING", novachatAccountingIntegrationOverride],
         ["PURCHASES_TO_FINANCE", purchasesFinanceIntegrationOverride],
       ].filter(([, value]) => value !== undefined);
       if (canManageIntegrationPolicies && policyEntries.length) {
@@ -646,7 +674,9 @@ export function EnterpriseGroupSetupView({
       salesAccountingIntegrationOverride: unitForm.salesAccountingIntegrationOverride,
       inventoryAccountingIntegrationOverride: unitForm.inventoryAccountingIntegrationOverride,
       purchasesAccountingIntegrationOverride: unitForm.purchasesAccountingIntegrationOverride,
+      hrAccountingIntegrationOverride: unitForm.hrAccountingIntegrationOverride,
       purchasesFinanceIntegrationOverride: unitForm.purchasesFinanceIntegrationOverride,
+      ...Object.fromEntries(Object.entries(unitForm).filter(([key]) => key.endsWith("IntegrationOverride"))),
       isActive: true,
       __draft: true,
     };
@@ -712,7 +742,9 @@ export function EnterpriseGroupSetupView({
       salesAccountingIntegrationOverride: branchForm.salesAccountingIntegrationOverride,
       inventoryAccountingIntegrationOverride: branchForm.inventoryAccountingIntegrationOverride,
       purchasesAccountingIntegrationOverride: branchForm.purchasesAccountingIntegrationOverride,
+      hrAccountingIntegrationOverride: branchForm.hrAccountingIntegrationOverride,
       purchasesFinanceIntegrationOverride: branchForm.purchasesFinanceIntegrationOverride,
+      ...Object.fromEntries(Object.entries(branchForm).filter(([key]) => key.endsWith("IntegrationOverride"))),
       _count: { users: 1, warehouses: 0 },
       __draft: true,
     };
@@ -760,7 +792,13 @@ export function EnterpriseGroupSetupView({
       salesAccountingIntegrationOverride: unit.integrationPolicyOverrides?.SALES_TO_ACCOUNTING || unit.salesAccountingIntegrationOverride || "INHERIT",
       inventoryAccountingIntegrationOverride: unit.integrationPolicyOverrides?.INVENTORY_TO_ACCOUNTING || "INHERIT",
       purchasesAccountingIntegrationOverride: unit.integrationPolicyOverrides?.PURCHASES_TO_ACCOUNTING || "INHERIT",
+      hrAccountingIntegrationOverride: unit.integrationPolicyOverrides?.HR_TO_ACCOUNTING || "INHERIT",
       purchasesFinanceIntegrationOverride: unit.integrationPolicyOverrides?.PURCHASES_TO_FINANCE || "INHERIT",
+      hrFinanceIntegrationOverride: unit.integrationPolicyOverrides?.HR_TO_FINANCE || "INHERIT",
+      financialAccountingIntegrationOverride: unit.integrationPolicyOverrides?.FINANCIAL_TO_ACCOUNTING || "INHERIT",
+      projectsAccountingIntegrationOverride: unit.integrationPolicyOverrides?.PROJECTS_TO_ACCOUNTING || "INHERIT",
+      novachatFinanceIntegrationOverride: unit.integrationPolicyOverrides?.NOVACHAT_TO_FINANCE || "INHERIT",
+      novachatAccountingIntegrationOverride: unit.integrationPolicyOverrides?.NOVACHAT_TO_ACCOUNTING || "INHERIT",
     });
   };
 
@@ -780,7 +818,9 @@ export function EnterpriseGroupSetupView({
               salesAccountingIntegrationOverride: unitForm.salesAccountingIntegrationOverride,
               inventoryAccountingIntegrationOverride: unitForm.inventoryAccountingIntegrationOverride,
               purchasesAccountingIntegrationOverride: unitForm.purchasesAccountingIntegrationOverride,
+              hrAccountingIntegrationOverride: unitForm.hrAccountingIntegrationOverride,
               purchasesFinanceIntegrationOverride: unitForm.purchasesFinanceIntegrationOverride,
+              ...Object.fromEntries(Object.entries(unitForm).filter(([key]) => key.endsWith("IntegrationOverride"))),
             }
           : unit,
       ),
@@ -796,6 +836,7 @@ export function EnterpriseGroupSetupView({
       salesAccountingIntegrationOverride: "INHERIT",
       inventoryAccountingIntegrationOverride: "INHERIT",
       purchasesAccountingIntegrationOverride: "INHERIT",
+      hrAccountingIntegrationOverride: "INHERIT",
       purchasesFinanceIntegrationOverride: "INHERIT",
     });
     toast.success("Rubro actualizado");
@@ -815,7 +856,9 @@ export function EnterpriseGroupSetupView({
         salesAccountingIntegrationOverride: unitForm.salesAccountingIntegrationOverride,
         inventoryAccountingIntegrationOverride: unitForm.inventoryAccountingIntegrationOverride,
         purchasesAccountingIntegrationOverride: unitForm.purchasesAccountingIntegrationOverride,
+        hrAccountingIntegrationOverride: unitForm.hrAccountingIntegrationOverride,
         purchasesFinanceIntegrationOverride: unitForm.purchasesFinanceIntegrationOverride,
+        ...Object.fromEntries(Object.entries(unitForm).filter(([key]) => key.endsWith("IntegrationOverride"))),
       },
     });
   };
@@ -926,7 +969,13 @@ export function EnterpriseGroupSetupView({
       salesAccountingIntegrationOverride: branch.integrationPolicyOverrides?.SALES_TO_ACCOUNTING || branch.salesAccountingIntegrationOverride || "INHERIT",
       inventoryAccountingIntegrationOverride: branch.integrationPolicyOverrides?.INVENTORY_TO_ACCOUNTING || "INHERIT",
       purchasesAccountingIntegrationOverride: branch.integrationPolicyOverrides?.PURCHASES_TO_ACCOUNTING || "INHERIT",
+      hrAccountingIntegrationOverride: branch.integrationPolicyOverrides?.HR_TO_ACCOUNTING || "INHERIT",
       purchasesFinanceIntegrationOverride: branch.integrationPolicyOverrides?.PURCHASES_TO_FINANCE || "INHERIT",
+      hrFinanceIntegrationOverride: branch.integrationPolicyOverrides?.HR_TO_FINANCE || "INHERIT",
+      financialAccountingIntegrationOverride: branch.integrationPolicyOverrides?.FINANCIAL_TO_ACCOUNTING || "INHERIT",
+      projectsAccountingIntegrationOverride: branch.integrationPolicyOverrides?.PROJECTS_TO_ACCOUNTING || "INHERIT",
+      novachatFinanceIntegrationOverride: branch.integrationPolicyOverrides?.NOVACHAT_TO_FINANCE || "INHERIT",
+      novachatAccountingIntegrationOverride: branch.integrationPolicyOverrides?.NOVACHAT_TO_ACCOUNTING || "INHERIT",
     });
     setBranchAdminEmailStatus("idle");
   };
@@ -956,7 +1005,9 @@ export function EnterpriseGroupSetupView({
               salesAccountingIntegrationOverride: branchForm.salesAccountingIntegrationOverride,
               inventoryAccountingIntegrationOverride: branchForm.inventoryAccountingIntegrationOverride,
               purchasesAccountingIntegrationOverride: branchForm.purchasesAccountingIntegrationOverride,
+              hrAccountingIntegrationOverride: branchForm.hrAccountingIntegrationOverride,
               purchasesFinanceIntegrationOverride: branchForm.purchasesFinanceIntegrationOverride,
+              ...Object.fromEntries(Object.entries(branchForm).filter(([key]) => key.endsWith("IntegrationOverride"))),
             }
           : branch,
       ),
@@ -981,6 +1032,7 @@ export function EnterpriseGroupSetupView({
       salesAccountingIntegrationOverride: "INHERIT",
       inventoryAccountingIntegrationOverride: "INHERIT",
       purchasesAccountingIntegrationOverride: "INHERIT",
+      hrAccountingIntegrationOverride: "INHERIT",
       purchasesFinanceIntegrationOverride: "INHERIT",
     });
     setBranchAdminEmailStatus("idle");
@@ -1007,7 +1059,9 @@ export function EnterpriseGroupSetupView({
         salesAccountingIntegrationOverride: branchForm.salesAccountingIntegrationOverride,
         inventoryAccountingIntegrationOverride: branchForm.inventoryAccountingIntegrationOverride,
         purchasesAccountingIntegrationOverride: branchForm.purchasesAccountingIntegrationOverride,
+        hrAccountingIntegrationOverride: branchForm.hrAccountingIntegrationOverride,
         purchasesFinanceIntegrationOverride: branchForm.purchasesFinanceIntegrationOverride,
+        ...Object.fromEntries(Object.entries(branchForm).filter(([key]) => key.endsWith("IntegrationOverride"))),
       },
     });
   };
@@ -1425,6 +1479,7 @@ export function EnterpriseGroupSetupView({
                     salesAccountingIntegrationOverride: "INHERIT",
                     inventoryAccountingIntegrationOverride: "INHERIT",
                     purchasesAccountingIntegrationOverride: "INHERIT",
+                    hrAccountingIntegrationOverride: "INHERIT",
                     purchasesFinanceIntegrationOverride: "INHERIT",
                   });
                 }}
@@ -1481,6 +1536,7 @@ export function EnterpriseGroupSetupView({
                     salesAccountingIntegrationOverride: "INHERIT",
                     inventoryAccountingIntegrationOverride: "INHERIT",
                     purchasesAccountingIntegrationOverride: "INHERIT",
+                    hrAccountingIntegrationOverride: "INHERIT",
                     purchasesFinanceIntegrationOverride: "INHERIT",
                   });
                 }}
@@ -3342,6 +3398,10 @@ function IntegrationPoliciesCard({ group, enabledModules, onChange, saving }: {
         { id: "SALES_TO_ACCOUNTING", source: "SALES", sourceLabel: "Ventas", legacyKey: "salesAccountingIntegrationEnabled", description: "Información contable y asientos de Ventas." },
         { id: "INVENTORY_TO_ACCOUNTING", source: "INVENTORY", sourceLabel: "Inventario", legacyKey: "", description: "Asientos de existencias iniciales, ajustes y traslados." },
         { id: "PURCHASES_TO_ACCOUNTING", source: "PURCHASES", sourceLabel: "Compras", legacyKey: "", description: "Asientos de recepciones, facturas, pagos y gastos." },
+        { id: "HR_TO_ACCOUNTING", source: "HR", sourceLabel: "Recursos Humanos", legacyKey: "", description: "Solicitudes de pago, devengos y pagos de nómina, capacitación y beneficios." },
+        { id: "FINANCIAL_TO_ACCOUNTING", source: "FINANCIAL", sourceLabel: "Finanzas", legacyKey: "", description: "Asientos automáticos de ingresos, gastos y cuotas financieras." },
+        { id: "PROJECTS_TO_ACCOUNTING", source: "PROJECTS", sourceLabel: "Proyectos", legacyKey: "", description: "Asientos de costos ejecutados que se contabilizan manualmente." },
+        { id: "NOVACHAT_TO_ACCOUNTING", source: "NOVACHAT", sourceLabel: "NovaChat", legacyKey: "", description: "Asientos de operaciones confirmadas desde NovaChat." },
       ],
     },
     {
@@ -3349,6 +3409,8 @@ function IntegrationPoliciesCard({ group, enabledModules, onChange, saving }: {
       routes: [
         { id: "SALES_TO_FINANCE", source: "SALES", sourceLabel: "Ventas", legacyKey: "salesFinanceIntegrationEnabled", description: "Ingresos, comisiones y movimientos bancarios auxiliares." },
         { id: "PURCHASES_TO_FINANCE", source: "PURCHASES", sourceLabel: "Compras", legacyKey: "", description: "Gastos espejo y movimientos bancarios auxiliares." },
+        { id: "HR_TO_FINANCE", source: "HR", sourceLabel: "Recursos Humanos", legacyKey: "", description: "Gastos y movimientos auxiliares de pagos de nómina, capacitaciones y beneficios." },
+        { id: "NOVACHAT_TO_FINANCE", source: "NOVACHAT", sourceLabel: "NovaChat", legacyKey: "", description: "Gastos confirmados desde NovaChat." },
       ],
     },
   ];
@@ -3413,8 +3475,14 @@ function IntegrationPolicyOverrideFields({ value, onChange, parentLabel, editabl
     { id: "SALES_TO_ACCOUNTING", key: "salesAccountingIntegrationOverride", source: "SALES", sourceLabel: "Ventas", destination: "Contabilidad", destinationAvailable: accountingAvailable },
     { id: "INVENTORY_TO_ACCOUNTING", key: "inventoryAccountingIntegrationOverride", source: "INVENTORY", sourceLabel: "Inventario", destination: "Contabilidad", destinationAvailable: accountingAvailable },
     { id: "PURCHASES_TO_ACCOUNTING", key: "purchasesAccountingIntegrationOverride", source: "PURCHASES", sourceLabel: "Compras", destination: "Contabilidad", destinationAvailable: accountingAvailable },
+    { id: "HR_TO_ACCOUNTING", key: "hrAccountingIntegrationOverride", source: "HR", sourceLabel: "Recursos Humanos", destination: "Contabilidad", destinationAvailable: accountingAvailable },
+    { id: "FINANCIAL_TO_ACCOUNTING", key: "financialAccountingIntegrationOverride", source: "FINANCIAL", sourceLabel: "Finanzas", destination: "Contabilidad", destinationAvailable: accountingAvailable },
+    { id: "PROJECTS_TO_ACCOUNTING", key: "projectsAccountingIntegrationOverride", source: "PROJECTS", sourceLabel: "Proyectos", destination: "Contabilidad", destinationAvailable: accountingAvailable },
+    { id: "NOVACHAT_TO_ACCOUNTING", key: "novachatAccountingIntegrationOverride", source: "NOVACHAT", sourceLabel: "NovaChat", destination: "Contabilidad", destinationAvailable: accountingAvailable },
     { id: "SALES_TO_FINANCE", key: "salesFinanceIntegrationOverride", source: "SALES", sourceLabel: "Ventas", destination: "Finanzas", destinationAvailable: financeAvailable },
     { id: "PURCHASES_TO_FINANCE", key: "purchasesFinanceIntegrationOverride", source: "PURCHASES", sourceLabel: "Compras", destination: "Finanzas", destinationAvailable: financeAvailable },
+    { id: "HR_TO_FINANCE", key: "hrFinanceIntegrationOverride", source: "HR", sourceLabel: "Recursos Humanos", destination: "Finanzas", destinationAvailable: financeAvailable },
+    { id: "NOVACHAT_TO_FINANCE", key: "novachatFinanceIntegrationOverride", source: "NOVACHAT", sourceLabel: "NovaChat", destination: "Finanzas", destinationAvailable: financeAvailable },
   ];
   const optionsFor = (canForce: boolean) => [
     { value: "INHERIT", label: `Heredar de ${parentLabel}`, disabled: false },

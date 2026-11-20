@@ -603,6 +603,7 @@ export interface BillingCancelResult {
     reason: string;
     journalReversed: boolean;
     reversedJournalCount: number;
+    journalReversalPending: boolean;
   };
   restoredPackages: number;
   packages: string[];
@@ -624,6 +625,10 @@ export interface BillingReversalsResult {
     amountPaidAfter: number;
     journalReversed: boolean;
     reversedJournalCount: number;
+    journalReversalPending: boolean;
+    journalReversalAttempts: number;
+    journalReversalLastAttemptAt?: string | null;
+    journalReversalLastError?: string | null;
     packageTrackingCodes: string[];
   }>;
   history: Array<{
