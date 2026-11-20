@@ -1107,26 +1107,26 @@ export function Topbar({ onMenuClick, onNavigate, isCollapsed, onToggleCollapse 
         {/* User Menu */}
         <DropdownMenu>
           <DropdownMenuTrigger asChild>
-            <Button variant="ghost" className="h-10 gap-3 px-2 ml-2 hover:bg-transparent focus-visible:ring-0" aria-label="Menú de usuario">
+            <Button variant="ghost" className="ml-1 h-auto min-h-10 max-w-full shrink-0 gap-2 px-1.5 py-1 hover:bg-transparent xl:gap-3 xl:px-2" aria-label="Menú de usuario">
               <Avatar className="size-9 rounded-full border-2 border-primary/30">
                 <AvatarImage src={user?.avatar} alt={user?.name} className="object-cover" />
                 <AvatarFallback className="bg-primary text-primary-foreground text-xs">
                   {getAvatarInitials(user?.name)}
                 </AvatarFallback>
               </Avatar>
-              <div className="hidden flex-col items-start text-left lg:flex leading-tight">
-                <span className="font-semibold text-[14px] text-foreground">{user?.name}</span>
-                <span className="text-[12px] text-primary font-medium capitalize">
+              <div className="hidden min-w-0 max-w-[min(18vw,13rem)] flex-col items-start text-left leading-tight xl:flex">
+                <span className="break-words text-[14px] font-semibold text-foreground">{user?.name}</span>
+                <span className="break-words text-[12px] font-medium capitalize text-primary">
                   {user?.customRoleName || getRoleLabel(user?.role || '')}
                 </span>
               </div>
             </Button>
           </DropdownMenuTrigger>
-          <DropdownMenuContent align="end" className="w-64 max-w-[calc(100vw-1rem)] sm:w-56">
-            <DropdownMenuLabel>
-              <div className="flex flex-col space-y-1">
-                <p className="text-sm font-medium">{user?.name}</p>
-                <p className="text-xs text-muted-foreground">{user?.email}</p>
+          <DropdownMenuContent align="end" className="w-[min(22rem,calc(100vw-1rem))] max-w-[calc(100vw-1rem)] overflow-y-auto">
+            <DropdownMenuLabel className="min-w-0">
+              <div className="flex min-w-0 flex-col space-y-1">
+                <p className="break-words text-sm font-medium">{user?.name}</p>
+                <p className="break-all text-xs text-muted-foreground">{user?.email}</p>
               </div>
             </DropdownMenuLabel>
             <DropdownMenuSeparator />

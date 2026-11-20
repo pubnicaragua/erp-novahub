@@ -1,5 +1,5 @@
 import { useEffect, useState, type ChangeEvent } from 'react';
-import { Eye, KeyRound, Loader2, Mail, Pencil, Save, Users } from 'lucide-react';
+import { Eye, Loader2, Pencil, Save, Users } from 'lucide-react';
 import { toast } from '@/app/services/toast';
 import { tenantsService } from '../../services/tenants.service';
 import { storageService } from '../../services/storage.service';
@@ -17,6 +17,8 @@ const safeTrim = (value: unknown) => String(value ?? '').trim();
 type BranchSupportDialogProps = {
   branch: any;
   onChanged?: () => void;
+  initialTab?: 'summary' | 'users';
+  triggerLabel?: string;
 };
 
 function getBranchUserIdentityLabel(user: any) {
@@ -28,23 +30,18 @@ function getBranchUserIdentityLabel(user: any) {
   return `REVISAR IDENTIDAD · ${role || 'SIN ROL'}${userType ? ` / ${userType}` : ''}`;
 }
 
-export function GroupBranchSupportDialog({ branch, onChanged }: BranchSupportDialogProps) {
+export function GroupBranchSupportDialog({ branch, onChanged, initialTab = 'summary', triggerLabel = 'Administrar' }: BranchSupportDialogProps) {
   const [open, setOpen] = useState(false);
-  const [tab, setTab] = useState<'summary' | 'users'>('summary');
+  const [tab, setTab] = useState<'summary' | 'users'>(initialTab);
   const [loading, setLoading] = useState(false);
   const [details, setDetails] = useState<any>(null);
   const [users, setUsers] = useState<any[]>([]);
   const [savingDetails, setSavingDetails] = useState(false);
   const [detailsForm, setDetailsForm] = useState({ name: branch.name || '', slug: branch.slug || '', logo: branch.logo || '', industry: branch.industry || 'OTHER', subIndustry: branch.subIndustry || 'OTHER', businessType: getBusinessTypeOption(undefined, branch.industry, branch.subIndustry).key });
-  const [passwordUser, setPasswordUser] = useState<any>(null);
-  const [newPassword, setNewPassword] = useState('');
-  const [savingPassword, setSavingPassword] = useState(false);
-  const [emailUser, setEmailUser] = useState<any>(null);
-  const [newEmail, setNewEmail] = useState('');
-  const [savingEmail, setSavingEmail] = useState(false);
-  const [nameUser, setNameUser] = useState<any>(null);
-  const [newName, setNewName] = useState('');
-  const [savingName, setSavingName] = useState(false);
+  const [editingUser, setEditingUser] = useState<any>(null);
+  const [userForm, setUserForm] = useState({ name: '', email: '', password: '' });
+  const [userFormError, setUserFormError] = useState('');
+  const [savingUser, setSavingUser] = useState(false);
 
   useEffect(() => {
     if (!open) return;
@@ -132,78 +129,64 @@ export function GroupBranchSupportDialog({ branch, onChanged }: BranchSupportDia
     }
   };
 
-  const savePassword = async () => {
-    const passwordError = getPasswordError(newPassword);
-    if (passwordError) {
-      toast.error(passwordError);
-      return;
-    }
-    try {
-      setSavingPassword(true);
-      await tenantsService.updateUser(branch.id, passwordUser.id, { password: newPassword });
-      toast.success('Contraseña actualizada correctamente');
-      setPasswordUser(null);
-      setNewPassword('');
-    } catch (error: any) {
-      toast.error(error?.message || 'No se pudo actualizar la contraseña');
-    } finally {
-      setSavingPassword(false);
-    }
+  const openUserEditor = (user: any) => {
+    setEditingUser(user);
+    setUserForm({ name: user?.name || '', email: user?.email || '', password: '' });
+    setUserFormError('');
   };
 
-  const saveEmail = async () => {
-    const email = safeTrim(newEmail).toLowerCase();
-    if (!emailUser?.id || !isValidEmail(email)) {
-      toast.error('Escribe un correo válido');
-      return;
-    }
-    try {
-      setSavingEmail(true);
-      const updated = await tenantsService.updateUser(branch.id, emailUser.id, { email });
-      setUsers((current) => current.map((user) => user.id === emailUser.id ? { ...user, email: updated?.email || email } : user));
-      toast.success('Correo actualizado correctamente');
-      setEmailUser(null);
-      setNewEmail('');
-    } catch (error: any) {
-      toast.error(error?.message || 'No se pudo actualizar el correo');
-    } finally {
-      setSavingEmail(false);
-    }
+  const closeUserEditor = () => {
+    if (savingUser) return;
+    setEditingUser(null);
+    setUserForm({ name: '', email: '', password: '' });
+    setUserFormError('');
   };
 
-  const saveName = async () => {
-    const name = safeTrim(newName);
-    if (!nameUser?.id || !name) {
-      toast.error('Escribe el nombre completo');
+  const saveUser = async () => {
+    const name = safeTrim(userForm.name);
+    const email = safeTrim(userForm.email).toLowerCase();
+    const password = userForm.password;
+    const passwordError = getPasswordError(password, false);
+    if (!editingUser?.id || !name || !isValidEmail(email) || passwordError) {
+      setUserFormError(passwordError || (!name ? 'Escribe el nombre completo.' : 'Escribe un correo válido.'));
       return;
     }
     try {
-      setSavingName(true);
-      const updated = await tenantsService.updateUser(branch.id, nameUser.id, { name });
-      setUsers((current) => current.map((user) => user.id === nameUser.id ? { ...user, name: updated?.name || name } : user));
-      toast.success('Nombre actualizado correctamente');
-      setNameUser(null);
-      setNewName('');
-      onChanged?.();
+      setSavingUser(true);
+      setUserFormError('');
+      const updated = await tenantsService.updateUser(branch.id, editingUser.id, {
+        name,
+        email,
+        ...(password ? { password } : {}),
+      });
+      setUsers((current) => current.map((user) => user.id === editingUser.id
+        ? { ...user, ...updated, name: updated?.name || name, email: updated?.email || email }
+        : user));
+      toast.success('Usuario actualizado correctamente');
+      setEditingUser(null);
+      setUserForm({ name: '', email: '', password: '' });
+      await onChanged?.();
     } catch (error: any) {
-      toast.error(error?.message || 'No se pudo actualizar el nombre');
+      const message = error?.message || 'No se pudo actualizar el usuario';
+      setUserFormError(message);
+      toast.error(message);
     } finally {
-      setSavingName(false);
+      setSavingUser(false);
     }
   };
 
   return (
     <>
-      <Button variant="outline" size="sm" className="h-8 shrink-0 rounded-lg px-2.5" onClick={() => setOpen(true)}>
+      <Button variant="outline" size="sm" className="h-9 shrink-0 rounded-lg px-2.5" onClick={() => { setTab(initialTab); setOpen(true); }} aria-label={`${triggerLabel} de ${branch.name}`}>
         <Eye className="size-3.5" />
-        <span className="hidden lg:inline">Administrar</span>
+        <span>{triggerLabel}</span>
       </Button>
 
       <Dialog open={open} onOpenChange={setOpen}>
         <DialogContent className="h-auto w-[calc(100vw-2rem)] !max-w-[calc(100vw-2rem)] max-h-[calc(100dvh-2rem)] overflow-y-auto p-5 sm:w-[min(94vw,760px)] sm:!max-w-[760px] sm:p-7">
           <DialogHeader>
-            <DialogTitle className="flex items-center gap-2 font-black uppercase italic tracking-tight">
-              <Users className="size-5 text-primary" /> Soporte de {branch.name}
+            <DialogTitle className="flex min-w-0 items-start gap-2 break-words font-black uppercase italic tracking-tight">
+              <Users className="mt-0.5 size-5 shrink-0 text-primary" /> <span className="min-w-0 break-words">Soporte de {branch.name}</span>
             </DialogTitle>
             <DialogDescription>
               Consulta y administra la sucursal sin salir del grupo empresarial.
@@ -261,20 +244,14 @@ export function GroupBranchSupportDialog({ branch, onChanged }: BranchSupportDia
               {!users.length && <p className="rounded-2xl border border-dashed border-border p-8 text-center text-sm text-muted-foreground">No hay usuarios registrados en esta sucursal.</p>}
               {users.map((item: any) => (
                 <div key={item.id} className="flex min-w-0 flex-col gap-3 rounded-2xl border border-border/60 bg-muted/15 p-4 sm:flex-row sm:items-center sm:justify-between">
-                  <div className="min-w-0">
-                    <p className="truncate font-bold">{item.name}</p>
-                    <p className="truncate text-xs text-muted-foreground">{item.email}</p>
+                  <div className="min-w-0 flex-1">
+                    <p className="break-words font-bold">{item.name}</p>
+                    <p className="break-all text-xs text-muted-foreground">{item.email}</p>
                     <p className="mt-1 text-[10px] font-black uppercase tracking-widest text-primary">{getBranchUserIdentityLabel(item)}</p>
                   </div>
-                  <div className="flex flex-wrap gap-2 sm:shrink-0">
-                    <Button variant="outline" className="rounded-xl" onClick={() => { setNameUser(item); setNewName(item.name || ''); }}>
-                      <Pencil className="size-4" /> Cambiar nombre
-                    </Button>
-                    <Button variant="outline" className="rounded-xl" onClick={() => { setEmailUser(item); setNewEmail(item.email || ''); }}>
-                      <Mail className="size-4" /> Cambiar correo
-                    </Button>
-                    <Button variant="outline" className="rounded-xl" onClick={() => setPasswordUser(item)}>
-                      <KeyRound className="size-4" /> Cambiar contraseña
+                  <div className="flex w-full flex-wrap gap-2 sm:w-auto sm:shrink-0">
+                    <Button variant="outline" className="w-full rounded-xl sm:w-auto" onClick={() => openUserEditor(item)}>
+                      <Pencil className="size-4" /> Editar usuario
                     </Button>
                   </div>
                 </div>
@@ -289,46 +266,28 @@ export function GroupBranchSupportDialog({ branch, onChanged }: BranchSupportDia
         </DialogContent>
       </Dialog>
 
-      <Dialog open={!!passwordUser} onOpenChange={(nextOpen) => { if (!nextOpen) { setPasswordUser(null); setNewPassword(''); } }}>
-        <DialogContent className="w-[min(92vw,32rem)] max-w-none">
+      <Dialog open={!!editingUser} onOpenChange={(nextOpen) => { if (!nextOpen) closeUserEditor(); }}>
+        <DialogContent className="max-h-[calc(100dvh-2rem)] w-[min(92vw,36rem)] max-w-none overflow-y-auto rounded-3xl p-5 sm:p-7">
           <DialogHeader>
-            <DialogTitle className="font-black uppercase italic tracking-tight">Cambiar contraseña</DialogTitle>
-            <DialogDescription>Actualiza la contraseña de {passwordUser?.name} desde el soporte de la sucursal.</DialogDescription>
+            <DialogTitle className="break-words font-black uppercase italic tracking-tight">Editar usuario de sucursal</DialogTitle>
+            <DialogDescription className="break-all">Actualiza nombre y correo. Deja la contraseña en blanco para conservar la actual. Se mantienen las reglas de acceso de la cuenta.</DialogDescription>
           </DialogHeader>
-          <div className="space-y-2"><Label htmlFor="branch-support-password" required>Nueva contraseña</Label><input id="branch-support-password" type="password" required value={newPassword} onChange={(event) => setNewPassword(event.target.value)} placeholder="Nueva contraseña" className="h-11 w-full rounded-xl border border-border bg-background px-3 text-sm outline-none focus:border-primary" /></div>
-          <PasswordRequirements value={newPassword} />
-          <DialogFooter>
-            <Button variant="outline" className="rounded-xl" onClick={() => setPasswordUser(null)} disabled={savingPassword}>Cancelar</Button>
-            <Button className="rounded-xl" disabled={savingPassword || !!getPasswordError(newPassword)} onClick={savePassword}>{savingPassword ? 'Guardando…' : 'Guardar contraseña'}</Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
-
-      <Dialog open={!!emailUser} onOpenChange={(nextOpen) => { if (!nextOpen) { setEmailUser(null); setNewEmail(''); } }}>
-        <DialogContent className="w-[min(92vw,32rem)] max-w-none">
-          <DialogHeader>
-            <DialogTitle className="font-black uppercase italic tracking-tight">Cambiar correo</DialogTitle>
-            <DialogDescription>Actualiza el correo de acceso de {emailUser?.name}. Se valida contra todos los usuarios del ERP antes de guardar.</DialogDescription>
-          </DialogHeader>
-          <div className="space-y-2"><Label htmlFor="branch-support-email" required className="text-xs font-bold text-muted-foreground">Correo de acceso</Label><input id="branch-support-email" autoFocus type="email" required value={newEmail} onChange={(event) => setNewEmail(event.target.value)} placeholder="usuario@empresa.com" className="h-11 w-full rounded-xl border border-border bg-background px-3 text-sm text-foreground outline-none focus:border-primary" /></div>
-          <p className="text-xs text-muted-foreground">Debe ser válido y no estar registrado en ninguna otra cuenta, empresa o Manager.</p>
-          <DialogFooter>
-            <Button variant="outline" className="rounded-xl" onClick={() => setEmailUser(null)} disabled={savingEmail}>Cancelar</Button>
-            <Button className="rounded-xl" disabled={savingEmail || !isValidEmail(newEmail)} onClick={saveEmail}>{savingEmail ? 'Guardando…' : 'Guardar correo'}</Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
-
-      <Dialog open={!!nameUser} onOpenChange={(nextOpen) => { if (!nextOpen) { setNameUser(null); setNewName(''); } }}>
-        <DialogContent className="w-[min(92vw,32rem)] max-w-none">
-          <DialogHeader>
-            <DialogTitle className="font-black uppercase italic tracking-tight">Cambiar nombre</DialogTitle>
-            <DialogDescription>Actualiza el nombre visible de {nameUser?.email || 'este usuario'} en la sucursal.</DialogDescription>
-          </DialogHeader>
-          <div className="space-y-2"><Label htmlFor="branch-support-user-name" required className="text-xs font-bold text-muted-foreground">Nombre completo</Label><input id="branch-support-user-name" autoFocus type="text" required value={newName} onChange={(event) => setNewName(event.target.value)} placeholder="Nombre y apellido" className="h-11 w-full rounded-xl border border-border bg-background px-3 text-sm text-foreground outline-none focus:border-primary" /></div>
-          <DialogFooter>
-            <Button variant="outline" className="rounded-xl" onClick={() => setNameUser(null)} disabled={savingName}>Cancelar</Button>
-            <Button className="rounded-xl" disabled={savingName || !safeTrim(newName)} onClick={saveName}>{savingName ? 'Guardando…' : 'Guardar nombre'}</Button>
+          <div className="grid min-w-0 gap-4 sm:grid-cols-2">
+            <label className="min-w-0 space-y-1 text-xs font-bold text-muted-foreground">Nombre completo
+              <input autoFocus value={userForm.name} onChange={(event) => setUserForm((current) => ({ ...current, name: event.target.value }))} placeholder="Nombre y apellido" className="mt-2 h-11 w-full min-w-0 rounded-xl border border-border bg-background px-3 text-sm text-foreground outline-none focus:border-primary" />
+            </label>
+            <label className="min-w-0 space-y-1 text-xs font-bold text-muted-foreground">Correo de acceso
+              <input type="email" value={userForm.email} onChange={(event) => setUserForm((current) => ({ ...current, email: event.target.value }))} placeholder="usuario@empresa.com" className="mt-2 h-11 w-full min-w-0 rounded-xl border border-border bg-background px-3 text-sm text-foreground outline-none focus:border-primary" />
+            </label>
+            <label className="min-w-0 space-y-1 text-xs font-bold text-muted-foreground sm:col-span-2">Nueva contraseña <span className="font-normal">(opcional)</span>
+              <input type="password" autoComplete="new-password" value={userForm.password} onChange={(event) => setUserForm((current) => ({ ...current, password: event.target.value }))} placeholder="Deja en blanco para conservarla" className="mt-2 h-11 w-full min-w-0 rounded-xl border border-border bg-background px-3 text-sm text-foreground outline-none focus:border-primary" />
+            </label>
+            <PasswordRequirements value={userForm.password} className="sm:col-span-2" />
+          </div>
+          {userFormError && <p role="alert" className="rounded-xl border border-destructive/30 bg-destructive/5 px-3 py-2 text-sm text-destructive">{userFormError}</p>}
+          <DialogFooter className="flex-col gap-2 sm:flex-row">
+            <Button variant="outline" className="w-full rounded-xl sm:w-auto" onClick={closeUserEditor} disabled={savingUser}>Cancelar</Button>
+            <Button className="w-full rounded-xl sm:w-auto" disabled={savingUser} onClick={saveUser}>{savingUser ? <><Loader2 className="mr-2 size-4 animate-spin" />Guardando…</> : <><Save className="mr-2 size-4" />Guardar cambios</>}</Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>

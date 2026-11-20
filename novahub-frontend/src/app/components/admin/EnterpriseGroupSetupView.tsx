@@ -32,7 +32,7 @@ import { tenantFeaturesService, type TenantFeatureDefinition } from "../../servi
 import { storageService } from "../../services/storage.service";
 import { optimizeImageFile } from "../../utils/image-optimization";
 import { authService } from "../../services/auth.service";
-import { GroupManagerSupportDialog } from "./GroupManagerSupportDialog";
+import { GroupManagerEditDialog, GroupManagerSupportDialog } from "./GroupManagerSupportDialog";
 import { GroupBranchSupportDialog } from "./GroupBranchSupportDialog";
 import { PasswordRequirements } from "../PasswordRequirements";
 import { BrandLogo } from "../BrandLogo";
@@ -1491,6 +1491,7 @@ export function EnterpriseGroupSetupView({
                 units={units}
                 branches={branches}
                 editMode={mode === "edit"}
+                onChanged={refreshGroup}
                 availableModules={groupModuleIds}
                 groupPolicies={groupForm.modulePolicies || {}}
                 featureCatalog={tenantFeatureCatalogQuery.data || []}
@@ -1651,6 +1652,7 @@ function ManagersEditStep({
 }) {
   const managers = group?.managerAssignments || [];
   const [selectedManager, setSelectedManager] = useState<any>(null);
+  const [managerToEdit, setManagerToEdit] = useState<any>(null);
   const [password, setPassword] = useState("");
   const [saving, setSaving] = useState(false);
 
@@ -1696,24 +1698,29 @@ function ManagersEditStep({
         </CardHeader>
         <CardContent className="space-y-3 p-6">
           {managers.map((assignment: any) => (
-            <div key={assignment.id} className="flex flex-col gap-3 rounded-2xl border border-border/60 bg-muted/15 p-4 sm:flex-row sm:items-center sm:justify-between">
-              <div>
-                <p className="font-black">{assignment.user?.name || "Manager sin nombre"}</p>
-                <p className="text-sm text-muted-foreground">{assignment.user?.email || "Sin correo"}</p>
+            <div key={assignment.id} className="flex min-w-0 flex-col gap-3 rounded-2xl border border-border/60 bg-muted/15 p-4 sm:flex-row sm:items-center sm:justify-between">
+              <div className="min-w-0 flex-1">
+                <p className="break-words font-black">{assignment.user?.name || "Manager sin nombre"}</p>
+                <p className="break-all text-sm text-muted-foreground">{assignment.user?.email || "Sin correo"}</p>
                 <p className="mt-1 text-xs text-muted-foreground">
                   {assignment.isOwner ? "Propietario del grupo" : "Manager delegado"} · {assignment.user?.isActive === false ? "Inactivo" : "Activo"}
                 </p>
               </div>
-              <Button
-                variant="outline"
-                className="shrink-0 rounded-xl"
-                onClick={() => {
-                  setSelectedManager(assignment);
-                  setPassword("");
-                }}
-              >
-                <KeyRound className="mr-2 size-4" /> Cambiar contraseña
-              </Button>
+              <div className="flex w-full flex-wrap gap-2 sm:w-auto sm:shrink-0">
+                <Button variant="outline" className="w-full rounded-xl sm:w-auto" onClick={() => setManagerToEdit(assignment)}>
+                  <Pencil className="mr-2 size-4" /> Editar datos
+                </Button>
+                <Button
+                  variant="outline"
+                  className="w-full rounded-xl sm:w-auto"
+                  onClick={() => {
+                    setSelectedManager(assignment);
+                    setPassword("");
+                  }}
+                >
+                  <KeyRound className="mr-2 size-4" /> Cambiar contraseña
+                </Button>
+              </div>
             </div>
           ))}
           {!managers.length && (
@@ -1726,6 +1733,15 @@ function ManagersEditStep({
           )}
         </CardContent>
       </Card>
+      {managerToEdit && (
+        <GroupManagerEditDialog
+          key={managerToEdit.user?.id || managerToEdit.id}
+          group={group}
+          assignment={managerToEdit}
+          onOpenChange={(open) => { if (!open) setManagerToEdit(null); }}
+          onChanged={onChanged}
+        />
+      )}
       <Dialog
         open={Boolean(selectedManager)}
         onOpenChange={(open) => {
@@ -1797,7 +1813,7 @@ function UsersEditStep({
         minimal
         eyebrow="Configuración del grupo"
         title="Usuarios de las sucursales"
-        description="Los usuarios operativos siguen perteneciendo a cada sucursal. Desde aquí puedes abrir el soporte de una sucursal para consultar usuarios, cambiar contraseñas o inhabilitar cuentas sin borrar sus registros."
+        description="Los usuarios operativos siguen perteneciendo a cada sucursal. Abre el directorio para revisar y editar nombre, correo o contraseña de cada cuenta."
       />
       <Card className="rounded-3xl border-border/60">
         <CardHeader>
@@ -1807,14 +1823,14 @@ function UsersEditStep({
         </CardHeader>
         <CardContent className="grid gap-3 p-6 md:grid-cols-2">
           {branches.map((branch: any) => (
-            <div key={branch.id} className="flex min-w-0 items-center justify-between gap-3 rounded-2xl border border-border/60 bg-muted/15 p-4">
+            <div key={branch.id} className="flex min-w-0 flex-col gap-3 rounded-2xl border border-border/60 bg-muted/15 p-4 sm:flex-row sm:items-center sm:justify-between">
               <div className="min-w-0">
-                <p className="truncate font-black">{branch.name}</p>
+                <p className="break-words font-black">{branch.name}</p>
                 <p className="text-xs text-muted-foreground">
                   {branch._count?.users ?? 0} usuarios · {branch.isActive === false ? "Sucursal inactiva" : "Sucursal activa"}
                 </p>
               </div>
-              <GroupBranchSupportDialog branch={branch} onChanged={onChanged} />
+              <GroupBranchSupportDialog branch={branch} onChanged={onChanged} initialTab="users" triggerLabel="Ver usuarios" />
             </div>
           ))}
           {!branches.length && (
@@ -3057,6 +3073,7 @@ function BranchesStep({
   units,
   branches,
   editMode,
+  onChanged,
   availableModules,
   groupPolicies,
   featureCatalog,
@@ -3103,12 +3120,12 @@ function BranchesStep({
           {branches.map((branch: any) => (
             <div
               key={branch.id}
-              className="flex flex-col gap-2 rounded-2xl border border-border/60 bg-muted/15 p-4 sm:flex-row sm:items-center sm:justify-between"
+              className="flex flex-col gap-3 rounded-2xl border border-border/60 bg-muted/15 p-4 sm:flex-row sm:items-center sm:justify-between"
             >
               <div className="flex min-w-0 items-center gap-3">
                 <BrandLogo src={branch.logo} alt={`Logo de ${branch.name}`} kind="branch" className="size-11 rounded-xl bg-primary/10" imageClassName="rounded-xl" />
                 <div className="min-w-0">
-                <p className="truncate font-black">{branch.name}</p>
+                <p className="break-words font-black">{branch.name}</p>
                 <p className="text-xs text-muted-foreground">
                   {units.find((unit: any) => unit.id === branch.businessUnitId)
                     ?.name || "Rubro pendiente de normalizar"}{" "}
@@ -3119,7 +3136,7 @@ function BranchesStep({
                 </p>
                 </div>
               </div>
-              <div className="flex items-center gap-2">
+              <div className="flex w-full flex-wrap items-center gap-2 sm:w-auto sm:shrink-0">
                 <Badge variant="outline">
                   {units.find((unit: any) => unit.id === branch.businessUnitId)?.name ||
                     branch.businessType ||
@@ -3134,6 +3151,9 @@ function BranchesStep({
                   >
                     <Pencil className="size-4" />
                   </Button>
+                )}
+                {!branch.__draft && (
+                  <GroupBranchSupportDialog branch={branch} onChanged={onChanged} initialTab="users" triggerLabel="Ver usuarios" />
                 )}
                 {onStatusChange && (
                   <Button
@@ -3249,6 +3269,7 @@ function BranchesStep({
               empresarial.
             </div>
           </div>
+          {!editingId || editingBranch?.__draft ? (
           <div className="sm:col-span-2 grid gap-4 rounded-2xl border border-border/60 bg-background/50 p-4 sm:grid-cols-2">
             <label className={labelClass}>
               Administrador de sucursal
@@ -3308,6 +3329,15 @@ function BranchesStep({
             </label>
             <PasswordRequirements value={form.adminPassword} className="sm:col-span-2" />
           </div>
+          ) : (
+            <div className="sm:col-span-2 flex min-w-0 flex-col gap-3 rounded-2xl border border-primary/20 bg-primary/[0.03] p-4 sm:flex-row sm:items-center sm:justify-between">
+              <div className="min-w-0">
+                <p className="font-bold">Usuarios de esta sucursal</p>
+                <p className="text-xs leading-relaxed text-muted-foreground">Administra los datos de acceso desde el directorio de usuarios de la sucursal.</p>
+              </div>
+              <GroupBranchSupportDialog branch={editingBranch} onChanged={onChanged} initialTab="users" triggerLabel="Ver usuarios de sucursal" />
+            </div>
+          )}
           <div className="sm:col-span-2 rounded-2xl border border-border/60 bg-background/50 p-4">
             <p className={labelClass}>Módulos de la sucursal</p>
             <label className="mt-2 flex items-center gap-2 text-xs font-semibold text-foreground"><input type="checkbox" checked={form.moduleMode === "CUSTOM"} onChange={(event) => setForm((current: any) => ({ ...current, moduleMode: event.target.checked ? "CUSTOM" : "INHERIT", enabledModules: event.target.checked ? [...(selectedUnit?.enabledModules || availableModules)] : [] }))} className="size-4 accent-primary" />Personalizar módulos de esta sucursal</label>

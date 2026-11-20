@@ -9,7 +9,12 @@ import { Badge } from '../ui/badge';
 import { PasswordRequirements } from '../PasswordRequirements';
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '../ui/dialog';
 
-export function GroupManagerSupportDialog({ group, onChanged }: { group: any; onChanged?: () => void | Promise<void> }) {
+type GroupManagerSupportDialogProps = {
+  group: any;
+  onChanged?: () => void | Promise<void>;
+};
+
+export function GroupManagerSupportDialog({ group, onChanged }: GroupManagerSupportDialogProps) {
   const [open, setOpen] = useState(false);
   const [selectedManager, setSelectedManager] = useState<any>(null);
   const [password, setPassword] = useState('');
@@ -21,15 +26,12 @@ export function GroupManagerSupportDialog({ group, onChanged }: { group: any; on
   const managers = group?.managerAssignments || [];
 
   useEffect(() => {
+    if (!addingManager) return;
     const email = normalizeEmail(managerForm.email);
     let active = true;
     const timer = window.setTimeout(async () => {
       if (!email || !isValidEmail(email)) {
         if (active) setManagerEmailStatus('idle');
-        return;
-      }
-      if (editingManager?.user?.email && email === normalizeEmail(editingManager.user.email)) {
-        setManagerEmailStatus('available');
         return;
       }
       setManagerEmailStatus('checking');
@@ -46,7 +48,7 @@ export function GroupManagerSupportDialog({ group, onChanged }: { group: any; on
       active = false;
       window.clearTimeout(timer);
     };
-  }, [editingManager?.user?.email, managerForm.email]);
+  }, [addingManager, managerForm.email]);
 
   const resetManagerForm = () => {
     setManagerForm({ name: '', email: '', password: '' });
@@ -86,28 +88,6 @@ export function GroupManagerSupportDialog({ group, onChanged }: { group: any; on
 
   const openEditManager = (assignment: any) => {
     setEditingManager(assignment);
-    setManagerForm({ name: assignment.user?.name || '', email: assignment.user?.email || '', password: '' });
-    setManagerEmailStatus('available');
-  };
-
-  const saveManager = async () => {
-    const email = normalizeEmail(managerForm.email);
-    if (!editingManager?.user?.id || !managerForm.name.trim() || !isValidEmail(email) || managerEmailStatus !== 'available') {
-      toast.error('Completa el nombre y utiliza un correo válido y disponible');
-      return;
-    }
-    try {
-      setSaving(true);
-      await enterpriseGroupsService.updatePlatformManager(group.id, editingManager.user.id, { name: managerForm.name.trim(), email });
-      toast.success('Datos del Manager actualizados');
-      setEditingManager(null);
-      resetManagerForm();
-      await onChanged?.();
-    } catch (error: any) {
-      toast.error(error?.message || 'No se pudieron actualizar los datos del Manager');
-    } finally {
-      setSaving(false);
-    }
   };
 
   const savePassword = async () => {
@@ -131,18 +111,18 @@ export function GroupManagerSupportDialog({ group, onChanged }: { group: any; on
 
   return <>
     <Button aria-label={managers.length ? `Soporte de ${managers.length} Managers` : 'Agregar Manager al grupo empresarial'} variant={managers.length ? 'outline' : 'default'} size="sm" className="h-8 shrink-0 gap-1.5 rounded-lg px-2.5" onClick={() => setOpen(true)}>
-      <UserRound className="size-3.5" /> <span className="hidden lg:inline">{managers.length ? `Managers (${managers.length})` : 'Agregar Manager'}</span>
+      <UserRound className="size-3.5" /> <span>{managers.length ? `Managers (${managers.length})` : 'Agregar Manager'}</span>
     </Button>
     <Dialog open={open} onOpenChange={(nextOpen) => { setOpen(nextOpen); if (!nextOpen) resetManagerForm(); }}>
-      <DialogContent className="w-[calc(100vw-2rem)] !max-w-[min(92vw,720px)] rounded-3xl p-5 sm:p-7">
+      <DialogContent className="max-h-[calc(100dvh-2rem)] w-[calc(100vw-2rem)] !max-w-[min(92vw,720px)] overflow-y-auto rounded-3xl p-5 sm:p-7">
         <DialogHeader>
         <DialogTitle className="flex items-center gap-2 font-black uppercase italic tracking-tight"><ShieldCheck className="size-5 text-primary" /> {managers.length && !addingManager ? 'Soporte de Managers' : 'Agregar Manager al grupo'}</DialogTitle>
           <DialogDescription>{managers.length && !addingManager ? `Administra el acceso global de los Managers de ${group?.name}.` : `Crea un acceso global para continuar con la configuración de ${group?.name}.`}</DialogDescription>
         </DialogHeader>
         {managers.length && !addingManager ? <>
           <div className="space-y-3">
-            {managers.map((assignment: any) => <div key={assignment.user?.id || assignment.id} className="flex flex-col gap-3 rounded-2xl border border-border/60 bg-muted/15 p-4 sm:flex-row sm:items-center sm:justify-between">
-              <div className="min-w-0"><div className="flex flex-wrap items-center gap-2"><p className="font-bold">{assignment.user?.name}</p><Badge variant={assignment.isOwner ? 'default' : 'outline'}>{assignment.isOwner ? 'Propietario' : 'Manager delegado'}</Badge></div><p className="truncate text-xs text-muted-foreground">{assignment.user?.email}</p></div>
+            {managers.map((assignment: any) => <div key={assignment.user?.id || assignment.id} className="flex min-w-0 flex-col gap-3 rounded-2xl border border-border/60 bg-muted/15 p-4 sm:flex-row sm:items-center sm:justify-between">
+              <div className="min-w-0 flex-1"><div className="flex flex-wrap items-center gap-2"><p className="break-words font-bold">{assignment.user?.name}</p><Badge variant={assignment.isOwner ? 'default' : 'outline'}>{assignment.isOwner ? 'Propietario' : 'Manager delegado'}</Badge></div><p className="break-all text-xs text-muted-foreground">{assignment.user?.email}</p></div>
               <div className="flex flex-wrap gap-2">
                 <Button variant="outline" className="shrink-0 rounded-xl" onClick={() => openEditManager(assignment)}><Pencil className="mr-2 size-4" /> Editar datos</Button>
                 <Button variant="outline" className="shrink-0 rounded-xl" onClick={() => { setSelectedManager(assignment); setPassword(''); }}><KeyRound className="mr-2 size-4" /> Cambiar contraseña</Button>
@@ -161,16 +141,15 @@ export function GroupManagerSupportDialog({ group, onChanged }: { group: any; on
         </>}
       </DialogContent>
     </Dialog>
-    <Dialog open={Boolean(editingManager)} onOpenChange={(nextOpen) => { if (!nextOpen && !saving) { setEditingManager(null); resetManagerForm(); } }}>
-      <DialogContent className="w-[calc(100vw-2rem)] !max-w-md rounded-3xl p-5 sm:p-7">
-        <DialogHeader><DialogTitle className="font-black uppercase italic tracking-tight">Editar Manager</DialogTitle><DialogDescription>Actualiza el nombre y el correo con el que este Manager inicia sesión.</DialogDescription></DialogHeader>
-        <div className="grid gap-4 rounded-2xl border border-primary/20 bg-primary/[0.03] p-4">
-          <label className="space-y-1 text-xs font-bold text-muted-foreground">Nombre completo<input value={managerForm.name} onChange={(event) => setManagerForm((current) => ({ ...current, name: event.target.value }))} className="mt-2 h-11 w-full rounded-xl border border-border bg-background px-3 text-sm text-foreground outline-none focus:border-primary" /></label>
-          <label className="space-y-1 text-xs font-bold text-muted-foreground">Correo de acceso<input type="email" value={managerForm.email} onChange={(event) => setManagerForm((current) => ({ ...current, email: event.target.value }))} className="mt-2 h-11 w-full rounded-xl border border-border bg-background px-3 text-sm text-foreground outline-none focus:border-primary" /><span className={`mt-1 block text-[11px] font-normal ${managerEmailStatus === 'taken' ? 'text-destructive' : managerEmailStatus === 'available' ? 'text-emerald-600' : 'text-muted-foreground'}`}>{managerEmailStatus === 'checking' ? 'Verificando disponibilidad…' : managerEmailStatus === 'taken' ? 'Este correo ya está registrado en otra cuenta' : 'Correo disponible'}</span></label>
-        </div>
-        <DialogFooter><Button variant="outline" className="rounded-xl" onClick={() => { setEditingManager(null); resetManagerForm(); }} disabled={saving}>Cancelar</Button><Button className="rounded-xl" onClick={saveManager} disabled={saving || managerEmailStatus !== 'available' || !managerForm.name.trim() || !isValidEmail(normalizeEmail(managerForm.email))}>{saving ? <><Loader2 className="mr-2 size-4 animate-spin" />Guardando…</> : 'Guardar cambios'}</Button></DialogFooter>
-      </DialogContent>
-    </Dialog>
+    {editingManager && (
+      <GroupManagerEditDialog
+        key={editingManager.user?.id || editingManager.id}
+        group={group}
+        assignment={editingManager}
+        onOpenChange={(nextOpen) => { if (!nextOpen) setEditingManager(null); }}
+        onChanged={onChanged}
+      />
+    )}
     <Dialog open={Boolean(selectedManager)} onOpenChange={(nextOpen) => { if (!nextOpen) { setSelectedManager(null); setPassword(''); } }}>
       <DialogContent className="w-[calc(100vw-2rem)] !max-w-md rounded-3xl p-5 sm:p-7">
         <DialogHeader><DialogTitle className="font-black uppercase italic tracking-tight">Cambiar contraseña</DialogTitle><DialogDescription>Actualiza la contraseña de {selectedManager?.user?.name}.</DialogDescription></DialogHeader>
@@ -180,4 +159,91 @@ export function GroupManagerSupportDialog({ group, onChanged }: { group: any; on
       </DialogContent>
     </Dialog>
   </>;
+}
+
+type GroupManagerEditDialogProps = {
+  group: any;
+  assignment: any;
+  onOpenChange: (open: boolean) => void;
+  onChanged?: () => void | Promise<void>;
+};
+
+export function GroupManagerEditDialog({ group, assignment, onOpenChange, onChanged }: GroupManagerEditDialogProps) {
+  const [managerForm, setManagerForm] = useState(() => ({
+    name: assignment.user?.name || '',
+    email: assignment.user?.email || '',
+  }));
+  const [emailStatus, setEmailStatus] = useState<'idle' | 'checking' | 'available' | 'taken' | 'error'>('idle');
+  const [saving, setSaving] = useState(false);
+
+  useEffect(() => {
+    const email = normalizeEmail(managerForm.email);
+    let active = true;
+    const timer = window.setTimeout(async () => {
+      if (!email || !isValidEmail(email)) {
+        if (active) setEmailStatus('idle');
+        return;
+      }
+      if (email === normalizeEmail(assignment.user?.email)) {
+        if (active) setEmailStatus('available');
+        return;
+      }
+      if (active) setEmailStatus('checking');
+      try {
+        const response = await authService.checkEmail(email);
+        const exists = (response as any)?.data?.exists ?? (response as any)?.exists;
+        if (active) setEmailStatus(exists ? 'taken' : 'available');
+      } catch {
+        if (active) setEmailStatus('error');
+      }
+    }, email && isValidEmail(email) ? 350 : 0);
+
+    return () => {
+      active = false;
+      window.clearTimeout(timer);
+    };
+  }, [assignment.user?.email, managerForm.email]);
+
+  const saveManager = async () => {
+    const email = normalizeEmail(managerForm.email);
+    if (!assignment?.user?.id || !managerForm.name.trim() || !isValidEmail(email) || emailStatus !== 'available') {
+      toast.error('Completa el nombre y utiliza un correo válido y disponible');
+      return;
+    }
+    try {
+      setSaving(true);
+      await enterpriseGroupsService.updatePlatformManager(group.id, assignment.user.id, { name: managerForm.name.trim(), email });
+      toast.success('Datos del Manager actualizados');
+      onOpenChange(false);
+      await onChanged?.();
+    } catch (error: any) {
+      toast.error(error?.message || 'No se pudieron actualizar los datos del Manager');
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  return (
+    <Dialog open onOpenChange={(nextOpen) => { if (!saving) onOpenChange(nextOpen); }}>
+      <DialogContent className="max-h-[calc(100dvh-2rem)] w-[calc(100vw-2rem)] !max-w-md overflow-y-auto rounded-3xl p-5 sm:p-7">
+        <DialogHeader>
+          <DialogTitle className="break-words font-black uppercase italic tracking-tight">Editar Manager</DialogTitle>
+          <DialogDescription className="break-all">Actualiza el nombre y el correo con el que este Manager inicia sesión.</DialogDescription>
+        </DialogHeader>
+        <div className="grid min-w-0 gap-4 rounded-2xl border border-primary/20 bg-primary/[0.03] p-4">
+          <label className="min-w-0 space-y-1 text-xs font-bold text-muted-foreground">Nombre completo
+            <input value={managerForm.name} onChange={(event) => setManagerForm((current) => ({ ...current, name: event.target.value }))} className="mt-2 h-11 w-full min-w-0 rounded-xl border border-border bg-background px-3 text-sm text-foreground outline-none focus:border-primary" />
+          </label>
+          <label className="min-w-0 space-y-1 text-xs font-bold text-muted-foreground">Correo de acceso
+            <input type="email" value={managerForm.email} onChange={(event) => setManagerForm((current) => ({ ...current, email: event.target.value }))} className="mt-2 h-11 w-full min-w-0 rounded-xl border border-border bg-background px-3 text-sm text-foreground outline-none focus:border-primary" />
+            <span className={`mt-1 block break-words text-[11px] font-normal ${emailStatus === 'taken' ? 'text-destructive' : emailStatus === 'available' ? 'text-emerald-600' : 'text-muted-foreground'}`}>{emailStatus === 'checking' ? 'Verificando disponibilidad…' : emailStatus === 'taken' ? 'Este correo ya está registrado en otra cuenta' : emailStatus === 'available' ? 'Correo disponible' : emailStatus === 'error' ? 'No se pudo verificar el correo; intenta nuevamente' : 'Debe ser un correo válido y único'}</span>
+          </label>
+        </div>
+        <DialogFooter className="flex-col gap-2 sm:flex-row">
+          <Button variant="outline" className="w-full rounded-xl sm:w-auto" onClick={() => onOpenChange(false)} disabled={saving}>Cancelar</Button>
+          <Button className="w-full rounded-xl sm:w-auto" onClick={saveManager} disabled={saving || emailStatus !== 'available' || !managerForm.name.trim() || !isValidEmail(normalizeEmail(managerForm.email))}>{saving ? <><Loader2 className="mr-2 size-4 animate-spin" />Guardando…</> : 'Guardar cambios'}</Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+  );
 }

@@ -1051,14 +1051,14 @@ export function ManagerShell({
                   <DropdownMenuTrigger asChild>
                     <Button
                       variant="ghost"
-                      className="ml-1 h-10 gap-2 rounded-xl border-l border-border/60 pl-3 pr-1 hover:bg-muted/60 focus-visible:ring-1"
+                      className="ml-1 h-auto min-h-10 max-w-full shrink-0 gap-2 rounded-xl border-l border-border/60 py-1 pl-3 pr-1 hover:bg-muted/60 focus-visible:ring-1"
                       aria-label="Menú de usuario Manager"
                     >
                       <div className="flex size-9 items-center justify-center overflow-hidden rounded-full bg-primary text-xs font-black text-primary-foreground ring-1 ring-primary/20">
                         {profileAvatar ? <img src={profileAvatar} alt="" className="size-full object-cover" /> : String(user?.name || "M").split(" ").map((part) => part[0]).slice(0, 2).join("").toUpperCase()}
                       </div>
-                      <div className="hidden min-w-0 flex-col items-start text-left leading-tight xl:flex">
-                        <span className="max-w-32 truncate text-xs font-black">
+                      <div className="hidden min-w-0 max-w-[min(18vw,13rem)] flex-col items-start text-left leading-tight xl:flex">
+                        <span className="break-words text-xs font-black">
                           {user?.name || "Manager"}
                         </span>
                         <span className="text-[10px] uppercase tracking-widest text-primary">
@@ -1069,14 +1069,14 @@ export function ManagerShell({
                   </DropdownMenuTrigger>
                   <DropdownMenuContent
                     align="end"
-                    className="w-64 max-w-[calc(100vw-1rem)] rounded-xl"
+                    className="w-[min(22rem,calc(100vw-1rem))] max-w-[calc(100vw-1rem)] overflow-y-auto rounded-xl"
                   >
-                    <DropdownMenuLabel>
-                      <div className="flex flex-col space-y-1">
-                        <p className="text-sm font-medium">
+                    <DropdownMenuLabel className="min-w-0">
+                      <div className="flex min-w-0 flex-col space-y-1">
+                        <p className="break-words text-sm font-medium">
                           {user?.name || "Manager"}
                         </p>
-                        <p className="text-xs text-muted-foreground">
+                        <p className="break-all text-xs text-muted-foreground">
                           {user?.email || "Acceso Manager"}
                         </p>
                       </div>
