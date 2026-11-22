@@ -90,7 +90,7 @@ const SuscripcionesPage = lazyWithChunkRecovery(() => import('./components/Suscr
 const PrismaSchemaPage = lazyWithChunkRecovery(() => import('./components/PrismaSchemaPage').then(m => ({ default: m.PrismaSchemaPage })), 'schema');
 const FinanciamientoPymePage = lazyWithChunkRecovery(() => import('./components/FinanciamientoPymePage').then(m => ({ default: m.FinanciamientoPymePage })), 'financiamiento');
 const AsesoriaLegalPage = lazyWithChunkRecovery(() => import('./components/AsesoriaLegalPage').then(m => ({ default: m.AsesoriaLegalPage })), 'asesoria');
-const NovaChatView = lazyWithChunkRecovery(() => import('./components/novachat/NovaChatView').then(m => ({ default: m.NovaChatView })), 'novachat');
+const NovaSuiteHub = lazyWithChunkRecovery(() => import('./components/novachat/NovaSuiteHub').then(m => ({ default: m.NovaSuiteHub })), 'novachat');
 const TrainingHubView = lazyWithChunkRecovery(() => import('./components/help/TrainingHubView').then(m => ({ default: m.TrainingHubView })), 'training');
 const SoporteTecnicoView = lazyWithChunkRecovery(() => import('./components/help/SoporteTecnicoView').then(m => ({ default: m.SoporteTecnicoView })), 'support');
 const SoporteTecnicoAdminView = lazyWithChunkRecovery(() => import('./components/help/SoporteTecnicoAdminView').then(m => ({ default: m.SoporteTecnicoAdminView })), 'support-admin');
@@ -657,7 +657,7 @@ function DashboardLayout() {
       case 'soporte-tecnico': return user?.isPlatformAdmin ? <SoporteTecnicoAdminView activeSubModule={activeSubModule} onSubModuleChange={setActiveSubModule} isSidebarCollapsed={isCollapsed} /> : <SoporteTecnicoView activeSubModule={activeSubModule} onSubModuleChange={setActiveSubModule} isSidebarCollapsed={isCollapsed} />;
       case 'contabilidad': return <ContabilidadPage activeSubModule={activeSubModule} onSubModuleChange={setActiveSubModule} isSidebarCollapsed={isCollapsed} />;
       case 'asesoria-legal': return <AsesoriaLegalPage activeSubModule={activeSubModule} onSubModuleChange={setActiveSubModule} isSidebarCollapsed={isCollapsed} />;
-      case 'novachat': return <NovaChatView />;
+      case 'novachat': return <NovaSuiteHub />;
       case 'qa-console': return <ModuleErrorBoundary moduleName="Validador QA"><QaConsoleView activeSubModule={activeSubModule} onSubModuleChange={setActiveSubModule} isSidebarCollapsed={isCollapsed} /></ModuleErrorBoundary>;
       case 'guia-implementacion': return user?.role === 'superadmin' ? <ImplementationGuideView onNavigate={handleNavigate} /> : <div className="flex min-h-[calc(100vh-4rem)] items-center justify-center p-6"><div className="text-center"><h1 className="text-2xl font-semibold tracking-tight">Acceso Denegado</h1><p className="mt-2 text-muted-foreground">No tienes permisos para acceder a esta guía</p></div></div>;
       default: return <ModuleErrorBoundary moduleName="Dashboard"><OverviewDashboard onNavigate={handleNavigate} /></ModuleErrorBoundary>;
