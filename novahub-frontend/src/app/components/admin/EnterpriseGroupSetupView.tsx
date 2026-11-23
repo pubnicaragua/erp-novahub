@@ -53,6 +53,7 @@ import { getBusinessTypeLabel } from "../../constants/businessTypes";
 import {
   DEFAULT_ENTERPRISE_MODULES,
   ENTERPRISE_MODULE_OPTIONS,
+  updateEnterpriseModuleSelection,
 } from "../../constants/enterpriseModules";
 import { formatCurrencyDescriptor } from "../../utils/currency";
 import { PERMISSION_SUBMODULES } from "../../utils/sidebarPermissions";
@@ -252,9 +253,19 @@ export function EnterpriseGroupSetupView({
   useEffect(() => {
     if (!initialGroup?.id) return;
     // El listado de Superadmin ya entrega las colecciones necesarias para
-    // editar el grupo. Evita repetir GET /platform/:id al abrir cada tarjeta;
-    // el fallback conserva compatibilidad si llega un resumen incompleto.
-    if (Array.isArray(initialGroup.businessUnits) && Array.isArray(initialGroup.branches) && Array.isArray(initialGroup.warehouses)) {
+    // editar el grupo. Las sucursales también deben traer su modo y selección
+    // de módulos para poder omitir el GET de detalle sin perder ese estado.
+    const hasBranchModuleConfiguration = Array.isArray(initialGroup.branches)
+      && initialGroup.branches.every((branch: any) =>
+        ['INHERIT', 'CUSTOM'].includes(String(branch.moduleMode || '').toUpperCase())
+        && Array.isArray(branch.moduleSelection),
+      );
+    if (
+      Array.isArray(initialGroup.businessUnits)
+      && Array.isArray(initialGroup.branches)
+      && Array.isArray(initialGroup.warehouses)
+      && hasBranchModuleConfiguration
+    ) {
       setGroup(initialGroup);
       setLoadingGroup(false);
       return;
@@ -3575,7 +3586,8 @@ function ModuleSelector({
       </div>
       <p className="mt-1 text-xs text-muted-foreground">
         Esta selección no puede superar los módulos habilitados en el nivel
-        superior.
+        superior. Los módulos de Recursos Humanos requieren su módulo principal;
+        al desactivarlo también se desactivan sus vistas, como Capacitación.
       </p>
       <div className="mt-3 grid gap-2 sm:grid-cols-2">
         {options.map((module) => {
@@ -3588,13 +3600,7 @@ function ModuleSelector({
               <input
                 type="checkbox"
                 checked={checked}
-                onChange={() =>
-                  onChange(
-                    checked
-                      ? value.filter((id) => id !== module.id)
-                      : [...value, module.id],
-                  )
-                }
+                onChange={() => onChange(updateEnterpriseModuleSelection(value, module.id, !checked))}
                 className="mt-0.5 size-4 accent-primary"
               />
               <span className="min-w-0">

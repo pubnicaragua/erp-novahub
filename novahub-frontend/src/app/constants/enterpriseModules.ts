@@ -46,3 +46,19 @@ export const ENTERPRISE_MODULE_OPTIONS: EnterpriseModuleOption[] = [
 export const DEFAULT_ENTERPRISE_MODULES = ENTERPRISE_MODULE_OPTIONS
   .filter((module) => !['RESTAURANT', 'HOTEL', 'SALES_VOICE_QUICK', 'FORCE_SALES', 'ORGANIZATION', 'MARKETING', 'FLEET'].includes(module.id))
   .map((module) => module.id);
+
+export function updateEnterpriseModuleSelection(
+  selectedModules: string[],
+  moduleId: string,
+  checked: boolean,
+): string[] {
+  const current = [...new Set(selectedModules.map((module) => String(module || '').toUpperCase()))];
+  const selectedId = String(moduleId || '').toUpperCase();
+  if (checked) {
+    const additions = selectedId.startsWith('HR_') ? ['HR', selectedId] : [selectedId];
+    return [...current, ...additions.filter((module) => !current.includes(module))];
+  }
+  return current.filter((module) =>
+    module !== selectedId && !(selectedId === 'HR' && module.startsWith('HR_')),
+  );
+}
