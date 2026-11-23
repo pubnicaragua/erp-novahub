@@ -9,6 +9,7 @@ import { LEGACY_VIEW_PERMISSION_ALIASES, SIDEBAR_PERMISSION_PARENT_ALIASES, SIDE
 import { canAccessModuleShell, canAccessModuleView, type ModuleViewPolicies } from '../utils/moduleViewAccess';
 import { approvalActionValue } from '../utils/permissions';
 import { managerBranchCanReadView } from '../utils/managerBranchPermissions';
+import { resolveTenantAdminIdentity } from '../utils/tenantAdminIdentity';
 import type { UserThemeSettings } from '../services/branding.service';
 
 const SIDEBAR_PERMISSION_PARENT_MODULE_IDS = new Set<string>(SIDEBAR_PERMISSION_PARENT_ORDER);
@@ -729,12 +730,12 @@ const createUserObject = (apiPayload: any): User => {
     isPlatformAdmin,
     isPlatformSupportAgent,
     isTenantUser: !isPlatformAdmin && !isPlatformSupportAgent,
-    isTenantAdmin: Boolean(apiUser.clientTenantId)
-      && !isPlatformAdmin
-      && !isPlatformSupportAgent
-      && userType !== 'manager'
-      && userType !== 'customer_portal'
-      && (userType === 'admin' || role === 'admin'),
+    isTenantAdmin: resolveTenantAdminIdentity(apiUser, {
+      role,
+      userType,
+      isPlatformAdmin,
+      isPlatformSupportAgent,
+    }),
     managerMode: Boolean(apiUser.managerMode),
     managerCanAdminBranch: apiUser.managerCanAdminBranch === true,
     managerFullBranchAccess: apiUser.managerFullBranchAccess === true,

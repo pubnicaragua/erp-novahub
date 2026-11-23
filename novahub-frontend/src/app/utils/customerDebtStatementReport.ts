@@ -2,6 +2,8 @@ import { getCurrencyDecimalPlaces } from './currency';
 import { formatDateEs } from './dateFormat';
 import { buildDownloadFileName } from './exportFileNames';
 import { generateConfiguredReportTemplate } from './pdfGenerator';
+import { resolveCustomerDebtStatementInstallments } from './customerDebtStatementRows';
+import { pdfStatusLabel } from './pdfStatus';
 
 const money = (amount: number, currency: string) => new Intl.NumberFormat('es-NI', {
   style: 'currency',
@@ -14,21 +16,47 @@ export async function generateCustomerDebtStatementReport(input: {
   tenantName: string;
   tenantLogo?: string | null;
   customerName: string;
+  documentLabel?: 'Crédito' | 'Préstamo';
   contractNumber: string;
   currency: string;
   total: number;
   amountPaid: number;
   balance: number;
   overdueBalance: number;
+  status?: string | null;
+  date?: string | null;
+  dueDate?: string | null;
+  principalAmount?: number | null;
+  interestAmount?: number | null;
+  planEnabled?: boolean;
+  planCalculationMode?: 'AMOUNT' | 'DEADLINE' | 'MANUAL' | null;
+  installmentAmount?: number | string | null;
+  firstInstallmentDate?: string | null;
+  frequency?: 'DAILY' | 'WEEKLY' | 'BIWEEKLY' | 'MONTHLY' | null;
+  manualInstallments?: Array<{ dueDate: string; totalAmount: string; interestAmount: string }> | null;
+  excludedWeekdays?: number[] | null;
+  excludedDates?: string[] | null;
+  calendarExclusions?: { excludedWeekdays?: number[]; holidays?: Array<{ date?: string }> } | null;
   installments: Array<any>;
   paymentHistory: Array<any>;
 }) {
   const currency = input.currency || 'NIO';
-  const installmentRows = input.installments.map((item) => ({
+  const statementInstallments = resolveCustomerDebtStatementInstallments(input);
+  const isDraft = String(input.status || '').toUpperCase() === 'DRAFT';
+  const statusLabel = isDraft
+    ? 'Borrador'
+    : String(input.status || '').toUpperCase() === 'ISSUED'
+      ? 'Aprobado'
+      : pdfStatusLabel(input.status);
+  const installmentRows = statementInstallments.map((item) => ({
     sortDate: String(item.dueDate || '').slice(0, 10),
-    kind: 'Cuota',
+    kind: item.draftSummary ? input.documentLabel || 'Crédito' : item.projected ? 'Cuota proyectada' : 'Cuota',
     date: formatDateEs(item.dueDate),
-    detail: `Abono #${item.installmentNumber} · ${item.status === 'PAID' ? 'Pagado' : item.status === 'PARTIAL' ? 'Parcial' : 'Pendiente'}`,
+    detail: item.draftSummary
+      ? `Borrador de ${String(input.documentLabel || 'Crédito').toLowerCase()} · Sin cuotas ni pagos registrados`
+      : item.projected
+        ? `Abono proyectado #${item.installmentNumber} · Se registrará al aprobar el crédito`
+        : `Abono #${item.installmentNumber} · ${item.status === 'PAID' ? 'Pagado' : item.status === 'PARTIAL' ? 'Parcial' : 'Pendiente'}`,
     amount: money(Number(item.totalAmount || 0), currency),
     balance: money(Number(item.remainingAmount ?? Math.max(0, Number(item.totalAmount || 0) - Number(item.principalPaid || 0) - Number(item.interestPaid || 0))), currency),
   }));
@@ -76,10 +104,10 @@ export async function generateCustomerDebtStatementReport(input: {
   const rows = [...installmentRows, ...paymentRows].sort((a, b) => a.sortDate.localeCompare(b.sortDate) || a.kind.localeCompare(b.kind));
   return generateConfiguredReportTemplate({
     targetKey: 'ventas.customer-debt-statement',
-    title: 'Estado de deuda actualizado',
+    title: input.documentLabel === 'Préstamo' ? 'Estado de cuenta de préstamos' : 'Estado de cuenta de créditos',
     tenantName: input.tenantName,
     tenantLogo: input.tenantLogo,
-    subtitle: [`Cliente: ${input.customerName}`, `Documento: ${input.contractNumber}`].filter(Boolean).join(' · '),
+    subtitle: [`Cliente: ${input.customerName}`, `Documento: ${input.contractNumber}`, ...(input.status ? [`Estado: ${statusLabel}`] : [])].filter(Boolean).join(' · '),
     rows,
     columns: [
       { header: 'Tipo', value: (row) => row.kind, align: 'center' },
@@ -91,18 +119,19 @@ export async function generateCustomerDebtStatementReport(input: {
     totals: {
       Cliente: input.customerName,
       Documento: input.contractNumber,
-      'Total financiado': money(input.total, currency),
+      ...(input.status ? { Estado: isDraft ? 'Borrador · Aún sin abonos registrados' : statusLabel } : {}),
+      [isDraft ? 'Monto del crédito' : 'Total financiado']: money(input.total, currency),
       'Total abonado': money(input.amountPaid, currency),
-      'Saldo actual': money(input.balance, currency),
+      [isDraft ? 'Saldo del borrador' : 'Saldo actual']: money(input.balance, currency),
       'Saldo atrasado': money(input.overdueBalance, currency),
     },
     reportMetrics: [
-      { label: 'Total financiado', value: money(input.total, currency) },
+      { label: isDraft ? 'Monto del crédito' : 'Total financiado', value: money(input.total, currency) },
       { label: 'Abonado', value: money(input.amountPaid, currency) },
-      { label: 'Saldo actual', value: money(input.balance, currency) },
+      { label: isDraft ? 'Saldo proyectado' : 'Saldo actual', value: money(input.balance, currency) },
       { label: 'Saldo atrasado', value: money(input.overdueBalance, currency) },
     ],
-    fileName: buildDownloadFileName(['estado_de_deuda', input.customerName, input.contractNumber], 'pdf'),
+    fileName: buildDownloadFileName([`estado_de_cuenta_${input.documentLabel === 'Préstamo' ? 'prestamo' : 'credito'}`, input.customerName, input.contractNumber], 'pdf'),
     format: 'configured',
   });
 }

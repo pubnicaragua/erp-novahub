@@ -242,6 +242,14 @@ test('Ventas matrix exposes each confirmed business workflow instead of a blanke
   assert.equal(getPermissionActionKeys('SALES_CREDIT_NOTES').includes('delete'), false);
 });
 
+test('credit roles expose and persist the approval action', () => {
+  const permission = hydratePermissionActions({ module: 'SALES_CREDIT_NOTES', read: true, issue: true }, 'SALES_CREDIT_NOTES');
+  assert.equal(getPermissionActionKeys('SALES_CREDIT_NOTES').includes('issue'), true);
+  assert.equal(permission.issue, true);
+  const [saved] = serializePermissionActions([permission]);
+  assert.equal(saved.issue, true);
+});
+
 test('Facturas muestra registrar pago y conserva el permiso histórico de Pagos recibidos al editar roles', () => {
   const permissions = [
     { module: 'SALES_INVOICES', read: true },

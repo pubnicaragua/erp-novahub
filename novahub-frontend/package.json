@@ -24,6 +24,7 @@
     "test:api-error-normalization": "node --experimental-strip-types --test scripts/test-api-error-normalization.mjs",
     "test:global-invalid-fields": "node --test scripts/test-global-invalid-fields.mjs",
     "test:customer-credit-manual-plan": "node scripts/test-customer-credit-manual-plan.mjs",
+    "test:customer-credit-approval-and-statement": "node scripts/test-customer-credit-approval-and-statement.mjs",
     "test:module-subnavigation": "node scripts/test-module-subnavigation.mjs",
     "test:force-sales-map-location": "node scripts/test-force-sales-map-location.mjs",
     "test:force-sales-customer-link": "node scripts/test-force-sales-customer-link.mjs",

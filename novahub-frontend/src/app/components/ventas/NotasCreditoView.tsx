@@ -92,7 +92,7 @@ interface NotasCreditoViewProps {
 
 const statusOptions = [
   { label: 'Borrador', value: 'DRAFT', color: SALES_WORKFLOW_STATUS_COLORS.DRAFT },
-  { label: 'Activo', value: 'ISSUED', color: SALES_STATUS_COLORS.ISSUED },
+  { label: 'Aprobado', value: 'ISSUED', color: SALES_STATUS_COLORS.ISSUED },
   { label: 'Pago parcial', value: 'PARTIAL', color: SALES_STATUS_COLORS.PARTIAL },
   { label: 'Aplicado', value: 'APPLIED', color: SALES_STATUS_COLORS.APPLIED },
   { label: 'Vencido', value: 'OVERDUE', color: SALES_STATUS_COLORS.OVERDUE || SALES_STATUS_COLORS.PARTIAL },
@@ -816,14 +816,14 @@ export function NotasCreditoView({ data, summaryData, summaryLoading, summaryErr
       const saved = await handleSave(false);
       if (!saved) return;
     }
-    const issueToastId = toast.loading('Emitiendo crédito y validando el límite disponible...');
+    const issueToastId = toast.loading('Aprobando crédito y validando el límite disponible...');
     try {
       await creditNotesService.issue(id);
-      toast.success('Crédito emitido y agregado al saldo del cliente', { id: issueToastId });
+      toast.success('Crédito aprobado y agregado al saldo del cliente', { id: issueToastId });
       closeEditor();
       onRefresh();
     } catch (error: any) {
-      toast.error(error?.response?.data?.message || error?.message || 'No se pudo emitir el crédito', { id: issueToastId });
+      toast.error(error?.response?.data?.message || error?.message || 'No se pudo aprobar el crédito', { id: issueToastId });
     }
   };
 
@@ -1015,29 +1015,46 @@ export function NotasCreditoView({ data, summaryData, summaryLoading, summaryErr
   };
 
   const handleExportDebtStatement = async (row: CreditDocument) => {
-    const toastId = toast.loading('Preparando el estado actualizado de deuda…');
+    const toastId = toast.loading('Preparando el estado de cuenta…');
     try {
       const response: any = row.kind === 'CUSTOMER_LOAN'
         ? await customerLoansService.getById(row.id)
         : await creditNotesService.getById(row.id);
       const current = response?.data?.data ?? response?.data ?? response;
+      const draft = normalizeStatus(current.status || row.status) === 'DRAFT';
+      const total = Number(current.total ?? row.total ?? 0);
       const report = await generateCustomerDebtStatementReport({
         tenantName: user?.sessionBranding?.name || user?.tenantName || 'Mi Empresa',
         tenantLogo: themeConfig?.logo,
         customerName: current.customer?.name || customerName(row),
+        documentLabel: row.kind === 'CUSTOMER_LOAN' ? 'Préstamo' : 'Crédito',
         contractNumber: current.number || current.invoice?.number || row.number || row.invoice?.number || row.id,
         currency: current.currency || row.currency || 'NIO',
-        total: Number(current.total || row.total || 0),
-        amountPaid: Number(current.amountPaid ?? current.invoice?.amountPaid ?? row.amountPaid ?? 0),
-        balance: Number(current.balance ?? current.invoice?.balance ?? row.balance ?? Number(row.total || 0) - Number(row.amountPaid || 0)),
-        overdueBalance: Number(current.overdueBalance ?? row.overdueBalance ?? 0),
+        total,
+        amountPaid: draft ? 0 : Number(current.amountPaid ?? current.invoice?.amountPaid ?? row.amountPaid ?? 0),
+        balance: draft ? total : Number(current.balance ?? current.invoice?.balance ?? row.balance ?? total - Number(row.amountPaid || 0)),
+        overdueBalance: draft ? 0 : Number(current.overdueBalance ?? row.overdueBalance ?? 0),
+        status: current.status || row.status,
+        date: current.date || row.date,
+        dueDate: current.dueDate || row.dueDate,
+        principalAmount: current.principalAmount,
+        interestAmount: current.interestAmount,
+        planEnabled: Boolean(current.planEnabled ?? row.planEnabled),
+        planCalculationMode: current.planCalculationMode || row.planCalculationMode,
+        installmentAmount: current.installmentAmount ?? row.installmentAmount,
+        firstInstallmentDate: current.firstInstallmentDate || row.firstInstallmentDate,
+        frequency: current.frequency || row.frequency,
+        manualInstallments: current.manualInstallments,
+        excludedWeekdays: current.excludedWeekdays,
+        excludedDates: current.excludedDates,
+        calendarExclusions: current.calendarExclusions,
         installments: current.installments || row.installments || [],
         paymentHistory: current.paymentHistory || row.paymentHistory || [],
       });
       if (!report) throw new Error('No se pudo generar el estado de deuda.');
-      toast.success('Estado de deuda listo para imprimir o guardar como PDF.', { id: toastId });
+      toast.success('Estado de cuenta listo para imprimir o guardar como PDF.', { id: toastId });
     } catch (error: any) {
-      toast.error(error?.message || 'No se pudo preparar el estado de deuda.', { id: toastId });
+      toast.error(error?.message || 'No se pudo preparar el estado de cuenta.', { id: toastId });
     }
   };
 
@@ -1311,7 +1328,7 @@ export function NotasCreditoView({ data, summaryData, summaryLoading, summaryErr
       <div className="space-y-6 animate-in slide-in-from-right duration-300" data-tour="sales-form-title">
         <div className="flex flex-wrap items-center justify-between gap-4">
           <div className="flex items-center gap-4"><Button variant="ghost" size="icon" onClick={closeEditor} className="rounded-full"><ChevronLeft className="size-5" /></Button><div><h2 className="nh-module-title">{isCreating ? 'Nuevo Crédito' : `Crédito ${localDoc.number}`}</h2><p className="text-[10px] font-black uppercase tracking-widest text-muted-foreground/40">Productos y servicios entregados a crédito</p></div></div>
-          <div className="flex flex-wrap items-center gap-3">{canEditDocument && canPerform('SALES_CREDIT_NOTES', 'edit') && <><Button variant="outline" className="rounded-xl border-border/50 hover:bg-muted/70 hover:text-foreground font-black uppercase text-[10px] tracking-widest" onClick={handleSave}>Guardar Borrador</Button>{canIssue && canPerform('SALES_CREDIT_NOTES', 'issue') && <Button variant="outline" className="rounded-xl border-emerald-500/50 text-emerald-500 hover:bg-emerald-500/10 hover:text-emerald-700 dark:hover:text-emerald-300 font-black uppercase text-[10px] tracking-widest" onClick={() => handleIssue(localDoc.id)}><CheckCircle2 className="mr-2 size-3" /> Emitir Crédito</Button>}</>}</div>
+          <div className="flex flex-wrap items-center gap-3">{canEditDocument && canPerform('SALES_CREDIT_NOTES', 'edit') && <><Button variant="outline" className="rounded-xl border-border/50 hover:bg-muted/70 hover:text-foreground font-black uppercase text-[10px] tracking-widest" onClick={handleSave}>Guardar Borrador</Button>{canIssue && canPerform('SALES_CREDIT_NOTES', 'issue') && <Button variant="outline" className="rounded-xl border-emerald-500/50 text-emerald-500 hover:bg-emerald-500/10 hover:text-emerald-700 dark:hover:text-emerald-300 font-black uppercase text-[10px] tracking-widest" onClick={() => handleIssue(localDoc.id)}><CheckCircle2 className="mr-2 size-3" /> Aprobar crédito</Button>}</>}</div>
         </div>
         {!canEditDocument && <div className="rounded-xl border border-amber-500/30 bg-amber-500/10 px-4 py-3 text-xs text-amber-700 dark:text-amber-300">Este crédito ya fue emitido o aplicado. Se muestra en modo consulta para proteger el saldo y la trazabilidad.</div>}
         {customersError && <div role="alert" className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-rose-500/30 bg-rose-500/10 px-4 py-3 text-xs text-rose-700 dark:text-rose-300"><span>No se pudieron cargar los clientes ni sus límites de crédito.</span><Button type="button" variant="outline" size="sm" onClick={onRefresh}>Reintentar</Button></div>}
@@ -1741,7 +1758,7 @@ export function NotasCreditoView({ data, summaryData, summaryLoading, summaryErr
             const status = normalizeStatus(row.status);
             const activeQueue = ['PENDING', 'CLAIMED'].includes(normalizeStatus(row.cashQueue?.status));
             return <div className="flex items-center gap-1" onPointerDown={(event) => event.stopPropagation()} onClick={(event) => event.stopPropagation()}>
-              {row.kind === 'CREDIT_NOTE' && canPerform('SALES_CREDIT_NOTES', 'issue') && status === 'DRAFT' && <Button title="Emitir crédito" variant="ghost" size="icon" className="size-8 rounded-lg text-emerald-500" onClick={() => handleIssue(row.id)}><CheckCircle2 className="size-4" /></Button>}
+              {row.kind === 'CREDIT_NOTE' && canPerform('SALES_CREDIT_NOTES', 'issue') && status === 'DRAFT' && <Button title="Aprobar crédito" aria-label="Aprobar crédito" variant="ghost" size="icon" className="size-8 rounded-lg text-emerald-500" onClick={() => handleIssue(row.id)}><CheckCircle2 className="size-4" /></Button>}
               {row.kind === 'CREDIT_NOTE' && canPerform('SALES_CREDIT_NOTES', 'send') && ['ISSUED', 'PARTIAL', 'APPLIED'].includes(status) && Number(row.balance ?? row.total) > 0.01 && <Button title={activeQueue ? 'Crédito ya enviado a Caja' : 'Enviar crédito a Caja'} aria-label={activeQueue ? 'Crédito ya enviado a Caja' : 'Enviar crédito a Caja'} variant="ghost" size="icon" className={cn('size-8 rounded-lg', activeQueue ? 'text-amber-500' : 'text-emerald-500')} onClick={() => void handleSendToCash(row)} disabled={activeQueue}><Send className="size-4" /></Button>}
               {canPerform('SALES_CREDIT_NOTES', 'pay') && isPayableStatus(status) && Number(row.balance ?? row.total) > 0.01 && <Button title={row.kind === 'CUSTOMER_LOAN' ? 'Registrar abono' : 'Registrar pago'} aria-label={row.kind === 'CUSTOMER_LOAN' ? 'Registrar abono del préstamo' : 'Registrar pago del crédito'} variant="ghost" size="icon" className="size-8 rounded-lg text-primary" onClick={() => openPayment(row)}><CreditCard className="size-4" /></Button>}
               {row.kind === 'CUSTOMER_LOAN'
@@ -1765,8 +1782,8 @@ export function NotasCreditoView({ data, summaryData, summaryLoading, summaryErr
           startEdit(detailCredit.id);
         }}
         extraActions={detailCredit ? <>
-          {canPerform('SALES_CREDIT_NOTES', 'export') && <Button type="button" variant="outline" className="rounded-xl" onClick={() => void handleExportDebtStatement(detailCredit)}><FileText className="mr-2 size-4" />Estado de deuda</Button>}
-          {detailCredit.kind === 'CREDIT_NOTE' && canPerform('SALES_CREDIT_NOTES', 'issue') && normalizeStatus(detailCredit.status) === 'DRAFT' && <Button type="button" className="rounded-xl bg-emerald-600 text-white hover:bg-emerald-700" onClick={() => handleIssue(detailCredit.id)}><CheckCircle2 className="mr-2 size-4" />Emitir crédito</Button>}
+          {canPerform('SALES_CREDIT_NOTES', 'export') && <Button type="button" variant="outline" className="rounded-xl" onClick={() => void handleExportDebtStatement(detailCredit)}><FileText className="mr-2 size-4" />Estado de cuenta</Button>}
+          {detailCredit.kind === 'CREDIT_NOTE' && canPerform('SALES_CREDIT_NOTES', 'issue') && normalizeStatus(detailCredit.status) === 'DRAFT' && <Button type="button" className="rounded-xl bg-emerald-600 text-white hover:bg-emerald-700" onClick={() => handleIssue(detailCredit.id)}><CheckCircle2 className="mr-2 size-4" />Aprobar crédito</Button>}
           {detailCredit.kind === 'CREDIT_NOTE' && canPerform('SALES_CREDIT_NOTES', 'send') && ['ISSUED', 'PARTIAL', 'APPLIED'].includes(normalizeStatus(detailCredit.status)) && Number(detailCredit.balance ?? detailCredit.total) > 0.01 && <Button type="button" className="rounded-xl bg-emerald-600 text-white hover:bg-emerald-700" disabled={['PENDING', 'CLAIMED'].includes(normalizeStatus(detailCredit.cashQueue?.status))} onClick={() => void handleSendToCash(detailCredit)}><Send className="mr-2 size-4" />Enviar a Caja</Button>}
           {canPerform('SALES_CREDIT_NOTES', 'pay') && isPayableStatus(detailCredit.status) && Number(detailCredit.balance ?? detailCredit.total) > 0.01 && <Button type="button" variant="outline" className="rounded-xl border-primary/30 text-primary hover:bg-primary/10" onClick={() => openPayment(detailCredit)}><CreditCard className="mr-2 size-4" />{detailCredit.kind === 'CUSTOMER_LOAN' ? 'Registrar abono' : 'Registrar pago'}</Button>}
           {detailCredit.kind === 'CREDIT_NOTE' && canPerform('SALES_CREDIT_NOTES', 'cancel') && normalizeStatus(detailCredit.status) === 'DRAFT' && <Button type="button" variant="outline" className="rounded-xl border-rose-500/30 text-rose-600 hover:bg-rose-500/10 dark:text-rose-400" onClick={() => { setDetailCredit(null); setCancelReason(''); setCancelReasonAttempted(false); setPendingDeleteIds([detailCredit.id]); }}><Ban className="mr-2 size-4" />Cancelar</Button>}
