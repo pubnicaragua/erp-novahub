@@ -960,8 +960,8 @@ export function EnterpriseGroupSetupView({
       adminEmail: branch.adminEmail || "",
       adminPassword: branch.adminPassword || "",
       moduleMode: branch.moduleMode || "INHERIT",
-      enabledModules: Array.isArray(branch.enabledModules)
-        ? branch.enabledModules
+      enabledModules: Array.isArray(branch.moduleSelection)
+        ? branch.moduleSelection
         : [],
       moduleViewOverrides: branch.moduleViewOverrides || {},
       enabledFeatureKeys: Array.isArray(branch.enabledFeatureKeys) ? branch.enabledFeatureKeys : [],
@@ -1154,6 +1154,7 @@ export function EnterpriseGroupSetupView({
           adminName: branch.adminName,
           adminEmail: branch.adminEmail,
           adminPassword: branch.adminPassword,
+          moduleMode: branch.moduleMode || "INHERIT",
           enabledModules:
             branch.moduleMode === "CUSTOM" ? branch.enabledModules : undefined,
           enabledFeatureKeys: branch.enabledFeatureKeys || [],
@@ -3223,7 +3224,7 @@ function BranchesStep({
                   subIndustry: unit?.name || current.subIndustry,
                   enabledModules:
                     current.moduleMode === "CUSTOM"
-                      ? unit?.enabledModules || availableModules
+                      ? (current.enabledModules || []).filter((module: string) => (unit?.enabledModules || availableModules || []).includes(module))
                       : current.enabledModules,
                   moduleViewOverrides: current.moduleViewOverrides || {},
                 }));
@@ -3340,7 +3341,7 @@ function BranchesStep({
           )}
           <div className="sm:col-span-2 rounded-2xl border border-border/60 bg-background/50 p-4">
             <p className={labelClass}>Módulos de la sucursal</p>
-            <label className="mt-2 flex items-center gap-2 text-xs font-semibold text-foreground"><input type="checkbox" checked={form.moduleMode === "CUSTOM"} onChange={(event) => setForm((current: any) => ({ ...current, moduleMode: event.target.checked ? "CUSTOM" : "INHERIT", enabledModules: event.target.checked ? [...(selectedUnit?.enabledModules || availableModules)] : [] }))} className="size-4 accent-primary" />Personalizar módulos de esta sucursal</label>
+            <label className="mt-2 flex items-center gap-2 text-xs font-semibold text-foreground"><input type="checkbox" checked={form.moduleMode === "CUSTOM"} onChange={(event) => setForm((current: any) => ({ ...current, moduleMode: event.target.checked ? "CUSTOM" : "INHERIT", enabledModules: event.target.checked ? (current.enabledModules?.length ? current.enabledModules : [...(selectedUnit?.enabledModules || availableModules)]) : [] }))} className="size-4 accent-primary" />Personalizar módulos de esta sucursal</label>
             {form.moduleMode === "CUSTOM" ? <div className="mt-3"><ModuleSelector value={form.enabledModules || []} availableModules={selectedUnit?.enabledModules || availableModules} onChange={(enabledModules) => setForm((current: any) => ({ ...current, enabledModules }))} /></div> : <div className="mt-3 rounded-2xl border border-primary/20 bg-primary/[0.04] p-4 text-sm leading-relaxed text-muted-foreground">La sucursal hereda los módulos de <span className="font-bold text-foreground">{selectedUnit?.name || "su rubro"}</span>.</div>}
             <div className="mt-3"><ModuleViewOverrideEditor modules={form.moduleMode === "CUSTOM" ? (form.enabledModules || []) : (selectedUnit?.enabledModules || availableModules)} groupPolicies={groupPolicies || {}} parentViewOverrides={selectedUnit?.moduleViewOverrides || {}} value={form.moduleViewOverrides || {}} onChange={(moduleViewOverrides) => setForm((current: any) => ({ ...current, moduleViewOverrides }))} /></div>
           </div>
