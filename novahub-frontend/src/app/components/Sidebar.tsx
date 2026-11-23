@@ -88,6 +88,7 @@ import {
   Lightbulb,
 } from 'lucide-react';
 import { cn } from './ui/utils';
+import { isEnterpriseModuleInFamily } from '../constants/enterpriseModules';
 import { useAuth, type Module } from '../contexts/AuthContext';
 import { useTheme } from '../contexts/ThemeContext';
 import { BrandLogo } from './BrandLogo';
@@ -818,7 +819,14 @@ export function Sidebar({ activeModule, activeSubModule, onModuleChange, isOpen,
     // These entries are filters inside one module, not independent permission
     // scopes. Their parent view owns authorization and the current role chooses
     // which filter family is reachable.
-    if (parentId === 'centro-capacitacion') return canPerform('HR_TRAINING', 'view');
+    if (parentId === 'centro-capacitacion') {
+      if (subId === 'HR') return hasAccess('rh');
+      const trainingModules = user.managerMode && Array.isArray(user.managerEnabledModules)
+        ? user.managerEnabledModules
+        : user.enabledModules || [];
+      return (user.isPlatformAdmin || trainingModules.some((module) => String(module).toUpperCase() === 'HR_TRAINING'))
+        && hasAccess('centro-capacitacion');
+    }
     if (parentId === 'soporte-tecnico') {
       return canPerform('SUPPORT_TECH', 'view') && isSubmenuVisibleForCurrentRole(parentId, subId);
     }
@@ -850,7 +858,7 @@ export function Sidebar({ activeModule, activeSubModule, onModuleChange, isOpen,
       if (enabledSet.has(parentMod) || enabledSet.has(parentId.toUpperCase()) || hasSalesCashScope || hasTrackingOrImportScope) {
         isParentOrSubmoduleActive = true;
       } else {
-        isParentOrSubmoduleActive = [...enabledSet].some(m => m.startsWith(`${parentMod}_`));
+        isParentOrSubmoduleActive = [...enabledSet].some((module) => isEnterpriseModuleInFamily(module, parentMod));
       }
     }
     

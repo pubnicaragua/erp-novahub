@@ -21,6 +21,7 @@ import { useCardsOnlyBelowTableBreakpoint, ViewLayoutSelect, type ViewLayoutMode
 import { AuditHistoryDisclosure } from '../ui/AuditHistoryDisclosure';
 import { GuidedTour, type GuidedTourStep } from '../ui/GuidedTour';
 import { canAccessModuleView } from '../../utils/moduleViewAccess';
+import { isEnterpriseModuleInFamily } from '../../constants/enterpriseModules';
 
 interface TeamAccessPanelProps {
   tenantId: string;
@@ -485,13 +486,13 @@ export function TeamAccessPanel({ tenantId, tenantName, users, onBack, onRolesCh
       ? currentUser.enabledModules
       : [];
     const scope = new Set((enabledModulesData ?? fallback).map((module) => String(module || '').trim().toUpperCase()).filter(Boolean));
-    const hasSalesScope = scope.has('SALES') || [...scope].some((module) => module.startsWith('SALES_'));
+    const hasSalesScope = [...scope].some((module) => isEnterpriseModuleInFamily(module, 'SALES'));
     const hasScope = (moduleId: string) => scope.has(moduleId)
       || (LEGACY_VIEW_PERMISSION_ALIASES[moduleId] || []).some((alias) => scope.has(String(alias).toUpperCase()))
       || (ROLE_PERMISSION_SCOPE_ALIASES[moduleId] || []).some((alias) => scope.has(String(alias).toUpperCase()))
       || (['RETAIL_POS', 'RETAIL_CASH_CONTROL'].includes(moduleId) && hasSalesScope);
     const hasParentScope = (parent: string) => hasScope(parent)
-      || [...scope].some((module) => module.startsWith(`${parent}_`));
+      || [...scope].some((module) => isEnterpriseModuleInFamily(module, parent));
 
     // Las vistas administrativas son internas de la sucursal: quien ya tiene
     // acceso a Roles puede administrarlas, aunque no sean módulos facturables.

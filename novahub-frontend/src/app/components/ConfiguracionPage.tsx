@@ -51,6 +51,7 @@ import { AuditoriaPage } from './AuditoriaPage';
 import { THEME_PRESETS, type ThemePreset } from '../constants/themePresets';
 import { NovaPulseView } from './configuracion/NovaPulseView';
 import { canAccessModuleView } from '../utils/moduleViewAccess';
+import { isEnterpriseModuleInFamily } from '../constants/enterpriseModules';
 import { PoketPayLinkSettings } from './configuracion/PoketPayLinkSettings';
 import { ConfiguracionProyectosView } from './configuracion/ConfiguracionProyectosView';
 
@@ -654,7 +655,7 @@ export function ConfiguracionPage({ initialTab = 'branding', onTabChange, isSide
       .map(normalize)
       .filter(Boolean);
     const enabled = new Set(sessionModules);
-    const hasSalesScope = enabled.has('SALES') || sessionModules.some((candidate) => candidate.startsWith('SALES_'));
+    const hasSalesScope = sessionModules.some((candidate) => isEnterpriseModuleInFamily(candidate, 'SALES'));
 
     return ALL_PERM_MODULES
       .filter(m => !HIDDEN_PERMISSION_MODULE_IDS.has(String(m.id).toUpperCase()))
@@ -677,7 +678,7 @@ export function ConfiguracionPage({ initialTab = 'branding', onTabChange, isSide
 
         // Un padre se conserva cuando la sucursal recibió solo una o varias
         // vistas hijas. Los hermanos que no están en el alcance no entran.
-        return !parentMod && sessionModules.some((candidate) => candidate.startsWith(`${moduleId}_`));
+        return !parentMod && sessionModules.some((candidate) => isEnterpriseModuleInFamily(candidate, moduleId));
       });
   }, [enabledModules, enabledModulesLoaded, user]);
 

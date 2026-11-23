@@ -39,6 +39,7 @@ import { trainingService } from '../../services/training.service';
 import { cn } from '../ui/utils';
 import { asList, useTenantQuery } from '../../hooks/useTenantQuery';
 import { GuidesLibrary } from '../../guides/GuidesLibrary';
+import { isEnterpriseModuleInFamily } from '../../constants/enterpriseModules';
 
 const MODULE_CATEGORIES = [
   { id: 'ALL', label: 'Todos', color: 'bg-primary/10 text-primary border-primary/20', gradient: 'from-primary/20 to-primary/5', icon: GraduationCap },
@@ -102,14 +103,23 @@ const OPERATIONAL_GUIDES = [
 ];
 
 export function TrainingHubView({ activeSubModule, onSubModuleChange, isSidebarCollapsed }: { activeSubModule?: string; onSubModuleChange?: (subModule: string) => void; isSidebarCollapsed?: boolean }) {
-  const { user } = useAuth();
+  const { user, hasAccess } = useAuth();
+  const canViewHrContent = hasAccess('rh');
+  const visibleModuleCategories = canViewHrContent
+    ? MODULE_CATEGORIES
+    : MODULE_CATEGORIES.filter((category) => category.id !== 'HR');
   const isSuperAdmin = String(user?.role || '').toLowerCase().replace(/[_\s-]/g, '') === 'superadmin';
   
   const videosQuery = useTenantQuery<any[]>(['training', 'videos'], async signal => asList(await trainingService.getVideos(undefined, signal)));
   const videos = asList(videosQuery.data);
   const loading = videosQuery.isLoading || videosQuery.isFetching;
   const [search, setSearch] = useState('');
-  const [activeCategory, setActiveCategory] = useState(() => MODULE_CATEGORIES.some(category => category.id === activeSubModule) ? activeSubModule! : 'ALL');
+  const [requestedCategory, setRequestedCategory] = useState('ALL');
+  const activeCategory = visibleModuleCategories.some(category => category.id === activeSubModule)
+    ? activeSubModule!
+    : visibleModuleCategories.some(category => category.id === requestedCategory)
+      ? requestedCategory
+      : 'ALL';
   const [selectedVideo, setSelectedVideo] = useState<any | null>(null);
   const [showUploadModal, setShowUploadModal] = useState(false);
   const [editingVideo, setEditingVideo] = useState<any | null>(null);
@@ -126,18 +136,18 @@ export function TrainingHubView({ activeSubModule, onSubModuleChange, isSidebarC
 
   const [saving, setSaving] = useState(false);
 
-  useEffect(() => {
-    setActiveCategory(MODULE_CATEGORIES.some(category => category.id === activeSubModule) ? activeSubModule! : 'ALL');
-  }, [activeSubModule]);
-
   const handleCategoryChange = (category: string) => {
-    setActiveCategory(category);
+    setRequestedCategory(category);
     onSubModuleChange?.(category);
+  };
+
+  const openVideo = (video: any) => {
+    setShowVideoInfo(true);
+    setSelectedVideo(video);
   };
 
   useEffect(() => {
     if (selectedVideo) {
-      setShowVideoInfo(true);
       const timer = setTimeout(() => {
         setShowVideoInfo(false);
       }, 3500);
@@ -217,8 +227,9 @@ export function TrainingHubView({ activeSubModule, onSubModuleChange, isSidebarC
   const filteredVideos = videos.filter(v => {
     const matchesSearch = v.title.toLowerCase().includes(search.toLowerCase()) ||
                           v.description?.toLowerCase().includes(search.toLowerCase());
-    const matchesCategory = activeCategory === 'ALL' || v.module === activeCategory;
-    return matchesSearch && matchesCategory;
+    const module = String(v.module || '').toUpperCase();
+    const matchesCategory = activeCategory === 'ALL' || module === activeCategory;
+    return matchesSearch && matchesCategory && (canViewHrContent || !isEnterpriseModuleInFamily(module, 'HR'));
   });
 
   const openAiChat = () => {
@@ -295,7 +306,7 @@ export function TrainingHubView({ activeSubModule, onSubModuleChange, isSidebarC
         </div>
         <Tabs value={activeCategory} onValueChange={handleCategoryChange} className="w-full">
           <ModuleSubnavigation
-            items={MODULE_CATEGORIES.map((cat) => ({ id: cat.id, label: cat.label, icon: <cat.icon className="size-4" /> }))}
+            items={visibleModuleCategories.map((cat) => ({ id: cat.id, label: cat.label, icon: <cat.icon className="size-4" /> }))}
             value={activeCategory}
             onValueChange={handleCategoryChange}
             isSidebarCollapsed={isSidebarCollapsed}
@@ -410,7 +421,7 @@ export function TrainingHubView({ activeSubModule, onSubModuleChange, isSidebarC
                     </div>
 
                     <button 
-                      onClick={() => setSelectedVideo(video)}
+                      onClick={() => openVideo(video)}
                       className="absolute inset-0 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-all duration-300 z-20 bg-black/20"
                     >
                       <div className="size-16 rounded-full bg-white text-primary flex items-center justify-center shadow-2xl scale-75 group-hover:scale-100 transition-transform">
@@ -433,7 +444,7 @@ export function TrainingHubView({ activeSubModule, onSubModuleChange, isSidebarC
                       <Button 
                         variant="ghost" 
                         size="sm"
-                        onClick={() => setSelectedVideo(video)}
+                        onClick={() => openVideo(video)}
                         className="text-xs font-black uppercase tracking-widest text-primary hover:bg-primary/5 p-0 h-auto"
                       >
                         Ver Ahora
@@ -475,7 +486,7 @@ export function TrainingHubView({ activeSubModule, onSubModuleChange, isSidebarC
           <h2 className="text-2xl font-black tracking-tight uppercase italic">No se encontraron guías</h2>
           <Button 
             variant="outline" 
-            onClick={() => { setSearch(''); setActiveCategory('ALL'); }}
+            onClick={() => { setSearch(''); setRequestedCategory('ALL'); }}
             className="mt-6 rounded-2xl font-black uppercase tracking-widest text-[10px]"
           >
             Ver Todo

@@ -4,13 +4,15 @@ import {
   getEffectiveBusinessUnitModules,
   getEnterpriseModulesAvailable,
   getEnterpriseModulesWithinScope,
+  isEnterpriseModuleInFamily,
+  isEnterpriseModuleRoot,
   updateEnterpriseModuleSelection,
 } from './enterpriseModules.ts';
 
 assert.deepEqual(
   updateEnterpriseModuleSelection(['HR', 'HR_TRAINING', 'HR_PAYROLL', 'SALES'], 'HR', false),
-  ['SALES'],
-  'Desactivar Recursos Humanos también desactiva sus módulos hijos.',
+  ['HR_TRAINING', 'SALES'],
+  'Desactivar Recursos Humanos desactiva sus vistas hijas y conserva raíces independientes.',
 );
 
 assert.deepEqual(
@@ -21,9 +23,41 @@ assert.deepEqual(
 
 assert.deepEqual(
   updateEnterpriseModuleSelection(['SALES'], 'HR_TRAINING', true),
-  ['SALES', 'HR', 'HR_TRAINING'],
-  'Activar una vista hija de RH también activa su módulo padre.',
+  ['SALES', 'HR_TRAINING'],
+  'Activar Centro de capacitación no activa Recursos Humanos.',
 );
+
+assert.deepEqual(
+  updateEnterpriseModuleSelection(['SALES', 'SALES_CLIENTS', 'SALES_VOICE_QUICK'], 'SALES', false),
+  ['SALES_VOICE_QUICK'],
+  'Desactivar Ventas no desactiva otro módulo raíz con prefijo similar.',
+);
+
+for (const module of ENTERPRISE_MODULE_OPTIONS) {
+  for (const family of ENTERPRISE_MODULE_OPTIONS) {
+    if (module.id !== family.id) {
+      assert.equal(
+        isEnterpriseModuleInFamily(module.id, family.id),
+        false,
+        `${module.id} must remain independent from root ${family.id}.`,
+      );
+    }
+  }
+  const otherModules = ENTERPRISE_MODULE_OPTIONS
+    .filter(({ id }) => id !== module.id)
+    .slice(0, 3)
+    .map(({ id }) => id);
+  assert.deepEqual(
+    updateEnterpriseModuleSelection(otherModules, module.id, true),
+    [...otherModules, module.id],
+    `Activar ${module.id} no debe activar otro módulo raíz.`,
+  );
+}
+
+assert.equal(isEnterpriseModuleInFamily('SALES_CLIENTS', 'SALES'), true);
+assert.equal(isEnterpriseModuleInFamily('HR_TRAINING', 'HR'), false);
+assert.equal(isEnterpriseModuleInFamily('SALES_VOICE_QUICK', 'SALES'), false);
+assert.equal(isEnterpriseModuleRoot('HR_TRAINING'), true);
 
 assert.equal(
   getEnterpriseModulesAvailable(undefined).length,

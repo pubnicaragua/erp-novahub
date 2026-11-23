@@ -57,6 +57,7 @@ import {
   getEffectiveBusinessUnitModules,
   getEnterpriseModulesAvailable,
   getEnterpriseModulesWithinScope,
+  isEnterpriseModuleInFamily,
   updateEnterpriseModuleSelection,
 } from "../../constants/enterpriseModules";
 import { formatCurrencyDescriptor } from "../../utils/currency";
@@ -3471,7 +3472,7 @@ function IntegrationPoliciesCard({ group, enabledModules, onChange, saving }: {
 
   const groupModules = new Set((enabledModules || []).map((module) => String(module).toUpperCase()));
   const hasFamily = (family: string) => [...groupModules].some((module) =>
-    module === family || module.startsWith(`${family}_`) || (family === "SALES" && ["RETAIL_POS", "SALES_POS"].includes(module)),
+    isEnterpriseModuleInFamily(module, family) || (family === "SALES" && ["RETAIL_POS", "SALES_POS"].includes(module)),
   );
   const getPolicy = (route: string, legacyKey: string): "AUTO" | "ENABLED" | "DISABLED" => {
     const saved = group?.integrationPolicies?.[route];
@@ -3601,8 +3602,7 @@ function IntegrationPolicyOverrideFields({ value, onChange, parentLabel, editabl
 
 function hasEnabledModuleFamily(modules: Set<string>, family: string) {
   return [...modules].some((module) =>
-    module === family
-    || module.startsWith(`${family}_`)
+    isEnterpriseModuleInFamily(module, family)
     || (family === "SALES" && ["RETAIL_POS", "SALES_POS"].includes(module)),
   );
 }

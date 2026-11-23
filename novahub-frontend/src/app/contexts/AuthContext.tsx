@@ -10,6 +10,7 @@ import { canAccessModuleShell, canAccessModuleView, type ModuleViewPolicies } fr
 import { approvalActionValue } from '../utils/permissions';
 import { managerBranchCanReadView } from '../utils/managerBranchPermissions';
 import { resolveTenantAdminIdentity } from '../utils/tenantAdminIdentity';
+import { isEnterpriseModuleInFamily, isEnterpriseModuleRoot } from '../constants/enterpriseModules';
 import type { UserThemeSettings } from '../services/branding.service';
 
 const SIDEBAR_PERMISSION_PARENT_MODULE_IDS = new Set<string>(SIDEBAR_PERMISSION_PARENT_ORDER);
@@ -328,7 +329,8 @@ function tenantPermissionSubscriptionCandidates(module: string): string[] {
   const normalized = String(module || '').toUpperCase();
   const candidates = new Set(TENANT_PERMISSION_SUBSCRIPTION_ALIASES[normalized] || [normalized]);
   const parent = normalized.split('_')[0];
-  if (['SALES', 'PURCHASES', 'INVENTORY', 'FINANCIAL', 'HR', 'ACCOUNTING', 'ACTIVITIES', 'ORGANIZATION', 'MARKETING', 'FLEET', 'ASANA', 'DOCUMENTS', 'NOTIFICATIONS', 'REPORTS', 'TICKETS', 'LEGAL', 'RESTAURANT', 'TRACKING', 'HOTEL', 'FINANCING', 'IMPORT', 'PROJECTS'].includes(parent)) {
+  if (!isEnterpriseModuleRoot(normalized)
+    && ['SALES', 'PURCHASES', 'INVENTORY', 'FINANCIAL', 'HR', 'ACCOUNTING', 'ACTIVITIES', 'ORGANIZATION', 'MARKETING', 'FLEET', 'ASANA', 'DOCUMENTS', 'NOTIFICATIONS', 'REPORTS', 'TICKETS', 'LEGAL', 'RESTAURANT', 'TRACKING', 'HOTEL', 'FINANCING', 'IMPORT', 'PROJECTS'].includes(parent)) {
     candidates.add(parent);
   }
   return [...candidates];
@@ -343,7 +345,7 @@ function tenantAdminHasModuleEnabled(user: User, module: string): boolean {
     : user.enabledModules || [];
   const enabledModules = new Set(sourceModules.map((item) => String(item).toUpperCase()));
   const cashViewHasSalesScope = ['RETAIL_POS', 'RETAIL_CASH_CONTROL'].includes(normalized)
-    && [...enabledModules].some((candidate) => candidate === 'SALES' || candidate.startsWith('SALES_'));
+    && [...enabledModules].some((candidate) => isEnterpriseModuleInFamily(candidate, 'SALES'));
   return cashViewHasSalesScope || tenantPermissionSubscriptionCandidates(normalized).some((candidate) => enabledModules.has(candidate));
 }
 
@@ -1081,25 +1083,24 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     const isAdminControlModule = adminOnlyModules.includes(module) && user.isTenantAdmin;
     const groupModules = moduleGroupMap[module] || [];
     
-    // HR es especial: buscar cualquier submódulo HR_*
+    // Las vistas granulares heredan el módulo padre sin confundir raíces independientes.
     const subscriptionCandidates = tenantPermissionSubscriptionCandidates(backendModuleName);
     const tenantEnabledModules = user.managerMode && Array.isArray(user.managerEnabledModules)
       ? user.managerEnabledModules
       : user.enabledModules;
     const cashViewHasSalesScope = ['RETAIL_POS', 'RETAIL_CASH_CONTROL'].includes(backendModuleName)
-      && tenantEnabledModules.some((candidate) => candidate === 'SALES' || candidate.startsWith('SALES_'));
-    let isSubscribed = (user.managerMode
+      && tenantEnabledModules.some((candidate) => isEnterpriseModuleInFamily(candidate, 'SALES'));
+    const hasHrSubscriptionScope = backendModuleName === 'HR'
+      && tenantEnabledModules.some((candidate) => isEnterpriseModuleInFamily(candidate, 'HR'));
+    const isSubscribed = (user.managerMode
       ? managerCanAdminBranch && coreModules.includes(module)
       : coreModules.includes(module))
       || (!user.managerMode && isAdminControlModule)
       || cashViewHasSalesScope
+      || hasHrSubscriptionScope
       || subscriptionCandidates.some((candidate) => tenantEnabledModules.includes(candidate))
       || groupModules.some(m => tenantEnabledModules.includes(m));
     
-    if (module === 'rh' && !isSubscribed) {
-      isSubscribed = user.enabledModules.some(m => m.startsWith('HR_'));
-    }
-
     if (!isSubscribed) return false;
 
     if (user.managerMode) {
@@ -1155,7 +1156,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     return permissions.some((permission) => {
       const key = permission.module.toUpperCase();
       return SIDEBAR_PERMISSION_MODULE_IDS.has(key)
-        && key.startsWith(`${backendModuleName.toUpperCase()}_`)
+        && isEnterpriseModuleInFamily(key, backendModuleName)
         && permission.canView;
     });
   }, [user]);
@@ -1165,8 +1166,13 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     const normalizedModule = String(module || '');
     const upperModule = normalizedModule.toUpperCase();
     const managerCanAdminBranch = Boolean(user.managerMode && user.managerCanAdminBranch);
+    const moduleScope = user.managerMode && Array.isArray(user.managerEnabledModules)
+      ? user.managerEnabledModules
+      : user.enabledModules || [];
+    const hrTrainingWithinHr = upperModule === 'HR_TRAINING'
+      && moduleScope.some((candidate) => isEnterpriseModuleInFamily(candidate, 'HR'));
     if (!user.isPlatformAdmin && !user.isTenantAdmin && !managerCanAdminBranch && !canAccessModuleView(user.moduleAccessPolicies, module)) return false;
-    if (user.managerMode && !tenantAdminHasModuleEnabled(user, module)) return false;
+    if (user.managerMode && !tenantAdminHasModuleEnabled(user, module) && !hrTrainingWithinHr) return false;
     if (user.managerMode && user.managerFullBranchAccess) {
       if (action !== 'viewCost') return tenantAdminHasModuleEnabled(user, module);
       const inventoryCostModules = new Set([
@@ -1193,7 +1199,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     }
     // El administrador de la empresa tiene todas las acciones de los módulos
     // habilitados, incluidos permisos de flujo nuevos.
-    if (user.isTenantAdmin) return tenantAdminHasModuleEnabled(user, module);
+    if (user.isTenantAdmin) return tenantAdminHasModuleEnabled(user, module) || hrTrainingWithinHr;
     if (user.isPlatformAdmin) return hasAccess(module);
 
     const permissions = Array.isArray(user.permissions) ? user.permissions : [];
@@ -1274,7 +1280,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       };
       const mappedModule = Object.entries(moduleEnumMap).find(([, v]) => v === normalizedModule)?.[0];
       if (mappedModule) permission = findPermission(mappedModule);
-      if (!permission) {
+      if (!permission && !isEnterpriseModuleRoot(upperModule)) {
         const parentModule = Object.entries(parentByGranularPrefix).find(([prefix]) => upperModule.startsWith(prefix))?.[1];
         if (parentModule) permission = findPermission(parentModule);
       }

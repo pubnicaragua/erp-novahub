@@ -41,6 +41,20 @@ export const ENTERPRISE_MODULE_OPTIONS: EnterpriseModuleOption[] = [
   { id: 'CONFIGURATION', label: 'Configuración', description: 'Marca, seguridad, moneda y ajustes globales del tenant' },
 ];
 
+const ENTERPRISE_ROOT_MODULE_IDS = new Set(ENTERPRISE_MODULE_OPTIONS.map(({ id }) => id));
+
+export function isEnterpriseModuleRoot(moduleId: string): boolean {
+  return ENTERPRISE_ROOT_MODULE_IDS.has(String(moduleId || '').trim().toUpperCase());
+}
+
+/** A module's name alone does not make it a child of another enterprise module. */
+export function isEnterpriseModuleInFamily(moduleId: string, familyId: string): boolean {
+  const module = String(moduleId || '').trim().toUpperCase();
+  const family = String(familyId || '').trim().toUpperCase();
+  return module === family
+    || (!isEnterpriseModuleRoot(module) && module.startsWith(`${family}_`));
+}
+
 // Los módulos experimentales o de contratación adicional no se activan en
 // nuevos grupos automáticamente. El SuperAdmin los habilita por empresa.
 export const DEFAULT_ENTERPRISE_MODULES = ENTERPRISE_MODULE_OPTIONS
@@ -88,10 +102,7 @@ export function updateEnterpriseModuleSelection(
   const current = [...new Set(selectedModules.map((module) => String(module || '').toUpperCase()))];
   const selectedId = String(moduleId || '').toUpperCase();
   if (checked) {
-    const additions = selectedId.startsWith('HR_') ? ['HR', selectedId] : [selectedId];
-    return [...current, ...additions.filter((module) => !current.includes(module))];
+    return current.includes(selectedId) ? current : [...current, selectedId];
   }
-  return current.filter((module) =>
-    module !== selectedId && !(selectedId === 'HR' && module.startsWith('HR_')),
-  );
+  return current.filter((module) => module !== selectedId && !isEnterpriseModuleInFamily(module, selectedId));
 }

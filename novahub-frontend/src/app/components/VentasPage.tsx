@@ -40,6 +40,7 @@ import { getLoggedInSellerEmployeeId } from '../utils/salesSeller';
 import { fetchAllReportPages, useTenantQuery } from '../hooks/useTenantQuery';
 import { businessLeadsService } from '../services/business-leads.service';
 import { LeadsPanel } from './ventas/leads/LeadsPanel';
+import { isEnterpriseModuleInFamily } from '../constants/enterpriseModules';
 
 // Sub-Views
 import { ClientesView } from './ventas/ClientesView';
@@ -86,7 +87,7 @@ export function VentasPage({ activeSubModule, onSubModuleChange, isSidebarCollap
   const { selectedBranchId, filterByBranch, isRestricted, accessibleBranches } = useBranchScope();
   const canReadHr = canPerform('HR', 'view');
   const hrSellerDirectoryEnabled = Array.isArray(user?.enabledModules)
-    && user.enabledModules.some((module: string) => module === 'HR' || module.startsWith('HR_'));
+    && user.enabledModules.some((module: string) => isEnterpriseModuleInFamily(module, 'HR'));
   const leadCapabilities = useTenantQuery(['sales', 'business-leads-capabilities'], (signal) => businessLeadsService.getCapabilities(signal), { staleTime: 5 * 60_000, retry: 0, enabled: canPerform('SALES_LEADS', 'view') });
   const leadsEnabled = Boolean(leadCapabilities.data?.enabled);
   const customerLoansCapability = useTenantQuery<{ enabled: boolean }>(['sales', 'customer-loans-config', selectedBranchId || 'active-branch'], (signal) => customerLoansService.getConfig(signal), { staleTime: 60_000, retry: 0, enabled: canPerform('SALES_CUSTOMER_LOANS', 'view') });
