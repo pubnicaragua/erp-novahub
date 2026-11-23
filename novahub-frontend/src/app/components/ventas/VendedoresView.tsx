@@ -11,7 +11,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '.
 import { BankAccountSelect } from '../ui/BankAccountSelect';
 import { useTenantQuery, invalidateTenantQueries } from '../../hooks/useTenantQuery';
 import { useCurrency } from '../../contexts/CurrencyContext';
-import { salesSellersService, type SalesSeller, type SalesSellerCommissionRule } from '../../services/sales-sellers.service';
+import { salesSellersService, type SalesSellerCommissionRule } from '../../services/sales-sellers.service';
 
 type Section = 'vendedores' | 'comisiones' | 'metas' | 'pagos';
 type CommissionBasis = 'PER_SALE' | 'MONTHLY_TOTAL';
@@ -35,7 +35,6 @@ export function VendedoresView({ historicalOnly = false }: { historicalOnly?: bo
   const { baseCurrency } = useCurrency();
   const [section, setSection] = useState<Section>(historicalOnly ? 'pagos' : 'vendedores');
   const [selectedSellerId, setSelectedSellerId] = useState('');
-  const [code, setCode] = useState('');
   const [name, setName] = useState('');
   const [commissionCurrency, setCommissionCurrency] = useState('NIO');
   const [commissionBasis, setCommissionBasis] = useState<CommissionBasis>('PER_SALE');
@@ -105,9 +104,9 @@ export function VendedoresView({ historicalOnly = false }: { historicalOnly?: bo
 
   const refresh = () => invalidateTenantQueries(queryClient);
   const createSeller = useMutation({
-    mutationFn: () => salesSellersService.create({ code: code.trim(), name: name.trim() }),
+    mutationFn: () => salesSellersService.create({ name: name.trim() }),
     onSuccess: (seller) => {
-      setCode(''); setName(''); setSelectedSellerId(seller.id); refresh(); toast.success('Vendedor creado.');
+      setName(''); setSelectedSellerId(seller.id); refresh(); toast.success(`Vendedor creado con código ${seller.code}.`);
     },
     onError: (error: Error) => toast.error(error.message),
   });
@@ -218,9 +217,8 @@ export function VendedoresView({ historicalOnly = false }: { historicalOnly?: bo
         <Card className="min-w-0 rounded-2xl border-border bg-card shadow-sm">
           <CardHeader><CardTitle>Agregar vendedor</CardTitle></CardHeader>
           <CardContent className="space-y-4">
-            <div className="space-y-2"><Label htmlFor="sales-seller-code">Código</Label><Input id="sales-seller-code" value={code} onChange={(event) => setCode(event.target.value)} maxLength={40} /></div>
             <div className="space-y-2"><Label htmlFor="sales-seller-name">Nombre</Label><Input id="sales-seller-name" value={name} onChange={(event) => setName(event.target.value)} maxLength={160} /></div>
-            <Button disabled={!code.trim() || !name.trim() || createSeller.isPending} onClick={() => createSeller.mutate()}><Plus className="mr-2 size-4" />Crear vendedor</Button>
+            <Button disabled={!name.trim() || createSeller.isPending} onClick={() => createSeller.mutate()}><Plus className="mr-2 size-4" />Crear vendedor</Button>
           </CardContent>
         </Card>
       </div>}

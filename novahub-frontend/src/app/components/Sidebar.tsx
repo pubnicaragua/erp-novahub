@@ -190,6 +190,7 @@ const menuItems: MenuItem[] = [
       { id: 'listas-precios', label: 'Listas de precios', icon: <Tags className="size-4" /> },
       { id: 'facturacion-caja', label: 'Facturación por caja', icon: <Calculator className="size-4" /> },
       { id: 'control-caja', label: 'Control de Caja', icon: <Coins className="size-4" /> },
+      { id: 'vendedores', label: 'Vendedores', icon: <Users className="size-4" /> },
     ]
   },
   {

@@ -60,7 +60,7 @@ export interface SalesSellerCommissionRule {
 
 export const salesSellersService = {
   list: (search?: string, signal?: AbortSignal) => api.get<{ data: SalesSeller[] }>('/sales/sellers', { params: { search }, signal }),
-  create: (data: Pick<SalesSeller, 'code' | 'name'> & Partial<Pick<SalesSeller, 'email' | 'phone'>>) => api.post<SalesSeller>('/sales/sellers', data),
+  create: (data: Pick<SalesSeller, 'name'> & Partial<Pick<SalesSeller, 'email' | 'phone'>>) => api.post<SalesSeller>('/sales/sellers', data),
   update: (id: string, data: Partial<Pick<SalesSeller, 'code' | 'name' | 'email' | 'phone' | 'isActive'>>) => api.patch<SalesSeller>(`/sales/sellers/${id}`, data),
   getCommissionConfiguration: (signal?: AbortSignal) => api.get<any>('/sales/sellers/commission-configuration', { signal }),
   saveCommissionPlan: (data: { sellerId: string; currency: string; calculationBasis: 'PER_SALE' | 'MONTHLY_TOTAL'; rules: SalesSellerCommissionRule[] }) => api.put<any>('/sales/sellers/commission-configuration', data),
