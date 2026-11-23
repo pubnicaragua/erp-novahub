@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
+import { useSearchParams } from 'react-router';
 import { keepPreviousData } from '@tanstack/react-query';
 import { Building2, CalendarClock, ChevronLeft, ChevronRight, Clock3, FileText, GitBranch, HardDrive, LifeBuoy, Link2, Loader2, Plus, Search, UserRound, Users, Warehouse } from 'lucide-react';
 import { toast } from '@/app/services/toast';
@@ -38,9 +39,35 @@ type EnterpriseGroupTab = typeof ENTERPRISE_GROUP_TABS[number];
 
 export function EnterpriseGroupsAdminView({ embedded = false, initialTab, onTabChange, isSidebarCollapsed }: { embedded?: boolean; initialTab?: string; onTabChange?: (tab: string) => void; isSidebarCollapsed?: boolean }) {
   const { user } = useAuth();
+  const [searchParams, setSearchParams] = useSearchParams();
   const quoteOnly = user?.role === 'platform_quote_user';
   const isSuperAdmin = ['SUPER_ADMIN', 'SUPERADMIN'].includes(String(user?.role || '').toUpperCase().replace(/[-\s]/g, '_'));
-  const [workspace, setWorkspace] = useState<{ mode: 'create' | 'edit'; groupId?: string } | null>(null);
+  const workspaceMode = searchParams.get('egWorkspace');
+  const workspaceGroupId = searchParams.get('egGroupId') || undefined;
+  const workspace = workspaceMode === 'create'
+    ? { mode: 'create' as const }
+    : workspaceMode === 'edit' && workspaceGroupId
+      ? { mode: 'edit' as const, groupId: workspaceGroupId }
+      : null;
+  const setWorkspace = (next: { mode: 'create' | 'edit'; groupId?: string } | null) => {
+    const params = new URLSearchParams(searchParams);
+    if (next) {
+      params.set('egWorkspace', next.mode);
+      if (next.groupId) params.set('egGroupId', next.groupId);
+      else params.delete('egGroupId');
+      if (next.mode === 'create') {
+        params.set('egStep', 'identity');
+        params.delete('egTab');
+      } else {
+        params.set('egStep', 'identity');
+        params.set('egTab', 'identity');
+      }
+      params.delete('egBranchId');
+    } else {
+      for (const key of ['egWorkspace', 'egGroupId', 'egStep', 'egTab', 'egBranchId']) params.delete(key);
+    }
+    setSearchParams(params, { replace: !next });
+  };
   const [searchTerm, setSearchTerm] = useState('');
   const [debouncedSearchTerm, setDebouncedSearchTerm] = useState('');
   const [groupsPage, setGroupsPage] = useState(1);
@@ -89,7 +116,7 @@ export function EnterpriseGroupsAdminView({ embedded = false, initialTab, onTabC
   };
   if (workspace) {
     const selectedGroup = workspace.groupId ? data?.groups?.find((group: any) => group.id === workspace.groupId) : undefined;
-    return <EnterpriseGroupSetupView mode={workspace.mode} initialGroup={selectedGroup} onBack={() => setWorkspace(null)} onChanged={() => query.refetch()} />;
+    return <EnterpriseGroupSetupView mode={workspace.mode} initialGroup={selectedGroup || (workspace.groupId ? { id: workspace.groupId } : undefined)} onBack={() => setWorkspace(null)} onChanged={() => query.refetch()} />;
   }
   const content = (
     <section className="space-y-6">

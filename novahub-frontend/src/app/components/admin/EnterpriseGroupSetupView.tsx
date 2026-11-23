@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState, type ChangeEvent } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, type ChangeEvent } from "react";
 import { toast } from "@/app/services/toast";
 import {
   ArrowLeft,
@@ -22,6 +22,7 @@ import {
   Warehouse,
 } from "lucide-react";
 import { useMutation, useQuery } from "@tanstack/react-query";
+import { useSearchParams } from "react-router";
 import { useAuth } from "../../contexts/AuthContext";
 import { Card, CardContent, CardHeader, CardTitle } from "../ui/card";
 import { Button } from "../ui/button";
@@ -53,6 +54,9 @@ import { getBusinessTypeLabel } from "../../constants/businessTypes";
 import {
   DEFAULT_ENTERPRISE_MODULES,
   ENTERPRISE_MODULE_OPTIONS,
+  getEffectiveBusinessUnitModules,
+  getEnterpriseModulesAvailable,
+  getEnterpriseModulesWithinScope,
   updateEnterpriseModuleSelection,
 } from "../../constants/enterpriseModules";
 import { formatCurrencyDescriptor } from "../../utils/currency";
@@ -100,6 +104,17 @@ const steps: Array<{
   },
 ];
 
+const setupStepIds: SetupStep[] = ["identity", "units", "warehouses", "branches", "summary"];
+const editTabIds: EditTab[] = ["overview", "identity", "managers", "users", "units", "warehouses", "branches"];
+
+function getSetupStepFromUrl(value: string | null): SetupStep {
+  return setupStepIds.includes(value as SetupStep) ? value as SetupStep : "identity";
+}
+
+function getEditTabFromUrl(value: string | null): EditTab {
+  return editTabIds.includes(value as EditTab) ? value as EditTab : "identity";
+}
+
 const inputClass =
   "mt-2 h-11 w-full max-w-full rounded-xl border border-border bg-background px-3 text-sm text-foreground outline-none transition focus:border-primary focus:ring-2 focus:ring-primary/20";
 const labelClass = "space-y-1 text-xs font-bold text-muted-foreground";
@@ -138,15 +153,16 @@ export function EnterpriseGroupSetupView({
   onChanged: () => void;
 }) {
   const { user } = useAuth();
+  const [searchParams, setSearchParams] = useSearchParams();
   const canManageIntegrationPolicies = user?.role === "superadmin";
   const tenantFeatureCatalogQuery = useQuery({
     queryKey: ["platform-tenant-feature-catalog"],
     queryFn: ({ signal }) => tenantFeaturesService.getCatalog(signal),
     staleTime: 5 * 60 * 1000,
   });
-  const [step, setStep] = useState<SetupStep>("identity");
-  const [editDetailOpen, setEditDetailOpen] = useState(mode === "edit");
-  const [activeEditTab, setActiveEditTab] = useState<EditTab>("identity");
+  const [step, setStep] = useState<SetupStep>(() => getSetupStepFromUrl(searchParams.get("egStep")));
+  const [editDetailOpen, setEditDetailOpen] = useState(mode === "edit" && searchParams.get("egTab") !== "overview");
+  const [activeEditTab, setActiveEditTab] = useState<EditTab>(() => getEditTabFromUrl(searchParams.get("egTab")));
   const [pendingModuleSelection, setPendingModuleSelection] = useState<string[] | null>(null);
   const [moduleConfirmationOpen, setModuleConfirmationOpen] = useState(false);
   const [group, setGroup] = useState<any>(initialGroup || null);
@@ -221,8 +237,22 @@ export function EnterpriseGroupSetupView({
   const [editingWarehouseId, setEditingWarehouseId] = useState<string | null>(
     null,
   );
-  const [editingBranchId, setEditingBranchId] = useState<string | null>(null);
+  const [editingBranchId, setEditingBranchId] = useState<string | null>(() => searchParams.get("egBranchId"));
+  const initializedBranchEditRef = useRef<string | null>(null);
   const groupLogoScope = useRef(`group-logo-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`);
+
+  useEffect(() => {
+    const params = new URLSearchParams(searchParams);
+    params.set("egStep", step);
+    if (mode === "edit") params.set("egTab", activeEditTab);
+    else params.delete("egTab");
+    const hasSavedBranch = loadingGroup || (group?.branches || []).some((branch: any) => branch.id === editingBranchId);
+    if (mode === "edit" && editingBranchId && hasSavedBranch) params.set("egBranchId", editingBranchId);
+    else params.delete("egBranchId");
+    if (params.toString() !== searchParams.toString()) {
+      setSearchParams(params, { replace: true });
+    }
+  }, [activeEditTab, editingBranchId, mode, searchParams, setSearchParams, step]);
 
   const persistLogo = async (value: string | null | undefined, folder: string, fileName: string) => {
     if (!value || !value.startsWith("data:")) return value || "";
@@ -260,11 +290,14 @@ export function EnterpriseGroupSetupView({
         ['INHERIT', 'CUSTOM'].includes(String(branch.moduleMode || '').toUpperCase())
         && Array.isArray(branch.moduleSelection),
       );
+    const hasBranchFeatureConfiguration = Array.isArray(initialGroup.branches)
+      && initialGroup.branches.every((branch: any) => Array.isArray(branch.enabledFeatureKeys));
     if (
       Array.isArray(initialGroup.businessUnits)
       && Array.isArray(initialGroup.branches)
       && Array.isArray(initialGroup.warehouses)
       && hasBranchModuleConfiguration
+      && hasBranchFeatureConfiguration
     ) {
       setGroup(initialGroup);
       setLoadingGroup(false);
@@ -285,7 +318,7 @@ export function EnterpriseGroupSetupView({
           modulePolicies: result.modulePolicies || current.modulePolicies,
           enabledModules:
             Array.isArray(result.enabledModules) && result.enabledModules.length
-              ? result.enabledModules
+              ? getEnterpriseModulesWithinScope(result.enabledModules)
               : current.enabledModules,
         }));
       })
@@ -307,7 +340,7 @@ export function EnterpriseGroupSetupView({
       modulePolicies: group.modulePolicies || current.modulePolicies,
       enabledModules:
         Array.isArray(group.enabledModules) && group.enabledModules.length
-          ? group.enabledModules
+          ? getEnterpriseModulesWithinScope(group.enabledModules)
           : current.enabledModules,
     }));
   }, [group]);
@@ -465,7 +498,7 @@ export function EnterpriseGroupSetupView({
         name: unitForm.name.trim(),
         slug: unitForm.slug.trim(),
         description: unitForm.description.trim() || undefined,
-        enabledModules: unitForm.enabledModules,
+        enabledModules: getEnterpriseModulesWithinScope(unitForm.enabledModules, groupModuleIds),
         moduleViewOverrides: unitForm.moduleViewOverrides,
       }),
     onSuccess: async () => {
@@ -574,6 +607,9 @@ export function EnterpriseGroupSetupView({
     (warehouse: any) => warehouse.scopeType === "BUSINESS_UNIT" && !warehouse.clientTenantId,
   );
   const branches = group?.branches || [];
+  const activeEditingBranchId = editingBranchId && (loadingGroup || branches.some((branch: any) => branch.id === editingBranchId))
+    ? editingBranchId
+    : null;
   const manager = draftManager || group?.managerAssignments?.[0]?.user;
 
   const branchMutation = useMutation({
@@ -679,7 +715,7 @@ export function EnterpriseGroupSetupView({
       id: `draft-unit-${Date.now()}`,
       name: unitForm.name.trim(),
       description: unitForm.description.trim() || null,
-      enabledModules: unitForm.enabledModules,
+      enabledModules: getEnterpriseModulesWithinScope(unitForm.enabledModules, groupModuleIds),
       moduleViewOverrides: unitForm.moduleViewOverrides,
       salesFinanceIntegrationOverride: unitForm.salesFinanceIntegrationOverride,
       salesAccountingIntegrationOverride: unitForm.salesAccountingIntegrationOverride,
@@ -794,10 +830,7 @@ export function EnterpriseGroupSetupView({
       name: unit.name || "",
       slug: unit.slug || "",
       description: unit.description || "",
-      enabledModules:
-        Array.isArray(unit.enabledModules) && unit.enabledModules.length
-          ? unit.enabledModules
-          : [...DEFAULT_ENTERPRISE_MODULES],
+      enabledModules: getEffectiveBusinessUnitModules(unit.enabledModules, groupModuleIds),
       moduleViewOverrides: unit.moduleViewOverrides || {},
       salesFinanceIntegrationOverride: unit.integrationPolicyOverrides?.SALES_TO_FINANCE || unit.salesFinanceIntegrationOverride || "INHERIT",
       salesAccountingIntegrationOverride: unit.integrationPolicyOverrides?.SALES_TO_ACCOUNTING || unit.salesAccountingIntegrationOverride || "INHERIT",
@@ -823,7 +856,7 @@ export function EnterpriseGroupSetupView({
               ...unit,
               name: unitForm.name.trim(),
               description: unitForm.description.trim() || null,
-              enabledModules: unitForm.enabledModules,
+              enabledModules: getEnterpriseModulesWithinScope(unitForm.enabledModules, groupModuleIds),
               moduleViewOverrides: unitForm.moduleViewOverrides,
               salesFinanceIntegrationOverride: unitForm.salesFinanceIntegrationOverride,
               salesAccountingIntegrationOverride: unitForm.salesAccountingIntegrationOverride,
@@ -861,7 +894,7 @@ export function EnterpriseGroupSetupView({
         name: unitForm.name.trim(),
         slug: unitForm.slug.trim() || unitForm.name.trim(),
         description: unitForm.description.trim() || null,
-        enabledModules: unitForm.enabledModules,
+        enabledModules: getEnterpriseModulesWithinScope(unitForm.enabledModules, groupModuleIds),
         moduleViewOverrides: unitForm.moduleViewOverrides,
         salesFinanceIntegrationOverride: unitForm.salesFinanceIntegrationOverride,
         salesAccountingIntegrationOverride: unitForm.salesAccountingIntegrationOverride,
@@ -956,7 +989,8 @@ export function EnterpriseGroupSetupView({
     toast.success("Almacén eliminado");
   };
 
-  const startDraftBranchEdit = (branch: any) => {
+  const startDraftBranchEdit = useCallback((branch: any) => {
+    initializedBranchEditRef.current = branch.id;
     setEditingBranchId(branch.id);
     const selectedUnit = units.find((unit: any) => unit.id === branch.businessUnitId);
     setBranchForm({
@@ -989,7 +1023,20 @@ export function EnterpriseGroupSetupView({
       novachatAccountingIntegrationOverride: branch.integrationPolicyOverrides?.NOVACHAT_TO_ACCOUNTING || "INHERIT",
     });
     setBranchAdminEmailStatus("idle");
-  };
+  }, [units]);
+
+  useEffect(() => {
+    if (mode !== "edit" || loadingGroup || !editingBranchId) {
+      if (!editingBranchId) initializedBranchEditRef.current = null;
+      return;
+    }
+    const branch = branches.find((candidate: any) => candidate.id === editingBranchId);
+    if (!branch) {
+      initializedBranchEditRef.current = null;
+      return;
+    }
+    if (initializedBranchEditRef.current !== branch.id) startDraftBranchEdit(branch);
+  }, [branches, editingBranchId, loadingGroup, mode, startDraftBranchEdit]);
 
   const saveDraftBranchEdit = () => {
     if (!editingBranchId) return;
@@ -1139,7 +1186,7 @@ export function EnterpriseGroupSetupView({
         businessUnits: units.map((unit: any) => ({
           name: unit.name,
           description: unit.description || undefined,
-          enabledModules: unit.enabledModules || DEFAULT_ENTERPRISE_MODULES,
+          enabledModules: getEnterpriseModulesWithinScope(unit.enabledModules, groupForm.enabledModules),
         })),
         warehouses: warehouses.map((warehouse: any) => ({
           name: warehouse.name,
@@ -1513,15 +1560,15 @@ export function EnterpriseGroupSetupView({
                 form={branchForm}
                 setForm={setBranchForm}
                 creating={isDraft ? false : branchMutation.isPending || updateBranchMutation.isPending}
-                editingId={editingBranchId}
+                editingId={activeEditingBranchId}
                 canCreate={canCreateBranch}
                 emailStatus={branchAdminEmailStatus}
                 onCreate={
                   isDraft
-                    ? editingBranchId
+                  ? activeEditingBranchId
                       ? saveDraftBranchEdit
                       : addDraftBranch
-                    : editingBranchId
+                    : activeEditingBranchId
                       ? savePersistentBranchEdit
                       : () => branchMutation.mutate()
                 }
@@ -1883,7 +1930,7 @@ function GroupConfigurationView({
   const [unitViewDrafts, setUnitViewDrafts] = useState<Record<string, Record<string, string[]>>>({});
   const startUnitEdit = (unit: any) => {
     setEditingUnitId(unit.id);
-    setUnitModuleDrafts((current) => ({ ...current, [unit.id]: Array.isArray(unit.enabledModules) ? [...unit.enabledModules] : [] }));
+    setUnitModuleDrafts((current) => ({ ...current, [unit.id]: getEffectiveBusinessUnitModules(unit.enabledModules, groupForm.enabledModules) }));
     setUnitViewDrafts((current) => ({ ...current, [unit.id]: unit.moduleViewOverrides || {} }));
   };
   return (
@@ -2037,7 +2084,7 @@ function GroupConfigurationView({
             description="Cada rubro define los módulos heredables y el giro válido de sus sucursales."
             items={units.map((unit: any) => ({
               title: unit.name,
-              detail: `${Array.isArray(unit.enabledModules) ? unit.enabledModules.length : 0} módulos habilitados`,
+              detail: `${getEffectiveBusinessUnitModules(unit.enabledModules, groupForm.enabledModules).length} módulos habilitados`,
               badge: unit.isActive === false ? "Inactivo" : "Activo",
             }))}
             onOpen={() => onOpenDetail("units")}
@@ -2085,7 +2132,7 @@ function GroupConfigurationView({
           <CardContent className="space-y-3 p-6">
             {units.map((unit: any) => {
               const editing = editingUnitId === unit.id;
-              const modules = unitModuleDrafts[unit.id] || (Array.isArray(unit.enabledModules) ? unit.enabledModules : []);
+              const modules = unitModuleDrafts[unit.id] ?? getEffectiveBusinessUnitModules(unit.enabledModules, groupForm.enabledModules);
               return <div key={unit.id} className="rounded-2xl border border-border/60 bg-background/60 p-4">
                 <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
                   <div className="min-w-0"><p className="font-black">{unit.name}</p><p className="text-xs text-muted-foreground">{modules.length} módulos activos · las sucursales pueden heredar esta selección</p></div>
@@ -2562,6 +2609,7 @@ function UnitsStep({
   onCancelEdit,
   onNext,
 }: any) {
+  const selectedUnitModules = getEnterpriseModulesWithinScope(unitForm.enabledModules, availableModules);
   return (
     <div className="space-y-6">
       <SectionIntro
@@ -2579,18 +2627,16 @@ function UnitsStep({
             </CardTitle>
           </CardHeader>
           <CardContent className="space-y-3 p-6">
-            {units.map((unit: any) => (
-              <div
+            {units.map((unit: any) => {
+              const unitModules = getEffectiveBusinessUnitModules(unit.enabledModules, availableModules);
+              return <div
                 key={unit.id}
                 className="flex items-start justify-between gap-3 rounded-2xl border border-border/60 bg-muted/15 p-4"
               >
                 <div className="min-w-0">
                   <p className="truncate font-black">{unit.name}</p>
                   <p className="text-xs text-muted-foreground">
-                    {Array.isArray(unit.enabledModules) &&
-                    unit.enabledModules.length
-                      ? `${unit.enabledModules.length} módulos para sus sucursales`
-                      : "Módulos por configurar"}
+                    {`${unitModules.length} módulos para sus sucursales`}
                   </p>
                 </div>
                 <div className="flex shrink-0 items-center gap-2">
@@ -2630,8 +2676,8 @@ function UnitsStep({
                     </Button>
                   )}
                 </div>
-              </div>
-            ))}
+              </div>;
+            })}
             {!units.length && (
               <EmptyState
                 icon={GitBranch}
@@ -2677,14 +2723,14 @@ function UnitsStep({
               />
             </label>
             <ModuleSelector
-              value={unitForm.enabledModules}
+              value={selectedUnitModules}
               availableModules={availableModules}
               onChange={(enabledModules) =>
                 setUnitForm((current: any) => ({ ...current, enabledModules }))
               }
             />
             <ModuleViewOverrideEditor
-              modules={unitForm.enabledModules}
+              modules={selectedUnitModules}
               groupPolicies={groupPolicies || {}}
               value={unitForm.moduleViewOverrides || {}}
               onChange={(moduleViewOverrides) => setUnitForm((current: any) => ({ ...current, moduleViewOverrides }))}
@@ -2694,7 +2740,7 @@ function UnitsStep({
               onChange={(changes) => setUnitForm((current: any) => ({ ...current, ...changes }))}
               parentLabel="la política del grupo"
               editable={editMode}
-              moduleScope={unitForm.enabledModules}
+              moduleScope={selectedUnitModules}
             />
             <div className="flex gap-2">
               <Button
@@ -3110,9 +3156,10 @@ function BranchesStep({
   );
   const editingBranch = branches.find((branch: any) => branch.id === editingId);
   const branchIsActive = !editingId || editingBranch?.isActive !== false;
+  const unitModuleScope = getEffectiveBusinessUnitModules(selectedUnit?.enabledModules, availableModules);
   const branchModules = form.moduleMode === "CUSTOM"
-    ? form.enabledModules || []
-    : selectedUnit?.enabledModules || availableModules || [];
+    ? getEnterpriseModulesWithinScope(form.enabledModules, unitModuleScope)
+    : unitModuleScope;
   return (
     <div className="space-y-6">
       <SectionIntro
@@ -3235,7 +3282,7 @@ function BranchesStep({
                   subIndustry: unit?.name || current.subIndustry,
                   enabledModules:
                     current.moduleMode === "CUSTOM"
-                      ? (current.enabledModules || []).filter((module: string) => (unit?.enabledModules || availableModules || []).includes(module))
+                      ? getEnterpriseModulesWithinScope(current.enabledModules, getEffectiveBusinessUnitModules(unit?.enabledModules, availableModules))
                       : current.enabledModules,
                   moduleViewOverrides: current.moduleViewOverrides || {},
                 }));
@@ -3352,9 +3399,9 @@ function BranchesStep({
           )}
           <div className="sm:col-span-2 rounded-2xl border border-border/60 bg-background/50 p-4">
             <p className={labelClass}>Módulos de la sucursal</p>
-            <label className="mt-2 flex items-center gap-2 text-xs font-semibold text-foreground"><input type="checkbox" checked={form.moduleMode === "CUSTOM"} onChange={(event) => setForm((current: any) => ({ ...current, moduleMode: event.target.checked ? "CUSTOM" : "INHERIT", enabledModules: event.target.checked ? (current.enabledModules?.length ? current.enabledModules : [...(selectedUnit?.enabledModules || availableModules)]) : [] }))} className="size-4 accent-primary" />Personalizar módulos de esta sucursal</label>
-            {form.moduleMode === "CUSTOM" ? <div className="mt-3"><ModuleSelector value={form.enabledModules || []} availableModules={selectedUnit?.enabledModules || availableModules} onChange={(enabledModules) => setForm((current: any) => ({ ...current, enabledModules }))} /></div> : <div className="mt-3 rounded-2xl border border-primary/20 bg-primary/[0.04] p-4 text-sm leading-relaxed text-muted-foreground">La sucursal hereda los módulos de <span className="font-bold text-foreground">{selectedUnit?.name || "su rubro"}</span>.</div>}
-            <div className="mt-3"><ModuleViewOverrideEditor modules={form.moduleMode === "CUSTOM" ? (form.enabledModules || []) : (selectedUnit?.enabledModules || availableModules)} groupPolicies={groupPolicies || {}} parentViewOverrides={selectedUnit?.moduleViewOverrides || {}} value={form.moduleViewOverrides || {}} onChange={(moduleViewOverrides) => setForm((current: any) => ({ ...current, moduleViewOverrides }))} /></div>
+            <label className="mt-2 flex items-center gap-2 text-xs font-semibold text-foreground"><input type="checkbox" checked={form.moduleMode === "CUSTOM"} onChange={(event) => setForm((current: any) => ({ ...current, moduleMode: event.target.checked ? "CUSTOM" : "INHERIT", enabledModules: event.target.checked ? getEnterpriseModulesWithinScope(current.enabledModules?.length ? current.enabledModules : unitModuleScope, unitModuleScope) : [] }))} className="size-4 accent-primary" />Personalizar módulos de esta sucursal</label>
+            {form.moduleMode === "CUSTOM" ? <div className="mt-3"><ModuleSelector value={form.enabledModules || []} availableModules={unitModuleScope} onChange={(enabledModules) => setForm((current: any) => ({ ...current, enabledModules }))} /></div> : <div className="mt-3 rounded-2xl border border-primary/20 bg-primary/[0.04] p-4 text-sm leading-relaxed text-muted-foreground">La sucursal hereda los módulos de <span className="font-bold text-foreground">{selectedUnit?.name || "su rubro"}</span>.</div>}
+            <div className="mt-3"><ModuleViewOverrideEditor modules={branchModules} groupPolicies={groupPolicies || {}} parentViewOverrides={selectedUnit?.moduleViewOverrides || {}} value={form.moduleViewOverrides || {}} onChange={(moduleViewOverrides) => setForm((current: any) => ({ ...current, moduleViewOverrides }))} /></div>
           </div>
           <div className="sm:col-span-2">
             <BranchSpecificFeaturesSelector
@@ -3374,7 +3421,7 @@ function BranchesStep({
               onChange={(changes) => setForm((current: any) => ({ ...current, ...changes }))}
               parentLabel={`el rubro ${selectedUnit?.name || "seleccionado"}`}
               editable={editMode}
-              moduleScope={form.moduleMode === "CUSTOM" ? form.enabledModules : selectedUnit?.enabledModules || availableModules}
+              moduleScope={branchModules}
             />
           </div>
           <div className="sm:col-span-2 flex justify-end gap-2">
@@ -3569,11 +3616,8 @@ function ModuleSelector({
   availableModules?: string[];
   onChange: (value: string[]) => void;
 }) {
-  const options = availableModules?.length
-    ? ENTERPRISE_MODULE_OPTIONS.filter((module) =>
-        availableModules.includes(module.id),
-      )
-    : ENTERPRISE_MODULE_OPTIONS;
+  const options = getEnterpriseModulesAvailable(availableModules);
+  const selectedModules = getEnterpriseModulesWithinScope(value, availableModules);
   return (
     <div className="rounded-2xl border border-border/60 bg-background/50 p-4">
       <div className="flex items-center justify-between gap-2">
@@ -3581,7 +3625,7 @@ function ModuleSelector({
           Módulos operativos
         </p>
         <span className="text-[11px] text-muted-foreground">
-          {value.length} seleccionados
+          {selectedModules.length} seleccionados
         </span>
       </div>
       <p className="mt-1 text-xs text-muted-foreground">
@@ -3591,7 +3635,7 @@ function ModuleSelector({
       </p>
       <div className="mt-3 grid gap-2 sm:grid-cols-2">
         {options.map((module) => {
-          const checked = value.includes(module.id);
+          const checked = selectedModules.includes(module.id);
           return (
             <label
               key={module.id}
@@ -3600,7 +3644,10 @@ function ModuleSelector({
               <input
                 type="checkbox"
                 checked={checked}
-                onChange={() => onChange(updateEnterpriseModuleSelection(value, module.id, !checked))}
+                onChange={() => onChange(getEnterpriseModulesWithinScope(
+                  updateEnterpriseModuleSelection(selectedModules, module.id, !checked),
+                  availableModules,
+                ))}
                 className="mt-0.5 size-4 accent-primary"
               />
               <span className="min-w-0">

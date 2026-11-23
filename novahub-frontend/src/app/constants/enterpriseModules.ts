@@ -47,6 +47,39 @@ export const DEFAULT_ENTERPRISE_MODULES = ENTERPRISE_MODULE_OPTIONS
   .filter((module) => !['RESTAURANT', 'HOTEL', 'SALES_VOICE_QUICK', 'FORCE_SALES', 'ORGANIZATION', 'MARKETING', 'FLEET'].includes(module.id))
   .map((module) => module.id);
 
+/** Returns the catalog entries allowed by an optional upper-level scope. */
+export function getEnterpriseModulesAvailable(
+  availableModules?: readonly string[] | null,
+): EnterpriseModuleOption[] {
+  if (availableModules == null) return ENTERPRISE_MODULE_OPTIONS;
+  const available = new Set(availableModules.map((module) => String(module).toUpperCase()));
+  return ENTERPRISE_MODULE_OPTIONS.filter((module) => available.has(module.id));
+}
+
+/** Removes duplicate, unknown, and out-of-scope module IDs from a selection. */
+export function getEnterpriseModulesWithinScope(
+  selectedModules?: readonly string[] | null,
+  availableModules?: readonly string[] | null,
+): string[] {
+  const available = new Set(getEnterpriseModulesAvailable(availableModules).map(({ id }) => id));
+  const selected = new Set<string>();
+  for (const rawModule of selectedModules || []) {
+    const module = String(rawModule || '').toUpperCase();
+    if (available.has(module)) selected.add(module);
+  }
+  return [...selected];
+}
+
+/** An empty business-unit list means it inherits the group's module scope. */
+export function getEffectiveBusinessUnitModules(
+  unitModules?: readonly string[] | null,
+  groupModules?: readonly string[] | null,
+): string[] {
+  const groupScope = getEnterpriseModulesWithinScope(groupModules);
+  if (!unitModules?.length) return groupScope;
+  return getEnterpriseModulesWithinScope(unitModules, groupScope);
+}
+
 export function updateEnterpriseModuleSelection(
   selectedModules: string[],
   moduleId: string,
