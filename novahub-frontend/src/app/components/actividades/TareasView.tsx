@@ -79,7 +79,12 @@ import { ActivityViewHeader } from './ActivityViewHeader';
 import { TaskSavedViews, type TaskViewFilters } from './TaskSavedViews';
 import { TaskProgressCell } from './TaskProgressCell';
 import { getTaskProgress } from './actividades.progress';
-import { readTaskLayoutPreference, writeTaskLayoutPreference } from './taskViewPreferences';
+import {
+  readTaskKanbanGroupByCategoryPreference,
+  readTaskLayoutPreference,
+  writeTaskKanbanGroupByCategoryPreference,
+  writeTaskLayoutPreference,
+} from './taskViewPreferences';
 
 interface TareasViewProps {
   data: Task[];
@@ -143,11 +148,17 @@ export const TareasView: React.FC<TareasViewProps> = ({ data, loading, summaryEr
     setViewLayoutState({ userId: currentUserId, mode });
     writeTaskLayoutPreference(currentUserId, mode);
   };
-  const [kanbanGroupByCategory, setKanbanGroupByCategory] = useLocalStorageState<boolean>(
-    'activities-task-kanban-group-by-category',
-    true,
-    24 * 365,
-  );
+  const [kanbanGroupingState, setKanbanGroupingState] = useState<{ userId: string | null; groupByCategory: boolean }>(() => ({
+    userId: currentUserId,
+    groupByCategory: readTaskKanbanGroupByCategoryPreference(currentUserId),
+  }));
+  const kanbanGroupByCategory = kanbanGroupingState.userId === currentUserId
+    ? kanbanGroupingState.groupByCategory
+    : readTaskKanbanGroupByCategoryPreference(currentUserId);
+  const setKanbanGroupByCategory = (groupByCategory: boolean) => {
+    setKanbanGroupingState({ userId: currentUserId, groupByCategory });
+    writeTaskKanbanGroupByCategoryPreference(currentUserId, groupByCategory);
+  };
   const [kanbanCreatedAtOrder, setKanbanCreatedAtOrder] = useLocalStorageState<'newest' | 'oldest'>(
     'activities-task-kanban-created-at-order',
     'newest',

@@ -5,10 +5,13 @@ const PROTECTED_KEYS = new Set([
   'erp-active-submodule',
   'erp-sidebar-collapsed',
   'novahub:manager-sidebar-collapsed',
+  'nh-erp-activities-task-kanban-group-by-category',
 ]);
 
 const PROTECTED_KEY_PREFIXES = [
   'novahub:sales-draft:',
+  'nh:activities:task-layout:',
+  'nh:activities:task-kanban-grouping:',
 ];
 
 function isCacheKey(key: string): boolean {
