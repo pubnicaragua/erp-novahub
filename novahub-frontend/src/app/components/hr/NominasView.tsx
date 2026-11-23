@@ -440,9 +440,11 @@ export function NominasView({ payrolls, employees, onRefresh }: any) {
       if (configured) { toast.success('Previsualización abierta. Descarga o imprime el PDF desde el visor del navegador.'); return; }
       const pdfSettings = await getPdfDesignSettings('recursos-humanos.payrolls');
       const doc = new jsPDF(pdfDesignPaper(pdfSettings, 'recursos-humanos.payrolls', paperFormat)) as any;
-      doc.text("Reporte de Nominas", 14, 15);
+      const pageWidth = doc.internal.pageSize.getWidth();
+      const margin = pageWidth * 0.05;
+      doc.text("Reporte de Nominas", margin, 15);
       doc.setFontSize(10);
-      doc.text(`Generado: ${new Date().toLocaleDateString()}`, 14, 22);
+      doc.text(`Generado: ${new Date().toLocaleDateString()}`, margin, 22);
 
       const tableData = exportRows.map((p: any) => {
         return [
@@ -458,6 +460,8 @@ export function NominasView({ payrolls, employees, onRefresh }: any) {
 
       doc.autoTable({
         startY: 28,
+        tableWidth: pageWidth - margin * 2,
+        margin: { left: margin, right: margin, bottom: 18 },
         head: [['Empleado', 'Periodo', 'Periodicidad', 'Bruto', 'Neto a Pagar', 'Costo Empresa', 'Estado']],
         body: tableData,
         styles: { cellPadding: 2, overflow: 'linebreak', valign: 'middle' },

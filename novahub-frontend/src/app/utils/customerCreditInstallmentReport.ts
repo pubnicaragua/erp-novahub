@@ -1,6 +1,7 @@
 import { getCurrencyDecimalPlaces } from './currency';
 import { formatDateEs } from './dateFormat';
 import { buildDownloadFileName } from './exportFileNames';
+import { downloadPdfBlob } from './pdfBrowserPreview';
 import type { CustomerCreditScheduleRow } from '../components/ventas/CustomerCreditInstallmentSchedule';
 import { generateConfiguredReportTemplate } from './pdfGenerator';
 
@@ -15,6 +16,7 @@ export interface CustomerCreditInstallmentReportInput {
   principalAmount: number;
   interestAmount: number;
   installments: CustomerCreditScheduleRow[];
+  download?: boolean;
 }
 
 function reportMoney(amount: number, currency: string) {
@@ -37,7 +39,8 @@ export async function generateCustomerCreditInstallmentReport(input: CustomerCre
     dueDateLabel: formatDateEs(installment.dueDate),
   }));
 
-  return generateConfiguredReportTemplate({
+  const fileName = buildDownloadFileName(['plan_abonos', input.customerName, input.contractNumber], 'pdf');
+  const report = await generateConfiguredReportTemplate({
     targetKey: 'ventas.customer-installment-plan',
     title: input.title,
     tenantName: input.tenantName,
@@ -49,11 +52,11 @@ export async function generateCustomerCreditInstallmentReport(input: CustomerCre
     ].filter(Boolean).join(' · '),
     rows,
     columns: [
-      { header: 'Abono', value: row => `#${row.installmentNumber}`, align: 'center' },
-      { header: 'Vencimiento', value: row => row.dueDateLabel },
-      { header: 'Capital', value: row => reportMoney(Number(row.principalAmount || 0), currency), align: 'right' },
-      { header: 'Intereses', value: row => reportMoney(Number(row.interestAmount || 0), currency), align: 'right' },
-      { header: 'Total del abono', value: row => reportMoney(Number(row.totalAmount || 0), currency), align: 'right' },
+      { header: 'Abono', value: row => `#${row.installmentNumber}`, align: 'center', width: 10 },
+      { header: 'Vencimiento', value: row => row.dueDateLabel, width: 18 },
+      { header: 'Capital', value: row => reportMoney(Number(row.principalAmount || 0), currency), align: 'right', width: 22 },
+      { header: 'Intereses', value: row => reportMoney(Number(row.interestAmount || 0), currency), align: 'right', width: 22 },
+      { header: 'Total del abono', value: row => reportMoney(Number(row.totalAmount || 0), currency), align: 'right', width: 28 },
     ],
     totals: {
       Cliente: input.customerName || '—',
@@ -72,7 +75,9 @@ export async function generateCustomerCreditInstallmentReport(input: CustomerCre
       { label: 'Total del plan', value: reportMoney(totalAmount, currency), detail: 'Capital + intereses' },
       { label: 'Abonos', value: input.installments.length, detail: 'Programados' },
     ],
-    fileName: buildDownloadFileName(['plan_abonos', input.customerName, input.contractNumber], 'pdf'),
+    fileName,
     format: 'configured',
   });
+  if (input.download && report?.output) downloadPdfBlob(report.output('blob'), fileName);
+  return report;
 }

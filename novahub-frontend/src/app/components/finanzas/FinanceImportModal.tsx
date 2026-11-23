@@ -180,17 +180,19 @@ export function FinanceImportModal({
 
   const handleDownloadPdf = () => {
     const doc = new jsPDF({ orientation: 'landscape' });
+    const pageWidth = doc.internal.pageSize.getWidth();
+    const margin = pageWidth * 0.05;
     const sheetTitle = `Plantilla de Importación — ${title}`;
     const today = new Date().toLocaleDateString('es-NI');
 
     // Title
     doc.setFontSize(14);
     doc.setFont('helvetica', 'bold');
-    doc.text(sheetTitle, 14, 18);
+    doc.text(sheetTitle, margin, 18);
     doc.setFontSize(9);
     doc.setFont('helvetica', 'normal');
     doc.setTextColor(120);
-    doc.text(`NovaHub ERP • ${today}`, 14, 24);
+    doc.text(`NovaHub ERP • ${today}`, margin, 24);
     doc.setTextColor(0);
 
     // Main table: first row is example (grayed out), rest empty
@@ -199,6 +201,8 @@ export function FinanceImportModal({
     
     autoTable(doc, {
       startY: 30,
+      tableWidth: pageWidth - margin * 2,
+      margin: { left: margin, right: margin, bottom: 18 },
       head: [columns.map(c => c.label)],
       body: [exampleRowData, ...emptyRows],
       theme: 'grid',

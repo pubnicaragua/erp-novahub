@@ -1,6 +1,7 @@
 import type { QueryClient, QueryKey } from '@tanstack/react-query';
 import type { Notification } from '../types';
 import { getNotificationNavigation, type NotificationNavigation } from '../utils/notificationNavigation';
+import { financeSourceDocumentQueryKeys } from '../utils/financeSourceDocumentQueryKeys';
 
 export const NOTIFICATION_DOMAIN_REFRESH_EVENT = 'notification-domain-refresh';
 
@@ -115,6 +116,14 @@ const canonicalSubModule = (module: string, subModule?: string) => {
 
 const scoped = (domain: string, resource: string, tenantKey: string): QueryKey => [domain, resource, tenantKey];
 const accountingScoped = (resource: string, tenantKey: string): QueryKey => ['accounting', tenantKey, resource];
+const financeOperationalRefresh = (tenantKey: string): QueryKey[] => [
+  scoped('finance', 'dashboard-operational-summary', tenantKey),
+  scoped('finance', 'cash-bank-summary', tenantKey),
+];
+const financeSourceRefresh = (origin: 'SALES' | 'PURCHASES', tenantKey: string): QueryKey[] => [
+  financeSourceDocumentQueryKeys.summary(origin, tenantKey),
+  financeSourceDocumentQueryKeys.projection(origin, tenantKey),
+];
 
 /**
  * Returns prefixes instead of full keys so every active page/filter variant
@@ -133,13 +142,16 @@ export function getNotificationDomainQueryKeys(navigation: NotificationNavigatio
         scoped('sales', 'invoices', tenantKey),
         scoped('sales', 'invoices-payment-catalog', tenantKey),
         scoped('sales', 'invoices-return-catalog', tenantKey),
+        ...financeSourceRefresh('SALES', tenantKey),
       ],
       'facturas-recurrentes': [scoped('sales', 'recurring-invoices', tenantKey)],
-      'pagos-recibidos': [scoped('sales', 'payments', tenantKey)],
-      'devoluciones-venta': [scoped('sales', 'returns', tenantKey)],
+      'pagos-recibidos': [scoped('sales', 'payments', tenantKey), ...financeOperationalRefresh(tenantKey), ...financeSourceRefresh('SALES', tenantKey)],
+      'facturacion-caja': [scoped('sales', 'payments', tenantKey), ...financeOperationalRefresh(tenantKey), ...financeSourceRefresh('SALES', tenantKey)],
+      'devoluciones-venta': [scoped('sales', 'returns', tenantKey), ...financeSourceRefresh('SALES', tenantKey)],
       'notas-credito': [
         scoped('sales', 'credit-notes', tenantKey),
         scoped('sales', 'credit-notes-payment-catalog', tenantKey),
+        ...financeSourceRefresh('SALES', tenantKey),
       ],
       'listas-precios': [['sales', 'price-lists']],
     };
@@ -155,8 +167,11 @@ export function getNotificationDomainQueryKeys(navigation: NotificationNavigatio
       ordenes: [scoped('purchases', 'orders', tenantKey), scoped('purchases', 'orders-catalog', tenantKey)],
       recepciones: [scoped('purchases', 'receipts', tenantKey)],
       'facturas-rec': [scoped('purchases', 'recurring-invoices', tenantKey)],
-      pagos: [scoped('purchases', 'payments', tenantKey), scoped('purchases', 'invoices-catalog', tenantKey)],
-      creditos: [scoped('purchases', 'credit-invoices', tenantKey)],
+      pagos: [scoped('purchases', 'payments', tenantKey), scoped('purchases', 'invoices-catalog', tenantKey), ...financeOperationalRefresh(tenantKey), ...financeSourceRefresh('PURCHASES', tenantKey)],
+      'pagos-realizados': [scoped('purchases', 'payments', tenantKey), scoped('purchases', 'invoices-catalog', tenantKey), ...financeOperationalRefresh(tenantKey), ...financeSourceRefresh('PURCHASES', tenantKey)],
+      'facturas-proveedor': [scoped('purchases', 'invoices-catalog', tenantKey), ...financeSourceRefresh('PURCHASES', tenantKey)],
+      creditos: [scoped('purchases', 'credit-invoices', tenantKey), ...financeSourceRefresh('PURCHASES', tenantKey)],
+      'creditos-proveedor': [scoped('purchases', 'credit-invoices', tenantKey), ...financeSourceRefresh('PURCHASES', tenantKey)],
     };
     return purchaseKeys[subModule] || [];
   }
@@ -210,17 +225,17 @@ export function getNotificationDomainQueryKeys(navigation: NotificationNavigatio
       scoped('finance', 'accounting-mappings', tenantKey),
     ];
     const financeKeys: Record<string, QueryKey[]> = {
-      resumen: [scoped('finance', 'income', tenantKey), scoped('finance', 'expenses', tenantKey), scoped('finance', 'recurring-expenses', tenantKey), scoped('finance', 'recurring-incomes', tenantKey), ...financeBase],
-      'caja-bancos': [scoped('finance', 'bank-accounts', tenantKey), scoped('finance', 'bank-account-movements', tenantKey), scoped('finance', 'transactions', tenantKey), scoped('finance', 'sales-invoices-lookup', tenantKey), scoped('finance', 'supplier-invoices-lookup', tenantKey), scoped('finance', 'payments-made', tenantKey), ...financeBase],
-      'cuentas-cobrar': [scoped('finance', 'income', tenantKey), scoped('finance', 'sales-invoices', tenantKey), scoped('finance', 'sales-invoices-lookup', tenantKey)],
-      'cuentas-pagar': [scoped('finance', 'expenses', tenantKey), scoped('finance', 'supplier-invoices', tenantKey), scoped('finance', 'supplier-invoices-lookup', tenantKey)],
-      ingresos: [scoped('finance', 'income', tenantKey), ...financeBase],
-      gastos: [scoped('finance', 'expenses', tenantKey), ...financeBase],
-      recurrentes: [scoped('finance', 'recurring-expenses', tenantKey), scoped('finance', 'expenses', tenantKey), ...financeBase],
-      'ingresos-recurrentes': [scoped('finance', 'recurring-incomes', tenantKey), scoped('finance', 'income', tenantKey), ...financeBase],
+      resumen: [scoped('finance', 'income', tenantKey), scoped('finance', 'expenses', tenantKey), scoped('finance', 'recurring-expenses', tenantKey), scoped('finance', 'recurring-incomes', tenantKey), scoped('finance', 'dashboard-operational-summary', tenantKey), scoped('finance', 'cash-bank-summary', tenantKey), financeSourceDocumentQueryKeys.summary('SALES', tenantKey), financeSourceDocumentQueryKeys.summary('PURCHASES', tenantKey), financeSourceDocumentQueryKeys.projection('SALES', tenantKey), financeSourceDocumentQueryKeys.projection('PURCHASES', tenantKey), ...financeBase],
+      'caja-bancos': [scoped('finance', 'bank-accounts', tenantKey), scoped('finance', 'bank-account-movements', tenantKey), scoped('finance', 'transactions', tenantKey), scoped('finance', 'cash-bank-summary', tenantKey), financeSourceDocumentQueryKeys.lookup('SALES', tenantKey), financeSourceDocumentQueryKeys.lookup('PURCHASES', tenantKey), scoped('finance', 'payments-made', tenantKey), ...financeBase],
+      'cuentas-cobrar': [scoped('finance', 'income', tenantKey), financeSourceDocumentQueryKeys.lookup('SALES', tenantKey), financeSourceDocumentQueryKeys.summary('SALES', tenantKey), financeSourceDocumentQueryKeys.projection('SALES', tenantKey), ...financeOperationalRefresh(tenantKey)],
+      'cuentas-pagar': [scoped('finance', 'expenses', tenantKey), financeSourceDocumentQueryKeys.lookup('PURCHASES', tenantKey), financeSourceDocumentQueryKeys.summary('PURCHASES', tenantKey), financeSourceDocumentQueryKeys.projection('PURCHASES', tenantKey), ...financeOperationalRefresh(tenantKey)],
+      ingresos: [scoped('finance', 'income', tenantKey), ...financeOperationalRefresh(tenantKey), ...financeBase],
+      gastos: [scoped('finance', 'expenses', tenantKey), ...financeOperationalRefresh(tenantKey), ...financeBase],
+      recurrentes: [scoped('finance', 'recurring-expenses', tenantKey), scoped('finance', 'expenses', tenantKey), ...financeOperationalRefresh(tenantKey), ...financeBase],
+      'ingresos-recurrentes': [scoped('finance', 'recurring-incomes', tenantKey), scoped('finance', 'income', tenantKey), ...financeOperationalRefresh(tenantKey), ...financeBase],
       'diario-financiero': [scoped('finance', 'journals', tenantKey), scoped('finance', 'income', tenantKey), scoped('finance', 'expenses', tenantKey)],
       'libro-mayor-financiero': [scoped('finance', 'transactions', tenantKey), ...financeBase],
-      calendario: [scoped('finance', 'recurring-expenses', tenantKey), scoped('finance', 'recurring-incomes', tenantKey)],
+      calendario: [scoped('finance', 'recurring-expenses', tenantKey), scoped('finance', 'recurring-incomes', tenantKey), ...financeOperationalRefresh(tenantKey)],
       analisis: [scoped('finance', 'income', tenantKey), scoped('finance', 'expenses', tenantKey), ...financeBase],
       'balance-general': [scoped('finance', 'income', tenantKey), scoped('finance', 'expenses', tenantKey), scoped('finance', 'balance', tenantKey), ...financeBase],
       perdidas: [scoped('finance', 'expenses', tenantKey), scoped('finance', 'losses', tenantKey), ['inventory', 'losses', 'finanzas', tenantKey]],
@@ -248,7 +263,7 @@ export function getNotificationDomainQueryKeys(navigation: NotificationNavigatio
       presupuestos: [accountingScoped('budget-items', tenantKey)],
       'centros-costos': [accountingScoped('cost-centers', tenantKey), accountingScoped('budget-items', tenantKey)],
       'categorias-gastos': [accountingScoped('expense-categories', tenantKey)],
-      configuracion: [accountingScoped('config', tenantKey), accountingScoped('accounts', tenantKey), accountingScoped('tax-catalog', tenantKey), accountingScoped('cost-centers', tenantKey)],
+      configuracion: [accountingScoped('config', tenantKey), accountingScoped('accounts', tenantKey), accountingScoped('tax-catalog', tenantKey), accountingScoped('cost-centers', tenantKey), ['finance', 'cash-bank-summary', tenantKey]],
       'solicitudes-pago': [['hr-payment-requests']],
     };
     return accountingKeys[subModule] || [accountingScoped('accounts', tenantKey)];

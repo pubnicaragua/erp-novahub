@@ -147,7 +147,7 @@ export async function downloadPlatformQuotePdf(quote: PlatformQuote, options: Pd
   const doc = new jsPDF({ format: 'a4', orientation: 'portrait', unit: 'mm' });
   const width = doc.internal.pageSize.getWidth();
   const height = doc.internal.pageSize.getHeight();
-  const margin = 14;
+  const margin = width * 0.05;
   const contentWidth = width - margin * 2;
 
   const drawFooter = () => {
@@ -305,6 +305,7 @@ export async function downloadPlatformQuotePdf(quote: PlatformQuote, options: Pd
 
   autoTable(doc, {
     startY: y,
+    tableWidth: contentWidth,
     margin: { top: 39, left: margin, right: margin, bottom: 22 },
     head: [showDiscount ? ['#', 'Concepto', 'Empresas / unidades', 'Precio / modalidades', 'Descuento', 'Cobro', 'Descripción / alcance'] : ['#', 'Concepto', 'Empresas / unidades', 'Precio / modalidades', 'Cobro', 'Descripción / alcance']],
     body: rows,
@@ -490,7 +491,7 @@ export async function downloadPlatformQuoteCommercialReport(
   const doc = new jsPDF({ format: 'a4', orientation: 'portrait', unit: 'mm' });
   const width = doc.internal.pageSize.getWidth();
   const height = doc.internal.pageSize.getHeight();
-  const margin = 14;
+  const margin = width * 0.05;
   const contentWidth = width - margin * 2;
   const hasCondition = report.pricePreferential || report.specialPrice;
   const totals = calculatePlatformQuoteTotals(quote);
@@ -602,6 +603,7 @@ export async function downloadPlatformQuoteCommercialReport(
 
   autoTable(doc, {
     startY: y,
+    tableWidth: contentWidth,
     margin: { top: 38, left: margin, right: margin, bottom: 22 },
     head: [hasCondition
       ? ['#', 'Concepto', 'Empresas / unidades', 'Precio / modalidades', 'Cobro', 'Descripción / alcance', 'Condición comercial']

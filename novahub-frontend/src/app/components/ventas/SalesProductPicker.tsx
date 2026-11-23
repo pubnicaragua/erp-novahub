@@ -267,6 +267,7 @@ export function SalesProductPicker({
       const created: any = await inventoryService.createQuickService({ name: quickName.trim(), salePrice: Number(quickPrice) });
       const item = (created?.data?.data ?? created?.data ?? created) as SalesCatalogItem;
       void queryClient.invalidateQueries({ queryKey: ['tenant-module'] });
+      void queryClient.invalidateQueries({ queryKey: ['sales', 'price-lists', 'services'] });
       toast.success('Servicio creado y agregado a la factura');
       onChange(item.id, undefined, item);
       closeAndReset(false);
@@ -286,6 +287,9 @@ export function SalesProductPicker({
   };
 
   const renderPrice = (product: SalesCatalogItem) => {
+    // Los servicios requieren un precio explícito en la lista seleccionada;
+    // este selector no recibe esa lista y no debe mostrar el precio legado del catálogo.
+    if (getItemType(product) === 'SERVICE') return null;
     const rawPrice = product.salePrice ?? product.price;
     if (rawPrice === undefined || rawPrice === null) return null;
     const numericPrice = Number(rawPrice);

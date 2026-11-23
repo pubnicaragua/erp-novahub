@@ -5,11 +5,13 @@ import { getBase64Image } from './export-utils';
 import { getNovaHubLogoPng, NOVAHUB_LOGO_DATA_URL } from './novahubBrand';
 import { brandingService } from '../services/branding.service';
 import { ensurePdfBrowserPreview, showPdfInBrowserPreview } from './pdfBrowserPreview';
+import { ensureReportColumnWidths } from './pdf-template-renderer';
 
 export interface NovaHubFormatColumn<T = any> {
   header: string;
   value: (row: T) => unknown;
   align?: 'left' | 'center' | 'right';
+  width?: number;
 }
 
 export interface NovaHubFormatReportOptions<T = any> {
@@ -213,7 +215,7 @@ export async function generateNovaHubFormatReport<T = any>({
 
   const pageWidth = doc.internal.pageSize.getWidth();
   const pageHeight = doc.internal.pageSize.getHeight();
-  const margin = 14;
+  const margin = pageWidth * 0.05;
   const contentWidth = pageWidth - margin * 2;
 
   const primaryRgb = resolveActiveBrandColor(brandPrimaryColor);
@@ -317,19 +319,29 @@ export async function generateNovaHubFormatReport<T = any>({
   headerY = cardY + cardHeight + 6;
 
   // 4. Transformar filas para autoTable
-  const tableHeaders = columns.map((c) => c.header);
+  const templateColumns = ensureReportColumnWidths(columns.map((column, index) => ({
+    id: `column-${index}`,
+    label: column.header,
+    token: `column-${index}`,
+    width: Number(column.width) > 0 ? Number(column.width) : undefined,
+    align: column.align || 'left' as const,
+  })));
+  const effectiveColumns = columns.map((column, index) => ({ ...column, width: templateColumns[index]?.width }));
+  const tableHeaders = effectiveColumns.map((c) => c.header);
   const tableBody = rows.length > 0
-    ? rows.map((row) => columns.map((col) => {
+    ? rows.map((row) => effectiveColumns.map((col) => {
         const val = col.value(row);
         return val !== null && val !== undefined && val !== '' ? String(val) : '—';
       }))
-    : [[ 'Sin registros para el alcance seleccionado', ...Array(Math.max(0, columns.length - 1)).fill('') ]];
+    : [[ 'Sin registros para el alcance seleccionado', ...Array(Math.max(0, effectiveColumns.length - 1)).fill('') ]];
 
   // Configuración de anchos y alineación de columnas
   const columnStyles: Record<number, any> = {};
-  columns.forEach((col, idx) => {
+  const widthTotal = templateColumns.reduce((sum, column) => sum + (Number(column.width) || 100 / Math.max(templateColumns.length, 1)), 0) || 100;
+  effectiveColumns.forEach((col, idx) => {
     columnStyles[idx] = {
       halign: col.align || 'left',
+      cellWidth: contentWidth * (Number(col.width) || 100 / Math.max(effectiveColumns.length, 1)) / widthTotal,
     };
   });
 

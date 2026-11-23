@@ -50,25 +50,13 @@ export function ServicePriceListsDialog({ open, onOpenChange, service, onSaved }
         && String(entry.priceListId) === String(list.id)
         && !entry.variantId,
       );
-      const isRetail = String(list.code || '').toUpperCase() === 'RETAIL'
-        || String(list.name || '').trim().toLowerCase() === 'minorista'
-        || Boolean(list.isDefault);
       const currency = String(item?.currency || serviceRecord.priceCurrency || baseCurrency).toUpperCase();
       const rate = Number(item?.exchangeRate || serviceRecord.priceExchangeRate || (currency === baseCurrency ? 1 : exchangeRate || 1));
-      const catalogBasePrice = Number(serviceRecord.salePrice || 0);
-      const catalogOriginalPrice = Number(serviceRecord.salePriceOriginal || 0);
-      const catalogRetailPrice = catalogOriginalPrice > 0 || catalogBasePrice <= 0
-        ? catalogOriginalPrice
-        : currency === 'USD'
-          ? catalogBasePrice / Math.max(rate, 0.000001)
-          : catalogBasePrice;
       return {
         list,
         price: item?.price !== undefined && item?.price !== null
           ? String(item.price)
-          : isRetail
-            ? String(catalogRetailPrice)
-            : '',
+          : '',
         currency,
         exchangeRate: rate,
         configured: Boolean(item),

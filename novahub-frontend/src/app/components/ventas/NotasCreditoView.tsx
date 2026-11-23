@@ -2,7 +2,7 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import { useQueryClient } from '@tanstack/react-query';
 import {
   BadgeDollarSign, Plus, Search, TrendingUp, Clock, CheckCircle2, CircleDollarSign,
-  Eye, Trash2, ChevronLeft, Send, CreditCard, AlertTriangle, Ban, Bell, Mail, MessageCircle, CalendarDays, FileText, Settings2,
+  Eye, Trash2, ChevronLeft, Send, CreditCard, AlertTriangle, Ban, Bell, Mail, MessageCircle, CalendarDays, FileText, Download, Settings2,
 } from 'lucide-react';
 import { Card, CardContent } from '../ui/card';
 import { useDebouncedValue } from '../../hooks/useDebouncedValue';
@@ -1058,6 +1058,45 @@ export function NotasCreditoView({ data, summaryData, summaryLoading, summaryErr
     }
   };
 
+  const handleExportInstallmentPlan = async (row: CreditDocument) => {
+    if (!canPerform('SALES_CREDIT_NOTES', 'export')) return;
+    const toastId = toast.loading('Preparando el plan de abonos…');
+    try {
+      const response: any = row.kind === 'CUSTOMER_LOAN'
+        ? await customerLoansService.getById(row.id)
+        : await creditNotesService.getById(row.id);
+      const current = response?.data?.data ?? response?.data ?? response;
+      const installments = current.installments?.length ? current.installments : row.installments || [];
+      if (!installments.length) throw new Error('Este crédito no tiene un plan de abonos disponible.');
+
+      const frequency = String(current.frequency || row.frequency || 'WEEKLY').toUpperCase();
+      const frequencyLabels: Record<string, string> = { DAILY: 'Diaria', WEEKLY: 'Semanal', BIWEEKLY: 'Cada 15 días', MONTHLY: 'Mensual' };
+      const schedulePrincipal = installments.reduce((sum: number, installment: any) => sum + Number(installment.principalAmount || 0), 0);
+      const scheduleInterest = installments.reduce((sum: number, installment: any) => sum + Number(installment.interestAmount || 0), 0);
+      const report = await generateCustomerCreditInstallmentReport({
+        tenantName: user?.sessionBranding?.name || themeConfig?.tenantName || user?.tenantName || 'Mi Empresa',
+        tenantLogo: themeConfig?.logo || user?.sessionBranding?.logo,
+        title: `Plan de abonos · ${row.kind === 'CUSTOMER_LOAN' ? 'Préstamo' : 'Crédito'} ${current.number || row.number}`,
+        customerName: current.customer?.name || customerName(row),
+        contractNumber: row.kind === 'CUSTOMER_LOAN'
+          ? current.invoice?.number || row.invoice?.number || current.number || row.number || row.id
+          : current.number || row.number || current.invoice?.number || row.invoice?.number || row.id,
+        currency: current.currency || row.currency || 'NIO',
+        frequencyLabel: current.planCalculationMode === 'MANUAL' || row.planCalculationMode === 'MANUAL'
+          ? undefined
+          : frequencyLabels[frequency] || frequency,
+        principalAmount: schedulePrincipal || Number(current.principal ?? current.principalAmount ?? row.principal ?? row.total ?? 0),
+        interestAmount: scheduleInterest || Number(current.interest ?? current.interestAmount ?? row.interest ?? 0),
+        installments,
+        download: true,
+      });
+      if (!report) throw new Error('No se pudo generar el plan de abonos.');
+      toast.success('Se descargó el plan de abonos en PDF.', { id: toastId });
+    } catch (error: any) {
+      toast.error(error?.response?.data?.message || error?.message || 'No se pudo preparar el plan de abonos.', { id: toastId });
+    }
+  };
+
   const handlePrintPaymentTicket = async (payment: PaymentReceived) => {
     const printToastId = toast.loading('Preparando el ticket de pago...');
     try {
@@ -1782,6 +1821,7 @@ export function NotasCreditoView({ data, summaryData, summaryLoading, summaryErr
           startEdit(detailCredit.id);
         }}
         extraActions={detailCredit ? <>
+          {(detailCredit.planEnabled || Boolean(detailCredit.installments?.length)) && canPerform('SALES_CREDIT_NOTES', 'export') && <Button type="button" variant="outline" className="rounded-xl" onClick={() => void handleExportInstallmentPlan(detailCredit)}><Download className="mr-2 size-4" />Descargar plan de abonos</Button>}
           {canPerform('SALES_CREDIT_NOTES', 'export') && <Button type="button" variant="outline" className="rounded-xl" onClick={() => void handleExportDebtStatement(detailCredit)}><FileText className="mr-2 size-4" />Estado de cuenta</Button>}
           {detailCredit.kind === 'CREDIT_NOTE' && canPerform('SALES_CREDIT_NOTES', 'issue') && normalizeStatus(detailCredit.status) === 'DRAFT' && <Button type="button" className="rounded-xl bg-emerald-600 text-white hover:bg-emerald-700" onClick={() => handleIssue(detailCredit.id)}><CheckCircle2 className="mr-2 size-4" />Aprobar crédito</Button>}
           {detailCredit.kind === 'CREDIT_NOTE' && canPerform('SALES_CREDIT_NOTES', 'send') && ['ISSUED', 'PARTIAL', 'APPLIED'].includes(normalizeStatus(detailCredit.status)) && Number(detailCredit.balance ?? detailCredit.total) > 0.01 && <Button type="button" className="rounded-xl bg-emerald-600 text-white hover:bg-emerald-700" disabled={['PENDING', 'CLAIMED'].includes(normalizeStatus(detailCredit.cashQueue?.status))} onClick={() => void handleSendToCash(detailCredit)}><Send className="mr-2 size-4" />Enviar a Caja</Button>}

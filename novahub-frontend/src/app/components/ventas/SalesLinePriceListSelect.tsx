@@ -137,7 +137,7 @@ export function SalesLinePriceListSelect({ productId, variantId, productCode, pr
     });
     if (!entry) {
       const selectedList = lists.find((list: any) => sameSalesId(list.id, priceListId));
-      const canUseRetailFallback = isService || (
+      const canUseRetailFallback = !isService && (
         String(selectedList?.code || '').toUpperCase() === 'RETAIL'
         || String(selectedList?.name || '').trim().toLowerCase() === 'minorista'
       );

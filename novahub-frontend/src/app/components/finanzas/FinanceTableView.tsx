@@ -545,7 +545,8 @@ export function FinanceTableView({
         },
         alternateRowStyles: { fillColor: [245, 245, 245] },
         footStyles: { fillColor: [248, 250, 252], textColor: [60, 60, 60], fontStyle: 'bold', valign: 'middle' },
-        margin: { left: 14, right: 14 },
+        tableWidth: pageWidth - pageWidth * 0.1,
+        margin: { left: pageWidth * 0.05, right: pageWidth * 0.05 },
       });
 
       // Footer

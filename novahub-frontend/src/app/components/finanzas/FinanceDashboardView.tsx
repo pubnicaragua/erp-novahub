@@ -16,13 +16,17 @@ import { toast } from '@/app/services/toast';
 import { FINANCE_AXIS_TICK, FINANCE_GRID, FINANCE_TOOLTIP_WRAPPER, FinanceTooltipCard, financeCategoryLabel } from './financeChartTheme';
 import { normalizeCurrency, summarizeAmountsByCurrency, type SupportedCurrency } from '../../utils/currency';
 import { SalesKpiCard } from '../ventas/SalesKpiCard';
-import { getMonthlyRecurrenceFactor } from '../ui/RecurrenceScheduleFields';
+import { financeSourceDocumentQueryKeys } from '../../utils/financeSourceDocumentQueryKeys';
 
 interface Props {
   incomes: any[];
   expenses: any[];
-  recurringExpenses: any[];
-  recurringIncomes?: any[];
+  undatedExpenses?: any[];
+  recentIncomes?: any[];
+  recentExpenses?: any[];
+  recurringForecastRows?: any[];
+  operationalSummaryAvailable?: boolean;
+  historicalFilterActive?: boolean;
   onNavigate?: (tab: string) => void;
 }
 
@@ -30,7 +34,7 @@ const COLORS = ['#10b981', '#3b82f6', '#f59e0b', '#ef4444', '#8b5cf6', '#06b6d4'
 
 const toList = (response: any) => Array.isArray(response) ? response : (Array.isArray(response?.data) ? response.data : []);
 
-export function FinanceDashboardView({ incomes, expenses, recurringExpenses, recurringIncomes, onNavigate }: Props) {
+export function FinanceDashboardView({ incomes, expenses, undatedExpenses = [], recentIncomes = [], recentExpenses = [], recurringForecastRows = [], operationalSummaryAvailable = false, historicalFilterActive = false, onNavigate }: Props) {
   const indicatorsStartedAt = useRef<number | null>(typeof performance === 'undefined' ? null : performance.now());
   const indicatorsSpan = useRef<ReturnType<typeof Sentry.startInactiveSpan> | null>(Sentry.startInactiveSpan({ op: 'ui.load', name: 'Finance dashboard indicators ready' }));
   const indicatorsMeasured = useRef(false);
@@ -43,7 +47,7 @@ export function FinanceDashboardView({ incomes, expenses, recurringExpenses, rec
   const sym = displayCurrency === 'USD' ? '$' : 'C$';
 
   const salesInvoicesQuery = useQuery({
-    queryKey: ['finance', 'sales-invoices', tenantKey],
+    queryKey: financeSourceDocumentQueryKeys.summary('SALES', tenantKey),
     queryFn: ({ signal }) => sourceDocumentsService.getDashboardSummary('SALES', signal),
     enabled: canReadSales,
     staleTime: 30_000,
@@ -52,8 +56,26 @@ export function FinanceDashboardView({ incomes, expenses, recurringExpenses, rec
     retry: 1,
   });
   const supplierInvoicesQuery = useQuery({
-    queryKey: ['finance', 'supplier-invoices', tenantKey],
+    queryKey: financeSourceDocumentQueryKeys.summary('PURCHASES', tenantKey),
     queryFn: ({ signal }) => sourceDocumentsService.getDashboardSummary('PURCHASES', signal),
+    enabled: canReadPurchases,
+    staleTime: 30_000,
+    gcTime: 5 * 60_000,
+    refetchOnWindowFocus: false,
+    retry: 1,
+  });
+  const salesProjectionQuery = useQuery({
+    queryKey: financeSourceDocumentQueryKeys.projection('SALES', tenantKey),
+    queryFn: ({ signal }) => sourceDocumentsService.getProjectionSummary('SALES', signal),
+    enabled: canReadSales,
+    staleTime: 30_000,
+    gcTime: 5 * 60_000,
+    refetchOnWindowFocus: false,
+    retry: 1,
+  });
+  const supplierProjectionQuery = useQuery({
+    queryKey: financeSourceDocumentQueryKeys.projection('PURCHASES', tenantKey),
+    queryFn: ({ signal }) => sourceDocumentsService.getProjectionSummary('PURCHASES', signal),
     enabled: canReadPurchases,
     staleTime: 30_000,
     gcTime: 5 * 60_000,
@@ -71,11 +93,15 @@ export function FinanceDashboardView({ incomes, expenses, recurringExpenses, rec
   });
   const salesInvoices = toList(salesInvoicesQuery.data);
   const supplierInvoices = toList(supplierInvoicesQuery.data);
+  const salesProjectionRows = toList(salesProjectionQuery.data);
+  const supplierProjectionRows = toList(supplierProjectionQuery.data);
   const bankAccounts = toList(chartAccountsQuery.data);
   const indicatorsQueries = [
     { query: salesInvoicesQuery, enabled: canReadSales },
     { query: supplierInvoicesQuery, enabled: canReadPurchases },
     { query: chartAccountsQuery, enabled: canReadFinancial },
+    { query: salesProjectionQuery, enabled: canReadSales },
+    { query: supplierProjectionQuery, enabled: canReadPurchases },
   ];
   const indicatorsReady = indicatorsQueries.every(({ query, enabled }) => !enabled || query.isSuccess || query.isError);
   useEffect(() => {
@@ -88,7 +114,7 @@ export function FinanceDashboardView({ incomes, expenses, recurringExpenses, rec
     indicatorsSpan.current?.setAttribute('outcome', failed ? 'partial' : 'success');
     indicatorsSpan.current?.end();
     indicatorsSpan.current = null;
-  }, [indicatorsReady, salesInvoicesQuery.isError, supplierInvoicesQuery.isError, chartAccountsQuery.isError]);
+  }, [indicatorsReady, salesInvoicesQuery.isError, supplierInvoicesQuery.isError, chartAccountsQuery.isError, salesProjectionQuery.isError, supplierProjectionQuery.isError]);
   useEffect(() => () => {
     if (indicatorsMeasured.current || !indicatorsSpan.current) return;
     indicatorsSpan.current.setAttribute('outcome', 'cancelled');
@@ -103,48 +129,46 @@ export function FinanceDashboardView({ incomes, expenses, recurringExpenses, rec
       : convertAmount(amount, item.currency, item.exchangeRate);
   };
   const rawDocBalance = (item: any) => Number(item.amount ?? item.balance ?? item.balanceDue ?? (Number(item.total || 0) - Number(item.amountPaid || 0)));
-  const totalIncome = useMemo(() => incomes.reduce((a: number, i: any) => a + cv(i), 0), [incomes, valuationMode, convertAmount, convertCurrentAmount]);
-  const totalExpense = useMemo(() => expenses.reduce((a: number, e: any) => a + cv(e), 0), [expenses, valuationMode, convertAmount, convertCurrentAmount]);
-  const netCashFlow = totalIncome - totalExpense;
+  const includedUndatedExpenses = historicalFilterActive ? [] : undatedExpenses;
+  const totalIncome = useMemo(() => operationalSummaryAvailable ? incomes.reduce((a: number, i: any) => a + cv(i), 0) : null, [incomes, operationalSummaryAvailable, valuationMode, convertAmount, convertCurrentAmount]);
+  const totalExpense = useMemo(() => operationalSummaryAvailable
+    ? [...expenses, ...includedUndatedExpenses].reduce((a: number, e: any) => a + cv(e), 0)
+    : null, [expenses, includedUndatedExpenses, operationalSummaryAvailable, valuationMode, convertAmount, convertCurrentAmount]);
+  const netCashFlow = totalIncome === null || totalExpense === null ? null : totalIncome - totalExpense;
 
   const pendingSalesInvoices = salesInvoices;
   const pendingSupplierInvoices = supplierInvoices;
-  const totalCxc = useMemo(() => pendingSalesInvoices.reduce((sum: number, row: any) => sum + cv(row), 0), [pendingSalesInvoices, valuationMode, convertAmount, convertCurrentAmount]);
-  const totalCxp = useMemo(() => pendingSupplierInvoices.reduce((sum: number, row: any) => sum + cv(row), 0), [pendingSupplierInvoices, valuationMode, convertAmount, convertCurrentAmount]);
+  const salesSummaryAvailable = canReadSales && salesInvoicesQuery.isSuccess;
+  const purchasesSummaryAvailable = canReadPurchases && supplierInvoicesQuery.isSuccess;
+  const totalCxc = useMemo(() => salesSummaryAvailable
+    ? pendingSalesInvoices.reduce((sum: number, row: any) => sum + cv(row), 0)
+    : null, [pendingSalesInvoices, salesSummaryAvailable, valuationMode, convertAmount, convertCurrentAmount]);
+  const totalCxp = useMemo(() => purchasesSummaryAvailable
+    ? pendingSupplierInvoices.reduce((sum: number, row: any) => sum + cv(row), 0)
+    : null, [pendingSupplierInvoices, purchasesSummaryAvailable, valuationMode, convertAmount, convertCurrentAmount]);
   const bankBalance = useMemo(() => bankAccounts.reduce((a: number, acc: any) => a + (valuationMode === 'CURRENT'
     ? convertCurrentAmount(Number(acc.amount || 0), acc.currency)
     : convertAmount(Number(acc.amount || 0), acc.currency, acc.exchangeRate)), 0), [bankAccounts, valuationMode, convertAmount, convertCurrentAmount]);
+  const cashSummaryAvailable = canReadFinancial && chartAccountsQuery.isSuccess;
+  const availableCash = cashSummaryAvailable ? bankBalance : null;
 
   const originalCurrencies = useMemo<SupportedCurrency[]>(() => summarizeAmountsByCurrency(
-    [...incomes, ...expenses, ...bankAccounts, ...pendingSalesInvoices, ...pendingSupplierInvoices],
+    [...incomes, ...expenses, ...includedUndatedExpenses, ...bankAccounts, ...pendingSalesInvoices, ...pendingSupplierInvoices],
     () => 0,
     (row: any) => row.currency,
-  ).map((item) => item.currency), [incomes, expenses, bankAccounts, pendingSalesInvoices, pendingSupplierInvoices]);
+  ).map((item) => item.currency), [incomes, expenses, includedUndatedExpenses, bankAccounts, pendingSalesInvoices, pendingSupplierInvoices]);
+  const currenciesForDisplay = originalCurrencies.length ? originalCurrencies : [displayCurrency as SupportedCurrency];
   const originalSum = (rows: any[], amountOf: (row: any) => number, currency: SupportedCurrency) => rows
     .filter((row) => normalizeCurrency(row.currency) === currency)
     .reduce((sum, row) => sum + (Number.isFinite(amountOf(row)) ? amountOf(row) : 0), 0);
-  const originalIncome = (currency: SupportedCurrency) => originalSum(incomes, (row) => Number(row.amount ?? row.baseAmount ?? 0), currency);
-  const originalExpense = (currency: SupportedCurrency) => originalSum(expenses, (row) => Number(row.amount ?? row.baseAmount ?? 0), currency);
-  const originalBank = (currency: SupportedCurrency) => originalSum(bankAccounts, (row) => Number(row.amount || 0), currency);
-  const originalCxc = (currency: SupportedCurrency) => originalSum(pendingSalesInvoices, rawDocBalance, currency);
-  const originalCxp = (currency: SupportedCurrency) => originalSum(pendingSupplierInvoices, rawDocBalance, currency);
+  const originalIncome = (currency: SupportedCurrency) => operationalSummaryAvailable ? originalSum(incomes, (row) => Number(row.amount ?? row.baseAmount ?? 0), currency) : null;
+  const originalExpense = (currency: SupportedCurrency) => operationalSummaryAvailable ? originalSum([...expenses, ...includedUndatedExpenses], (row) => Number(row.amount ?? row.baseAmount ?? 0), currency) : null;
+  const originalBank = (currency: SupportedCurrency) => cashSummaryAvailable ? originalSum(bankAccounts, (row) => Number(row.amount || 0), currency) : null;
+  const originalCxc = (currency: SupportedCurrency) => salesSummaryAvailable ? originalSum(pendingSalesInvoices, rawDocBalance, currency) : null;
+  const originalCxp = (currency: SupportedCurrency) => purchasesSummaryAvailable ? originalSum(pendingSupplierInvoices, rawDocBalance, currency) : null;
   const originalOverdue = (rows: any[], currency: SupportedCurrency) => originalSum(
     rows.filter((row: any) => row.agingBucket !== 'NOT_DUE'), rawDocBalance, currency,
   );
-
-  const activeRecurringExpenses = useMemo(() => recurringExpenses.filter((r: any) => r.status === 'ACTIVE' && Number(r.amount) > 0), [recurringExpenses]);
-  const activeRecurringIncomes = useMemo(() => (recurringIncomes || []).filter((r: any) => r.status === 'ACTIVE' && Number(r.amount) > 0), [recurringIncomes]);
-  const monthlyRecurring = useMemo(() =>
-    activeRecurringExpenses.reduce((a, r) => a + cv(r) * getMonthlyRecurrenceFactor(r.frequency, r.intervalDays), 0),
-    [activeRecurringExpenses, valuationMode, convertAmount, convertCurrentAmount]
-  );
-  const monthlyRecurringIncome = useMemo(() =>
-    activeRecurringIncomes.reduce((a, r) => a + cv(r) * getMonthlyRecurrenceFactor(r.frequency, r.intervalDays), 0),
-    [activeRecurringIncomes, valuationMode, convertAmount, convertCurrentAmount]
-  );
-  const projected30 = netCashFlow + monthlyRecurringIncome - monthlyRecurring;
-  const projected60 = projected30 + monthlyRecurringIncome - monthlyRecurring;
-  const projected90 = projected60 + monthlyRecurringIncome - monthlyRecurring;
 
   const monthlyData = useMemo(() => {
     const months: Record<string, { income: number; expense: number; net: number }> = {};
@@ -159,11 +183,44 @@ export function FinanceDashboardView({ incomes, expenses, recurringExpenses, rec
     cxp: pendingSupplierInvoices.filter((row: any) => row.agingBucket === label).reduce((sum: number, row: any) => sum + cv(row), 0),
   })), [pendingSalesInvoices, pendingSupplierInvoices, valuationMode, convertAmount, convertCurrentAmount]);
 
+  const projectionAvailable = canReadFinancial && canReadSales && canReadPurchases
+    && cashSummaryAvailable && operationalSummaryAvailable
+    && salesProjectionQuery.isSuccess && supplierProjectionQuery.isSuccess;
+  const projectionLoading = (canReadSales && salesProjectionQuery.isLoading)
+    || (canReadPurchases && supplierProjectionQuery.isLoading);
+  const sumProjection = (rows: any[], predicate: (row: any) => boolean, field: 'amount' | 'overdueAmount' = 'amount') => rows
+    .filter(predicate)
+    .reduce((sum: number, row: any) => sum + (valuationMode === 'CURRENT'
+      ? convertCurrentAmount(Number(row[field] || 0), row.currency)
+      : convertAmount(Number(row[field] || 0), row.currency, row.exchangeRate)), 0);
+  const overdueCxc = sumProjection(salesProjectionRows, (row) => row.bucket === '0-30 días', 'overdueAmount');
+  const overdueCxp = sumProjection(supplierProjectionRows, (row) => row.bucket === '0-30 días', 'overdueAmount');
+  const undatedCxc = sumProjection(salesProjectionRows, (row) => row.bucket === 'NO_DUE_DATE');
+  const undatedCxp = sumProjection(supplierProjectionRows, (row) => row.bucket === 'NO_DUE_DATE');
+  const undatedExpenseTotal = includedUndatedExpenses.reduce((sum: number, row: any) => sum + cv(row), 0);
+  const agingAvailable = canReadSales && canReadPurchases && salesInvoicesQuery.isSuccess && supplierInvoicesQuery.isSuccess;
+  const agingLoading = (canReadSales && salesInvoicesQuery.isLoading)
+    || (canReadPurchases && supplierInvoicesQuery.isLoading);
   const projectData = useMemo(() => {
-    const last = monthlyData.length > 0 ? monthlyData[monthlyData.length - 1] : null;
-    const base = last ? last.net + monthlyRecurringIncome - monthlyRecurring : 0;
-    return [{ label: 'Actual', amount: base }, { label: '30d', amount: projected30 }, { label: '60d', amount: projected60 }, { label: '90d', amount: projected90 }];
-  }, [monthlyData, projected30, projected60, projected90, monthlyRecurringIncome, monthlyRecurring]);
+    if (!projectionAvailable || availableCash === null) return [];
+    const totalDueBy = (rows: any[], days: 30 | 60 | 90) => sumProjection(rows, (row) => {
+      if (row.bucket === '0-30 días') return true;
+      if (days >= 60 && row.bucket === '31-60 días') return true;
+      return days >= 90 && row.bucket === '61-90 días';
+    });
+    const recurringBy = (kind: 'INCOME' | 'EXPENSE', days: 30 | 60 | 90) => recurringForecastRows
+      .filter((row: any) => row.kind === kind && new Date(row.date).getTime() <= Date.now() + days * 86_400_000)
+      .reduce((sum: number, row: any) => sum + cv(row), 0);
+    const balanceAt = (days: 30 | 60 | 90) => availableCash
+      + totalDueBy(salesProjectionRows, days) - totalDueBy(supplierProjectionRows, days)
+      + recurringBy('INCOME', days) - recurringBy('EXPENSE', days);
+    return [
+      { label: 'Hoy', amount: availableCash },
+      { label: '30 días', amount: balanceAt(30) },
+      { label: '60 días', amount: balanceAt(60) },
+      { label: '90 días', amount: balanceAt(90) },
+    ];
+  }, [projectionAvailable, availableCash, salesProjectionRows, supplierProjectionRows, recurringForecastRows, valuationMode, convertAmount, convertCurrentAmount]);
 
   const categoryData = useMemo(() => {
     const cats: Record<string, number> = {};
@@ -171,8 +228,14 @@ export function FinanceDashboardView({ incomes, expenses, recurringExpenses, rec
       const cat = financeCategoryLabel(e.category || 'OTROS');
       cats[cat] = (cats[cat] || 0) + cv(e);
     }
+    if (!historicalFilterActive) {
+      for (const e of includedUndatedExpenses) {
+        const category = 'Compras sin fecha confiable';
+        cats[category] = (cats[category] || 0) + cv(e);
+      }
+    }
     return Object.entries(cats).sort(([, a], [, b]) => b - a).slice(0, 6).map(([name, value]) => ({ name, value }));
-  }, [expenses, valuationMode, convertAmount, convertCurrentAmount]);
+  }, [expenses, includedUndatedExpenses, historicalFilterActive, valuationMode, convertAmount, convertCurrentAmount]);
 
   const fmt = (n: number) => formatCurrentAmount(n, displayCurrency);
   const fmtShort = (n: number) => {
@@ -184,35 +247,47 @@ export function FinanceDashboardView({ incomes, expenses, recurringExpenses, rec
   const renderKpi = (
     label: string,
     icon: any,
-    total: number,
-    amountByCurrency: (currency: SupportedCurrency) => number,
+    total: number | null,
+    amountByCurrency: (currency: SupportedCurrency) => number | null,
     onClick?: () => void,
     subByCurrency?: (currency: SupportedCurrency) => string,
   ) => displayMode === 'ORIGINAL'
-    ? originalCurrencies.map((currency) => (
+    ? currenciesForDisplay.map((currency) => (
       <KpiCard
         key={`${label}-${currency}`}
         icon={icon}
         label={`${label} (${currency})`}
-        value={formatExplicitAmount(amountByCurrency(currency), currency)}
+        value={amountByCurrency(currency) === null ? '—' : formatExplicitAmount(amountByCurrency(currency) as number, currency)}
         sub={subByCurrency?.(currency)}
         onClick={onClick}
       />
     ))
-    : <KpiCard icon={icon} label={`${label}${valuationModeSuffix}`} value={fmt(total)} onClick={onClick} />;
+    : <KpiCard icon={icon} label={`${label}${valuationModeSuffix}`} value={total === null ? '—' : fmt(total)} onClick={onClick} />;
 
   return (
     <div className="min-w-0 space-y-6">
       <div className="grid grid-cols-1 gap-2 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6">
-        {renderKpi('Saldo Disponible', Landmark, bankBalance, originalBank, () => onNavigate?.('caja-bancos'))}
+        {renderKpi('Saldo Disponible', Landmark, availableCash, originalBank, () => onNavigate?.('caja-bancos'))}
         {renderKpi('Ingresos Cobrados', TrendingUp, totalIncome, originalIncome, () => onNavigate?.('ingresos'))}
-        {renderKpi('Pagos Realizados', TrendingDown, totalExpense, originalExpense, () => onNavigate?.('gastos'))}
-        {renderKpi('Flujo Neto', DollarSign, netCashFlow, (currency) => originalIncome(currency) - originalExpense(currency))}
+        {renderKpi('Pagos Realizados', TrendingDown, totalExpense, originalExpense, () => onNavigate?.('gastos'), (currency) => {
+          const undated = originalSum(undatedExpenses, (row) => Number(row.amount ?? row.baseAmount ?? 0), currency);
+          if (undated <= 0) return undefined;
+          return historicalFilterActive
+            ? `${formatExplicitAmount(undated, currency)} sin fecha confiable · fuera del período`
+            : `${formatExplicitAmount(undated, currency)} sin fecha confiable · incluido`;
+        })}
+        {renderKpi('Flujo Neto', DollarSign, netCashFlow, (currency) => {
+          const income = originalIncome(currency);
+          const expense = originalExpense(currency);
+          return income === null || expense === null ? null : income - expense;
+        })}
         {renderKpi('Total por Cobrar', BarChart3, totalCxc, originalCxc, () => onNavigate?.('cuentas-cobrar'), (currency) => {
+          if (!salesSummaryAvailable) return 'No disponible';
           const overdue = originalOverdue(pendingSalesInvoices, currency);
           return overdue > 0 ? `${formatExplicitAmount(overdue, currency)} vencido` : 'Sin vencidos';
         })}
         {renderKpi('Total por Pagar', BarChart3, totalCxp, originalCxp, () => onNavigate?.('cuentas-pagar'), (currency) => {
+          if (!purchasesSummaryAvailable) return 'No disponible';
           const overdue = originalOverdue(pendingSupplierInvoices, currency);
           return overdue > 0 ? `${formatExplicitAmount(overdue, currency)} vencido` : 'Sin vencidos';
         })}
@@ -222,10 +297,10 @@ export function FinanceDashboardView({ incomes, expenses, recurringExpenses, rec
         <Card className="min-w-0 rounded-2xl border-border/40 bg-card shadow-sm">
           <CardHeader className="pb-2 px-5 pt-4">
             <CardTitle className="text-sm font-black uppercase tracking-tight text-foreground">Cobros vs Pagos por Mes</CardTitle>
-            <p className="text-[10px] text-muted-foreground">Barras: ingresos (verde) y gastos (rojo). Línea naranja: resultado neto.</p>
+            <p className="text-[10px] text-muted-foreground">Cobros y pagos reales según su fecha. Línea naranja: resultado neto.</p>
           </CardHeader>
           <CardContent className="min-w-0 overflow-visible px-2 pb-3">
-            <ResponsiveContainer width="100%" height={320}>
+            {!operationalSummaryAvailable ? <p className="py-20 text-center text-xs text-muted-foreground">No se pudo cargar el resumen operativo.</p> : <ResponsiveContainer width="100%" height={320}>
               <ComposedChart data={monthlyData} margin={{ top: 12, right: 20, left: 8, bottom: 14 }}>
                 <defs>
                   <linearGradient id="incG" x1="0" y1="0" x2="0" y2="1"><stop offset="0%" stopColor="#10b981" stopOpacity={0.9} /><stop offset="100%" stopColor="#10b981" stopOpacity={0.6} /></linearGradient>
@@ -240,17 +315,20 @@ export function FinanceDashboardView({ incomes, expenses, recurringExpenses, rec
                 <Bar dataKey="expense" name="Gastos" fill="url(#expG)" radius={[5, 5, 0, 0]} maxBarSize={36} onClick={(data: any) => toast.info(`Gastos ${data.month}: ${fmt(data.expense)}`)} style={{ cursor: 'pointer' }} />
                 <Line dataKey="net" name="Resultado Neto" stroke="#f59e0b" strokeWidth={2.5} dot={{ r: 3, fill: '#f59e0b', strokeWidth: 0 }} connectNulls />
               </ComposedChart>
-            </ResponsiveContainer>
+            </ResponsiveContainer>}
+            {operationalSummaryAvailable && undatedExpenseTotal > 0 && !historicalFilterActive && (
+              <p className="px-3 pt-1 text-[10px] text-amber-600 dark:text-amber-400">{fmt(undatedExpenseTotal)} en facturas pagadas sin fecha confiable se incluye en los totales, pero no se asigna a un mes.</p>
+            )}
           </CardContent>
         </Card>
 
         <Card className="min-w-0 rounded-2xl border-border/40 bg-card shadow-sm">
           <CardHeader className="pb-2 px-5 pt-4">
             <CardTitle className="text-sm font-black uppercase tracking-tight text-foreground">Flujo de Caja Proyectado</CardTitle>
-            <p className="text-[10px] text-muted-foreground">Proyección a 30, 60 y 90 días según recurrentes</p>
+            <p className="text-[10px] text-muted-foreground">Saldo de hoy más cobros, pagos y recurrencias previstas desde hoy.</p>
           </CardHeader>
           <CardContent className="min-w-0 overflow-visible px-2 pb-3">
-            <ResponsiveContainer width="100%" height={320}>
+            {!projectionAvailable ? <p className="py-20 text-center text-xs text-muted-foreground">{projectionLoading ? 'Calculando proyección…' : 'La proyección no está disponible. Verifica el saldo de caja y los permisos de Ventas y Compras.'}</p> : <ResponsiveContainer width="100%" height={320}>
               <ComposedChart data={projectData} margin={{ top: 12, right: 20, left: 8, bottom: 14 }}>
                 <defs>
                   <linearGradient id="projG" x1="0" y1="0" x2="0" y2="1"><stop offset="0%" stopColor="#06b6d4" stopOpacity={0.25} /><stop offset="100%" stopColor="#06b6d4" stopOpacity={0} /></linearGradient>
@@ -261,7 +339,11 @@ export function FinanceDashboardView({ incomes, expenses, recurringExpenses, rec
                 <Tooltip content={<FinanceTooltipCard formatter={fmt} />} wrapperStyle={FINANCE_TOOLTIP_WRAPPER} cursor={{ stroke: '#06b6d4', strokeWidth: 1, strokeDasharray: '4 4' }} />
                 <Area dataKey="amount" name="Flujo proyectado" fill="url(#projG)" stroke="#06b6d4" strokeWidth={2.5} type="monotone" dot={{ r: 4, fill: '#06b6d4', strokeWidth: 0 }} />
               </ComposedChart>
-            </ResponsiveContainer>
+            </ResponsiveContainer>}
+            {projectionAvailable && <div className="space-y-1 px-3 pt-1 text-[10px] text-muted-foreground">
+              <p>Vencido incluido en 0–30 días: por cobrar {fmt(overdueCxc)} · por pagar {fmt(overdueCxp)}.</p>
+              {(undatedCxc > 0 || undatedCxp > 0) && <p>Sin fecha de vencimiento, excluido de la proyección: por cobrar {fmt(undatedCxc)} · por pagar {fmt(undatedCxp)}.</p>}
+            </div>}
           </CardContent>
         </Card>
       </div>
@@ -272,7 +354,7 @@ export function FinanceDashboardView({ incomes, expenses, recurringExpenses, rec
             <CardTitle className="text-sm font-black uppercase tracking-tight text-foreground">CxC y CxP por Vencimiento</CardTitle>
           </CardHeader>
           <CardContent className="min-w-0 overflow-visible px-2 pb-3">
-            <ResponsiveContainer width="100%" height={260}>
+            {!agingAvailable ? <p className="py-20 text-center text-xs text-muted-foreground">{agingLoading ? 'Cargando vencimientos…' : 'No se pudieron cargar ambos resúmenes de vencimiento.'}</p> : <ResponsiveContainer width="100%" height={260}>
               <BarChart data={agingData} layout="vertical" margin={{ top: 8, right: 20, left: 8, bottom: 14 }}>
                 <CartesianGrid strokeDasharray="4 4" stroke={FINANCE_GRID} opacity={0.45} horizontal={false} />
                 <XAxis type="number" tick={FINANCE_AXIS_TICK} tickFormatter={(v: number) => fmtShort(v)} tickMargin={8} />
@@ -282,7 +364,7 @@ export function FinanceDashboardView({ incomes, expenses, recurringExpenses, rec
                 <Bar dataKey="cxc" name="Por Cobrar" fill="#10b981" radius={[0, 5, 5, 0]} maxBarSize={32} onClick={(data: any) => toast.info(`CxC ${data.label}: ${fmt(data.cxc)}`)} style={{ cursor: 'pointer' }} />
                 <Bar dataKey="cxp" name="Por Pagar" fill="#ef4444" radius={[0, 5, 5, 0]} maxBarSize={32} onClick={(data: any) => toast.info(`CxP ${data.label}: ${fmt(data.cxp)}`)} style={{ cursor: 'pointer' }} />
               </BarChart>
-            </ResponsiveContainer>
+            </ResponsiveContainer>}
           </CardContent>
         </Card>
 
@@ -291,7 +373,9 @@ export function FinanceDashboardView({ incomes, expenses, recurringExpenses, rec
             <CardTitle className="text-sm font-black uppercase tracking-tight text-foreground">Gastos por Categoría</CardTitle>
           </CardHeader>
           <CardContent className="min-w-0 overflow-visible px-2 pb-3">
-            {categoryData.length === 0 ? (
+            {!operationalSummaryAvailable ? (
+              <p className="text-xs text-muted-foreground py-12 text-center">No se pudo cargar el resumen de gastos.</p>
+            ) : categoryData.length === 0 ? (
               <p className="text-xs text-muted-foreground py-12 text-center">Sin datos de gastos</p>
             ) : (
               <ResponsiveContainer width="100%" height={260}>
@@ -315,15 +399,15 @@ export function FinanceDashboardView({ incomes, expenses, recurringExpenses, rec
           <CardHeader className="pb-2 px-5 pt-4">
             <div className="flex items-center justify-between">
               <CardTitle className="text-xs font-black uppercase tracking-tight text-foreground">Últimos Ingresos</CardTitle>
-              <Badge variant="secondary" className="text-[9px]">{incomes.length} total</Badge>
+              <Badge variant="secondary" className="text-[9px]">{recentIncomes.length} recientes</Badge>
             </div>
           </CardHeader>
           <CardContent className="px-5 pb-4">
-            {incomes.length === 0 ? (
+            {!operationalSummaryAvailable ? <p className="py-10 text-center text-xs text-muted-foreground">Resumen no disponible</p> : recentIncomes.length === 0 ? (
               <div className="text-center py-10 text-xs text-muted-foreground"><TrendingUp className="size-6 mx-auto mb-2 text-muted-foreground/30" />Sin ingresos registrados</div>
             ) : (
               <>
-              {incomes.slice(0, 5).map((inc: any) => (
+              {recentIncomes.map((inc: any) => (
                 <div key={inc.id} className="flex items-center justify-between py-2.5 border-b border-border/20 last:border-0 group hover:bg-muted/30 -mx-2 px-2 rounded-lg transition-colors">
                   <div className="flex items-center gap-3 min-w-0">
                     <div className="size-7 rounded-lg bg-emerald-500/10 flex items-center justify-center shrink-0"><ArrowUpRight className="size-3.5 text-emerald-500" /></div>
@@ -335,11 +419,7 @@ export function FinanceDashboardView({ incomes, expenses, recurringExpenses, rec
                   <span className="text-xs font-black text-emerald-500 shrink-0 ml-2">{fmt(cv(inc))}</span>
                 </div>
               ))}
-              {incomes.length > 5 && (
-                <button onClick={() => onNavigate?.('ingresos')} className="w-full mt-2 py-2 text-[10px] font-black uppercase tracking-widest text-primary hover:text-primary transition-colors">
-                  Ver todos ({incomes.length}) →
-                </button>
-              )}
+              <button onClick={() => onNavigate?.('ingresos')} className="w-full mt-2 py-2 text-[10px] font-black uppercase tracking-widest text-primary hover:text-primary transition-colors">Ver ingresos →</button>
               </>
             )}
           </CardContent>
@@ -348,15 +428,15 @@ export function FinanceDashboardView({ incomes, expenses, recurringExpenses, rec
           <CardHeader className="pb-2 px-5 pt-4">
             <div className="flex items-center justify-between">
               <CardTitle className="text-xs font-black uppercase tracking-tight text-foreground">Últimos Gastos</CardTitle>
-              <Badge variant="secondary" className="text-[9px]">{expenses.length} total</Badge>
+              <Badge variant="secondary" className="text-[9px]">{recentExpenses.length} recientes</Badge>
             </div>
           </CardHeader>
           <CardContent className="px-5 pb-4">
-            {expenses.length === 0 ? (
+            {!operationalSummaryAvailable ? <p className="py-10 text-center text-xs text-muted-foreground">Resumen no disponible</p> : recentExpenses.length === 0 ? (
               <div className="text-center py-10 text-xs text-muted-foreground"><TrendingDown className="size-6 mx-auto mb-2 text-muted-foreground/30" />Sin gastos registrados</div>
             ) : (
               <>
-              {expenses.slice(0, 5).map((exp: any) => (
+              {recentExpenses.map((exp: any) => (
                 <div key={exp.id} className="flex items-center justify-between py-2.5 border-b border-border/20 last:border-0 group hover:bg-muted/30 -mx-2 px-2 rounded-lg transition-colors">
                   <div className="flex items-center gap-3 min-w-0">
                     <div className="size-7 rounded-lg bg-rose-500/10 flex items-center justify-center shrink-0"><ArrowDownRight className="size-3.5 text-rose-500" /></div>
@@ -368,11 +448,7 @@ export function FinanceDashboardView({ incomes, expenses, recurringExpenses, rec
                   <span className="text-xs font-black text-rose-500 shrink-0 ml-2">{fmt(cv(exp))}</span>
                 </div>
               ))}
-              {expenses.length > 5 && (
-                <button onClick={() => onNavigate?.('gastos')} className="w-full mt-2 py-2 text-[10px] font-black uppercase tracking-widest text-primary hover:text-primary transition-colors">
-                  Ver todos ({expenses.length}) →
-                </button>
-              )}
+              <button onClick={() => onNavigate?.('gastos')} className="w-full mt-2 py-2 text-[10px] font-black uppercase tracking-widest text-primary hover:text-primary transition-colors">Ver gastos →</button>
               </>
             )}
           </CardContent>

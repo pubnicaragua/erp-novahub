@@ -168,7 +168,8 @@ export async function exportManagerSalesPdf(options: ManagerSalesExportOptions) 
   const doc = new jsPDF(rollFormat ? { ...pdfPaperForFormat(settings, options.pdfFormat), orientation: 'portrait' } : pdfPaperForFormat(settings, options.pdfFormat));
   const pageWidth = doc.internal.pageSize.getWidth();
   const pageHeight = doc.internal.pageSize.getHeight();
-  const margin = 12;
+  const margin = rollFormat ? (pageWidth <= 60 ? 3 : 4) : pageWidth * 0.05;
+  const contentWidth = pageWidth - margin * 2;
   let currentY = 15;
   const logo = await getBase64Image(getPdfTemplateLogo(settings, tenantLogo, options.targetKey));
   if (logo) {
@@ -195,6 +196,7 @@ export async function exportManagerSalesPdf(options: ManagerSalesExportOptions) 
     head: [keys],
     body: options.rows.length ? options.rows.map((row) => keys.map((key) => pdfReportCell(key, row[key]))) : [['Sin registros para el alcance seleccionado']],
     startY: currentY,
+    tableWidth: contentWidth,
     margin: { left: margin, right: margin, bottom: 14 },
     styles: { font: 'helvetica', fontSize: keys.length > 12 ? 5.8 : 7, cellPadding: 1.8, textColor: [51, 65, 85], overflow: 'linebreak', valign: 'middle' },
     headStyles: { fillColor: primary, textColor: [255, 255, 255], fontStyle: 'bold', halign: 'center', valign: 'middle' },
@@ -216,6 +218,7 @@ export async function exportManagerSalesPdf(options: ManagerSalesExportOptions) 
       head: [sheetKeys],
       body: sheetData.rows.length ? sheetData.rows.map((row) => sheetKeys.map((key) => pdfReportCell(key, row[key]))) : [['Sin registros para el alcance seleccionado']],
       startY: extraY,
+      tableWidth: contentWidth,
       margin: { left: margin, right: margin, bottom: 14 },
       styles: { font: 'helvetica', fontSize: sheetKeys.length > 10 ? 5.8 : 7, cellPadding: 1.8, textColor: [51, 65, 85], overflow: 'linebreak', valign: 'middle' },
       headStyles: { fillColor: primary, textColor: [255, 255, 255], fontStyle: 'bold', halign: 'center', valign: 'middle' },

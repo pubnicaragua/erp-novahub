@@ -185,7 +185,8 @@ export async function exportManagerQuotesPdf(options: ManagerQuotesExportOptions
   const doc = new jsPDF(pdfDesignPaper(settings));
   const pageWidth = doc.internal.pageSize.getWidth();
   const pageHeight = doc.internal.pageSize.getHeight();
-  const margin = 14;
+  const margin = pageWidth * 0.05;
+  const contentWidth = pageWidth - margin * 2;
   let currentY = 16;
   const logo = await getBase64Image(getPdfTemplateLogo(settings, options.tenantLogo, 'reportes.sales'));
   if (logo) {
@@ -227,6 +228,7 @@ export async function exportManagerQuotesPdf(options: ManagerQuotesExportOptions
       ? [row.number || '—', row.branchName || 'Sucursal', row.customerName || 'Cliente ocasional', formatDate(row.date), formatMoney(row.total, row.currency, true), additionalChargesLabel(row), rateContext(row), pdfStatusLabel(row.status), formatDate(row.expiryDate)]
       : [row.number || '—', row.branchName || 'Sucursal', row.customerName || 'Cliente ocasional', formatDate(row.date), displayedTotal(row, displayMode), additionalChargesLabel(row), rateContext(row), pdfStatusLabel(row.status), formatDate(row.expiryDate)]),
     startY: currentY,
+    tableWidth: contentWidth,
     margin: { left: margin, right: margin, bottom: 16 },
     styles: { font: 'helvetica', fontSize: 7.5, cellPadding: 2.5, textColor: [51, 65, 85], overflow: 'linebreak', valign: 'middle' },
     headStyles: { fillColor: primary, textColor: [255, 255, 255], fontStyle: 'bold', halign: 'center', valign: 'middle' },

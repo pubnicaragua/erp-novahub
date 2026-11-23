@@ -12,6 +12,8 @@ import {
 } from 'recharts'
 import { FINANCE_AXIS_TICK, FINANCE_GRID, FINANCE_TOOLTIP_WRAPPER, FinanceTooltipCard } from './financeChartTheme'
 import { normalizeCurrency, summarizeAmountsByCurrency, type SupportedCurrency } from '../../utils/currency'
+import { financeSourceDocumentQueryKeys } from '../../utils/financeSourceDocumentQueryKeys'
+import { isOutstandingFinanceReceivable } from '../../utils/financeReceivables'
 
 const COLORS = ['#10b981', '#f59e0b', '#ef4444', '#8b5cf6', '#3b82f6']
 
@@ -29,7 +31,7 @@ export function FinanceReceivablesView() {
   }
 
   const invoicesQuery = useQuery({
-    queryKey: ['finance', 'sales-invoices', tenantKey],
+    queryKey: financeSourceDocumentQueryKeys.lookup('SALES', tenantKey),
     queryFn: ({ signal }) => sourceDocumentsService.getAllLookup({ origin: 'SALES' }, signal),
     enabled: canReadSales,
     staleTime: 30_000,
@@ -43,7 +45,7 @@ export function FinanceReceivablesView() {
   }, [invoicesQuery.data])
   const loading = invoicesQuery.isLoading
 
-  const pending = invoices.filter((inv: any) => { const s = String(inv.status || '').toUpperCase(); return s !== 'PAID' && s !== 'CANCELLED' && s !== 'CANCELED' })
+  const pending = invoices.filter(isOutstandingFinanceReceivable)
   const documentLabel = (document: any) => document.documentType === 'CUSTOMER_CREDIT'
     ? 'Crédito'
     : document.documentType === 'CUSTOMER_LOAN'

@@ -228,7 +228,6 @@ export function getConfiguredPriceForVariant(
 export function getMissingSalesPriceItems(items: any[] = []): any[] {
   return items.filter((item) => {
     if (!item?.productId) return false;
-    if (String(item?.itemType || '').toUpperCase() === 'SERVICE') return false;
     const hasVisiblePrice = Number(item?.unitPrice) > 0;
     return (item?.priceMissing === true && !hasVisiblePrice) || (!item?.priceListId && !hasVisiblePrice);
   });
@@ -242,7 +241,7 @@ export function getMissingSalesPriceMessage(items: any[] = []): string {
     .slice(0, 3)
     .join(', ');
   const suffix = missing.length > 3 ? ` y ${missing.length - 3} más` : '';
-  return `Tener stock no basta: falta el precio en la lista seleccionada para: ${names}${suffix}. Selecciona una lista con precio antes de continuar.`;
+  return `Falta el precio configurado en la lista seleccionada para: ${names}${suffix}. Selecciona una lista con precio antes de continuar.`;
 }
 
 /**

@@ -12,6 +12,7 @@ import {
 } from 'recharts'
 import { FINANCE_AXIS_TICK, FINANCE_GRID, FINANCE_TOOLTIP_WRAPPER, FinanceTooltipCard } from './financeChartTheme'
 import { normalizeCurrency, summarizeAmountsByCurrency, type SupportedCurrency } from '../../utils/currency'
+import { financeSourceDocumentQueryKeys } from '../../utils/financeSourceDocumentQueryKeys'
 
 const COLORS = ['#ef4444', '#f59e0b', '#10b981', '#8b5cf6', '#3b82f6']
 
@@ -29,7 +30,7 @@ export function FinancePayablesView() {
   }
 
   const invoicesQuery = useQuery({
-    queryKey: ['finance', 'supplier-invoices', tenantKey],
+    queryKey: financeSourceDocumentQueryKeys.lookup('PURCHASES', tenantKey),
     queryFn: ({ signal }) => sourceDocumentsService.getAllLookup({ origin: 'PURCHASES' }, signal),
     enabled: canReadPurchases,
     staleTime: 30_000,

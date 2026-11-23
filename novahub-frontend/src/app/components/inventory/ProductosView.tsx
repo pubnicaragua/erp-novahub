@@ -23,6 +23,7 @@ import { SalesKpiCard } from '../ventas/SalesKpiCard';
 import { KpiSummaryNotice } from '../ui/KpiSummaryNotice';
 import { getKpiSummaryRows } from '../../utils/kpiSummary';
 import { inventoryService, type SimilarProductGroup, type SimilarityResolution, type SimilarProductMatch } from '../../services/inventario.service';
+import { getApiErrorMessage } from '../../services/api';
 import { purchaseRequestsService } from '../../services/compras.service';
 import { employeesService } from '../../services/rh.service';
 import { useCurrency } from '../../contexts/CurrencyContext';
@@ -3316,7 +3317,8 @@ export function ProductosView({ products, summaryProducts, summaryProductsLoaded
       const code = String(row.code || '').trim();
       const commercialNote = String(row.commercialNote || '').trim();
       const categoryOk = categoryNames.has(String(row.category || '').trim().toLowerCase());
-      const categoryWillBeCreated = !isServiceView && Boolean(row._advanced) && Boolean(String(row.category || '').trim());
+      const categoryWillBeCreated = Boolean(String(row.category || '').trim())
+        && (isServiceView || (!isServiceView && Boolean(row._advanced)));
       const cost = row.costPrice === '' || row.costPrice === undefined || row.costPrice === null ? undefined : Number(row.costPrice);
       const rawTaxRate = isServiceView ? 0 : (row.taxRate === '' || row.taxRate === undefined || row.taxRate === null ? 0.15 : Number(row.taxRate));
       const taxRate = rawTaxRate > 1 ? rawTaxRate / 100 : rawTaxRate;
@@ -3833,6 +3835,7 @@ export function ProductosView({ products, summaryProducts, summaryProductsLoaded
           code: row.code,
           name: row.name,
           categoryId: cat?.id,
+          category: row.category,
           commercialNote: row.commercialNote,
           description: row.description, taxRate: isServiceView ? 0 : row.taxRate, brand: row.brand, estimatedDuration: row.estimatedDuration, trackInventory: row.trackInventory, trackBatch: row.trackBatch, attributes: row.attributes,
           unit: String(row.unit ?? '').trim(),
@@ -3925,9 +3928,11 @@ export function ProductosView({ products, summaryProducts, summaryProductsLoaded
       setImportProgress(55);
       await uploadInitialImportImages(valid, setImportProgress);
       setImportProgress(100);
-      toast.success(`Importación completada: ${valid.length} registro(s) procesado(s)`);
+      const resultErrors = Array.isArray(results.errors) ? results.errors : [];
+      if (resultErrors.length) toast.warning('La importación terminó con incidencias. Revisa el detalle completo.');
+      else toast.success(`Importación completada: ${valid.length} registro(s) procesado(s)`);
       completeNotificationAction(actionToken);
-      setImportResults({ success: (results.success || 0) + (results.updatedProductCount || 0) + (results.updatedServiceCount || 0), skipped: (importData.length - valid.length) + (results.skipped || 0), failed: results.errors?.length || 0, errors: results.errors || [], warnings: results.warnings || [] });
+      setImportResults({ success: (results.success || 0) + (results.updatedProductCount || 0) + (results.updatedServiceCount || 0), skipped: (importData.length - valid.length) + (results.skipped || 0), failed: resultErrors.length, errors: resultErrors, warnings: results.warnings || [] });
       setImportModalOpen(false);
        setInitialImportConfirmOpen(false);
        setImportPreviewOpen(false);
@@ -3944,7 +3949,6 @@ export function ProductosView({ products, summaryProducts, summaryProductsLoaded
       setImportBatchId(null);
       setInitialImportCompleted(true);
       onRefresh();
-      window.setTimeout(() => setImportResults(null), 2600);
     } catch (e: any) {
       const responseData = e?.data || e?.response?.data;
       if (responseData?.code === 'PRODUCT_SIMILAR_MATCH' && Array.isArray(responseData.matches) && responseData.matches.length > 0) {
@@ -3954,7 +3958,10 @@ export function ProductosView({ products, summaryProducts, summaryProductsLoaded
         setInitialImportConfirmOpen(false);
         toast.warning('La validación detectó otra coincidencia. Revisa la alerta antes de continuar.');
       } else {
-        toast.error('Error durante la importación: ' + (e.message || 'Error'));
+        const message = getApiErrorMessage(e, 'No se pudo completar la importación.');
+        setInitialImportConfirmOpen(false);
+        setImportResults({ success: 0, skipped: valid.length, failed: 1, errors: [message] });
+        toast.warning('La importación no se completó. Revisa el detalle completo.');
       }
       failNotificationAction(actionToken);
     } finally {
@@ -5635,14 +5642,14 @@ export function ProductosView({ products, summaryProducts, summaryProductsLoaded
 
 
       <Dialog open={importResults !== null} onOpenChange={(open) => { if (!open) setImportResults(null); }}>
-        <DialogContent className="max-w-md">
+        <DialogContent className="flex max-h-[min(88vh,calc(100dvh-1rem))] w-[calc(100vw-1rem)] max-w-2xl flex-col overflow-hidden">
           <DialogHeader data-tour="inventory-request-title">
             <div className="flex flex-col items-center gap-3 py-3 text-center">
-              <div className="flex size-20 animate-in zoom-in items-center justify-center rounded-full bg-success/10 text-success duration-500">
-                <CheckCircle2 className="size-12 animate-pulse" />
+              <div className={`flex size-16 animate-in zoom-in items-center justify-center rounded-full duration-500 ${importResults?.failed ? 'bg-destructive/10 text-destructive' : 'bg-success/10 text-success'}`}>
+                {importResults?.failed ? <AlertTriangle className="size-9" /> : <CheckCircle2 className="size-9" />}
               </div>
-              <DialogTitle className="text-xl">Importación completada</DialogTitle>
-               <DialogDescription>{isServiceView ? 'Los servicios ya están disponibles y la vista se actualizó correctamente.' : 'El inventario ya está disponible y la vista se actualizó correctamente.'}</DialogDescription>
+              <DialogTitle className="text-xl">{importResults?.failed ? 'Importación con incidencias' : 'Importación completada'}</DialogTitle>
+               <DialogDescription>{importResults?.failed ? 'Consulta el mensaje completo y corrige las incidencias antes de volver a importar.' : isServiceView ? 'Los servicios ya están disponibles y la vista se actualizó correctamente.' : 'El inventario ya está disponible y la vista se actualizó correctamente.'}</DialogDescription>
             </div>
           </DialogHeader>
           <div className="grid grid-cols-3 gap-2 text-center">
@@ -5650,8 +5657,16 @@ export function ProductosView({ products, summaryProducts, summaryProductsLoaded
             <div className="rounded-xl border bg-muted/20 p-3"><p className="text-2xl font-black text-warning">{importResults?.skipped || 0}</p><p className="text-[10px] uppercase text-muted-foreground">Omitidos</p></div>
             <div className="rounded-xl border bg-muted/20 p-3"><p className="text-2xl font-black text-destructive">{importResults?.failed || 0}</p><p className="text-[10px] uppercase text-muted-foreground">Incidencias</p></div>
           </div>
-          {Boolean(importResults?.warnings?.length) && <p className="rounded-xl border border-warning/30 bg-warning/10 p-3 text-xs text-warning dark:text-warning">{importResults?.warnings?.join(' ')}</p>}
-          <DialogFooter>
+          {Boolean(importResults?.warnings?.length) && <p className="shrink-0 whitespace-pre-wrap break-words rounded-xl border border-warning/30 bg-warning/10 p-3 text-xs text-warning dark:text-warning">{importResults?.warnings?.join('\n')}</p>}
+          {Boolean(importResults?.errors?.length) && (
+            <section role="alert" aria-label="Detalle completo de incidencias" className="min-h-0 flex-1 overflow-hidden rounded-xl border border-destructive/30 bg-destructive/5 p-3">
+              <h3 className="mb-2 text-xs font-black uppercase tracking-wider text-destructive">Detalle completo de incidencias</h3>
+              <ol className="max-h-[34vh] space-y-2 overflow-y-auto pr-2 text-xs text-foreground">
+                {(importResults?.errors || []).map((error, index, errors) => <li key={`${index}-${error}`} className="whitespace-pre-wrap break-words [overflow-wrap:anywhere]">{errors.length > 1 ? `${index + 1}. ` : ''}{error}</li>)}
+              </ol>
+            </section>
+          )}
+          <DialogFooter className="shrink-0">
             <Button className="w-full" onClick={() => setImportResults(null)}>Continuar al inventario</Button>
           </DialogFooter>
         </DialogContent>

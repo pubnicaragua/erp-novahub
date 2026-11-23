@@ -1009,7 +1009,7 @@ export const HRReportTab = forwardRef<ReportExportRef, ReportProps>(({ dateRange
         const rgbPrimary = primaryHex.startsWith('#')
           ? [parseInt(primaryHex.slice(1, 3), 16), parseInt(primaryHex.slice(3, 5), 16), parseInt(primaryHex.slice(5, 7), 16)]
           : [1, 66, 44];
-        const marginX = 14;
+        const marginX = pageWidth * 0.05;
         const contentWidth = pageWidth - marginX * 2;
         let currentY = 15;
         const reportSections: ConfiguredReportSectionInput[] = [];

@@ -38,6 +38,10 @@ export interface FinanceAccountLookup {
 export interface FinanceOperationalDashboardSummary {
   incomeGroups: Array<{ month: string; currency: string; exchangeRate: number; amount: number }>;
   expenseGroups: Array<{ month: string; category: string; currency: string; exchangeRate: number; amount: number }>;
+  undatedExpenseGroups: Array<{ currency: string; exchangeRate: number; amount: number }>;
+  recentIncomeRows: Array<any>;
+  recentExpenseRows: Array<any>;
+  recurringForecastRows: Array<{ kind: 'INCOME' | 'EXPENSE'; date: string; currency: string; exchangeRate: number; amount: number }>;
   recurringExpenseGroups: Array<{ frequency: string; intervalDays?: number | null; currency: string; exchangeRate: number; amount: number }>;
   recurringIncomeGroups: Array<{ frequency: string; intervalDays?: number | null; currency: string; exchangeRate: number; amount: number }>;
 }
@@ -53,6 +57,10 @@ export const sourceDocumentsService = {
   getDashboardSummary: (origin: 'SALES' | 'PURCHASES', signal?: AbortSignal) =>
     api.get<Array<{ currency: string; exchangeRate: number; agingBucket: string; amount: number }>>(
       '/financials/source-documents/dashboard-summary', { params: { origin }, signal },
+    ),
+  getProjectionSummary: (origin: 'SALES' | 'PURCHASES', signal?: AbortSignal) =>
+    api.get<Array<{ currency: string; exchangeRate: number; bucket: string; amount: number; overdueAmount: number }>>(
+      '/financials/source-documents/projection-summary', { params: { origin }, signal },
     ),
   /** Todos los documentos origen (páginas de 200); una sola página dejaba fuera los más antiguos. */
   getAllLookup: (filters: ApiFilters & { origin: 'SALES' | 'PURCHASES'; branchId?: string; warehouseId?: string }, signal?: AbortSignal) =>

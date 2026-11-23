@@ -110,11 +110,11 @@ export async function generateCustomerDebtStatementReport(input: {
     subtitle: [`Cliente: ${input.customerName}`, `Documento: ${input.contractNumber}`, ...(input.status ? [`Estado: ${statusLabel}`] : [])].filter(Boolean).join(' · '),
     rows,
     columns: [
-      { header: 'Tipo', value: (row) => row.kind, align: 'center' },
-      { header: 'Fecha', value: (row) => row.date },
-      { header: 'Detalle y auditoría', value: (row) => row.detail },
-      { header: 'Monto', value: (row) => row.amount, align: 'right' },
-      { header: 'Saldo de cuota', value: (row) => row.balance, align: 'right' },
+      { header: 'Tipo', value: (row) => row.kind, align: 'center', width: 12 },
+      { header: 'Fecha', value: (row) => row.date, width: 14 },
+      { header: 'Detalle y auditoría', value: (row) => row.detail, width: 40 },
+      { header: 'Monto', value: (row) => row.amount, align: 'right', width: 17 },
+      { header: 'Saldo de cuota', value: (row) => row.balance, align: 'right', width: 17 },
     ],
     totals: {
       Cliente: input.customerName,

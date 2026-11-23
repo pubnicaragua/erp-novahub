@@ -247,7 +247,8 @@ export async function generatePurchaseRecordPDF({ document, tenantName, tenantLo
     const text = pdfDesignColor(paperSettings.textColor, [51, 65, 85]);
     const pageWidth = doc.internal.pageSize.getWidth();
     const pageHeight = doc.internal.pageSize.getHeight();
-    const margin = Math.max(12, Math.min(20, Number(paperSettings.margins) || 14));
+    const margin = pageWidth * 0.05;
+    const contentWidth = pageWidth - margin * 2;
     const nativeLogoSource = getPdfTemplateLogo(paperSettings, tenantLogo, targetKey);
     const nativeLogo = nativeLogoSource?.startsWith('data:') ? nativeLogoSource : nativeLogoSource ? await getBase64Image(nativeLogoSource) : null;
     if (nativeLogo) {
@@ -269,10 +270,10 @@ export async function generatePurchaseRecordPDF({ document, tenantName, tenantLo
       : [{ label: partyLabel, value: partyName }, ...(document.fields || [])];
     const uniqueFields = fields.filter(field => !/notas?|observaciones?/i.test(field.label))
       .filter((field, index, all) => field.value !== undefined && (index === 0 || `${field.label}:${field.value}` !== `${all[index - 1].label}:${all[index - 1].value}`));
-    autoTable(doc, { startY: 45, head: [['Campo', 'Detalle']], body: uniqueFields.map((field) => [field.label, valueText(field.value)]), theme: 'grid', headStyles: { fillColor: primary, textColor: 255, fontStyle: 'bold' }, bodyStyles: { textColor: text }, columnStyles: { 0: { cellWidth: 52, fontStyle: 'bold' }, 1: { cellWidth: 'auto' } }, styles: { fontSize: 9, cellPadding: 4, overflow: 'linebreak', valign: 'middle' } });
+    autoTable(doc, { startY: 45, tableWidth: contentWidth, margin: { left: margin, right: margin }, head: [['Campo', 'Detalle']], body: uniqueFields.map((field) => [field.label, valueText(field.value)]), theme: 'grid', headStyles: { fillColor: primary, textColor: 255, fontStyle: 'bold' }, bodyStyles: { textColor: text }, columnStyles: { 0: { cellWidth: 52, fontStyle: 'bold' }, 1: { cellWidth: 'auto' } }, styles: { fontSize: 9, cellPadding: 4, overflow: 'linebreak', valign: 'middle' } });
     let currentY = ((doc as any).lastAutoTable?.finalY || 45) + 8;
     if (document.lines?.length) {
-      autoTable(doc, { startY: currentY, head: [['Descripción', 'Cant.', 'Precio U.', 'Total']], body: document.lines.map((line) => [purchaseLineDescription(line), valueText(line.quantity), line.unitPrice || '—', line.total || '—']), theme: 'grid', headStyles: { fillColor: primary, textColor: 255, fontStyle: 'bold', halign: 'center' }, bodyStyles: { textColor: text, fontSize: 8 }, columnStyles: { 0: { cellWidth: 'auto' }, 1: { cellWidth: 20, halign: 'right' }, 2: { cellWidth: 34, halign: 'right' }, 3: { cellWidth: 34, halign: 'right' } }, styles: { cellPadding: 3, overflow: 'linebreak', valign: 'middle' } });
+      autoTable(doc, { startY: currentY, tableWidth: contentWidth, margin: { left: margin, right: margin }, head: [['Descripción', 'Cant.', 'Precio U.', 'Total']], body: document.lines.map((line) => [purchaseLineDescription(line), valueText(line.quantity), line.unitPrice || '—', line.total || '—']), theme: 'grid', headStyles: { fillColor: primary, textColor: 255, fontStyle: 'bold', halign: 'center' }, bodyStyles: { textColor: text, fontSize: 8 }, columnStyles: { 0: { cellWidth: 'auto' }, 1: { cellWidth: 20, halign: 'right' }, 2: { cellWidth: 34, halign: 'right' }, 3: { cellWidth: 34, halign: 'right' } }, styles: { cellPadding: 3, overflow: 'linebreak', valign: 'middle' } });
       currentY = ((doc as any).lastAutoTable?.finalY || currentY) + 8;
     }
     if ((document.totals || []).length || document.total) {

@@ -949,7 +949,7 @@ export const PurchasesReportTab = forwardRef<ReportExportRef, ReportProps>(({ da
         const rgbPrimary = primaryColor.startsWith('#')
           ? [parseInt(primaryColor.slice(1, 3), 16), parseInt(primaryColor.slice(3, 5), 16), parseInt(primaryColor.slice(5, 7), 16)]
           : [1, 66, 44];
-        const marginX = 14;
+        const marginX = pageWidth * 0.05;
         const contentWidth = pageWidth - marginX * 2;
         let currentY = 15;
         const reportSections: ConfiguredReportSectionInput[] = [];

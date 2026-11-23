@@ -440,7 +440,7 @@ export function FinanceBalanceView({ incomes, expenses, recurringIncomes, recurr
         ? [parseInt(primaryColor.slice(1,3), 16), parseInt(primaryColor.slice(3,5), 16), parseInt(primaryColor.slice(5,7), 16)]
         : [1, 66, 44];
       const primaryHex = primaryColor.startsWith('#') ? primaryColor : '#01422c';
-      const marginX = 14;
+      const marginX = pageWidth * 0.05;
       const contentWidth = pageWidth - marginX * 2;
 
       const checkPage = (needed: number) => {

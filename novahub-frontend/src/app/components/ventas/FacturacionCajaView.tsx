@@ -1037,7 +1037,7 @@ export function FacturacionCajaView({ onNavigateToControlCaja, branchId, employe
   };
 
   const getCatalogPrice = (product: PosProduct) => {
-    if (product.itemType === 'SERVICE') return getConfiguredPrice(selectedPriceListId, product.id, null, true) ?? Number(product.salePrice || 0);
+    if (product.itemType === 'SERVICE') return getConfiguredPrice(selectedPriceListId, product.id, null, true);
     return getConfiguredPrice(selectedPriceListId, product.id);
   };
 
@@ -1358,7 +1358,11 @@ export function FacturacionCajaView({ onNavigateToControlCaja, branchId, employe
       const categoryId = String(product.categoryId || product.category?.id || product.category?.name || '');
       if (catalogCategoryFilter !== 'all' && categoryId !== catalogCategoryFilter) return false;
       if (catalogAvailabilityFilter !== 'ALL') {
-        if (product.itemType === 'SERVICE' || !product.trackInventory) return false;
+        if (product.itemType === 'SERVICE') {
+          if (catalogAvailabilityFilter === 'EMPTY' || product.isActive === false) return false;
+          return true;
+        }
+        if (!product.trackInventory) return false;
         const stock = getAvailableSalesStock(product, selectedWarehouseId);
         if (stock === null) return false;
         if (catalogAvailabilityFilter === 'AVAILABLE' && stock <= 0) return false;
@@ -1460,11 +1464,11 @@ export function FacturacionCajaView({ onNavigateToControlCaja, branchId, employe
     const isService = product.itemType === 'SERVICE';
     const warehouseId = isService ? undefined : (selectedWarehouseId || undefined);
     const configuredPrice = isService
-      ? getConfiguredPrice(selectedPriceListId, product.id, null, true) ?? Number(product.salePrice || 0)
+      ? getConfiguredPrice(selectedPriceListId, product.id, null, true)
       : getConfiguredPrice(selectedPriceListId, product.id, variant.id);
     const hasOverridePrice = Number.isFinite(overrideUnitPrice);
     const effectivePrice = hasOverridePrice ? Number(overrideUnitPrice) : (configuredPrice ?? 0);
-    const priceMissing = !isService && !hasOverridePrice && (configuredPrice === undefined || configuredPrice === 0);
+    const priceMissing = !hasOverridePrice && configuredPrice === undefined;
     const variantDescription = variant.attributes?.length
       ? `${product.name} - ${variant.attributes.map((a) => a.value).join(' / ')}`
       : product.name;
@@ -1529,13 +1533,13 @@ export function FacturacionCajaView({ onNavigateToControlCaja, branchId, employe
       return;
     }
     const configuredPrice = isService
-      ? getConfiguredPrice(selectedPriceListId, product.id, null, true) ?? Number(product.salePrice || 0)
+      ? getConfiguredPrice(selectedPriceListId, product.id, null, true)
       : getConfiguredPrice(selectedPriceListId, product.id);
     const hasOverridePrice = Number.isFinite(overrideUnitPrice);
     const effectivePrice = hasOverridePrice ? Number(overrideUnitPrice) : (configuredPrice ?? 0);
-    const priceMissing = !isService && !hasOverridePrice && configuredPrice === undefined;
+    const priceMissing = !hasOverridePrice && configuredPrice === undefined;
     if (priceMissing) {
-      toast.warning(`El producto "${product.name}" no tiene precio en esta lista. Puedes agregarlo, pero selecciona otra lista antes de emitir.`);
+      toast.warning(`${isService ? 'El servicio' : 'El producto'} "${product.name}" no tiene precio en esta lista. Puedes agregarlo, pero selecciona una lista configurada antes de emitir.`);
     }
     const existing = cart.find((i) => i.productId === product.id && i.warehouseId === warehouseId);
     const globalQty = getGlobalCartQuantity(product.id, undefined, warehouseId);
@@ -1648,7 +1652,7 @@ export function FacturacionCajaView({ onNavigateToControlCaja, branchId, employe
     const product = availabilityProduct;
     const isService = product.itemType === 'SERVICE';
     const configuredPrice = isService
-      ? getConfiguredPrice(selectedPriceListId, product.id, null, true) ?? Number(product.salePrice || 0)
+      ? getConfiguredPrice(selectedPriceListId, product.id, null, true)
       : getConfiguredPrice(selectedPriceListId, product.id, availabilityVariantId);
     const selectedVariant = availabilityVariantId
       ? product.variants?.find((variant) => variant.id === availabilityVariantId)
@@ -1887,7 +1891,7 @@ export function FacturacionCajaView({ onNavigateToControlCaja, branchId, employe
     const nextCart = cart.map((item) => {
       const isService = productsById.get(item.productId)?.itemType === 'SERVICE';
       const price = isService
-        ? getConfiguredPrice(nextListId, item.productId, null, true) ?? Number(productsById.get(item.productId)?.salePrice ?? item.unitPrice ?? 0)
+        ? getConfiguredPrice(nextListId, item.productId, null, true)
         : getConfiguredPrice(nextListId, item.productId, item.variantId);
       return price === undefined
         ? { ...item, itemType: isService ? 'SERVICE' : item.itemType, taxRate: isService ? 0 : item.taxRate, priceListId: nextListId || undefined, unitPrice: 0, lineTotal: 0, priceMissing: true }
@@ -2541,10 +2545,10 @@ export function FacturacionCajaView({ onNavigateToControlCaja, branchId, employe
                     </SelectContent>
                   </Select>
                   <Select value={catalogAvailabilityFilter} onValueChange={(value) => setCatalogAvailabilityFilter(value as CatalogAvailabilityFilter)}>
-                    <SelectTrigger aria-label="Filtrar por existencia"><SelectValue /></SelectTrigger>
+                    <SelectTrigger aria-label="Filtrar disponibilidad"><SelectValue /></SelectTrigger>
                     <SelectContent>
                       <SelectItem value="ALL">Todo</SelectItem>
-                      <SelectItem value="AVAILABLE">Con existencias</SelectItem>
+                      <SelectItem value="AVAILABLE">Disponibles</SelectItem>
                       <SelectItem value="EMPTY">Sin existencias</SelectItem>
                     </SelectContent>
                   </Select>

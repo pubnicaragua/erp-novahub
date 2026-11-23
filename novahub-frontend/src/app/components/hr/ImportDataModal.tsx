@@ -391,17 +391,20 @@ export function ImportDataModal({
   // ── DOWNLOAD PDF TEMPLATE ──
   const handleDownloadPdf = () => {
     const doc = new jsPDF({ orientation: columns.length > 6 ? 'landscape' : 'portrait' });
+    const pageWidth = doc.internal.pageSize.getWidth();
+    const margin = pageWidth * 0.05;
+    const contentWidth = pageWidth - margin * 2;
     const sheetTitle = type === 'employees' ? 'Plantilla de Importación — Empleados' : 'Plantilla de Importación — Nóminas';
     const today = new Date().toLocaleDateString('es-NI');
 
     // Title
     doc.setFontSize(14);
     doc.setFont('helvetica', 'bold');
-    doc.text(sheetTitle, 14, 18);
+    doc.text(sheetTitle, margin, 18);
     doc.setFontSize(9);
     doc.setFont('helvetica', 'normal');
     doc.setTextColor(120);
-    doc.text(`NovaHub ERP • ${today}`, 14, 24);
+    doc.text(`NovaHub ERP • ${today}`, margin, 24);
     doc.setTextColor(0);
 
     // Main table: first row is example (grayed out), rest empty
@@ -409,6 +412,8 @@ export function ImportDataModal({
     const emptyRows = Array.from({ length: 14 }, () => columns.map(() => ''));
     autoTable(doc, {
       startY: 30,
+      tableWidth: contentWidth,
+      margin: { left: margin, right: margin, bottom: 18 },
       head: [columns.map(c => c.label)],
       body: [exampleRowData, ...emptyRows],
       theme: 'grid',
@@ -430,11 +435,11 @@ export function ImportDataModal({
       doc.addPage();
       doc.setFontSize(12);
       doc.setFont('helvetica', 'bold');
-      doc.text('Referencia — Departamentos, Puestos y Monedas', 14, 18);
+      doc.text('Referencia — Departamentos, Puestos y Monedas', margin, 18);
       doc.setFontSize(8);
       doc.setFont('helvetica', 'italic');
       doc.setTextColor(5, 150, 105);
-      doc.text('Si escribes un departamento o puesto nuevo, se creará automáticamente al importar.', 14, 24);
+      doc.text('Si escribes un departamento o puesto nuevo, se creará automáticamente al importar.', margin, 24);
       doc.setTextColor(0);
 
       const currencies = ['NIO', 'USD'];
@@ -445,6 +450,8 @@ export function ImportDataModal({
       }
       autoTable(doc, {
         startY: 28,
+        tableWidth: contentWidth,
+        margin: { left: margin, right: margin, bottom: 18 },
         head: [['Departamentos', 'Puestos', 'Monedas']],
         body: refBody,
         theme: 'grid',

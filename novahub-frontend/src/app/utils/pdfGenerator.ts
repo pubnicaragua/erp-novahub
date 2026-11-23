@@ -12,8 +12,8 @@ import { getSalesAdditionalCharges } from './salesCharges';
 import { paymentMethodLabel } from './paymentMethods';
 import { formatCurrencyNumber } from './currency';
 import { getPurchasePriorityOption } from './purchasePriority';
-import { preparePdfDocumentFonts, renderPdfTemplateToPdf, type PdfTemplateRenderProgress } from './pdf-template-renderer';
-import { applyStandardPdfLayoutSettings, createDefaultTemplateDefinition, createSystemDefaultPdfDesign, createSystemDefaultPdfSettings, formatPdfPageNumber, hasCurrentStandardPdfLayout, isPurchasePdfLayoutTarget, isStandardPdfLayoutTarget, normalizePdfPaperSettings, sanitizeTemplateDefinition, type PdfTemplateChart, type PdfTemplateData, type PdfTemplateReportSection } from '../services/pdf-template-definition';
+import { ensureReportColumnWidths, preparePdfDocumentFonts, renderPdfTemplateToPdf, type PdfTemplateRenderProgress } from './pdf-template-renderer';
+import { applyStandardPdfLayoutSettings, createDefaultTemplateDefinition, createSystemDefaultPdfDesign, createSystemDefaultPdfSettings, formatPdfPageNumber, hasCurrentStandardPdfLayout, isPurchasePdfLayoutTarget, isStandardPdfLayoutTarget, normalizePdfPaperSettings, sanitizeTemplateDefinition, type PdfTemplateChart, type PdfTemplateColumn, type PdfTemplateData, type PdfTemplateReportSection } from '../services/pdf-template-definition';
 import { pdfStatusLabel } from './pdfStatus';
 import { formatPdfItemDescription as commercialItemDescription } from './pdf-line-details';
 import { isEstimateCustomFieldExpired, normalizeEstimateImages, type EstimateCustomField } from '../types';
@@ -194,9 +194,8 @@ export function drawReportTable({ doc, title, headers, rows, color, marginX, con
   const pageHeight = doc.internal.pageSize.getHeight();
   const bottomMargin = 15;
   const startPage = () => { doc.addPage(); return 20; };
-  const horizontalInset = Math.min(8, contentWidth * 0.025);
-  const tableX = marginX + horizontalInset;
-  const tableWidth = contentWidth - horizontalInset * 2;
+  const tableX = marginX;
+  const tableWidth = contentWidth;
   const rawWidths = headers.map((_, index) => Number(columnWidths?.[index]) || 1);
   const widthTotal = rawWidths.reduce((sum, width) => sum + width, 0);
   const widths = rawWidths.map(width => (width / widthTotal) * tableWidth);
@@ -608,7 +607,7 @@ function appendAttachedCustomFieldsToPdf({
   if (validFields.length === 0) return;
 
   const pageWidth = doc.internal.pageSize.getWidth();
-  const margin = 14;
+  const margin = pageWidth * 0.05;
   const contentWidth = pageWidth - margin * 2;
 
   // Siempre se agrega una nueva página de anexo para evitar colisiones con el cuerpo del documento principal
@@ -643,6 +642,7 @@ function appendAttachedCustomFieldsToPdf({
 
   autoTable(doc, {
     startY,
+    tableWidth: contentWidth,
     margin: { left: margin, right: margin },
     head: [['Campo / Título', 'Descripción / Detalle']],
     body: validFields.map((cf: any) => [
@@ -1307,8 +1307,8 @@ export const generateEstimatePDF = async ({ estimate, tenantName, formatAmount, 
   const primaryColor = pdfHexToRgb(design.primaryColor, [15, 118, 110]);
   const textColor = pdfHexToRgb(design.textColor, [30, 41, 59]);
   const lineColor = pdfHexToRgb(design.lineColor, [226, 232, 240]);
-  const margin = Math.max(8, Math.min(28, Number(design.margins) || 14));
   const pageWidth = doc.internal.pageSize.getWidth();
+  const margin = pageWidth * 0.05;
   const rightEdge = pageWidth - margin;
   // jsPDF trae tres familias base; las opciones adicionales del diseñador
   // se agrupan en su equivalente PDF para conservar una salida consistente.
@@ -1488,6 +1488,8 @@ export const generateEstimatePDF = async ({ estimate, tenantName, formatAmount, 
   const lightTableHeader = tableLayout === 'minimal';
   autoTable(doc, {
     startY: isCenteredHeader ? 104 : headerLayout === 'compact' ? 79 : 92,
+    tableWidth: pageWidth - margin * 2,
+    margin: { left: margin, right: margin, bottom: 22 },
     head: [['Descripción', 'Cantidad', 'Precio U.', 'Total']],
     body: tableData,
     theme: tableTheme,
@@ -2170,7 +2172,7 @@ async function generateSalesPaymentVoucherPDF({
   const doc = new jsPDF({ orientation, unit: 'mm', format: paperFormat });
   const pageWidth = doc.internal.pageSize.getWidth();
   const pageHeight = doc.internal.pageSize.getHeight();
-  const margin = Math.max(10, Math.min(24, Number(settings.margins) || 14));
+  const margin = pageWidth * 0.05;
   const rightEdge = pageWidth - margin;
   const paymentHeaderLayout = String(settings.headerLayout || 'split');
   const logoPosition = String(settings.logoPosition || 'left');
@@ -2257,6 +2259,7 @@ async function generateSalesPaymentVoucherPDF({
     theme: 'plain',
     columnStyles: { 0: { cellWidth: 42, fontStyle: 'bold', textColor: primaryColor }, 1: { cellWidth: 'auto', textColor } },
     styles: { font: fontName, fontSize: 9, cellPadding: 3, overflow: 'linebreak' },
+    margin: { left: margin, right: margin },
     tableWidth: pageWidth - margin * 2,
   });
   currentY = ((doc as any).lastAutoTable?.finalY || currentY + 30) + 7;
@@ -2270,6 +2273,7 @@ async function generateSalesPaymentVoucherPDF({
     columnStyles: { 0: { cellWidth: 35 }, 1: { cellWidth: 22, halign: 'center' }, 2: { cellWidth: 'auto' }, 3: { cellWidth: 34, halign: 'right' } },
     styles: { font: fontName, cellPadding: String(settings.tableLayout || 'standard') === 'compact' ? 2 : 3.5, overflow: 'linebreak', lineColor, lineWidth: String(settings.tableLayout || 'standard') === 'minimal' ? 0 : 0.2 },
     alternateRowStyles: ['striped', 'ledger', 'accent'].includes(String(settings.tableLayout || 'standard')) ? { fillColor: [248, 250, 252] } : undefined,
+    margin: { left: margin, right: margin },
     tableWidth: pageWidth - margin * 2,
   });
   currentY = ((doc as any).lastAutoTable?.finalY || currentY + 20) + 7;
@@ -2813,24 +2817,26 @@ export async function generateFastGlobalReportPDF({ targetKey, title, tenantName
     id: `column-${index}`,
     label: String(column.header || column.label || `Columna ${index + 1}`),
     token: `column-${index}`,
-    width: Number(column.width) > 0 ? Number(column.width) : 100 / Math.max(columns.length, 1),
+    width: Number(column.width) > 0 ? Number(column.width) : undefined,
     align: column.align || 'left' as const,
   }));
-  const mappedRows = rows.map(row => Object.fromEntries(columns.map((column, index) => [`column-${index}`, column.value(row) ?? '—'])));
+  const effectiveTemplateColumns = ensureReportColumnWidths(templateColumns);
+  const effectiveColumns = columns.map((column, index) => ({ ...column, width: effectiveTemplateColumns[index]?.width }));
+  const mappedRows = rows.map(row => Object.fromEntries(effectiveColumns.map((column, index) => [`column-${index}`, column.value(row) ?? '—'])));
   const generatedAt = new Date().toLocaleString('es-NI');
   const semanticData: PdfTemplateData = {
     company: { name: settings.companyName || tenantName, logo: tenantLogo },
     document: { title, generated: `Generado: ${generatedAt}`, meta: subtitle || '' },
     items: mappedRows,
     rows: mappedRows,
-    tableColumns: templateColumns,
+    tableColumns: effectiveTemplateColumns,
     tableSummary,
     totals,
     ...(getPdfTemplateTarget(targetKey).structure === 'dashboard' ? {
       reportKpis: rows.map(row => ({ label: String(row.label ?? ''), value: String(row.value ?? ''), detail: String(row.detail ?? '') })),
     } : {}),
     ...(getPdfTemplateTarget(targetKey).module === 'reportes' ? {
-      reportSections: [{ id: 'report-results', title, columns: templateColumns, rows: mappedRows }],
+      reportSections: [{ id: 'report-results', title, columns: effectiveTemplateColumns, rows: mappedRows }],
     } : {}),
   };
   // Las bitácoras y otros listados administrativos pueden contener miles de
@@ -2859,7 +2865,7 @@ export async function generateFastGlobalReportPDF({ targetKey, title, tenantName
   const doc = new jsPDF(pdfDesignPaper(settings, targetKey));
   const pageWidth = doc.internal.pageSize.getWidth();
   const pageHeight = doc.internal.pageSize.getHeight();
-  const margin = Math.max(10, Math.min(18, Number(settings.margins) || 14));
+  const margin = pageWidth * 0.05;
   const contentWidth = pageWidth - margin * 2;
   const primary = pdfDesignColor(settings.primaryColor, [16, 185, 129]);
   const secondary = pdfDesignColor(settings.secondaryColor, [15, 59, 101]);
@@ -2876,7 +2882,7 @@ export async function generateFastGlobalReportPDF({ targetKey, title, tenantName
   const logo = logoSource ? await getBase64Image(logoSource) : null;
   const companyName = settings.showCompanyName === false ? '' : String(settings.companyName || tenantName || '');
   const identityRows = [settings.slogan, settings.address, [settings.fiscalInfo, settings.phone, settings.email, settings.website].filter(Boolean).join(' · ')];
-  const customerListColumn = (pattern: RegExp) => columns.findIndex(column => pattern.test(String(column.header || column.label || '')));
+  const customerListColumn = (pattern: RegExp) => effectiveColumns.findIndex(column => pattern.test(String(column.header || column.label || '')));
   const customerTypeIndex = customerListColumn(/tipo/i);
   const customerStatusIndex = customerListColumn(/estado/i);
   const customerListMetrics = targetKey === 'ventas.customers' ? [
@@ -2959,9 +2965,9 @@ export async function generateFastGlobalReportPDF({ targetKey, title, tenantName
 
   const startY = tableStartY;
   const columnHeader = (column: { header?: string; label?: string }) => String(column.header || column.label || '—');
-  const widths = columns.map(column => Number(column.width) > 0 ? Number(column.width) : 100 / Math.max(columns.length, 1));
+  const widths = effectiveColumns.map(column => Number(column.width) > 0 ? Number(column.width) : 100 / Math.max(effectiveColumns.length, 1));
   const widthTotal = widths.reduce((sum, width) => sum + width, 0) || 100;
-  const columnStyles = Object.fromEntries(columns.map((column, index) => [index, {
+  const columnStyles = Object.fromEntries(effectiveColumns.map((column, index) => [index, {
     halign: column.align || 'left',
     cellWidth: contentWidth * widths[index] / widthTotal,
   }]));
@@ -2969,11 +2975,11 @@ export async function generateFastGlobalReportPDF({ targetKey, title, tenantName
     startY,
     tableWidth: contentWidth,
     margin: { left: margin, right: margin, bottom: 22, top: reportMetrics.length ? 27 : startY },
-    head: [columns.map(columnHeader)],
-    body: rows.length ? rows.map(row => columns.map(column => String(column.value(row) ?? '—'))) : [columns.map(() => '—')],
+    head: [effectiveColumns.map(columnHeader)],
+    body: rows.length ? rows.map(row => effectiveColumns.map(column => String(column.value(row) ?? '—'))) : [effectiveColumns.map(() => '—')],
     foot: tableSummary ? [(() => {
-      const summaryRow = columns.map(() => '');
-      const valueIndex = Math.min(Math.max(Number(tableSummary.columnIndex ?? columns.length - 1), 0), Math.max(columns.length - 1, 0));
+      const summaryRow = effectiveColumns.map(() => '');
+      const valueIndex = Math.min(Math.max(Number(tableSummary.columnIndex ?? effectiveColumns.length - 1), 0), Math.max(effectiveColumns.length - 1, 0));
       const labelIndex = valueIndex > 0 ? valueIndex - 1 : 0;
       summaryRow[labelIndex] = tableSummary.label;
       summaryRow[valueIndex] = String(tableSummary.value ?? '—');
@@ -3214,7 +3220,7 @@ export async function generateConfiguredReportTemplate({
   tenantName: string;
   tenantLogo?: string | null;
   rows: any[];
-  columns: Array<{ header: string; value: (row: any) => unknown; align?: 'left' | 'center' | 'right' }>;
+  columns: Array<{ header: string; value: (row: any) => unknown; align?: 'left' | 'center' | 'right'; width?: number }>;
   totals?: Record<string, unknown>;
   tableSummary?: { label: string; value: unknown; columnIndex?: number };
   subtitle?: string;
@@ -3226,12 +3232,20 @@ export async function generateConfiguredReportTemplate({
   ensurePdfBrowserPreview(title);
   const design = designOverride || await getPdfDesign(targetKey);
   const isInstallmentPlanReport = targetKey === 'ventas.customer-installment-plan';
+  const mappedColumns = ensureReportColumnWidths(columns.map((column, index) => ({
+    id: `column-${index}`,
+    label: column.header,
+    token: `column-${index}`,
+    width: Number(column.width) > 0 ? Number(column.width) : undefined,
+    align: column.align || ('left' as const),
+  })));
+  const reportColumns = columns.map((column, index) => ({ ...column, width: mappedColumns[index]?.width }));
   if (!isInstallmentPlanReport && format === 'novahub-format' && !design?.settings?.curatedTemplateSelection && !['ventas.customer-history', 'compras.supplier-history'].includes(targetKey)) {
     return generateNovaHubFormatReport({
       title,
       tenantName,
       tenantLogo,
-      columns,
+      columns: reportColumns,
       rows,
       totals,
       tableSummary,
@@ -3239,16 +3253,9 @@ export async function generateConfiguredReportTemplate({
     });
   }
 
-  const mappedColumns = columns.map((column, index) => ({
-    id: `column-${index}`,
-    label: column.header,
-    token: `column-${index}`,
-    width: 100 / Math.max(columns.length, 1),
-    align: column.align || ('left' as const),
-  }));
   const mappedRows = rows.length > 0
-    ? rows.map(row => Object.fromEntries(columns.map((column, index) => [`column-${index}`, column.value(row) ?? '—'])))
-    : [Object.fromEntries(columns.map((column, index) => [`column-${index}`, index === 0 ? 'Sin registros para el alcance seleccionado' : '']))];
+    ? rows.map(row => Object.fromEntries(reportColumns.map((column, index) => [`column-${index}`, column.value(row) ?? '—'])))
+    : [Object.fromEntries(reportColumns.map((column, index) => [`column-${index}`, index === 0 ? 'Sin registros para el alcance seleccionado' : '']))];
   const target = getPdfTemplateTarget(targetKey);
   const generatedAt = new Date().toLocaleString('es-NI');
   const data: PdfTemplateData = {
@@ -3274,7 +3281,7 @@ export async function generateConfiguredReportTemplate({
     tenantLogo,
     settings,
     designOverride: design,
-    columns,
+    columns: reportColumns,
     rows,
     totals,
     tableSummary,
@@ -3357,13 +3364,14 @@ export async function generateConfiguredReportSectionsPDF({ targetKey, title, te
     : null;
   const reportNode = configuredDefinition?.nodes.find(node => node.type === 'report-sections' && node.enabled !== false);
   const reportSections: PdfTemplateReportSection[] = sections.filter(section => section && section.title && section.headers.length > 0).map((section, sectionIndex) => {
-    const columns = section.headers.map((header, columnIndex) => ({
+    const sourceColumns: PdfTemplateColumn[] = section.headers.map((header, columnIndex) => ({
       id: `report-${sectionIndex}-column-${columnIndex}`,
       label: header,
       token: `report-${sectionIndex}-column-${columnIndex}`,
-      width: Number((section as ConfiguredReportSectionInput & { widths?: number[] }).widths?.[columnIndex]) || 100 / Math.max(section.headers.length, 1),
+      width: Number((section as ConfiguredReportSectionInput & { widths?: number[] }).widths?.[columnIndex]) || undefined,
       align: reportTemplateColumnAlign(header),
     }));
+    const columns = ensureReportColumnWidths(sourceColumns);
     const rows = section.rows.map(row => Object.fromEntries(columns.map((column, columnIndex) => {
       const value = row[columnIndex] ?? '—';
       return [column.token, /estado|status/i.test(column.label) ? pdfStatusLabel(value) : value];
@@ -3439,7 +3447,7 @@ export async function generateConfiguredReportSectionsPDF({ targetKey, title, te
   const doc = new jsPDF(pdfDesignPaper(settings));
   const pageWidth = doc.internal.pageSize.getWidth();
   const pageHeight = doc.internal.pageSize.getHeight();
-  const margin = Math.max(10, Math.min(18, Number(settings.margins) || 14));
+  const margin = pageWidth * 0.05;
   const contentWidth = pageWidth - margin * 2;
   const primary = pdfDesignColor(settings.primaryColor, [16, 185, 129]);
   const text = pdfDesignColor(settings.textColor, [51, 65, 85]);
@@ -3835,6 +3843,7 @@ export const generateConfiguredHistoryPDF = async ({
         header: column.header,
         value: (row: any) => configuredPdfTableValue(column, row),
         align: column.align || 'left',
+        width: column.width,
       })),
       rows: Array.isArray(rows) ? rows : [],
       tableSummary: { label: 'Total de registros', value: Array.isArray(rows) ? rows.length : 0 },
@@ -3870,6 +3879,13 @@ export const generateConfiguredHistoryPDF = async ({
       name: subjectName,
       ...(targetKey === 'ventas.customer-history' ? { balanceSummary } : {}),
     };
+    const historyColumns = ensureReportColumnWidths(columns.map((column, index) => ({
+      id: `column-${index}`,
+      label: column.header,
+      token: `column-${index}`,
+      width: Number(column.width) > 0 ? Number(column.width) : undefined,
+      align: column.align || 'left' as const,
+    })));
     const hasPartyHistory = ['ventas.customer-history', 'compras.supplier-history'].includes(targetKey);
     const company = {
       name: tenantName,
@@ -3898,7 +3914,7 @@ export const generateConfiguredHistoryPDF = async ({
       items: mappedRows,
       rows: mappedRows,
       renderScale: 1.5,
-      tableColumns: columns.map((column, index) => ({ id: `column-${index}`, label: column.header, token: `column-${index}`, width: Number(column.width) > 0 ? Number(column.width) : 100 / Math.max(columns.length, 1), align: column.align || 'left' })),
+      tableColumns: historyColumns,
     }, fileName, save });
     return rendered;
   }
@@ -4056,6 +4072,7 @@ export const generateConfiguredHistoryPDF = async ({
   const tableColumnStyles = Object.fromEntries(columns.map((column, index) => [index, { halign: column.align || 'left' }])) as any;
   autoTable(doc, {
     startY: subjectBoxY + subjectBoxH + 8,
+    tableWidth: pageWidth - margin * 2,
     head: [columns.map((column) => column.header)],
     body: reportRows.length
       ? reportRows.map((row) => columns.map((column) => configuredPdfTableValue(column, row)))
@@ -4161,6 +4178,8 @@ export const generateExpensePDF = async ({
 
   autoTable(doc, {
     startY: 45,
+    tableWidth: doc.internal.pageSize.getWidth() * 0.9,
+    margin: { left: doc.internal.pageSize.getWidth() * 0.05, right: doc.internal.pageSize.getWidth() * 0.05 },
     head: [['Campo', 'Detalle']],
     body: [
       ['Descripción', expense.description || '-'],
@@ -4235,6 +4254,8 @@ export const generatePurchaseOrderPDF = async ({
 
   autoTable(doc, {
     startY: 45,
+    tableWidth: doc.internal.pageSize.getWidth() * 0.9,
+    margin: { left: doc.internal.pageSize.getWidth() * 0.05, right: doc.internal.pageSize.getWidth() * 0.05 },
     head: [['Campo', 'Detalle']],
     body: [
       ['Proveedor', order.supplier?.name || '-'],
@@ -4262,6 +4283,8 @@ export const generatePurchaseOrderPDF = async ({
 
   autoTable(doc, {
     startY: ((doc as any).lastAutoTable?.finalY || 45) + 8,
+    tableWidth: doc.internal.pageSize.getWidth() * 0.9,
+    margin: { left: doc.internal.pageSize.getWidth() * 0.05, right: doc.internal.pageSize.getWidth() * 0.05 },
     head: [['Código', 'Nombre', 'Categoría', 'Stock', 'Cant.', 'Precio U.', 'Total']],
     body: itemsRows.length > 0 ? itemsRows : [['-', '-', '-', '-', '-', '-', '-']],
     theme: 'grid',
@@ -4351,6 +4374,8 @@ export const generatePurchaseRequestPDF = async ({
 
   autoTable(doc, {
     startY: 45,
+    tableWidth: doc.internal.pageSize.getWidth() * 0.9,
+    margin: { left: doc.internal.pageSize.getWidth() * 0.05, right: doc.internal.pageSize.getWidth() * 0.05 },
     head: [['Campo', 'Detalle']],
     body: [
       ['Solicitante', request.requestedBy ? `${request.requestedBy.firstName || ''} ${request.requestedBy.lastName || ''}`.trim() : '-'],
@@ -4383,6 +4408,8 @@ export const generatePurchaseRequestPDF = async ({
 
   autoTable(doc, {
     startY: ((doc as any).lastAutoTable?.finalY || 45) + 8,
+    tableWidth: doc.internal.pageSize.getWidth() * 0.9,
+    margin: { left: doc.internal.pageSize.getWidth() * 0.05, right: doc.internal.pageSize.getWidth() * 0.05 },
     head: [['Código', 'Descripción', 'Cantidad', 'Stock', 'Total']],
     body: itemsRows.length > 0 ? itemsRows : [['-', '-', '-', '-', '-']],
     theme: 'grid',
@@ -4489,6 +4516,8 @@ export const generateRecurringInvoicePDF = async ({
 
   autoTable(doc, {
     startY: 45,
+    tableWidth: doc.internal.pageSize.getWidth() * 0.9,
+    margin: { left: doc.internal.pageSize.getWidth() * 0.05, right: doc.internal.pageSize.getWidth() * 0.05 },
     head: [['Campo', 'Detalle']],
     body: [
       ['Cliente', recurringInvoice.customer?.name || '-'],
@@ -4517,6 +4546,8 @@ export const generateRecurringInvoicePDF = async ({
 
   autoTable(doc, {
     startY: ((doc as any).lastAutoTable?.finalY || 45) + 8,
+    tableWidth: doc.internal.pageSize.getWidth() * 0.9,
+    margin: { left: doc.internal.pageSize.getWidth() * 0.05, right: doc.internal.pageSize.getWidth() * 0.05 },
     head: [['Tipo', 'Concepto', 'Cant.', 'Precio U.', 'Total']],
     body: itemsRows.length > 0 ? itemsRows : [['-', '-', '-', '-', '-']],
     theme: 'grid',
@@ -4599,6 +4630,8 @@ export const generateSupplierInvoicePDF = async ({
 
   autoTable(doc, {
     startY: 45,
+    tableWidth: doc.internal.pageSize.getWidth() * 0.9,
+    margin: { left: doc.internal.pageSize.getWidth() * 0.05, right: doc.internal.pageSize.getWidth() * 0.05 },
     head: [['Campo', 'Detalle']],
     body: [
       ['Proveedor', invoice.supplier?.name || '-'],
@@ -4622,6 +4655,8 @@ export const generateSupplierInvoicePDF = async ({
 
   autoTable(doc, {
     startY: ((doc as any).lastAutoTable?.finalY || 45) + 8,
+    tableWidth: doc.internal.pageSize.getWidth() * 0.9,
+    margin: { left: doc.internal.pageSize.getWidth() * 0.05, right: doc.internal.pageSize.getWidth() * 0.05 },
     head: [['Descripción', 'Cant.', 'Precio U.', 'Imp. %', 'Total']],
     body: itemsRows.length > 0 ? itemsRows : [['-', '-', '-', '-', '-']],
     theme: 'grid',
@@ -4751,13 +4786,17 @@ export const generateSessionSummaryPDF = async ({
   if (configured) return configured.doc;
   const settings = await getPdfDesignSettings('ventas.cash-session');
   const doc = new jsPDF(pdfDesignPaper(settings));
+  const pageWidth = doc.internal.pageSize.getWidth();
+  const margin = pageWidth * 0.05;
+  const contentWidth = pageWidth - margin * 2;
+  const rightEdge = pageWidth - margin;
   const primaryColor = pdfDesignColor(settings.primaryColor, [16, 185, 129]);
   const textColor = pdfDesignColor(settings.textColor, [51, 65, 85]);
 
   let titleY = 25;
   if (tenantLogo) {
     try {
-      doc.addImage(tenantLogo, 'PNG', 14, 15, 30, 15);
+      doc.addImage(tenantLogo, 'PNG', margin, 15, 30, 15);
       titleY = 38;
       doc.setFontSize(14);
     } catch {
@@ -4768,34 +4807,36 @@ export const generateSessionSummaryPDF = async ({
   }
   doc.setTextColor(primaryColor[0], primaryColor[1], primaryColor[2]);
   doc.setFont('helvetica', 'bold');
-  doc.text(tenantName || 'Nuestra Empresa', 14, titleY);
+  doc.text(tenantName || 'Nuestra Empresa', margin, titleY);
   
   doc.setFontSize(10);
   doc.setTextColor(100, 116, 139);
   doc.setFont('helvetica', 'normal');
-  doc.text('Resumen de Turno (Caja)', 14, titleY + 7);
+  doc.text('Resumen de Turno (Caja)', margin, titleY + 7);
   
   doc.setFontSize(18);
   doc.setTextColor(textColor[0], textColor[1], textColor[2]);
   doc.setFont('helvetica', 'bold');
-  doc.text('ARQUEO DE CAJA', 196, 25, { align: 'right' });
+  doc.text('ARQUEO DE CAJA', rightEdge, 25, { align: 'right' });
   
   doc.setFontSize(10);
   doc.setFont('helvetica', 'normal');
-  doc.text(`Sesión iniciada: ${new Date(session.openedAt).toLocaleString()}`, 196, 32, { align: 'right' });
-  doc.text(`Generado: ${new Date().toLocaleString()}`, 196, 38, { align: 'right' });
+  doc.text(`Sesión iniciada: ${new Date(session.openedAt).toLocaleString()}`, rightEdge, 32, { align: 'right' });
+  doc.text(`Generado: ${new Date().toLocaleString()}`, rightEdge, 38, { align: 'right' });
   
   doc.setDrawColor(226, 232, 240);
   doc.setLineWidth(0.5);
-  doc.line(14, 46, 196, 46);
+  doc.line(margin, 46, rightEdge, 46);
 
   doc.setFontSize(12);
   doc.setFont('helvetica', 'bold');
   doc.setTextColor(textColor[0], textColor[1], textColor[2]);
-  doc.text('Resumen Financiero', 14, 55);
+  doc.text('Resumen Financiero', margin, 55);
 
   autoTable(doc, {
     startY: 60,
+    tableWidth: contentWidth,
+    margin: { left: margin, right: margin, bottom: 18 },
     head: [['Concepto', `Monto (${displayCurrency})`]],
     body: hideSystemAmounts ? [
       ['Efectivo Contado', `${symbol} ${formatCurrencyNumber(totals.contado)}`],
@@ -4819,7 +4860,7 @@ export const generateSessionSummaryPDF = async ({
 
   doc.setFontSize(12);
   doc.setFont('helvetica', 'bold');
-  doc.text('Transacciones del Turno', 14, (doc as any).lastAutoTable.finalY + 10);
+  doc.text('Transacciones del Turno', margin, (doc as any).lastAutoTable.finalY + 10);
 
   const tableData = logs.map((log: any) => {
     const logNIO = Number(log.amountNIO || 0);
@@ -4841,6 +4882,8 @@ export const generateSessionSummaryPDF = async ({
     startY: (doc as any).lastAutoTable.finalY + 15,
     head: [hideSystemAmounts ? ['Ref / Ticket', 'Tipo', 'Descripción', 'Hora'] : ['Ref / Ticket', 'Tipo', 'Descripción', 'Hora', `Monto (${displayCurrency})`]],
     body: tableData,
+    tableWidth: contentWidth,
+    margin: { left: margin, right: margin, bottom: 18 },
     theme: 'grid',
     headStyles: { fillColor: primaryColor, textColor: 255, fontSize: 9, fontStyle: 'bold', halign: 'center' },
     bodyStyles: { textColor: textColor, fontSize: 8 },
@@ -4858,7 +4901,7 @@ export const generateSessionSummaryPDF = async ({
   doc.setFontSize(8);
   doc.setTextColor(148, 163, 184);
   doc.setFont('helvetica', 'italic');
-  doc.text(`Generado por ${tenantName} - Módulo de Caja POS`, 14, pageHeight - 10);
+  doc.text(`Generado por ${tenantName} - Módulo de Caja POS`, margin, pageHeight - 10);
 
   savePdfBlob(doc.output('blob'), buildPdfFileName(['arqueo_de_caja', session.register?.code || 'sin_caja']));
 };
@@ -5004,23 +5047,29 @@ export const generateHistoricalCashReportPDF = async ({
   if (configured) return configured.doc;
   const settings = await getPdfDesignSettings('ventas.cash-historical-report');
   const doc = new jsPDF(pdfDesignPaper(settings));
+  const pageWidth = doc.internal.pageSize.getWidth();
+  const margin = pageWidth * 0.05;
+  const contentWidth = pageWidth - margin * 2;
+  const rightEdge = pageWidth - margin;
   const primaryColor = pdfDesignColor(settings.primaryColor, [16, 185, 129]);
   const textColor = pdfDesignColor(settings.textColor, [51, 65, 85]);
 
   doc.setTextColor(primaryColor[0], primaryColor[1], primaryColor[2]);
   doc.setFont('helvetica', 'bold');
   doc.setFontSize(18);
-  doc.text(tenantName || 'Nuestra Empresa', 14, 18);
+  doc.text(tenantName || 'Nuestra Empresa', margin, 18);
   doc.setTextColor(textColor[0], textColor[1], textColor[2]);
   doc.setFontSize(14);
-  doc.text('REPORTE HISTÓRICO DE CAJA', 14, 27);
+  doc.text('REPORTE HISTÓRICO DE CAJA', margin, 27);
   doc.setFont('helvetica', 'normal');
   doc.setFontSize(9);
-  doc.text(`Periodo: ${reportDate(report.filters?.dateFrom)} al ${reportDate(report.filters?.dateTo)}`, 14, 34);
-  doc.text(`Generado: ${new Date().toLocaleString()}`, 283, 18, { align: 'right' });
+  doc.text(`Periodo: ${reportDate(report.filters?.dateFrom)} al ${reportDate(report.filters?.dateTo)}`, margin, 34);
+  doc.text(`Generado: ${new Date().toLocaleString()}`, rightEdge, 18, { align: 'right' });
 
   autoTable(doc, {
     startY: 42,
+    tableWidth: contentWidth,
+    margin: { left: margin, right: margin },
     head: [['Sesiones', 'Cerradas', 'Ventas NIO', 'Ventas USD', 'Diferencia NIO', 'Depósitos NIO']],
     body: [[
       String(summary.sessions || 0),
@@ -5039,6 +5088,8 @@ export const generateHistoricalCashReportPDF = async ({
   const paymentRows = paymentMethodRows.map(row => [row.method, row.operations, row.amountNio, row.amountUsd]);
   autoTable(doc, {
     startY: (doc as any).lastAutoTable.finalY + 8,
+    tableWidth: contentWidth,
+    margin: { left: margin, right: margin },
     head: [['Forma de pago', 'Operaciones', 'Monto NIO', 'Monto USD']],
     body: paymentRows,
     theme: 'grid',
@@ -5048,9 +5099,11 @@ export const generateHistoricalCashReportPDF = async ({
   });
 
   const sessionRows = historicalDetailRows.map(row => [row.date, row.register, row.cashier, row.salesCount, row.salesAmounts, row.differenceDeposit]);
-  const sessionTableWidth = doc.internal.pageSize.getWidth() - 28;
+  const sessionTableWidth = contentWidth;
   autoTable(doc, {
     startY: (doc as any).lastAutoTable.finalY + 8,
+    tableWidth: contentWidth,
+    margin: { left: margin, right: margin },
     head: [['Fecha', 'Caja', 'Cajero', 'N.º ventas', 'Ventas NIO / USD', 'Dif. NIO / depósito NIO']],
     body: sessionRows,
     theme: 'grid',
@@ -5069,7 +5122,7 @@ export const generateHistoricalCashReportPDF = async ({
 
   doc.setFontSize(8);
   doc.setTextColor(148, 163, 184);
-  doc.text(`Generado por ${tenantName || 'NovaHub'} - Reporte histórico de Caja`, 14, doc.internal.pageSize.height - 10);
+  doc.text(`Generado por ${tenantName || 'NovaHub'} - Reporte histórico de Caja`, margin, doc.internal.pageSize.height - 10);
   savePdfBlob(doc.output('blob'), buildDateFilteredPdfFileName(['reporte_historico_de_caja'], 'configured', report.filters?.dateFrom, report.filters?.dateTo));
 };
 
@@ -5137,6 +5190,8 @@ export const generateCashClosureReportPDF = async ({
   const width = 216;
   const height = 279;
   const doc = new jsPDF({ orientation: 'portrait', unit: 'mm', format: [width, height] });
+  const margin = width * 0.05;
+  const contentWidth = width - margin * 2;
   const primary = pdfDesignColor(settings.primaryColor, [16, 185, 129]);
   const dark: PdfRgb = [15, 55, 48];
   const text = pdfDesignColor(settings.textColor, [51, 65, 85]);
@@ -5162,20 +5217,20 @@ export const generateCashClosureReportPDF = async ({
     doc.setTextColor(...text);
     doc.setDrawColor(...line);
     doc.setLineWidth(0.25);
-    doc.line(14, height - 12, width - 14, height - 12);
+    doc.line(margin, height - 12, width - margin, height - 12);
     doc.setFontSize(7);
     doc.setTextColor(112, 132, 125);
-    doc.text(`${tenantName || 'NovaHub'} - Cierre gerencial de Caja`, 14, height - 6);
-    doc.text(`Página ${doc.getNumberOfPages()}`, width - 14, height - 6, { align: 'right' });
+    doc.text(`${tenantName || 'NovaHub'} - Cierre gerencial de Caja`, margin, height - 6);
+    doc.text(`Página ${doc.getNumberOfPages()}`, width - margin, height - 6, { align: 'right' });
   };
-  const sectionTitle = (value: string, x: number, y: number) => {
+  const sectionTitle = (value: string, _x: number, y: number) => {
     doc.setTextColor(...primary);
     doc.setFont('helvetica', 'bold');
     doc.setFontSize(9);
-    doc.text(value.toUpperCase(), x, y);
+    doc.text(value.toUpperCase(), margin, y);
     doc.setDrawColor(...primary);
     doc.setLineWidth(0.8);
-    doc.line(x, y + 2, x + 20, y + 2);
+    doc.line(margin, y + 2, margin + 20, y + 2);
     doc.setTextColor(...text);
   };
   const tableStyles = { textColor: text, fontSize: 7, cellPadding: 2, lineColor: line, lineWidth: 0.2, overflow: 'linebreak' as const };
@@ -5188,12 +5243,12 @@ export const generateCashClosureReportPDF = async ({
   doc.setFont('helvetica', 'normal');
   doc.setFontSize(8);
   doc.setTextColor(...text);
-  doc.text(`Cajero: ${session.openedBy?.name || 'No aplica'}    Cierre: ${session.closedBy?.name || 'Pendiente'}    Tipo de cambio: ${money(session.exchangeRateUSD, 'NIO')}/USD`, 15, 32);
-  sectionTitle('Resumen de caja', 15, 43);
+  doc.text(`Cajero: ${session.openedBy?.name || 'No aplica'}    Cierre: ${session.closedBy?.name || 'Pendiente'}    Tipo de cambio: ${money(session.exchangeRateUSD, 'NIO')}/USD`, margin, 32);
+  sectionTitle('Resumen de caja', margin, 43);
   autoTable(doc, {
     startY: 48,
-    margin: { left: 15, right: 15 },
-    tableWidth: 186,
+    margin: { left: margin, right: margin },
+    tableWidth: contentWidth,
     head: [['Concepto', 'Córdobas', 'Dólares']],
     body: [
       ...currencyRows(cash.initial, 'Fondo inicial'),
@@ -5206,11 +5261,11 @@ export const generateCashClosureReportPDF = async ({
     theme: 'grid', headStyles, bodyStyles: tableStyles, styles: tableStyles,
   });
 
-  sectionTitle('Facturación y pagos', 15, 105);
+  sectionTitle('Facturación y pagos', margin, 105);
   autoTable(doc, {
     startY: 110,
-    margin: { left: 15, right: 15 },
-    tableWidth: 186,
+    margin: { left: margin, right: margin },
+    tableWidth: contentWidth,
     head: [['Indicador', 'Valor']],
     body: [
       ['Facturas / ventas', String(invoices.count || 0)],
@@ -5226,7 +5281,7 @@ export const generateCashClosureReportPDF = async ({
 
   doc.addPage([width, height], 'portrait');
   drawChrome('DETALLE TRANSACCIONAL', `${session.register?.name || 'Caja'} · Facturas, estados, pagos y trazabilidad`);
-  sectionTitle('Facturas de la sesión', 15, 34);
+  sectionTitle('Facturas de la sesión', margin, 34);
   const invoiceRows = (invoices.rows || []).map((invoice: any) => [
     invoice.number,
     date(invoice.date),
@@ -5237,7 +5292,8 @@ export const generateCashClosureReportPDF = async ({
   ]);
   autoTable(doc, {
     startY: 39,
-    margin: { left: 15, right: 15 },
+    margin: { left: margin, right: margin },
+    tableWidth: contentWidth,
     head: [['Factura', 'Fecha', 'Cliente', 'Estado', 'Moneda', 'Total']],
     body: invoiceRows.length ? invoiceRows : [['No aplica', 'No aplica', 'No hay facturas asociadas', 'No aplica', 'No aplica', 'C$ 0.00']],
     theme: 'grid', headStyles, bodyStyles: tableStyles, styles: tableStyles,
@@ -5245,13 +5301,14 @@ export const generateCashClosureReportPDF = async ({
   });
 
   const paymentStart = Math.min(Number((doc as any).lastAutoTable?.finalY || 88) + 8, 145);
-  sectionTitle('Pagos registrados', 15, paymentStart);
+  sectionTitle('Pagos registrados', margin, paymentStart);
   const paymentRows = (payments.rows || []).map((payment: any) => [
     payment.number || 'No aplica', date(payment.date), label(payment.method), payment.customer || 'Cliente general', payment.document || 'No aplica', money(payment.amount, payment.currency), payment.reference || 'No aplica',
   ]);
   autoTable(doc, {
     startY: paymentStart + 5,
-    margin: { left: 15, right: 15 },
+    margin: { left: margin, right: margin },
+    tableWidth: contentWidth,
     head: [['Recibo', 'Fecha', 'Método', 'Cliente', 'Documento', 'Monto', 'Referencia']],
     body: paymentRows.length ? paymentRows : [['No aplica', 'No aplica', 'No aplica', 'Sin pagos', 'No aplica', 'C$ 0.00', 'No aplica']],
     theme: 'grid', headStyles, bodyStyles: { ...tableStyles, fontSize: 6.5 }, styles: { ...tableStyles, fontSize: 6.5 },
@@ -5259,43 +5316,43 @@ export const generateCashClosureReportPDF = async ({
 
   doc.addPage([width, height], 'portrait');
   drawChrome('ARQUEO Y MOVIMIENTOS', `${session.register?.name || 'Caja'} · Denominaciones, entradas, salidas y conceptos no registrados`);
-  sectionTitle('Denominaciones de apertura', 15, 34);
+  sectionTitle('Denominaciones de apertura', margin, 34);
   const denominationRows = (items: any[]) => items.map((item) => [label(item.currency), money(item.value, item.currency), String(item.quantity || 0), money(item.subtotal, item.currency)]);
   autoTable(doc, {
     startY: 39,
-    margin: { left: 15, right: 15 },
-    tableWidth: 186,
+    margin: { left: margin, right: margin },
+    tableWidth: contentWidth,
     head: [['Moneda', 'Valor', 'Cantidad', 'Subtotal']],
     body: denominationRows(detail.denominations?.opening || []).length ? denominationRows(detail.denominations?.opening || []) : [['No aplica', 'C$ 0.00', '0', 'C$ 0.00']],
     theme: 'grid', headStyles, bodyStyles: tableStyles, styles: tableStyles,
   });
-  sectionTitle('Denominaciones de cierre', 15, 83);
+  sectionTitle('Denominaciones de cierre', margin, 83);
   autoTable(doc, {
     startY: 88,
-    margin: { left: 15, right: 15 },
-    tableWidth: 186,
+    margin: { left: margin, right: margin },
+    tableWidth: contentWidth,
     head: [['Moneda', 'Valor', 'Cantidad', 'Subtotal']],
     body: denominationRows(detail.denominations?.closing || []).length ? denominationRows(detail.denominations?.closing || []) : [['No aplica', 'C$ 0.00', '0', 'C$ 0.00']],
     theme: 'grid', headStyles, bodyStyles: tableStyles, styles: tableStyles,
   });
   const movementStart = Math.max(Number((doc as any).lastAutoTable?.finalY || 115), 115) + 8;
-  sectionTitle('Entradas y salidas', 15, movementStart);
+  sectionTitle('Entradas y salidas', margin, movementStart);
   const movementRows = (detail.movements || []).map((item: any) => [label(item.type), date(item.createdAt), String(item.description || 'Sin descripción').slice(0, 45), label(item.paymentMethod), money(item.amountNIO), money(item.amountUSD, 'USD')]);
   autoTable(doc, {
     startY: movementStart + 5,
-    margin: { left: 15, right: 15 },
-    tableWidth: 186,
+    margin: { left: margin, right: margin },
+    tableWidth: contentWidth,
     head: [['Tipo', 'Fecha', 'Descripción', 'Método', 'C$', 'USD']],
     body: movementRows.length ? movementRows : [['No aplica', 'No aplica', 'No hay movimientos manuales', 'No aplica', 'C$ 0.00', '$ 0.00']],
     theme: 'grid', headStyles, bodyStyles: { ...tableStyles, fontSize: 6.5 }, styles: { ...tableStyles, fontSize: 6.5 },
   });
   const movementEnd = Number((doc as any).lastAutoTable?.finalY || movementStart + 45);
   const unavailableStart = Math.min(movementEnd + 13, height - 42);
-  sectionTitle('Conceptos no registrados en la sesión', 15, unavailableStart - 5);
+  sectionTitle('Conceptos no registrados en la sesión', margin, unavailableStart - 5);
   autoTable(doc, {
     startY: unavailableStart,
-    margin: { left: 15, right: 15 },
-    tableWidth: 186,
+    margin: { left: margin, right: margin },
+    tableWidth: contentWidth,
     head: [['Concepto', 'Resultado']],
     body: (detail.unavailable || []).map((item: any) => [item.label, item.value]),
     theme: 'grid', headStyles, bodyStyles: { ...tableStyles, fontSize: 6.5 }, styles: { ...tableStyles, fontSize: 6.5 },

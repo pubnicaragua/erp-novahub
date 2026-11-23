@@ -378,6 +378,20 @@ export function adaptReportColumnWidths(columns: PdfTemplateColumn[], enabled: b
   return columns.map((column, index) => ({ ...column, width: (weights[index] / total) * 100 }));
 }
 
+/** Completa anchos omitidos sin sustituir los que definió explícitamente una vista. */
+export function ensureReportColumnWidths(columns: PdfTemplateColumn[]) {
+  const missingIndexes = columns.flatMap((column, index) => Number(column.width) > 0 ? [] : [index]);
+  if (!missingIndexes.length || (columns.length < 5 && missingIndexes.length === columns.length)) return columns;
+
+  const inferred = adaptReportColumnWidths(columns, true);
+  const explicitTotal = columns.reduce((sum, column) => sum + (Number(column.width) > 0 ? Number(column.width) : 0), 0);
+  const remainingWidth = Math.max(0, 100 - explicitTotal);
+  const missingWeightTotal = missingIndexes.reduce((sum, index) => sum + (Number(inferred[index]?.width) || 1), 0) || missingIndexes.length;
+  return columns.map((column, index) => Number(column.width) > 0
+    ? column
+    : { ...column, width: remainingWidth * (Number(inferred[index]?.width) || 1) / missingWeightTotal });
+}
+
 function runtimeTableColumns(data: PdfTemplateData | undefined, adaptWidths = false): PdfTemplateColumn[] {
   if (!Array.isArray(data?.tableColumns)) return [];
   const source = data.tableColumns as Array<Partial<PdfTemplateColumn>>;
@@ -1271,14 +1285,11 @@ function createTableNode(node: PdfTemplateNode, data: PdfTemplateData, settings:
   const isTransactionTable = node.id === 'items-table' && !isRollPaper;
   const isStandardTable = Boolean(targetKey && isStandardPdfLayoutTarget(targetKey));
   const salesTableTextBoost = targetKey && isStandardPdfLayoutTarget(targetKey) ? 1.25 : 0;
-  // Algunos diseños guardados dejaron la tabla de partidas más cerca del
-  // borde que las tarjetas. Normalizamos solo sus márgenes, conservando una
-  // anchura menor si el usuario ya había definido una tabla más estrecha.
-  const tableLeft = Number(node.x || 0);
-  const tableWidth = Number(node.width || 0);
-  if (isTransactionTable && (tableLeft < 5 || tableLeft + tableWidth > 95)) {
+  // Todas las tablas estándar comparten la retícula útil de Clientes (5%–95%),
+  // también cuando el diseño guardado conserva una caja más angosta.
+  if (isStandardTable) {
     element.style.left = '5%';
-    element.style.width = `${Math.min(90, tableWidth || 90)}%`;
+    element.style.width = '90%';
   }
   const pdfTableStyle = settings.pdfTableStyle || (['light', 'boxed', 'bold', 'striped', 'bubble', 'wave', 'folder'].includes(settings.tableLayout || '') ? settings.tableLayout as PdfTableStyle : 'light');
   const tablePresentation = getPdfTablePresentation(pdfTableStyle);
@@ -1399,6 +1410,11 @@ function createTableNode(node: PdfTemplateNode, data: PdfTemplateData, settings:
 function createReportSectionsNode(node: PdfTemplateNode, data: PdfTemplateData, settings: PdfTemplateRenderSettings, targetKey?: string) {
   const element = document.createElement('div');
   setBaseNodeStyle(element, node, settings);
+  const fullWidthReportSections = Boolean(targetKey && isStandardPdfLayoutTarget(targetKey));
+  if (fullWidthReportSections) {
+    element.style.left = '5%';
+    element.style.width = '90%';
+  }
   const pageNumber = Number((data.page as Record<string, unknown> | undefined)?.index || (data.page as Record<string, unknown> | undefined)?.number || 1);
   if (pageNumber > 1) {
     if (Number.isFinite(Number(node.subsequentY))) element.style.top = `${Number(node.subsequentY)}%`;
@@ -1415,7 +1431,6 @@ function createReportSectionsNode(node: PdfTemplateNode, data: PdfTemplateData, 
   // (que suelen tener columnas más largas) quedan cortados en la captura.
   element.style.overflow = 'visible';
 
-  const fullWidthReportSections = Boolean(targetKey && isStandardPdfLayoutTarget(targetKey));
   const isCustomerList = targetKey === 'ventas.customers';
   const sectionTableGap = getPdfReportSectionTableGap(targetKey || '');
   const sections = Array.isArray(data.reportSections) ? data.reportSections : [];

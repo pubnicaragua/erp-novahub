@@ -656,7 +656,7 @@ export async function generateNovaHubCommercialPDF({
 
   const pageWidth = doc.internal.pageSize.getWidth();
   const pageHeight = doc.internal.pageSize.getHeight();
-  const margin = 14;
+  const margin = pageWidth * 0.05;
   const contentWidth = pageWidth - margin * 2;
   const docConfig = getCommercialDocConfig(documentType);
 
@@ -1006,6 +1006,7 @@ export async function generateNovaHubCommercialPDF({
 
   autoTable(doc, {
     startY: headerY,
+    tableWidth: contentWidth,
     margin: { left: margin, right: margin },
     head: tableHead,
     body: tableBody,

@@ -3,14 +3,13 @@ import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { 
   DollarSign, TrendingUp, TrendingDown, BarChart3, 
   CalendarClock, Landmark, RotateCcw, Wallet,
-  AlertTriangle, Calendar, CalendarDays, Filter, X,
+  AlertTriangle, Calendar, CalendarDays, X,
 } from 'lucide-react';
 import { Tabs, TabsContent } from './ui/tabs';
 import { ModuleSubnavigation } from './ui/ModuleSubnavigation';
 import { Badge } from './ui/badge';
 import { Button } from './ui/button';
 import { DateField } from './ui/DateField';
-import { Popover, PopoverContent, PopoverTrigger } from './ui/popover';
 import { FinanceDashboardView } from './finanzas/FinanceDashboardView';
 import { FinanceTableView } from './finanzas/FinanceTableView';
 import { FinanceBalanceView } from './finanzas/FinanceBalanceView';
@@ -238,9 +237,10 @@ export function FinanzasPage({ activeSubModule, onSubModuleChange, isSidebarColl
     }
     dashboardSummaryStartedAt.current = null;
   }, [activeTab, dashboardSummaryQuery.isSuccess, dashboardSummaryQuery.isError, dashboardSummaryQuery.dataUpdatedAt]);
-  const invalidateDashboardSummary = () => queryClient.invalidateQueries({
-    queryKey: ['finance', 'dashboard-operational-summary', tenantKey],
-  });
+  const invalidateDashboardSummary = () => Promise.all([
+    queryClient.invalidateQueries({ queryKey: ['finance', 'dashboard-operational-summary', tenantKey] }),
+    queryClient.invalidateQueries({ queryKey: ['finance', 'cash-bank-summary', tenantKey] }),
+  ]);
   const incomesQuery = useQuery({
     queryKey: ['finance', 'income', tenantKey, dateFrom, dateTo],
     queryFn: ({ signal }) => fetchAllReportPages((filters) => incomeService.getAll(filters, signal), financeParams, signal),
@@ -334,8 +334,10 @@ export function FinanzasPage({ activeSubModule, onSubModuleChange, isSidebarColl
     exchangeRate: group.exchangeRate,
     category: group.category,
   }));
-  const dashboardRecurringExpenseRows = (dashboardSummary?.recurringExpenseGroups || []).map((group) => ({ ...group, status: 'ACTIVE' }));
-  const dashboardRecurringIncomeRows = (dashboardSummary?.recurringIncomeGroups || []).map((group) => ({ ...group, status: 'ACTIVE' }));
+  const dashboardUndatedExpenseRows = dashboardSummary?.undatedExpenseGroups || [];
+  const dashboardRecentIncomeRows = dashboardSummary?.recentIncomeRows || [];
+  const dashboardRecentExpenseRows = dashboardSummary?.recentExpenseRows || [];
+  const dashboardRecurringForecastRows = dashboardSummary?.recurringForecastRows || [];
   const [fundingOpen, setFundingOpen] = useState(false);
 
   const normalizeItemResponse = (response: any) => {
@@ -697,38 +699,6 @@ export function FinanzasPage({ activeSubModule, onSubModuleChange, isSidebarColl
 
       <h2 className="nh-module-title" data-tour="finance-page-title">{tabs.find((tab) => tab.id === activeTab)?.label || 'Finanzas'}</h2>
 
-      {/* Filter bar */}
-      <div className="grid min-w-0 grid-cols-2 gap-2 rounded-xl border border-border/40 bg-card/50 p-3 sm:flex sm:flex-wrap sm:items-center">
-        <CalendarDays className="col-span-2 size-5 text-primary sm:col-span-1" aria-hidden="true" />
-        {PERIOD_PRESETS.map(p => (
-          <button key={p.label} onClick={() => applyPreset(p.label, p.days)}
-            className={`min-w-0 rounded-lg px-2 py-1.5 text-[10px] font-black uppercase tracking-widest transition-all sm:px-3 ${activePreset === p.label ? 'bg-primary text-primary-foreground' : 'bg-muted/50 text-foreground/80 hover:bg-muted'}`}>
-            {p.label}
-          </button>
-        ))}
-        <div className="hidden h-5 w-px bg-border mx-1 sm:block" />
-        <DateField
-          value={dateFrom}
-          onChange={(value) => { setDateFrom(value); setActivePreset(''); }}
-          maxDate={dateTo || undefined}
-          className="h-9 min-w-0 w-full text-xs font-semibold text-foreground sm:w-44"
-          placeholder="Desde"
-          title="Fecha desde"
-        />
-        <DateField
-          value={dateTo}
-          onChange={(value) => { setDateTo(value); setActivePreset(''); }}
-          minDate={dateFrom || undefined}
-          className="h-9 min-w-0 w-full text-xs font-semibold text-foreground sm:w-44"
-          placeholder="Hasta"
-          title="Fecha hasta"
-        />
-        {(dateFrom || dateTo || activePreset) && (
-          <button onClick={clearFilters} className="col-span-2 justify-self-start rounded-lg p-1.5 text-muted-foreground hover:bg-muted sm:col-span-1" title="Limpiar filtros"><X className="size-3.5" /></button>
-        )}
-        <BranchScopeFilter className="col-span-2 w-full sm:col-span-1 sm:ml-auto sm:w-auto" showLabel={false} />
-      </div>
-
       <Tabs value={activeTab} className="w-full" onValueChange={handleTabChange}>
         <ModuleSubnavigation
           items={tabs.filter((tab) => hasAccess(tab.module) && tab.permission.some((module) => canPerform(module, 'view'))).map((tab) => ({ id: tab.id, label: tab.label, icon: <tab.icon className="size-4" /> }))}
@@ -736,8 +706,70 @@ export function FinanzasPage({ activeSubModule, onSubModuleChange, isSidebarColl
           onValueChange={handleTabChange}
           isSidebarCollapsed={isSidebarCollapsed}
           ariaLabel="Navegación de Finanzas"
-          className="mb-6"
+          className="mb-2"
         />
+
+        <div className="w-full min-w-0 overflow-x-auto overscroll-x-contain rounded-xl border border-border/40 bg-card/50 custom-scrollbar">
+          <div role="group" aria-label="Filtros globales de Finanzas" className="flex min-w-max items-center gap-1.5 p-1.5">
+            <CalendarDays className="mx-1 size-4 shrink-0 text-primary" aria-hidden="true" />
+            {PERIOD_PRESETS.map((preset) => (
+              <button
+                key={preset.label}
+                type="button"
+                aria-pressed={activePreset === preset.label}
+                onClick={() => applyPreset(preset.label, preset.days)}
+                className={cn(
+                  'h-8 flex-none rounded-lg px-2.5 text-[10px] font-black uppercase tracking-wide transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background',
+                  activePreset === preset.label
+                    ? 'bg-primary text-primary-foreground'
+                    : 'bg-muted/50 text-foreground/80 hover:bg-muted',
+                )}
+              >
+                {preset.label}
+              </button>
+            ))}
+            <div className="mx-1 h-5 w-px shrink-0 bg-border" aria-hidden="true" />
+            <div className="w-[132px] shrink-0">
+              <DateField
+                value={dateFrom}
+                onChange={(value) => { setDateFrom(value); setActivePreset(''); }}
+                maxDate={dateTo || undefined}
+                className="h-8 w-full rounded-lg px-2 text-[11px] font-semibold text-foreground"
+                placeholder="Desde"
+                title="Fecha desde"
+                ariaLabel="Fecha desde"
+              />
+            </div>
+            <div className="w-[132px] shrink-0">
+              <DateField
+                value={dateTo}
+                onChange={(value) => { setDateTo(value); setActivePreset(''); }}
+                minDate={dateFrom || undefined}
+                className="h-8 w-full rounded-lg px-2 text-[11px] font-semibold text-foreground"
+                placeholder="Hasta"
+                title="Fecha hasta"
+                ariaLabel="Fecha hasta"
+              />
+            </div>
+            {(dateFrom || dateTo || activePreset) && (
+              <Button
+                type="button"
+                variant="ghost"
+                size="icon"
+                onClick={clearFilters}
+                className="size-8 shrink-0 rounded-lg text-muted-foreground"
+                title="Limpiar filtros"
+                aria-label="Limpiar filtros de Finanzas"
+              >
+                <X className="size-4" />
+              </Button>
+            )}
+            <BranchScopeFilter
+              className="ml-1 w-[184px] shrink-0 [&_[data-slot=select-trigger]]:h-8 [&_[data-slot=select-trigger]]:rounded-lg [&_[data-slot=select-trigger]]:px-2 [&_[data-slot=select-trigger]]:text-[11px]"
+              showLabel={false}
+            />
+          </div>
+        </div>
 
         <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.1 }} className="mt-4 min-h-[600px] min-w-0">
           {loading ? (
@@ -754,7 +786,17 @@ export function FinanzasPage({ activeSubModule, onSubModuleChange, isSidebarColl
             <>
               <TabsContent value="resumen" className="m-0" asChild>
                 <motion.div initial={{ opacity: 0, y: 16 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.3 }}>
-                  <FinanceDashboardView incomes={dashboardIncomeRows} expenses={dashboardExpenseRows} recurringExpenses={dashboardRecurringExpenseRows} recurringIncomes={dashboardRecurringIncomeRows} onNavigate={(tab) => handleTabChange(tab)} />
+                  <FinanceDashboardView
+                    incomes={dashboardIncomeRows}
+                    expenses={dashboardExpenseRows}
+                    undatedExpenses={dashboardUndatedExpenseRows}
+                    recentIncomes={dashboardRecentIncomeRows}
+                    recentExpenses={dashboardRecentExpenseRows}
+                    recurringForecastRows={dashboardRecurringForecastRows}
+                    operationalSummaryAvailable={dashboardSummaryQuery.isSuccess}
+                    historicalFilterActive={Boolean(dateFrom || dateTo)}
+                    onNavigate={(tab) => handleTabChange(tab)}
+                  />
                 </motion.div>
               </TabsContent>
 
