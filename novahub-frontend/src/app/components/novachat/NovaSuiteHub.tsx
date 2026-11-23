@@ -1,6 +1,8 @@
 import { useState } from 'react';
 import { MessageCircle, Smartphone } from 'lucide-react';
+import { useAuth } from '../../contexts/AuthContext';
 import { WhatsAppModule } from './whatsapp/WhatsAppModule';
+import { WhatsAppPlatformPlans } from './whatsapp/WhatsAppPlatformPlans';
 import { NovaChatView } from './NovaChatView';
 
 /**
@@ -8,7 +10,12 @@ import { NovaChatView } from './NovaChatView';
  * Chatwoot sigue funcionando igual; solo cambia que ya no es la única vía para manejar WhatsApp.
  */
 export function NovaSuiteHub() {
+  const { user } = useAuth();
   const [tab, setTab] = useState<'whatsapp' | 'channels'>('whatsapp');
+  // El personal de NovaHub no pertenece a una empresa: solo administra los planes de WhatsApp de cada una.
+  if (user?.isPlatformAdmin) {
+    return <div className="flex h-[calc(100dvh-8rem)] flex-col overflow-hidden rounded-2xl border border-border/50 bg-card"><WhatsAppPlatformPlans /></div>;
+  }
   return (
     <div className="flex flex-col gap-3">
       <div className="flex gap-1.5">

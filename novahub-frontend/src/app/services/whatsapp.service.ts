@@ -14,9 +14,11 @@ export interface WaLine {
 }
 export interface WaOverview {
   plan: { name: string; maxLines: number; used: number; available: number };
-  isAdmin: boolean; lines: WaLine[]; encryptionConfigured: boolean; webhookConfigured: boolean;
+  isAdmin: boolean; lines: WaLine[]; encryptionConfigured: boolean; webhookConfigured: boolean; qrEnabled: boolean; engine: string;
   plans: Array<{ code: string; name: string; maxLines: number; priceUsd: number }>;
 }
+export type WaPairingState = 'open' | 'connecting' | 'close';
+export interface WaPairing { state: WaPairingState; qr?: string; pairingCode?: string; ownerPhone?: string }
 export interface WaContact { id: string; phone: string; name: string; leadId: string | null; customerId: string | null }
 export interface WaConversation {
   id: string; lineId: string; line: { id: string; name: string; color: string | null; provider: WaProvider };
@@ -42,7 +44,9 @@ const enc = encodeURIComponent;
 
 export const whatsappService = {
   overview: (signal?: AbortSignal) => api.get<WaOverview>(`${base}/overview`, { signal }),
-  createLine: (body: Record<string, unknown>) => api.post<WaLine>(`${base}/lines`, body),
+  createLine: (body: Record<string, unknown>) => api.post<WaLine & { pairing?: WaPairing }>(`${base}/lines`, body),
+  pairingStatus: (id: string, withQr = false, signal?: AbortSignal) => api.get<WaPairing>(`${base}/lines/${enc(id)}/pairing`, { params: withQr ? { qr: '1' } : {}, signal }),
+  restartPairing: (id: string) => api.post<WaPairing>(`${base}/lines/${enc(id)}/pairing`, {}),
   updateLine: (id: string, body: Record<string, unknown>) => api.patch<WaLine>(`${base}/lines/${enc(id)}`, body),
   setMembers: (id: string, members: Array<{ userId: string; canReply: boolean }>) => api.put<{ ok: boolean }>(`${base}/lines/${enc(id)}/members`, { members }),
   verifyLine: (id: string) => api.post<WaLine>(`${base}/lines/${enc(id)}/verify`, {}),

@@ -1,6 +1,6 @@
-import { useState } from 'react';
-import { useQueryClient } from '@tanstack/react-query';
-import { Loader2, Lock, MessageSquarePlus, Plus, RefreshCw, ShieldCheck, Smartphone, TestTube2, Users } from 'lucide-react';
+import { useEffect, useRef, useState } from 'react';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
+import { CheckCircle2, Loader2, Plus, QrCode, RefreshCw, ShieldCheck, Smartphone, Users } from 'lucide-react';
 import { Button } from '../../ui/button';
 import { Input } from '../../ui/input';
 import { Label } from '../../ui/label';
@@ -48,19 +48,82 @@ function MembersEditor({ value, onChange }: { value: MemberMap; onChange: (next:
   );
 }
 
+/** Muestra el QR, cambia solo a "Conectado" cuando el teléfono lo escanea y pide un código nuevo si vence. */
+function PairingPanel({ lineId, initialQr, onConnected }: { lineId: string; initialQr?: string; onConnected: () => void }) {
+  const [restarting, setRestarting] = useState(false);
+  const notified = useRef(false);
+  const status = useQuery({
+    queryKey: ['wa-pairing', lineId],
+    queryFn: ({ signal }) => whatsappService.pairingStatus(lineId, false, signal),
+    refetchInterval: (q) => (q.state.data?.state === 'open' ? false : 3000),
+    refetchIntervalInBackground: false, retry: true, staleTime: 0, gcTime: 0,
+  });
+  const open = status.data?.state === 'open';
+  const closed = status.data?.state === 'close';
+  // El código de WhatsApp vence cada pocos segundos: se renueva mientras se espera el escaneo.
+  const qrQuery = useQuery({
+    queryKey: ['wa-pairing-qr', lineId],
+    queryFn: ({ signal }) => whatsappService.pairingStatus(lineId, true, signal),
+    enabled: !open && !closed,
+    refetchInterval: 15_000, refetchIntervalInBackground: false, staleTime: 0, gcTime: 0, retry: true,
+  });
+  const qr = qrQuery.data?.qr || initialQr;
+  useEffect(() => {
+    if (open && !notified.current) { notified.current = true; onConnected(); }
+  }, [open, onConnected]);
+
+  const restart = async () => {
+    setRestarting(true);
+    try { await whatsappService.restartPairing(lineId); void status.refetch(); void qrQuery.refetch(); } catch (error) { toast.error(getApiErrorMessage(error, 'No se pudo generar un código nuevo.')); } finally { setRestarting(false); }
+  };
+
+  if (open) {
+    return <div className="py-8 text-center"><CheckCircle2 className="mx-auto size-14 text-emerald-500" /><p className="mt-3 text-lg font-black">¡Conectado!</p><p className="mt-1 text-sm text-muted-foreground">Tu número ya está vinculado. Sigue funcionando en tu teléfono como siempre.</p></div>;
+  }
+  return (
+    <div className="grid gap-5 py-1 sm:grid-cols-[1fr_auto]">
+      <ol className="space-y-3 text-sm">
+        {['Abre WhatsApp en tu teléfono', 'Toca Menú (⋮) o Configuración y entra a Dispositivos vinculados', 'Toca Vincular un dispositivo y escanea este código'].map((t, i) => (
+          <li key={t} className="flex items-start gap-3"><span className="flex size-6 shrink-0 items-center justify-center rounded-full bg-emerald-100 text-xs font-black text-emerald-800">{i + 1}</span><span>{t}</span></li>
+        ))}
+        <li className="rounded-lg bg-muted/50 p-2.5 text-[11px] text-muted-foreground">Tu número sigue funcionando en tu teléfono. El código cambia solo cada pocos segundos; si no escaneas a tiempo, se renueva.</li>
+      </ol>
+      <div className="mx-auto flex size-56 items-center justify-center rounded-2xl border border-border/60 bg-white p-2">
+        {closed ? (
+          <div className="px-3 text-center"><p className="text-xs text-slate-600">La sesión no está activa.</p><Button type="button" size="sm" className="mt-2" onClick={() => void restart()} disabled={restarting}>{restarting ? <Loader2 className="mr-1 size-3 animate-spin" /> : null}Generar código</Button></div>
+        ) : qr ? <img src={qr} alt="Código QR para vincular WhatsApp" className="size-full object-contain" /> : <Loader2 className="size-6 animate-spin text-slate-400" />}
+      </div>
+    </div>
+  );
+}
+
+function PairingDialog({ line, onClose, onDone }: { line: WaLine | null; onClose: () => void; onDone: () => void }) {
+  return (
+    <Dialog open={Boolean(line)} onOpenChange={(next) => { if (!next) onClose(); }}>
+      <DialogContent className="sm:max-w-xl">
+        <DialogHeader><DialogTitle>Vincular {line?.name}</DialogTitle><DialogDescription>Escanea el código desde el WhatsApp de tu teléfono.</DialogDescription></DialogHeader>
+        {line && <PairingPanel key={line.id} lineId={line.id} onConnected={onDone} />}
+        <DialogFooter><Button type="button" variant="ghost" onClick={onClose}>Cerrar</Button></DialogFooter>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
 function ConnectDialog({ open, onClose, overview, onDone }: { open: boolean; onClose: () => void; overview: WaOverview; onDone: () => void }) {
-  const [step, setStep] = useState<1 | 2 | 3>(1);
-  const [provider, setProvider] = useState<'META_CLOUD' | 'SIMULATED'>('META_CLOUD');
+  const [step, setStep] = useState<1 | 2 | 3 | 4>(1);
+  const [provider, setProvider] = useState<'QR' | 'META_CLOUD'>('QR');
   const [name, setName] = useState('');
   const [phone, setPhone] = useState('');
   const [phoneNumberId, setPhoneNumberId] = useState('');
   const [accessToken, setAccessToken] = useState('');
   const [members, setMembers] = useState<MemberMap>({});
   const [saving, setSaving] = useState(false);
+  const [created, setCreated] = useState<{ id: string; qr?: string } | null>(null);
 
-  const reset = () => { setStep(1); setProvider('META_CLOUD'); setName(''); setPhone(''); setPhoneNumberId(''); setAccessToken(''); setMembers({}); };
-  const close = () => { if (saving) return; reset(); onClose(); };
-  const step2Valid = name.trim().length > 0 && (provider === 'SIMULATED' || (phoneNumberId.trim() && accessToken.trim()));
+  const reset = () => { setStep(1); setProvider('QR'); setName(''); setPhone(''); setPhoneNumberId(''); setAccessToken(''); setMembers({}); setCreated(null); };
+  const close = () => { if (saving) return; const done = step === 4; reset(); onClose(); if (done) onDone(); };
+  const step2Valid = name.trim().length > 0 && (provider === 'QR' || (phoneNumberId.trim() && accessToken.trim()));
+  const qrUnavailable = provider === 'QR' && !overview.qrEnabled;
 
   const save = async () => {
     setSaving(true);
@@ -71,9 +134,11 @@ function ConnectDialog({ open, onClose, overview, onDone }: { open: boolean; onC
         accessToken: provider === 'META_CLOUD' ? accessToken.trim() : undefined,
         members: Object.entries(members).map(([userId, m]) => ({ userId, canReply: m.canReply })),
       });
+      onDone();
+      if (provider === 'QR') { setCreated({ id: line.id, qr: line.pairing?.qr }); setStep(4); return; }
       if (line.status === 'ERROR') toast.warning(`El número se guardó pero Meta no lo validó: ${line.lastError || 'revisa el identificador y el token.'}`);
       else toast.success('Número conectado.');
-      reset(); onDone(); onClose();
+      reset(); onClose();
     } catch (error) {
       toast.error(getApiErrorMessage(error, 'No se pudo conectar el número.'));
     } finally {
@@ -83,26 +148,23 @@ function ConnectDialog({ open, onClose, overview, onDone }: { open: boolean; onC
 
   return (
     <Dialog open={open} onOpenChange={(next) => { if (!next) close(); }}>
-      <DialogContent className="sm:max-w-lg">
+      <DialogContent className="sm:max-w-xl">
         <DialogHeader>
           <DialogTitle>Conectar WhatsApp</DialogTitle>
-          <DialogDescription>Paso {step} de 3 · {step === 1 ? 'Elige cómo conectar' : step === 2 ? 'Datos del número' : '¿Quién lo atiende?'}</DialogDescription>
+          <DialogDescription>{step === 4 ? 'Último paso · Escanea el código' : `Paso ${step} de 3 · ${step === 1 ? 'Elige cómo conectar' : step === 2 ? 'Datos del número' : '¿Quién lo atiende?'}`}</DialogDescription>
         </DialogHeader>
 
         {step === 1 && (
           <div className="space-y-2.5 py-1">
-            <button type="button" onClick={() => setProvider('META_CLOUD')} className={`flex w-full items-start gap-3 rounded-xl border p-3.5 text-left ${provider === 'META_CLOUD' ? 'border-emerald-500 bg-emerald-50 dark:bg-emerald-950/30' : 'border-border/60 hover:bg-muted/40'}`}>
-              <ShieldCheck className="mt-0.5 size-5 text-emerald-600" />
-              <div><p className="text-sm font-black">WhatsApp Business · Conexión oficial <span className="ml-1 rounded-full bg-emerald-600 px-2 py-0.5 text-[9px] text-white">Recomendado</span></p><p className="mt-0.5 text-xs text-muted-foreground">API oficial de Meta. Estable y sin riesgo de bloqueo. Meta cobra aparte los mensajes de plantilla de marketing.</p></div>
+            <button type="button" onClick={() => setProvider('QR')} className={`flex w-full items-start gap-3 rounded-xl border p-3.5 text-left ${provider === 'QR' ? 'border-emerald-500 bg-emerald-50 dark:bg-emerald-950/30' : 'border-border/60 hover:bg-muted/40'}`}>
+              <QrCode className="mt-0.5 size-5 text-emerald-600" />
+              <div><p className="text-sm font-black">Escanear un código QR <span className="ml-1 rounded-full bg-emerald-600 px-2 py-0.5 text-[9px] text-white">Más fácil</span></p><p className="mt-0.5 text-xs text-muted-foreground">Igual que WhatsApp Web: vinculas tu número en segundos y sigues usándolo en tu teléfono. Es una conexión no oficial de WhatsApp; úsala con números de tu empresa y sin envíos masivos.</p></div>
             </button>
-            <button type="button" onClick={() => setProvider('SIMULATED')} className={`flex w-full items-start gap-3 rounded-xl border p-3.5 text-left ${provider === 'SIMULATED' ? 'border-primary bg-primary/[0.06]' : 'border-border/60 hover:bg-muted/40'}`}>
-              <TestTube2 className="mt-0.5 size-5 text-primary" />
-              <div><p className="text-sm font-black">Línea de prueba</p><p className="mt-0.5 text-xs text-muted-foreground">No usa un número real. Sirve para conocer la bandeja y capacitar a tu equipo.</p></div>
+            <button type="button" onClick={() => setProvider('META_CLOUD')} className={`flex w-full items-start gap-3 rounded-xl border p-3.5 text-left ${provider === 'META_CLOUD' ? 'border-primary bg-primary/[0.06]' : 'border-border/60 hover:bg-muted/40'}`}>
+              <ShieldCheck className="mt-0.5 size-5 text-primary" />
+              <div><p className="text-sm font-black">API oficial de Meta <span className="ml-1 rounded-full bg-muted px-2 py-0.5 text-[9px]">Avanzado</span></p><p className="mt-0.5 text-xs text-muted-foreground">Conexión autorizada por Meta. Requiere una cuenta de Meta for Developers, un token y la verificación de tu empresa.</p></div>
             </button>
-            <div className="flex w-full items-start gap-3 rounded-xl border border-dashed border-border/60 p-3.5 opacity-60">
-              <Lock className="mt-0.5 size-5" />
-              <div><p className="text-sm font-black">Vinculación por QR <span className="ml-1 rounded-full bg-muted px-2 py-0.5 text-[9px]">Próximamente</span></p><p className="mt-0.5 text-xs text-muted-foreground">Método no oficial: Meta puede suspender el número. Todavía no está disponible.</p></div>
-            </div>
+            {qrUnavailable && <p className="rounded-lg bg-amber-50 p-2.5 text-[11px] text-amber-900 dark:bg-amber-950/30 dark:text-amber-200">La conexión por QR todavía no está activada en el servidor. Avisa a NovaHub.</p>}
           </div>
         )}
 
@@ -129,11 +191,19 @@ function ConnectDialog({ open, onClose, overview, onDone }: { open: boolean; onC
           </div>
         )}
 
+        {step === 4 && created && <PairingPanel lineId={created.id} initialQr={created.qr} onConnected={onDone} />}
+
         <DialogFooter className="gap-2 sm:justify-between">
-          <Button type="button" variant="ghost" onClick={() => (step === 1 ? close() : setStep((step - 1) as 1 | 2))} disabled={saving}>{step === 1 ? 'Cancelar' : 'Atrás'}</Button>
-          {step < 3
-            ? <Button type="button" onClick={() => setStep((step + 1) as 2 | 3)} disabled={step === 2 && !step2Valid}>Continuar</Button>
-            : <Button type="button" onClick={() => void save()} disabled={saving}>{saving && <Loader2 className="mr-1 size-4 animate-spin" />}Conectar</Button>}
+          {step === 4 ? (
+            <Button type="button" className="ml-auto" onClick={close}>Listo</Button>
+          ) : (
+            <>
+              <Button type="button" variant="ghost" onClick={() => (step === 1 ? close() : setStep((step - 1) as 1 | 2))} disabled={saving}>{step === 1 ? 'Cancelar' : 'Atrás'}</Button>
+              {step < 3
+                ? <Button type="button" onClick={() => setStep((step + 1) as 2 | 3)} disabled={(step === 1 && qrUnavailable) || (step === 2 && !step2Valid)}>Continuar</Button>
+                : <Button type="button" onClick={() => void save()} disabled={saving}>{saving && <Loader2 className="mr-1 size-4 animate-spin" />}{provider === 'QR' ? 'Generar código' : 'Conectar'}</Button>}
+            </>
+          )}
         </DialogFooter>
       </DialogContent>
     </Dialog>
@@ -193,19 +263,14 @@ function ManageForm({ line, onClose, onDone }: { line: WaLine; onClose: () => vo
   );
 }
 
-function LineCard({ line, isAdmin, onManage, onArchive, onChanged }: { line: WaLine; isAdmin: boolean; onManage: () => void; onArchive: () => void; onChanged: () => void }) {
+function LineCard({ line, isAdmin, onManage, onArchive, onChanged, onScan }: { line: WaLine; isAdmin: boolean; onManage: () => void; onArchive: () => void; onChanged: () => void; onScan: () => void }) {
   const status = STATUS_LABEL[line.status] || STATUS_LABEL.PENDING;
-  const [busy, setBusy] = useState<'verify' | 'sim' | null>(null);
-  const run = async (kind: 'verify' | 'sim') => {
+  const [busy, setBusy] = useState<'verify' | null>(null);
+  const run = async (kind: 'verify') => {
     setBusy(kind);
     try {
-      if (kind === 'verify') {
-        const result = await whatsappService.verifyLine(line.id);
-        if (result.status === 'CONNECTED') toast.success('El número responde correctamente.'); else toast.error(result.lastError || 'No se pudo verificar el número.');
-      } else {
-        await whatsappService.simulateIncoming(line.id, { name: 'Cliente de prueba', body: 'Hola, quisiera una cotización, ¿me ayudan?' });
-        toast.success('Mensaje de prueba recibido. Míralo en la bandeja.');
-      }
+      const result = await whatsappService.verifyLine(line.id);
+      if (result.status === 'CONNECTED') toast.success('El número responde correctamente.'); else toast.error(result.lastError || 'No se pudo verificar el número.');
       onChanged();
     } catch (error) {
       toast.error(getApiErrorMessage(error, 'No se pudo completar la acción.'));
@@ -233,8 +298,8 @@ function LineCard({ line, isAdmin, onManage, onArchive, onChanged }: { line: WaL
       {isAdmin && (
         <div className="mt-4 flex flex-wrap gap-2">
           <Button type="button" size="sm" className="h-8 rounded-lg text-xs" onClick={onManage}>Gestionar</Button>
-          <Button type="button" size="sm" variant="outline" className="h-8 gap-1 rounded-lg text-xs" disabled={busy !== null} onClick={() => void run('verify')}>{busy === 'verify' ? <Loader2 className="size-3 animate-spin" /> : <RefreshCw className="size-3" />}Verificar</Button>
-          {line.provider === 'SIMULATED' && <Button type="button" size="sm" variant="outline" className="h-8 gap-1 rounded-lg text-xs" disabled={busy !== null} onClick={() => void run('sim')}>{busy === 'sim' ? <Loader2 className="size-3 animate-spin" /> : <MessageSquarePlus className="size-3" />}Simular mensaje</Button>}
+          {line.provider !== 'QR' && <Button type="button" size="sm" variant="outline" className="h-8 gap-1 rounded-lg text-xs" disabled={busy !== null} onClick={() => void run('verify')}>{busy === 'verify' ? <Loader2 className="size-3 animate-spin" /> : <RefreshCw className="size-3" />}Verificar</Button>}
+          {line.provider === 'QR' && line.status !== 'CONNECTED' && <Button type="button" size="sm" className="h-8 gap-1 rounded-lg bg-emerald-600 text-xs hover:bg-emerald-700" onClick={onScan}><QrCode className="size-3" />Escanear QR</Button>}
           <Button type="button" size="sm" variant="ghost" className="ml-auto h-8 rounded-lg text-xs text-muted-foreground" onClick={onArchive}>Archivar</Button>
         </div>
       )}
@@ -248,6 +313,7 @@ export function WhatsAppLines({ overview }: { overview: WaOverview }) {
   const [connectOpen, setConnectOpen] = useState(false);
   const [managing, setManaging] = useState<WaLine | null>(null);
   const [archiving, setArchiving] = useState<WaLine | null>(null);
+  const [scanning, setScanning] = useState<WaLine | null>(null);
   const refresh = () => { void qc.invalidateQueries({ queryKey: key('overview') }); void qc.invalidateQueries({ queryKey: key('conversations') }); };
   const { plan, isAdmin, lines } = overview;
   const pct = Math.min(100, Math.round((plan.used / Math.max(1, plan.maxLines)) * 100));
@@ -278,12 +344,13 @@ export function WhatsAppLines({ overview }: { overview: WaOverview }) {
           </div>
         ) : (
           <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-            {lines.map((line) => <LineCard key={line.id} line={line} isAdmin={isAdmin} onManage={() => setManaging(line)} onArchive={() => setArchiving(line)} onChanged={refresh} />)}
+            {lines.map((line) => <LineCard key={line.id} line={line} isAdmin={isAdmin} onManage={() => setManaging(line)} onArchive={() => setArchiving(line)} onChanged={refresh} onScan={() => setScanning(line)} />)}
           </div>
         )}
       </div>
       <ConnectDialog open={connectOpen} onClose={() => setConnectOpen(false)} overview={overview} onDone={refresh} />
       <ManageDialog line={managing} onClose={() => setManaging(null)} onDone={refresh} />
+      <PairingDialog line={scanning} onClose={() => setScanning(null)} onDone={refresh} />
       <ConfirmDialog
         open={Boolean(archiving)} onOpenChange={(next) => { if (!next) setArchiving(null); }} variant="warning"
         title={`¿Archivar ${archiving?.name || 'el número'}?`}
