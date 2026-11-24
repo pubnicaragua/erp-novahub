@@ -6,6 +6,15 @@ export type WaConversationStatus = 'OPEN' | 'PENDING' | 'RESOLVED';
 export type WaMessageStatus = 'QUEUED' | 'SENT' | 'DELIVERED' | 'READ' | 'FAILED' | 'RECEIVED';
 
 export interface WaLineMember { userId: string; canReply: boolean; name: string; email: string }
+/** Lo que el ERP guarda de un número. `cost` solo llega al personal de NovaHub. */
+export interface WaLineUsage {
+  messages: { total: number; incoming: number; outgoing: number; media: number; imported: number; firstAt: string | null; lastAt: string | null };
+  conversations: { total: number; groups: number; direct: number };
+  contacts: number;
+  storage: { bytes: number; perMessageBytes: number; breakdown: { messages: number; conversations: number; events: number } };
+  cost?: { usdPerGbMonth: number; usdPerMonth: number; usdPerYear: number };
+}
+
 export interface WaLine {
   id: string; name: string; phone: string | null; provider: WaProvider; status: WaLineStatus; color: string | null;
   qualityRating: string | null; assignmentMode: 'MANUAL' | 'ROUND_ROBIN'; lastSyncAt: string | null; lastError: string | null;
@@ -78,6 +87,7 @@ export const whatsappService = {
   overview: (signal?: AbortSignal) => api.get<WaOverview>(`${base}/overview`, { signal }),
   createLine: (body: Record<string, unknown>) => api.post<WaLine & { pairing?: WaPairing }>(`${base}/lines`, body),
   pairingStatus: (id: string, withQr = false, signal?: AbortSignal) => api.get<WaPairing>(`${base}/lines/${enc(id)}/pairing`, { params: withQr ? { qr: '1' } : {}, signal }),
+  lineUsage: (id: string, signal?: AbortSignal) => api.get<WaLineUsage>(`${base}/lines/${enc(id)}/usage`, { signal }),
   restartPairing: (id: string, body: { historyDays?: number | null } = {}) => api.post<WaPairing>(`${base}/lines/${enc(id)}/pairing`, body),
   suiteFlags: (signal?: AbortSignal) => api.get<WaSuiteFlags>(`${base}/suite-flags`, { signal }),
   reportSummary: (query: WaReportQuery, signal?: AbortSignal) => api.get<WaReport>(`${base}/reports/summary`, { params: reportParams(query), signal }),

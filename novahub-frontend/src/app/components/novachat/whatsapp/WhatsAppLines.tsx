@@ -89,7 +89,7 @@ function MembersEditor({ value, onChange }: { value: MemberMap; onChange: (next:
 }
 
 /** Muestra el QR, cambia solo a "Conectado" cuando el teléfono lo escanea y pide un código nuevo si vence. */
-function PairingPanel({ lineId, initialQr, onConnected }: { lineId: string; initialQr?: string; onConnected: () => void }) {
+function PairingPanel({ lineId, initialQr, onConnected, askHistory = false }: { lineId: string; initialQr?: string; onConnected: () => void; askHistory?: boolean }) {
   const [restarting, setRestarting] = useState(false);
   const [historyDays, setHistoryDays] = useState<number | null>(null);
   const notified = useRef(false);
@@ -129,7 +129,13 @@ function PairingPanel({ lineId, initialQr, onConnected }: { lineId: string; init
         ))}
         <li className="rounded-lg bg-muted/50 p-2.5 text-[11px] text-muted-foreground">Tu número sigue funcionando en tu teléfono. WhatsApp renueva el código cada ~45 segundos por seguridad y aquí se actualiza solo, sin que tengas que hacer nada. Puedes dejar esta ventana abierta y escanear el que veas en ese momento; si ya no aparece uno, pulsa «Generar código».</li>
       </ol>
-      {closed && <div className="sm:col-span-2"><HistoryOption value={historyDays} onChange={setHistoryDays} /></div>}
+      {(closed || askHistory) && (
+        <div className="space-y-2 sm:col-span-2">
+          <HistoryOption value={historyDays} onChange={setHistoryDays} />
+          {/* La sesión ya está esperando un código: para que el historial surta efecto hay que generar uno nuevo con esa opción. */}
+          {!closed && historyDays != null && <Button type="button" size="sm" variant="outline" onClick={() => void restart()} disabled={restarting}>{restarting && <Loader2 className="mr-1 size-3 animate-spin" />}Generar código nuevo con esta opción</Button>}
+        </div>
+      )}
       <div className="mx-auto flex size-56 items-center justify-center rounded-2xl border border-border/60 bg-white p-2">
         {closed ? (
           <div className="px-3 text-center"><p className="text-xs text-slate-600">La sesión no está activa.</p><Button type="button" size="sm" className="mt-2" onClick={() => void restart()} disabled={restarting}>{restarting ? <Loader2 className="mr-1 size-3 animate-spin" /> : null}Generar código</Button></div>
@@ -144,7 +150,7 @@ function PairingDialog({ line, onClose, onDone }: { line: WaLine | null; onClose
     <Dialog open={Boolean(line)} onOpenChange={(next) => { if (!next) onClose(); }}>
       <DialogContent className="sm:max-w-xl">
         <DialogHeader><DialogTitle>Vincular {line?.name}</DialogTitle><DialogDescription>Escanea el código desde el WhatsApp de tu teléfono.</DialogDescription></DialogHeader>
-        {line && <PairingPanel key={line.id} lineId={line.id} onConnected={onDone} />}
+        {line && <PairingPanel key={line.id} lineId={line.id} onConnected={onDone} askHistory />}
         <DialogFooter><Button type="button" variant="ghost" onClick={onClose}>Cerrar</Button></DialogFooter>
       </DialogContent>
     </Dialog>
@@ -306,9 +312,48 @@ function ManageForm({ line, onClose, onDone }: { line: WaLine; onClose: () => vo
   );
 }
 
+const formatBytes = (bytes: number) => {
+  if (bytes < 1024) return `${bytes} B`;
+  if (bytes < 1024 ** 2) return `${(bytes / 1024).toFixed(1)} KB`;
+  if (bytes < 1024 ** 3) return `${(bytes / 1024 ** 2).toFixed(1)} MB`;
+  return `${(bytes / 1024 ** 3).toFixed(2)} GB`;
+};
+const formatUsd = (value: number) => (value > 0 && value < 0.01 ? `< US$ 0.01` : `US$ ${value.toFixed(value < 1 ? 3 : 2)}`);
+const formatDay = (iso: string | null) => (iso ? new Date(iso).toLocaleDateString('es-NI', { day: '2-digit', month: 'short', year: 'numeric' }) : '—');
+
+/** Cuánto guarda el ERP de este número: mensajes, conversaciones y espacio. El costo solo se muestra al personal de NovaHub. */
+function LineUsagePanel({ lineId }: { lineId: string }) {
+  const usage = useQuery({ queryKey: ['wa-line-usage', lineId], queryFn: ({ signal }) => whatsappService.lineUsage(lineId, signal), staleTime: 5 * 60_000, retry: 1 });
+  if (usage.isLoading) return <div className="mt-3 flex items-center gap-2 text-[11px] text-muted-foreground"><Loader2 className="size-3 animate-spin" />Calculando consumo…</div>;
+  if (usage.isError || !usage.data) return <p className="mt-3 rounded-lg bg-rose-50 p-2 text-[11px] text-rose-800 dark:bg-rose-950/30 dark:text-rose-200">No se pudo calcular el consumo. Inténtalo de nuevo en un momento.</p>;
+  const u = usage.data;
+  const rows: Array<[string, string]> = [
+    ['Mensajes guardados', `${u.messages.total.toLocaleString('es-NI')} (${u.messages.incoming.toLocaleString('es-NI')} recibidos · ${u.messages.outgoing.toLocaleString('es-NI')} enviados)`],
+    ['Importados del historial', u.messages.imported.toLocaleString('es-NI')],
+    ['Con archivo (foto, audio, doc.)', u.messages.media.toLocaleString('es-NI')],
+    ['Conversaciones', `${u.conversations.total.toLocaleString('es-NI')} (${u.conversations.direct.toLocaleString('es-NI')} chats · ${u.conversations.groups.toLocaleString('es-NI')} grupos)`],
+    ['Contactos', u.contacts.toLocaleString('es-NI')],
+    ['Período', `${formatDay(u.messages.firstAt)} – ${formatDay(u.messages.lastAt)}`],
+    ['Espacio en la base de datos', `${formatBytes(u.storage.bytes)} (≈ ${formatBytes(u.storage.perMessageBytes)} por mensaje)`],
+  ];
+  return (
+    <div className="mt-3 rounded-xl border border-border/60 bg-muted/20 p-3 text-[11px]">
+      <dl className="space-y-1">{rows.map(([k, v]) => <div key={k} className="flex justify-between gap-3"><dt className="text-muted-foreground">{k}</dt><dd className="text-right font-bold">{v}</dd></div>)}</dl>
+      {u.cost && (
+        <div className="mt-2 rounded-lg bg-amber-50 p-2 text-amber-950 dark:bg-amber-950/30 dark:text-amber-100">
+          <p className="font-black">Costo de almacenar este número (solo NovaHub)</p>
+          <p className="mt-0.5">≈ {formatUsd(u.cost.usdPerMonth)} al mes · {formatUsd(u.cost.usdPerYear)} al año, a US$ {u.cost.usdPerGbMonth} por GB al mes.</p>
+        </div>
+      )}
+      <p className="mt-2 text-[10px] leading-relaxed text-muted-foreground">Estimación con el tamaño real promedio de cada registro, índices incluidos. Es solo el almacenamiento de la base de datos del ERP: no incluye el servidor de conexión de WhatsApp (que se limpia solo a los 45 días) ni el tráfico.</p>
+    </div>
+  );
+}
+
 function LineCard({ line, isAdmin, onManage, onArchive, onChanged, onScan }: { line: WaLine; isAdmin: boolean; onManage: () => void; onArchive: () => void; onChanged: () => void; onScan: () => void }) {
   const status = STATUS_LABEL[line.status] || STATUS_LABEL.PENDING;
   const [busy, setBusy] = useState<'verify' | null>(null);
+  const [showUsage, setShowUsage] = useState(false);
   const run = async (kind: 'verify') => {
     setBusy(kind);
     try {
@@ -339,11 +384,13 @@ function LineCard({ line, isAdmin, onManage, onArchive, onChanged, onScan }: { l
         <div className="rounded-xl bg-muted/40 py-2"><p className={`text-lg font-black leading-none ${line.unread ? 'text-emerald-600' : ''}`}>{line.unread}</p><p className="mt-1 text-[10px] font-bold text-muted-foreground">Sin leer</p></div>
       </div>
       <div className="mt-3 flex items-center gap-1.5 text-[11px] text-muted-foreground"><Users className="size-3.5" />{line.members.length ? line.members.map((m) => m.name.split(' ')[0]).slice(0, 3).join(', ') + (line.members.length > 3 ? ` +${line.members.length - 3}` : '') : 'Solo administradores'}</div>
+      {isAdmin && showUsage && <LineUsagePanel lineId={line.id} />}
       {isAdmin && (
         <div className="mt-4 flex flex-wrap gap-2">
           <Button type="button" size="sm" className="h-8 rounded-lg text-xs" onClick={onManage}>Gestionar</Button>
           {line.provider !== 'QR' && <Button type="button" size="sm" variant="outline" className="h-8 gap-1 rounded-lg text-xs" disabled={busy !== null} onClick={() => void run('verify')}>{busy === 'verify' ? <Loader2 className="size-3 animate-spin" /> : <RefreshCw className="size-3" />}Verificar</Button>}
           {line.provider === 'QR' && line.status !== 'CONNECTED' && <Button type="button" size="sm" className="h-8 gap-1 rounded-lg bg-emerald-600 text-xs hover:bg-emerald-700" onClick={onScan}><QrCode className="size-3" />Escanear QR</Button>}
+          <Button type="button" size="sm" variant="outline" className="h-8 rounded-lg text-xs" onClick={() => setShowUsage((v) => !v)}>{showUsage ? 'Ocultar consumo' : 'Ver consumo'}</Button>
           <Button type="button" size="sm" variant="ghost" className="ml-auto h-8 rounded-lg text-xs text-muted-foreground" onClick={onArchive}>Archivar</Button>
         </div>
       )}
