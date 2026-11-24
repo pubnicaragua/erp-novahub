@@ -222,8 +222,6 @@ function ConnectDialog({ open, onClose, overview, onDone }: { open: boolean; onC
                 <div className="space-y-1.5"><Label htmlFor="wa-pnid">Identificador del número (Phone number ID)</Label><Input id="wa-pnid" value={phoneNumberId} onChange={(e) => setPhoneNumberId(e.target.value)} placeholder="1234567890123456" inputMode="numeric" /></div>
                 <div className="space-y-1.5"><Label htmlFor="wa-token">Token de acceso</Label><Input id="wa-token" type="password" value={accessToken} onChange={(e) => setAccessToken(e.target.value)} placeholder="EAAG…" autoComplete="off" /></div>
                 <p className="rounded-lg bg-muted/50 p-2.5 text-[11px] text-muted-foreground">Los encuentras en Meta for Developers › tu app › WhatsApp › Configuración de la API. El token se guarda cifrado y nunca se vuelve a mostrar.</p>
-                {!overview.webhookConfigured && <p className="rounded-lg bg-amber-50 p-2.5 text-[11px] text-amber-900 dark:bg-amber-950/30 dark:text-amber-200">Aviso: el servidor de NovaHub aún no tiene configurado el webhook de Meta, así que podrás enviar pero los mensajes entrantes no llegarán hasta que NovaHub lo active.</p>}
-                {!overview.encryptionConfigured && <p className="rounded-lg bg-rose-50 p-2.5 text-[11px] text-rose-900 dark:bg-rose-950/30 dark:text-rose-200">El servidor aún no puede guardar credenciales. Avisa a NovaHub.</p>}
               </>
             )}
           </div>

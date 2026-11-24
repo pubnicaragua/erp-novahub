@@ -53,8 +53,12 @@ export interface WaReport {
   lines: Array<{ lineId: string; name: string; color: string | null; conversations: number; avgFirstResponseSec: number | null; unanswered: number }>;
   agents: Array<{ userId: string; name: string; conversations: number; avgFirstResponseSec: number | null; messagesSent: number; resolved: number; unanswered: number }>;
   types: Array<{ type: string; count: number }>;
-  topContacts: Array<{ id: string; name: string; isGroup: boolean; messages: number }>;
+  topContacts: Array<{ id: string; name: string; isGroup: boolean; messages: number; inbound: number; outbound: number; lastAt: string | null }>;
   backlogAging: Array<{ bucket: string; count: number }>;
+  previous: { messagesIn: number; messagesOut: number; conversationsActive: number; avgFirstResponseSec: number | null; from: string; to: string };
+  resolution: { count: number; avgSec: number | null; medianSec: number | null };
+  contacts: { active: number; fresh: number; returning: number };
+  responseByHour: Array<{ hour: number; conversations: number; avgSec: number | null; unanswered: number }>;
 }
 export type WaReportSection = 'daily' | 'lines' | 'agents' | 'hourly' | 'conversations';
 export type WaScope = 'all' | 'unread' | 'unassigned' | 'mine' | 'resolved';
@@ -121,7 +125,11 @@ export async function downloadWhatsAppReport(section: WaReportSection, query: Wa
 export async function fetchWhatsAppMediaUrl(messageId: string, signal?: AbortSignal): Promise<string> {
   const response = await fetch(getApiUrl(`${base}/messages/${enc(messageId)}/media`), { headers: { ...getAuthHeaders() }, signal });
   if (!response.ok) throw new Error('No se pudo abrir el archivo (puede haber expirado en WhatsApp).');
-  return URL.createObjectURL(await response.blob());
+  // Segunda barrera: el tipo lo declara quien envió el archivo; si no está en la lista segura, se trata como descarga genérica
+  // (un HTML o SVG abierto desde una URL blob se ejecutaría con los permisos del ERP).
+  const blob = await response.blob();
+  const safe = /^(image\/(jpeg|png|webp|gif)|audio\/[a-z0-9.+-]+|video\/(mp4|webm|quicktime|3gpp)|application\/pdf)$/.test(blob.type);
+  return URL.createObjectURL(safe ? blob : new Blob([blob], { type: 'application/octet-stream' }));
 }
 
 /**
@@ -131,6 +139,8 @@ export async function fetchWhatsAppMediaUrl(messageId: string, signal?: AbortSig
 export function subscribeToWhatsAppEvents(onEvent: (event: WaRealtimeEvent) => void, onState?: (online: boolean) => void): () => void {
   const controller = new AbortController();
   let hadConnection = false;
+  // El servidor cierra el flujo a propósito cada cierto tiempo para renovar permisos: reconectar enseguida y sin recargar todo.
+  let cleanEnd = false;
   const connect = async () => {
     let delay = 1500;
     while (!controller.signal.aborted) {
@@ -140,14 +150,15 @@ export function subscribeToWhatsAppEvents(onEvent: (event: WaRealtimeEvent) => v
         if (!response.ok || !response.body) throw new Error(`HTTP ${response.status}`);
         delay = 1500;
         onState?.(true);
-        if (hadConnection) onEvent({ type: 'resync' });
+        if (hadConnection && !cleanEnd) onEvent({ type: 'resync' });
         hadConnection = true;
+        cleanEnd = false;
         const reader = response.body.getReader();
         const decoder = new TextDecoder();
         let buffer = '';
         while (!controller.signal.aborted) {
           const { done, value } = await reader.read();
-          if (done) break;
+          if (done) { cleanEnd = true; break; }
           buffer += decoder.decode(value, { stream: true });
           const frames = buffer.split(/\r?\n\r?\n/);
           buffer = frames.pop() || '';
@@ -163,6 +174,7 @@ export function subscribeToWhatsAppEvents(onEvent: (event: WaRealtimeEvent) => v
       } catch {
         if (controller.signal.aborted) return;
       }
+      if (cleanEnd) { if (!controller.signal.aborted) await new Promise((resolve) => window.setTimeout(resolve, 150)); continue; }
       onState?.(false);
       if (!controller.signal.aborted) {
         await new Promise((resolve) => window.setTimeout(resolve, delay));

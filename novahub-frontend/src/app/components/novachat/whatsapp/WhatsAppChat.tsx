@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
-import { AlertTriangle, ArrowLeft, CheckCircle2, ChevronDown, FileText, Info, Loader2, Mic, Paperclip, RotateCcw, Send, Square, X } from 'lucide-react';
+import { AlertTriangle, ArrowLeft, CheckCircle2, ChevronDown, FileText, Info, Loader2, Mic, Paperclip, Pause, Play, RotateCcw, Send, Trash2, X } from 'lucide-react';
 import { Button } from '../../ui/button';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../../ui/select';
 import { toast } from '@/app/services/toast';
@@ -12,6 +12,7 @@ import {
   fetchWhatsAppMediaUrl, whatsappService, type WaConversation, type WaMessage, type WaOverview, type WaParticipant,
 } from '../../../services/whatsapp.service';
 import { WaAvatar } from './WaAvatar';
+import { optimizeImage } from './imageOptimize';
 import {
   LineChip, MessageTicks, dayKey, formatClock, formatDayLabel, formatDuration, formatPhone, useWhatsAppEvents,
 } from './whatsappUi';
@@ -116,6 +117,7 @@ export function WhatsAppChat({ conversationId, overview, onBack, onChanged }: Ch
   const [mentionQuery, setMentionQuery] = useState<{ from: number; text: string } | null>(null);
   const [mentionIndex, setMentionIndex] = useState(0);
   const textRef = useRef<HTMLTextAreaElement | null>(null);
+  const changedTimer = useRef<number | null>(null);
   const pendingRef = useRef<Pending[]>([]);
 
   const conversation = useQuery({ queryKey: key('conversation', conversationId), queryFn: ({ signal }) => whatsappService.conversation(conversationId, signal), staleTime: 10_000 });
@@ -154,7 +156,13 @@ export function WhatsAppChat({ conversationId, overview, onBack, onChanged }: Ch
   // Marca como leída al abrir y cuando llegan mensajes nuevos mientras está abierta.
   const markReadRef = useRef<() => void>(() => undefined);
   useEffect(() => {
-    markReadRef.current = () => { void whatsappService.markRead(conversationId).then(() => onChanged()).catch(() => undefined); };
+    // Marcar como leído avisa a la lista como máximo una vez cada 2 segundos (la lista ya se actualiza sola con cada mensaje).
+    markReadRef.current = () => {
+      void whatsappService.markRead(conversationId).then(() => {
+        if (changedTimer.current) return;
+        changedTimer.current = window.setTimeout(() => { changedTimer.current = null; onChanged(); }, 2000);
+      }).catch(() => undefined);
+    };
   });
   useEffect(() => {
     markReadRef.current();
@@ -218,13 +226,15 @@ export function WhatsAppChat({ conversationId, overview, onBack, onChanged }: Ch
     void doSend(text, undefined, ids);
   };
 
-  const addFiles = (files: File[]) => {
+  const addFiles = async (original: File[]) => {
     const maxBytes = c?.line.provider === 'QR' ? MAX_FILE_BYTES_QR : MAX_FILE_BYTES;
     const added: Pending[] = [];
+    // Las fotos y capturas pesadas se reducen antes de subirlas (WhatsApp las recomprime de todos modos).
+    const files = await Promise.all(original.map((f) => optimizeImage(f)));
     for (const file of files) {
       if (file.size === 0) { toast.error(`«${file.name}» está vacío.`); continue; }
       if (file.size > maxBytes) { toast.error(`«${file.name}» pesa ${formatBytes(file.size)} y el máximo es ${maxBytes / 1024 / 1024} MB.`); continue; }
-      added.push({ id: crypto.randomUUID(), file, previewUrl: file.type.startsWith('image/') ? URL.createObjectURL(file) : null });
+      added.push({ id: crypto.randomUUID(), file, previewUrl: file.type.startsWith('image/') || file.type.startsWith('audio/') ? URL.createObjectURL(file) : null });
     }
     if (!added.length) return;
     setPending((prev) => [...prev, ...added].slice(0, 10));
@@ -262,6 +272,7 @@ export function WhatsAppChat({ conversationId, overview, onBack, onChanged }: Ch
   // Libera las vistas previas al cambiar de conversación o salir.
   useEffect(() => { pendingRef.current = pending; });
   useEffect(() => () => { pendingRef.current.forEach((p) => p.previewUrl && URL.revokeObjectURL(p.previewUrl)); }, [conversationId]);
+  useEffect(() => () => { if (changedTimer.current) window.clearTimeout(changedTimer.current); }, []);
 
   const mentionOptions = mentionQuery ? people.filter((p) => `${p.label} ${p.phone || ''}`.toLowerCase().includes(mentionQuery.text.toLowerCase())).slice(0, 6) : [];
   const detectMention = (value: string, caret: number) => {
@@ -290,20 +301,23 @@ export function WhatsAppChat({ conversationId, overview, onBack, onChanged }: Ch
       toast.dismiss(toastId);
       void qc.invalidateQueries({ queryKey: key('messages', conversationId) });
       void qc.invalidateQueries({ queryKey: key('conversations') });
+      return true;
     } catch (error) {
       toast.dismiss(toastId);
       toast.error(getApiErrorMessage(error, 'No se pudo enviar el archivo.'));
+      return false;
     }
   };
 
-  const voice = useVoiceRecorder((v) => { void sendFile(v.file); });
-  const toggleVoice = async () => {
-    if (voice.recording) {
-      const recorded = await voice.stop();
-      if (recorded) await sendFile(recorded.file);
-    } else {
-      await voice.start();
-    }
+  // Si una nota de voz no se envía, queda en la bandeja de adjuntos para escucharla y reintentar; nunca se pierde.
+  const sendVoice = async (file: File) => {
+    const ok = await sendFile(file);
+    if (!ok) void addFiles([file]);
+  };
+  const voice = useVoiceRecorder((v) => { void sendVoice(v.file); });
+  const sendRecording = async () => {
+    const recorded = await voice.stop();
+    if (recorded) await sendVoice(recorded.file);
   };
 
   const retry = async (message: WaMessage) => {
@@ -363,7 +377,7 @@ export function WhatsAppChat({ conversationId, overview, onBack, onChanged }: Ch
         className="relative flex min-w-0 flex-1 flex-col"
         onDragOver={(e) => { if (e.dataTransfer.types.includes('Files')) { e.preventDefault(); setDragging(true); } }}
         onDragLeave={(e) => { if (!e.currentTarget.contains(e.relatedTarget as Node | null)) setDragging(false); }}
-        onDrop={(e) => { if (e.dataTransfer.files.length) { e.preventDefault(); setDragging(false); if (!blocked) addFiles(Array.from(e.dataTransfer.files)); } }}
+        onDrop={(e) => { if (e.dataTransfer.files.length) { e.preventDefault(); setDragging(false); if (!blocked) void addFiles(Array.from(e.dataTransfer.files)); } }}
       >
         {dragging && !blocked && <div className="pointer-events-none absolute inset-0 z-20 flex items-center justify-center rounded-lg border-2 border-dashed border-emerald-500 bg-emerald-50/80 text-sm font-black text-emerald-700 dark:bg-emerald-950/70 dark:text-emerald-200">Suelta aquí los archivos para adjuntarlos</div>}
         <div className="flex flex-wrap items-center gap-2 border-b border-border/40 bg-card px-3 py-2.5">
@@ -427,10 +441,20 @@ export function WhatsAppChat({ conversationId, overview, onBack, onChanged }: Ch
           <div className="border-t border-border/40 bg-card p-2.5 pr-16 sm:pr-20">
             {voice.error && <p className="px-2 pb-1 text-[11px] text-rose-600">{voice.error}</p>}
             {voice.recording ? (
-              <div className="flex items-center gap-3 rounded-xl border border-rose-300/50 bg-rose-50 px-3 py-2 dark:bg-rose-950/30">
-                <span className="size-2.5 animate-pulse rounded-full bg-rose-500" />
-                <span className="flex-1 text-xs font-bold tabular-nums">Grabando… {Math.floor(voice.seconds / 60)}:{String(voice.seconds % 60).padStart(2, '0')}</span>
-                <Button type="button" size="sm" className="h-8 gap-1 rounded-lg text-xs" onClick={() => void toggleVoice()}><Square className="size-3" />Enviar</Button>
+              <div className="flex items-center gap-2 rounded-xl border border-rose-300/50 bg-rose-50 px-2.5 py-2 dark:bg-rose-950/30" role="group" aria-label="Grabando nota de voz">
+                <Button type="button" variant="ghost" size="icon" className="size-9 shrink-0 rounded-xl text-rose-600 hover:bg-rose-100" onClick={voice.cancel} aria-label="Cancelar grabación"><Trash2 className="size-4" /></Button>
+                <span className={`size-2.5 shrink-0 rounded-full bg-rose-500 ${voice.paused ? '' : 'animate-pulse'}`} />
+                <span className="w-12 shrink-0 text-xs font-bold tabular-nums">{Math.floor(voice.seconds / 60)}:{String(voice.seconds % 60).padStart(2, '0')}</span>
+                <div className="flex h-8 min-w-0 flex-1 items-center gap-[3px] overflow-hidden" aria-hidden="true" title={voice.paused ? 'En pausa' : 'Nivel del micrófono'}>
+                  {Array.from({ length: 28 }, (_, i) => {
+                    const lit = !voice.paused && voice.level * 28 > i;
+                    return <span key={i} className={`w-1 shrink-0 rounded-full transition-all ${lit ? 'bg-rose-500' : 'bg-rose-200 dark:bg-rose-900'}`} style={{ height: lit ? `${30 + ((i * 37) % 70)}%` : '18%' }} />;
+                  })}
+                </div>
+                {voice.paused && <span className="shrink-0 text-[11px] font-bold text-rose-700">En pausa</span>}
+                {!voice.paused && voice.seconds >= 3 && voice.level < 0.02 && <span className="shrink-0 text-[11px] font-bold text-amber-700">No se oye nada</span>}
+                <Button type="button" variant="ghost" size="icon" className="size-9 shrink-0 rounded-xl" onClick={voice.paused ? voice.resume : voice.pause} aria-label={voice.paused ? 'Reanudar grabación' : 'Pausar grabación'}>{voice.paused ? <Play className="size-4" /> : <Pause className="size-4" />}</Button>
+                <Button type="button" size="icon" className="size-9 shrink-0 rounded-xl bg-emerald-600 hover:bg-emerald-700" onClick={() => void sendRecording()} aria-label="Enviar nota de voz"><Send className="size-4" /></Button>
               </div>
             ) : (
               <div className="relative">
@@ -438,10 +462,10 @@ export function WhatsAppChat({ conversationId, overview, onBack, onChanged }: Ch
                   <div className="mb-2 flex flex-wrap gap-2 rounded-xl border border-border/50 bg-muted/30 p-2">
                     {pending.map((p) => (
                       <div key={p.id} className="relative flex max-w-[220px] items-center gap-2 rounded-lg border border-border/50 bg-card p-1.5 pr-7">
-                        {p.previewUrl
+                        {p.previewUrl && p.file.type.startsWith('image/')
                           ? <img src={p.previewUrl} alt="" className="size-12 rounded-md object-cover" />
                           : <div className="flex size-12 items-center justify-center rounded-md bg-muted"><FileText className="size-5 text-muted-foreground" /></div>}
-                        <div className="min-w-0"><p className="truncate text-[11px] font-bold">{p.file.name}</p><p className="text-[10px] text-muted-foreground">{formatBytes(p.file.size)}</p></div>
+                        <div className="min-w-0"><p className="truncate text-[11px] font-bold">{p.file.type.startsWith('audio/') ? 'Nota de voz' : p.file.name}</p>{p.previewUrl && p.file.type.startsWith('audio/') ? <audio controls preload="metadata" src={p.previewUrl} className="mt-0.5 h-7 w-44" /> : <p className="text-[10px] text-muted-foreground">{formatBytes(p.file.size)}</p>}</div>
                         <button type="button" onClick={() => removePending(p.id)} disabled={sendingFiles} className="absolute right-1 top-1 rounded-full p-0.5 text-muted-foreground hover:bg-muted" aria-label={`Quitar ${p.file.name}`}><X className="size-3.5" /></button>
                       </div>
                     ))}
@@ -461,7 +485,7 @@ export function WhatsAppChat({ conversationId, overview, onBack, onChanged }: Ch
                   </ul>
                 )}
                 <div className="flex items-end gap-2">
-                  <input ref={fileRef} type="file" multiple className="hidden" onChange={(e) => { const files = Array.from(e.target.files || []); e.target.value = ''; if (files.length) addFiles(files); }} />
+                  <input ref={fileRef} type="file" multiple className="hidden" onChange={(e) => { const files = Array.from(e.target.files || []); e.target.value = ''; if (files.length) void addFiles(files); }} />
                   <Button type="button" variant="ghost" size="icon" className="size-10 shrink-0 rounded-xl" onClick={() => fileRef.current?.click()} aria-label="Adjuntar archivo"><Paperclip className="size-4" /></Button>
                   <textarea
                     ref={textRef}
@@ -469,7 +493,7 @@ export function WhatsAppChat({ conversationId, overview, onBack, onChanged }: Ch
                     onChange={(e) => { setDraft(e.target.value); detectMention(e.target.value, e.target.selectionStart); }}
                     onPaste={(e) => {
                       const files = Array.from(e.clipboardData.files || []);
-                      if (files.length) { e.preventDefault(); addFiles(files.map((f, i) => (f.name && f.name !== 'image.png' ? f : new File([f], `captura-${Date.now()}-${i + 1}.${(f.type.split('/')[1] || 'png').replace('jpeg', 'jpg')}`, { type: f.type })))); }
+                      if (files.length) { e.preventDefault(); void addFiles(files.map((f, i) => (f.name && f.name !== 'image.png' ? f : new File([f], `captura-${Date.now()}-${i + 1}.${(f.type.split('/')[1] || 'png').replace('jpeg', 'jpg')}`, { type: f.type })))); }
                     }}
                     onKeyDown={(e) => {
                       if (mentionQuery && mentionOptions.length) {
@@ -487,7 +511,7 @@ export function WhatsAppChat({ conversationId, overview, onBack, onChanged }: Ch
                   {draft.trim() || pending.length ? (
                     <Button type="button" size="icon" className="size-10 shrink-0 rounded-xl" onClick={submit} disabled={sendingFiles} aria-label="Enviar">{sendingFiles ? <Loader2 className="size-4 animate-spin" /> : <Send className="size-4" />}</Button>
                   ) : (
-                    <Button type="button" variant="ghost" size="icon" className="size-10 shrink-0 rounded-xl" onClick={() => void toggleVoice()} disabled={!voice.supported} aria-label="Grabar nota de voz"><Mic className="size-4" /></Button>
+                    <Button type="button" variant="ghost" size="icon" className="size-10 shrink-0 rounded-xl" onClick={() => void voice.start()} disabled={!voice.supported} aria-label="Grabar nota de voz"><Mic className="size-4" /></Button>
                   )}
                 </div>
               </div>

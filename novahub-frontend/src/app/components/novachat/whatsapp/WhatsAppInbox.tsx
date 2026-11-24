@@ -58,6 +58,7 @@ export function WhatsAppInbox({ overview }: { overview: WaOverview }) {
   const validLineIds = lineIds.filter((id) => overview.lines.some((l) => l.id === id));
   const lineKey = [...validLineIds].sort().join(',');
   const refreshTimer = useRef<number | null>(null);
+  const lastOverview = useRef(0);
 
   const list = useInfiniteQuery({
     queryKey: key('conversations', lineKey, scope, q),
@@ -66,6 +67,8 @@ export function WhatsAppInbox({ overview }: { overview: WaOverview }) {
     getNextPageParam: (last) => last.nextCursor || undefined,
     staleTime: 10_000,
     refetchOnWindowFocus: false,
+    // Solo se mantienen las últimas páginas: cada recarga por mensaje nuevo pide pocas páginas, no todo lo que se ha desplazado.
+    maxPages: 4,
   });
   const items = list.data?.pages.flatMap((p) => p.items) || [];
 
@@ -75,7 +78,8 @@ export function WhatsAppInbox({ overview }: { overview: WaOverview }) {
     if (refreshTimer.current) window.clearTimeout(refreshTimer.current);
     refreshTimer.current = window.setTimeout(() => {
       void qc.invalidateQueries({ queryKey: key('conversations') });
-      void qc.invalidateQueries({ queryKey: key('overview') });
+      // Los contadores por número no necesitan recalcularse con cada mensaje: como máximo cada 5 segundos.
+      if (Date.now() - lastOverview.current > 5000) { lastOverview.current = Date.now(); void qc.invalidateQueries({ queryKey: key('overview') }); }
     }, 400);
   }), [events, qc, key]);
   useEffect(() => () => { if (refreshTimer.current) window.clearTimeout(refreshTimer.current); }, []);

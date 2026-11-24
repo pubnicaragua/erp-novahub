@@ -5,10 +5,10 @@ import { useTenantQuery } from '../../../hooks/useTenantQuery';
 import { downloadWhatsAppReport, whatsappService, type WaOverview, type WaReport, type WaReportQuery, type WaReportSection } from '../../../services/whatsapp.service';
 import { LineMultiSelect } from './LineMultiSelect';
 import { FALLBACK_LINE_COLOR, formatDuration } from './whatsappUi';
+import { DailyChart, PeakHeatmap, ResponseByHour, SplitBar, TopContacts } from './WhatsAppReportCharts';
 
 type Preset = 'today' | '7' | '30' | '90' | 'custom';
 const PRESETS: Array<{ id: Preset; label: string }> = [{ id: 'today', label: 'Hoy' }, { id: '7', label: '7 días' }, { id: '30', label: '30 días' }, { id: '90', label: '90 días' }, { id: 'custom', label: 'Rango' }];
-const DAYS = ['Dom', 'Lun', 'Mar', 'Mié', 'Jue', 'Vie', 'Sáb'];
 const DAYS_LONG = ['domingo', 'lunes', 'martes', 'miércoles', 'jueves', 'viernes', 'sábado'];
 const TYPE_LABEL: Record<string, string> = { text: 'Texto', image: 'Fotos', audio: 'Audios', video: 'Videos', document: 'Documentos', sticker: 'Stickers', location: 'Ubicaciones', contacts: 'Contactos', button: 'Respuestas rápidas', unknown: 'Otros' };
 const EXPORTS: Array<{ id: WaReportSection; label: string; hint: string }> = [
@@ -22,11 +22,21 @@ const EXPORTS: Array<{ id: WaReportSection; label: string; hint: string }> = [
 const dayInput = (d: Date) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
 const nf = (n: number) => n.toLocaleString('es-NI');
 
-function Kpi({ label, value, hint, tone = '' }: { label: string; value: string | number; hint?: string; tone?: string }) {
+/** Variación contra el período anterior; `goodWhen` dice si subir es bueno (mensajes) o malo (tiempos de respuesta). */
+function Delta({ now, before, goodWhen = 'up' }: { now: number | null; before: number | null; goodWhen?: 'up' | 'down' }) {
+  if (now == null || before == null || before === 0) return null;
+  const pct = Math.round(((now - before) / before) * 100);
+  if (pct === 0) return <span className="text-[10px] font-bold text-muted-foreground">= que el período anterior</span>;
+  const good = (pct > 0) === (goodWhen === 'up');
+  return <span className={`text-[10px] font-black ${good ? 'text-emerald-600' : 'text-rose-600'}`}>{pct > 0 ? '▲' : '▼'} {Math.abs(pct)}% <span className="font-normal text-muted-foreground">vs período anterior</span></span>;
+}
+
+function Kpi({ label, value, hint, tone = '', delta }: { label: string; value: string | number; hint?: string; tone?: string; delta?: ReactNode }) {
   return (
     <div className="rounded-2xl border border-border/50 bg-card p-4">
       <p className="text-[11px] font-bold text-muted-foreground">{label}</p>
       <p className={`mt-1 text-2xl font-black tabular-nums ${tone}`}>{value}</p>
+      {delta && <p className="mt-0.5">{delta}</p>}
       {hint && <p className="mt-0.5 text-[10px] text-muted-foreground">{hint}</p>}
     </div>
   );
@@ -52,52 +62,6 @@ function Bar({ label, value, max, suffix = '', color = 'bg-emerald-500' }: { lab
   );
 }
 
-function DailyChart({ data }: { data: WaReport['daily'] }) {
-  const max = Math.max(1, ...data.map((d) => d.in + d.out));
-  if (!data.length) return <p className="py-8 text-center text-xs text-muted-foreground">Sin mensajes en este período.</p>;
-  return (
-    <div>
-      <div className="flex h-44 items-end gap-[3px]" role="img" aria-label="Mensajes por día">
-        {data.map((d) => (
-          <div key={d.day} className="group relative flex h-full min-w-0 flex-1 flex-col justify-end" title={`${d.day}: ${d.in} recibidos, ${d.out} enviados`}>
-            <div className="w-full rounded-t-sm bg-sky-500/80 transition-opacity group-hover:opacity-80" style={{ height: `${(d.out / max) * 100}%` }} />
-            <div className={`w-full bg-emerald-500 transition-opacity group-hover:opacity-80 ${d.out ? '' : 'rounded-t-sm'}`} style={{ height: `${(d.in / max) * 100}%` }} />
-          </div>
-        ))}
-      </div>
-      <div className="mt-1.5 flex justify-between text-[10px] text-muted-foreground"><span>{data[0].day.slice(5)}</span><span>{data[data.length - 1].day.slice(5)}</span></div>
-      <div className="mt-2 flex gap-4 text-[11px] font-bold"><span className="inline-flex items-center gap-1.5"><span className="size-2.5 rounded-sm bg-emerald-500" />Recibidos</span><span className="inline-flex items-center gap-1.5"><span className="size-2.5 rounded-sm bg-sky-500/80" />Enviados</span></div>
-    </div>
-  );
-}
-
-function Heatmap({ data }: { data: WaReport['hourly'] }) {
-  const grid = useMemo(() => {
-    const m = new Map(data.map((h) => [`${h.dow}-${h.hour}`, h.count]));
-    return { get: (d: number, h: number) => m.get(`${d}-${h}`) || 0, max: Math.max(1, ...data.map((h) => h.count)) };
-  }, [data]);
-  const order = [1, 2, 3, 4, 5, 6, 0];
-  if (!data.length) return <p className="py-8 text-center text-xs text-muted-foreground">Sin mensajes recibidos en este período.</p>;
-  return (
-    <div className="overflow-x-auto">
-      <div className="min-w-[560px]">
-        <div className="ml-10 grid grid-cols-24 gap-[2px] text-[9px] text-muted-foreground" style={{ gridTemplateColumns: 'repeat(24, minmax(0, 1fr))' }}>{Array.from({ length: 24 }, (_, h) => <span key={h} className="text-center">{h % 3 === 0 ? h : ''}</span>)}</div>
-        {order.map((d) => (
-          <div key={d} className="mt-[2px] flex items-center gap-1">
-            <span className="w-9 shrink-0 text-[10px] font-bold text-muted-foreground">{DAYS[d]}</span>
-            <div className="grid flex-1 gap-[2px]" style={{ gridTemplateColumns: 'repeat(24, minmax(0, 1fr))' }}>
-              {Array.from({ length: 24 }, (_, h) => {
-                const n = grid.get(d, h);
-                return <div key={h} className="aspect-square rounded-[3px] bg-emerald-500" style={{ opacity: n ? 0.12 + (n / grid.max) * 0.88 : 0.05 }} title={`${DAYS_LONG[d]} ${h}:00 · ${n} mensajes recibidos`} />;
-              })}
-            </div>
-          </div>
-        ))}
-      </div>
-    </div>
-  );
-}
-
 /** Frases listas para un dueño de negocio, calculadas con los datos del período. */
 function insights(r: WaReport): string[] {
   const out: string[] = [];
@@ -113,6 +77,15 @@ function insights(r: WaReport): string[] {
   if (r.kpis.unansweredNow > 0) out.push(`Hay ${r.kpis.unansweredNow} ${r.kpis.unansweredNow === 1 ? 'conversación esperando' : 'conversaciones esperando'} respuesta ahora mismo.`);
   const rated = r.agents.filter((a) => a.avgFirstResponseSec != null && a.conversations >= 3).sort((a, b) => (a.avgFirstResponseSec as number) - (b.avgFirstResponseSec as number));
   if (rated.length >= 2) out.push(`${rated[0].name} es quien responde más rápido (${formatDuration(rated[0].avgFirstResponseSec)}); ${rated[rated.length - 1].name} tarda más (${formatDuration(rated[rated.length - 1].avgFirstResponseSec)}).`);
+  const total = r.kpis.messagesIn + r.kpis.messagesOut;
+  const prevTotal = r.previous.messagesIn + r.previous.messagesOut;
+  if (prevTotal > 0) {
+    const pct = Math.round(((total - prevTotal) / prevTotal) * 100);
+    if (Math.abs(pct) >= 5) out.push(`El movimiento de mensajes ${pct > 0 ? 'subió' : 'bajó'} ${Math.abs(pct)}% frente al período anterior.`);
+  }
+  if (r.contacts.active > 0) out.push(`${Math.round((r.contacts.fresh / r.contacts.active) * 100)}% de los clientes que escribieron son nuevos y ${Math.round((r.contacts.returning / r.contacts.active) * 100)}% ya habían escrito antes.`);
+  const slowest = [...r.responseByHour].filter((h) => h.avgSec != null && h.conversations >= 2).sort((a, b) => (b.avgSec as number) - (a.avgSec as number))[0];
+  if (slowest && (slowest.avgSec as number) > 600) out.push(`La respuesta más lenta es para quienes escriben a las ${slowest.hour}:00 (${formatDuration(slowest.avgSec)} en promedio).`);
   if (r.kpis.unassignedNow > 0) out.push(`${r.kpis.unassignedNow} ${r.kpis.unassignedNow === 1 ? 'conversación está' : 'conversaciones están'} sin responsable.`);
   return out;
 }
@@ -211,18 +184,18 @@ export function WhatsAppReports({ overview }: { overview: WaOverview }) {
             )}
 
             <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
-              <Kpi label="Mensajes recibidos" value={nf(data.kpis.messagesIn)} />
-              <Kpi label="Mensajes enviados" value={nf(data.kpis.messagesOut)} />
-              <Kpi label="Conversaciones con actividad" value={nf(data.kpis.conversationsActive)} hint={`${nf(data.kpis.conversationsNew)} nuevas · ${nf(data.kpis.groupConversations)} grupos`} />
-              <Kpi label="Resueltas" value={nf(data.kpis.resolved)} />
-              <Kpi label="Primera respuesta (promedio)" value={formatDuration(data.kpis.firstResponse.avgSec)} hint={data.kpis.firstResponse.sample ? `${nf(data.kpis.firstResponse.sample)} conversaciones nuevas` : 'Sin conversaciones nuevas'} />
+              <Kpi label="Mensajes recibidos" value={nf(data.kpis.messagesIn)} delta={<Delta now={data.kpis.messagesIn} before={data.previous.messagesIn} />} />
+              <Kpi label="Mensajes enviados" value={nf(data.kpis.messagesOut)} delta={<Delta now={data.kpis.messagesOut} before={data.previous.messagesOut} />} />
+              <Kpi label="Conversaciones con actividad" value={nf(data.kpis.conversationsActive)} delta={<Delta now={data.kpis.conversationsActive} before={data.previous.conversationsActive} />} hint={`${nf(data.kpis.conversationsNew)} nuevas · ${nf(data.kpis.groupConversations)} grupos`} />
+              <Kpi label="Resueltas" value={nf(data.kpis.resolved)} hint={data.resolution.count ? `Tardan ${formatDuration(data.resolution.avgSec)} en promedio` : 'Marca conversaciones como resueltas para medirlo'} />
+              <Kpi label="Primera respuesta (promedio)" value={formatDuration(data.kpis.firstResponse.avgSec)} delta={<Delta now={data.kpis.firstResponse.avgSec} before={data.previous.avgFirstResponseSec} goodWhen="down" />} hint={data.kpis.firstResponse.sample ? `${nf(data.kpis.firstResponse.sample)} conversaciones nuevas` : 'Sin conversaciones nuevas'} />
               <Kpi label="Primera respuesta (mediana)" value={formatDuration(data.kpis.firstResponse.medianSec)} hint="La mitad respondió más rápido que esto" />
               <Kpi label="Sin responder ahora" value={nf(data.kpis.unansweredNow)} tone={data.kpis.unansweredNow ? 'text-rose-600' : ''} hint={`${nf(data.kpis.unassignedNow)} sin responsable · ${nf(data.kpis.openNow)} abiertas`} />
               <Kpi label="Mensajes por conversación" value={data.kpis.messagesPerConversation ?? '—'} />
             </div>
 
             <div className="grid gap-4 lg:grid-cols-3">
-              <Card title="Mensajes por día" className="lg:col-span-2"><DailyChart data={data.daily} /></Card>
+              <Card title="Mensajes por día" subtitle="Cuántos mensajes entran y salen cada día" className="lg:col-span-2"><DailyChart data={data.daily} from={data.from} to={data.to} /></Card>
               <Card title="Qué tan rápido responden" subtitle="Conversaciones nuevas con respuesta dentro de…">
                 <div className="space-y-3">
                   <Bar label="5 minutos" value={data.kpis.firstResponse.within5Pct ?? 0} max={100} suffix="%" />
@@ -235,7 +208,7 @@ export function WhatsAppReports({ overview }: { overview: WaOverview }) {
             </div>
 
             <div className="grid gap-4 lg:grid-cols-3">
-              <Card title="Horas en que más escriben" subtitle={`Mensajes recibidos por día y hora (${data.tz})`} className="lg:col-span-2"><Heatmap data={data.hourly} /></Card>
+              <Card title="Horas en que más escriben" subtitle="Mensajes recibidos por día de la semana y hora; el recuadro oscuro es el momento más fuerte" className="lg:col-span-2"><PeakHeatmap data={data.hourly} tz={data.tz} /></Card>
               <Card title="Esperando respuesta" subtitle="Cuánto llevan esperando las conversaciones abiertas">
                 {data.backlogAging.length ? <div className="space-y-3">{data.backlogAging.map((b) => <Bar key={b.bucket} label={b.bucket} value={b.count} max={agingMax} color="bg-rose-500" />)}</div> : <p className="py-6 text-center text-xs text-muted-foreground">No hay nadie esperando. ¡Buen trabajo!</p>}
               </Card>
@@ -271,11 +244,16 @@ export function WhatsAppReports({ overview }: { overview: WaOverview }) {
               </Card>
             </div>
 
-            <div className="grid gap-4 lg:grid-cols-2">
-              <Card title="Clientes que más escriben" subtitle="Contactos y grupos con más mensajes en el período">
-                <div className="space-y-2.5">{data.topContacts.map((c) => <Bar key={c.id} label={c.isGroup ? `👥 ${c.name}` : c.name} value={c.messages} max={data.topContacts[0]?.messages || 1} color="bg-emerald-500" />)}
-                  {data.topContacts.length === 0 && <p className="py-4 text-center text-xs text-muted-foreground">Sin mensajes en este período.</p>}</div>
-              </Card>
+            <div className="grid gap-4 lg:grid-cols-3">
+              <Card title="Clientes que más escriben" subtitle="Contactos y grupos con más mensajes en el período" className="lg:col-span-2"><TopContacts data={data.topContacts} /></Card>
+              <div className="space-y-4">
+                <Card title="Clientes nuevos y recurrentes" subtitle="Personas que escribieron en el período (sin grupos)"><SplitBar a={data.contacts.fresh} b={data.contacts.returning} aLabel="Nuevos" bLabel="Ya habían escrito" /></Card>
+                <Card title="Individuales y grupos" subtitle="Conversaciones con actividad"><SplitBar a={Math.max(0, data.kpis.conversationsActive - data.kpis.groupConversations)} b={data.kpis.groupConversations} aLabel="Individuales" bLabel="Grupos" bColor="#8b5cf6" /></Card>
+              </div>
+            </div>
+
+            <div className="grid gap-4 lg:grid-cols-3">
+              <Card title="Respuesta según la hora" subtitle="Cuánto tarda la primera respuesta a quien escribe a cada hora" className="lg:col-span-2"><ResponseByHour data={data.responseByHour} /></Card>
               <Card title="Qué envían" subtitle="Tipos de mensaje del período">
                 <div className="space-y-2.5">{data.types.map((t) => <Bar key={t.type} label={TYPE_LABEL[t.type] || t.type} value={t.count} max={typeMax} color="bg-violet-500" />)}
                   {data.types.length === 0 && <p className="py-4 text-center text-xs text-muted-foreground">Sin mensajes en este período.</p>}</div>
