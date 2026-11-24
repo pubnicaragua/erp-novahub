@@ -7,7 +7,7 @@ import {
   Plus, Info, Trash2,
   FileText, Receipt, Package, Wallet,
   Users, BarChart3, RotateCcw, Undo2, Network, ArrowLeftRight, Landmark, Sparkles, GitBranch,
-  Search, Check, GraduationCap,
+  Search, Check,
 } from 'lucide-react'
 import { Card, CardContent, CardHeader, CardTitle } from '../ui/card'
 import { Button } from '../ui/button'
@@ -351,7 +351,7 @@ const ACCOUNTING_MODULE_REQUIRED_FAMILIES: Record<string, string[]> = {
   expense: ['PURCHASES'],
   supplierCredit: ['PURCHASES'],
   payroll: ['HR'],
-  hrTraining: ['HR', 'HR_TRAINING'],
+  hrTraining: ['HR'],
   hrBenefit: ['HR'],
   hrExpense: ['HR'],
   financialIncome: ['FINANCIAL'],
@@ -386,16 +386,9 @@ const ACCOUNTING_MODULE_GROUPS = [
   {
     id: 'hr',
     label: 'Cuentas contables de Recursos Humanos',
-    description: 'Nómina, obligaciones laborales y gastos de RRHH.',
+    description: 'Nómina, obligaciones laborales, formación y gastos de RR. HH.',
     icon: Users,
     moduleIds: ['payroll', 'hrTraining', 'hrBenefit', 'hrExpense'],
-  },
-  {
-    id: 'training',
-    label: 'Cuentas contables de Centro de Capacitación',
-    description: 'Gastos pagados de formación y capacitaciones.',
-    icon: GraduationCap,
-    moduleIds: ['hrTraining'],
   },
   {
     id: 'finance',
@@ -1538,7 +1531,6 @@ const [mappingsSearch, setMappingsSearch] = useState('')
     const hrModuleEnabled = enabledModules.some(module => isEnterpriseModuleInFamily(module, 'HR'))
     const visibleGroups = ACCOUNTING_MODULE_GROUPS.filter(group => {
       if (group.id === 'hr') return hrModuleEnabled
-      if (group.id === 'training') return !hrModuleEnabled
       return true
     })
     const assigned = new Set<string>()
