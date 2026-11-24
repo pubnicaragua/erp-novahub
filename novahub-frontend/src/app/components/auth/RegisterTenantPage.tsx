@@ -220,6 +220,7 @@ const SUBMODULE_NAMES_ES: Record<string, string> = {
   FLEET_VEHICLES: 'Vehículos de flota',
   FLEET_RATES: 'Tarifas y rutas de flota',
   FLEET_SETTINGS: 'Parámetros y costos de flota',
+  FLEET_REMISSION: 'Datos de remisión (órdenes de venta)',
   FLEET_COSTS: 'Costo interno del viaje',
   FLEET_REPORTS: 'Rentabilidad de flota',
   CONFIG_COMPANY: 'Empresa',

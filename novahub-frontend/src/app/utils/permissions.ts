@@ -448,6 +448,7 @@ const VIEW_PERMISSION_ACTIONS: Record<string, readonly PermissionMatrixAction[]>
   FLEET_VEHICLES: ['read', 'create', 'edit', 'delete'],
   FLEET_RATES: ['read', 'create', 'edit', 'delete'],
   FLEET_SETTINGS: ['read', 'create', 'edit', 'delete'],
+  FLEET_REMISSION: ['read', 'create', 'edit', 'delete'],
   FLEET_COSTS: ['read', 'create', 'edit', 'delete'],
   FLEET_REPORTS: ['read'],
 

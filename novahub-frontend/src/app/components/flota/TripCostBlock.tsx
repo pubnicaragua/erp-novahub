@@ -5,9 +5,10 @@ import { Input } from '../ui/input';
 import { Skeleton } from '../ui/skeleton';
 import { Combobox } from '../ui/Combobox';
 import { useAuth } from '../../contexts/AuthContext';
+import { canAccessModuleView } from '../../utils/moduleViewAccess';
 import { useTenantQuery } from '../../hooks/useTenantQuery';
 import {
-  flotaService, type DriverType, type PriceResult, type SavedTripCost, type TripCostInput, type TripCostResult, type TripMeta, type TripSourceType,
+  flotaService, type DriverType, type FleetRoute, type FleetVehicle, type PriceResult, type SavedTripCost, type TripCostInput, type TripCostResult, type TripMeta, type TripSourceType,
 } from '../../services/flota.service';
 import { hrService } from '../../services/hr.service';
 import { suppliersService } from '../../services/compras.service';
@@ -116,17 +117,22 @@ function toPayload(draft: Draft, props: Pick<Props, 'revenue' | 'currency' | 'li
 }
 
 /**
- * Datos del viaje dentro de órdenes, facturas y cotizaciones. Solo lo ve quien tiene el permiso FLEET_COSTS (y solo las empresas con Flota activo).
+ * Datos del viaje dentro de órdenes, facturas y cotizaciones. Solo las empresas con Flota activo y la vista habilitada por el superadmin:
+ *  - órdenes de venta (REMISION): vista FLEET_REMISSION; facturas y cotizaciones (FULL): vista FLEET_COSTS (costo interno).
  *  - En la orden de venta (mode REMISION) se capturan solo los datos de la remisión: origen, destino, camión, conductor, número de remisión y de pedido.
  *  - En la factura (mode FULL) esos datos ya vienen de la orden, el camión autocompleta el resto, y ahí está el costo interno, las fórmulas y el precio.
  * El cliente y el PDF nunca lo ven: ahí solo va el precio final.
  */
 export function TripCostBlock({ sourceType, sourceId, lineId = '', revenue, quantity, currency, readOnly, mode = 'FULL', onApplyPrice, onDraftChange }: Props) {
-  const { canPerform } = useAuth();
-  const canView = canPerform('FLEET_COSTS', 'view');
-  const canEdit = canPerform('FLEET_COSTS', 'edit') && !readOnly;
-  const refresh = useFleetRefresh();
+  const { canPerform, user } = useAuth();
   const full = mode === 'FULL';
+  // Cada bloque depende de SU vista, que el superadmin habilita por empresa: la remisión (órdenes de venta) y el costo interno
+  // (facturas y cotizaciones) no se dan por añadidura. La política de la empresa también aplica al administrador.
+  const viewId = full ? 'FLEET_COSTS' : 'FLEET_REMISSION';
+  const allowedByCompany = canAccessModuleView(user?.roleModuleAccessPolicies || user?.moduleAccessPolicies, viewId);
+  const canView = allowedByCompany && canPerform(viewId, 'view');
+  const canEdit = allowedByCompany && canPerform(viewId, 'edit') && !readOnly;
+  const refresh = useFleetRefresh();
   const [open, setOpen] = useState(false);
   const [draft, setDraft] = useState<Draft>({ ...EMPTY, quantity: quantity ? String(quantity) : '' });
   const [price, setPrice] = useState<PriceDraft>(EMPTY_PRICE);
@@ -143,8 +149,12 @@ export function TripCostBlock({ sourceType, sourceId, lineId = '', revenue, quan
   const priceResult = Number(price.pumpPrice) > 0 ? priceResultRaw : null;
 
   const enabled = canView && open;
-  const vehicles = useTenantQuery(['fleet', 'vehicles', 'trip-block'], (signal) => flotaService.listVehicles({ status: 'ACTIVE' }, signal), { enabled });
-  const routes = useTenantQuery(['fleet', 'routes', 'trip-block'], (signal) => flotaService.listRoutes(undefined, signal), { enabled });
+  // Costo interno: camiones y rutas completos. Remisión: solo lo necesario, sin rendimiento, comisión ni tarifas.
+  const fullVehicles = useTenantQuery(['fleet', 'vehicles', 'trip-block'], (signal) => flotaService.listVehicles({ status: 'ACTIVE' }, signal), { enabled: enabled && full });
+  const fullRoutes = useTenantQuery(['fleet', 'routes', 'trip-block'], (signal) => flotaService.listRoutes(undefined, signal), { enabled: enabled && full });
+  const remissionOptions = useTenantQuery(['fleet', 'remission-options'], (signal) => flotaService.remissionOptions(signal), { enabled: enabled && !full, retry: false });
+  const vehicles = { data: full ? fullVehicles.data : remissionOptions.data?.vehicles as unknown as FleetVehicle[] | undefined };
+  const routes = { data: full ? fullRoutes.data : remissionOptions.data?.routes.map((route) => ({ ...route, rate: 0, rateUnit: 'PER_TRIP' as const, distanceKm: null })) as unknown as FleetRoute[] | undefined };
   const fields = useTenantQuery(['fleet', 'cost-fields', 'trip-block'], (signal) => flotaService.listCostFields(signal), { enabled: enabled && full, retry: false });
   const saved = useTenantQuery(['fleet', 'trips', sourceType, sourceId || 'new', lineId], (signal) => flotaService.listTrips(sourceType, String(sourceId), signal), { enabled: enabled && Boolean(sourceId) });
   const inherited = useTenantQuery(['fleet', 'trips', 'inherited', sourceId || 'new'], (signal) => flotaService.inheritedTrip(String(sourceId), signal), { enabled: enabled && Boolean(sourceId) && sourceType === 'INVOICE', retry: false });
@@ -230,6 +240,11 @@ export function TripCostBlock({ sourceType, sourceId, lineId = '', revenue, quan
     const vehicle = (vehicles.data || []).find((item) => item.id === vehicleId);
     set({ vehicleId, ...(vehicle?.plate && !trim(draft.plate) ? { plate: vehicle.plate } : {}) });
     if (!vehicleId) return;
+    if (!full) {
+      // En la orden solo se sugiere el conductor habitual: el último viaje trae costos y no se consulta.
+      if (vehicle?.defaultDriverName) setDraft((current) => (trim(current.driverName) === '' ? { ...current, driverName: vehicle.defaultDriverName || '' } : current));
+      return;
+    }
     try {
       const last = await flotaService.lastTripOfVehicle(vehicleId);
       if (!last.found) {

@@ -68,6 +68,11 @@ export type DriverType = 'PAYROLL' | 'SUBCONTRACTED' | 'PER_TRIP';
 
 export interface TripCostLine { code: string; label: string; kind: string; amount: number; visibleToCustomer: boolean; error?: string; how?: string; formula?: string }
 
+export interface RemissionOptions {
+  vehicles: Array<{ id: string; code: string; plate?: string | null; name?: string | null; defaultDriverName?: string | null; status: string }>;
+  routes: Array<{ id: string; origin: string; destination: string; isActive: boolean }>;
+}
+
 /** Datos de la remisión de DINICO y del pedido del proveedor; viajan con el viaje desde la orden de venta hasta la factura. */
 export interface TripMeta {
   remisionNumber?: string | null; supplierOrderNumber?: string | null; supplierName?: string | null; plate?: string | null;
@@ -150,6 +155,8 @@ export const flotaService = {
   listTrips: (sourceType: TripSourceType, sourceId: string, signal?: AbortSignal) => api.get<SavedTripCost[]>(`/fleet/trips/${sourceType}/${sourceId}`, { signal }),
   saveTrip: (sourceType: TripSourceType, sourceId: string, data: TripCostInput) => api.put<SavedTripCost & { summary: TripCostResult }>(`/fleet/trips/${sourceType}/${sourceId}`, data),
   removeTrip: (sourceType: TripSourceType, sourceId: string, lineId = '') => api.delete<{ deleted: number }>(`/fleet/trips/${sourceType}/${sourceId}?lineId=${encodeURIComponent(lineId)}`),
+  /** Camiones y rutas sin costos ni tarifas: para capturar la remisión de una orden de venta. */
+  remissionOptions: (signal?: AbortSignal) => api.get<RemissionOptions>('/fleet/remission/options', { signal }),
   inheritedTrip: (invoiceId: string, signal?: AbortSignal) => api.get<InheritedTrip>(`/fleet/trips/inherited/${invoiceId}`, { signal }),
   lastTripOfVehicle: (vehicleId: string, signal?: AbortSignal) => api.get<LastVehicleTrip>(`/fleet/vehicles/${vehicleId}/last-trip`, { signal }),
   priceHelp: (signal?: AbortSignal) => api.get<PriceHelp>('/fleet/pricing/help', { signal }),
