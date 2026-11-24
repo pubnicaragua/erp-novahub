@@ -10,6 +10,17 @@ export const hrService = {
   getDepartmentHeadCandidates: (signal?: AbortSignal) => api.get('/hr/department-head-candidates', withSignal(undefined, signal)),
   getDepartment: (id: string, signal?: AbortSignal) => api.get(`/hr/departments/${id}`, withSignal(undefined, signal)),
   getCommissionConfiguration: (signal?: AbortSignal) => api.get('/hr/commissions/configuration', withSignal(undefined, signal)),
+  getCommissionSellerLookup: (signal?: AbortSignal) => api.get<Array<{ id: string; employeeNumber: string; name: string; firstName: string; lastName: string }>>('/hr/commissions/incentives/employees', withSignal(undefined, signal)),
+  getCommissionPayoutIntegrationPolicy: (signal?: AbortSignal) => api.get<{ financeEnabled: boolean; accountingEnabled: boolean }>('/hr/commissions/incentives/payment-policy', withSignal(undefined, signal)),
+  getEmployeeSellerGoals: (employeeId?: string, signal?: AbortSignal) => api.get<any[]>('/hr/commissions/incentives/goals', withSignal(employeeId ? { employeeId } : undefined, signal)),
+  createEmployeeSellerGoal: (data: Record<string, unknown>) => api.post('/hr/commissions/incentives/goals', data),
+  evaluateEmployeeSellerGoals: () => api.post<{ evaluated: number; awardsCreated: number }>('/hr/commissions/incentives/goals/evaluate', {}),
+  approveEmployeeSellerGoalAward: (id: string, approve: boolean) => api.post(`/hr/commissions/incentives/goals/awards/${id}/approve`, { approve }),
+  getEmployeeSellerPayable: (employeeId?: string, signal?: AbortSignal) => api.get<any>('/hr/commissions/incentives/payable', withSignal(employeeId ? { employeeId } : undefined, signal)),
+  getEmployeeSellerPayouts: (employeeId?: string, signal?: AbortSignal) => api.get<any[]>('/hr/commissions/incentives/payouts', withSignal(employeeId ? { employeeId } : undefined, signal)),
+  getEmployeeSellerCommissions: (employeeId?: string, signal?: AbortSignal) => api.get<any[]>('/hr/commissions/incentives/commissions', withSignal(employeeId ? { employeeId } : undefined, signal)),
+  payEmployeeSellerIncentives: (data: { sellerEmployeeId: string; commissionIds: string[]; awardIds: string[]; currency: string; method: string; reference?: string; paidAt?: string; bankAccountId?: string; exchangeRate?: number }) => api.post('/hr/commissions/incentives/payouts', data),
+  reverseEmployeeSellerPayout: (id: string, reason: string) => api.post(`/hr/commissions/incentives/payouts/${id}/reverse`, { reason }),
   saveCommissionConfiguration: (data: { scope: 'GLOBAL' | 'SELLER'; sellerEmployeeId?: string | null; currency: 'NIO' | 'USD'; calculationBasis?: 'PER_SALE' | 'MONTHLY_TOTAL'; rules: Array<{ minAmount: number; maxAmount: number | null; rate: number }> }) =>
     api.put('/hr/commissions/configuration', data),
   resetCommissionConfiguration: (data: { scope: 'GLOBAL' | 'SELLER'; sellerEmployeeId?: string | null }) =>

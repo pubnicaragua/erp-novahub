@@ -10,6 +10,12 @@ test('legacy approve grants hydrate the new expense actions', () => {
   assert.equal(permissionValue({ approve: false }, 'pay'), false);
 });
 
+test('HR commission roles expose direct payout reversal as a separate action', () => {
+  assert.equal(getPermissionActionKeys('HR_COMMISSIONS').includes('reverse'), true);
+  assert.equal(permissionValue({ module: 'HR_COMMISSIONS', reverse: true }, 'reverse', 'HR_COMMISSIONS'), true);
+  assert.equal(permissionValue({ module: 'HR_COMMISSIONS', reverse: false, delete: true }, 'reverse', 'HR_COMMISSIONS'), false);
+});
+
 test('editing an old expense role shows inherited actions and persists granular overrides', () => {
   const hydrated = hydratePermissionActions({ module: 'PURCHASES_EXPENSES', approve: true }, 'PURCHASES_EXPENSES');
   assert.equal(hydrated.submit, true);

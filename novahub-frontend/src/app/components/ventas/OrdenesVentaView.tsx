@@ -906,6 +906,8 @@ export function OrdenesVentaView({ data, summaryData, summaryLoading, summaryErr
     baseCurrency,
   );
 
+  const commissionPendingSave = Boolean(localDoc?.sellerEmployeeId && String(localDoc.id).startsWith('local-'));
+
   if (editingId && localDoc) {
     return (
       <div className="sales-document-editor min-w-0 space-y-6 animate-in slide-in-from-right duration-300" data-tour="sales-form-title">
@@ -993,10 +995,10 @@ export function OrdenesVentaView({ data, summaryData, summaryLoading, summaryErr
                 <div className="space-y-2 md:col-span-2">
                   <p className="text-[10px] text-muted-foreground mb-1">Comisión configurada</p>
                   <div className="grid grid-cols-2 gap-2">
-                    <div><Label className="text-[9px] uppercase tracking-wider text-muted-foreground">Porcentaje</Label><Input readOnly tabIndex={-1} value={localDoc?.sellerEmployeeId ? `${Number(localDoc?.commissionRate || 0).toFixed(2)}%` : '—'} className="h-8 bg-muted/20 text-xs" /></div>
-                    <div><Label className="text-[9px] uppercase tracking-wider text-muted-foreground">Monto estimado</Label><Input readOnly tabIndex={-1} value={localDoc?.sellerEmployeeId ? Number(localDoc?.commissionAmount || 0).toFixed(getCurrencyDecimalPlaces()) : '—'} className="h-8 bg-muted/20 text-xs" /></div>
+                    <div><Label className="text-[9px] uppercase tracking-wider text-muted-foreground">Porcentaje</Label><Input readOnly tabIndex={-1} value={!localDoc?.sellerEmployeeId ? '—' : commissionPendingSave ? 'Al guardar' : `${Number(localDoc?.commissionRate || 0).toFixed(2)}%`} className="h-8 bg-muted/20 text-xs" /></div>
+                    <div><Label className="text-[9px] uppercase tracking-wider text-muted-foreground">Monto estimado</Label><Input readOnly tabIndex={-1} value={!localDoc?.sellerEmployeeId ? '—' : commissionPendingSave ? 'Al guardar' : Number(localDoc?.commissionAmount || 0).toFixed(getCurrencyDecimalPlaces())} className="h-8 bg-muted/20 text-xs" /></div>
                   </div>
-                  <p className="text-[9px] text-muted-foreground">Se aplica automáticamente al subtotal neto; no se puede editar en la venta.</p>
+                  <p className="text-[9px] text-muted-foreground">{commissionPendingSave ? 'El porcentaje y monto se calcularán y guardarán al guardar la orden.' : 'Se aplica automáticamente al subtotal neto; no se puede editar en la venta.'}</p>
                 </div>
                 <div>
                   <p className="text-[10px] text-muted-foreground mb-1">Fecha Emisión</p>

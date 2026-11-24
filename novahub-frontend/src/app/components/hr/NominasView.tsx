@@ -28,7 +28,7 @@ import { normalizeCurrency, summarizeAmountsByCurrency, type SupportedCurrency }
 import { pdfStatusLabel } from '../../utils/pdfStatus';
 import { ExportMenu } from '../ui/ExportMenu';
 import { showPdfInBrowserPreview } from '../../utils/pdfBrowserPreview';
-import type { PdfDownloadFormat } from '../../utils/pdfDownloadFormats';
+import type { PdfDownloadFormat, PdfPaperFormat } from '../../utils/pdfDownloadFormats';
 import { createReportWorkbook } from '../../utils/reportWorkbook';
 
 type PayrollFrequency = 'WEEKLY' | 'BIWEEKLY' | 'MONTHLY' | 'ALL';
@@ -439,7 +439,8 @@ export function NominasView({ payrolls, employees, onRefresh }: any) {
       const configured = await generateConfiguredReportTemplate({ targetKey: 'recursos-humanos.payrolls', title: 'Reporte de nóminas', tenantName: user?.tenantName || 'Mi Empresa', tenantLogo: user?.sessionBranding?.logo || null, rows: exportRows, columns: [{ header: 'Empleado', value: row => payrollEmployeeName(row) }, { header: 'Periodo', value: row => `${new Date(row.periodStart).toLocaleDateString()} - ${new Date(row.periodEnd).toLocaleDateString()}` }, { header: 'Periodicidad', value: row => payrollFrequencyLabel(row.frequency || row.employee?.payFrequency) }, { header: 'Salario bruto', value: row => payrollDisplay(row, 'grossPay', 'grossPayBase'), align: 'right' }, { header: 'Neto a pagar', value: row => payrollDisplay(row, 'netPay', 'netPayBase'), align: 'right' }, { header: 'Costo empresa', value: row => payrollDisplay(row, 'costoTotalEmpresa', 'costoTotalEmpresaBase'), align: 'right' }, { header: 'Estado', value: row => (isOverdue(row) ? 'Vencida' : pdfStatusLabel(row.status)) }], format: paperFormat, fileName: buildDatedDownloadFileName(['reporte_nominas'], 'pdf') });
       if (configured) { toast.success('Previsualización abierta. Descarga o imprime el PDF desde el visor del navegador.'); return; }
       const pdfSettings = await getPdfDesignSettings('recursos-humanos.payrolls');
-      const doc = new jsPDF(pdfDesignPaper(pdfSettings, 'recursos-humanos.payrolls', paperFormat)) as any;
+      const fallbackPaperFormat: PdfPaperFormat | undefined = paperFormat === 'configured' || paperFormat === 'novahub-format' ? undefined : paperFormat;
+      const doc = new jsPDF(pdfDesignPaper(pdfSettings, 'recursos-humanos.payrolls', fallbackPaperFormat)) as any;
       const pageWidth = doc.internal.pageSize.getWidth();
       const margin = pageWidth * 0.05;
       doc.text("Reporte de Nominas", margin, 15);
@@ -592,7 +593,7 @@ export function NominasView({ payrolls, employees, onRefresh }: any) {
               className="rounded border-border text-primary focus:ring-primary h-4 w-4 accent-primary"
             />
             <label htmlFor="includeComm" className="text-xs font-bold text-muted-foreground uppercase tracking-widest cursor-pointer select-none">
-              Incluir Comisiones
+              Incluir comisiones y recompensas de metas
             </label>
           </div>
           {canPerform('HR_PAYROLL', 'process') && (
@@ -610,7 +611,7 @@ export function NominasView({ payrolls, employees, onRefresh }: any) {
           {canPerform('HR_PAYROLL', 'export') && (
             <ExportMenu onPdf={(paperFormat) => void handleExportPDF(paperFormat)} onExcel={() => void handleExportExcel()} pdfDescription="Nóminas con la estructura configurada" excelDescription="Todas las nóminas filtradas" />
           )}
-          <HRViewTutorial label="Cómo procesar nómina" targetPrefix="hr-payroll" stepKeys={['title', 'data', 'actions']} copy={{ data: { title: 'Listado de nóminas', description: 'Consulta empleados, períodos, montos, estados y el desglose de cada nómina.' }, actions: { description: 'Filtra, descarga el reporte, paga pendientes o procesa el período actual incluyendo comisiones.' } }} />
+          <HRViewTutorial label="Cómo procesar nómina" targetPrefix="hr-payroll" stepKeys={['title', 'data', 'actions']} copy={{ data: { title: 'Listado de nóminas', description: 'Consulta empleados, períodos, montos, estados y el desglose de cada nómina.' }, actions: { description: 'Filtra, descarga el reporte, paga pendientes o procesa el período actual incluyendo comisiones y recompensas de metas aprobadas.' } }} />
         </div>
       </div>
 

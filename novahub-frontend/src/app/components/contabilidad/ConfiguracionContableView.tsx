@@ -7,7 +7,7 @@ import {
   Plus, Info, Trash2,
   FileText, Receipt, Package, Wallet,
   Users, BarChart3, RotateCcw, Undo2, Network, ArrowLeftRight, Landmark, Sparkles, GitBranch,
-  Search, Check,
+  Search, Check, GraduationCap,
 } from 'lucide-react'
 import { Card, CardContent, CardHeader, CardTitle } from '../ui/card'
 import { Button } from '../ui/button'
@@ -389,6 +389,13 @@ const ACCOUNTING_MODULE_GROUPS = [
     description: 'Nómina, obligaciones laborales y gastos de RRHH.',
     icon: Users,
     moduleIds: ['payroll', 'hrTraining', 'hrBenefit', 'hrExpense'],
+  },
+  {
+    id: 'training',
+    label: 'Cuentas contables de Centro de Capacitación',
+    description: 'Gastos pagados de formación y capacitaciones.',
+    icon: GraduationCap,
+    moduleIds: ['hrTraining'],
   },
   {
     id: 'finance',
@@ -1525,10 +1532,19 @@ const [mappingsSearch, setMappingsSearch] = useState('')
   })
   const otherModuleDefs = allModuleDefs.filter(mod => !SALES_MODULE_IDS.has(mod.id) && matchesSearch(mod))
   const groupedOtherModules = useMemo(() => {
+    const enabledModules = (user?.managerMode && Array.isArray(user.managerEnabledModules)
+      ? user.managerEnabledModules
+      : user?.enabledModules || []).map(module => String(module).toUpperCase())
+    const hrModuleEnabled = enabledModules.some(module => isEnterpriseModuleInFamily(module, 'HR'))
+    const visibleGroups = ACCOUNTING_MODULE_GROUPS.filter(group => {
+      if (group.id === 'hr') return hrModuleEnabled
+      if (group.id === 'training') return !hrModuleEnabled
+      return true
+    })
     const assigned = new Set<string>()
-    const groups = ACCOUNTING_MODULE_GROUPS.map(group => {
+    const groups = visibleGroups.map(group => {
       const modules = otherModuleDefs.filter(mod => {
-        const included = group.moduleIds.includes(mod.id) || (group.id === 'other' && !ACCOUNTING_MODULE_GROUPS.some(item => item.moduleIds.includes(mod.id)))
+        const included = group.moduleIds.includes(mod.id) || (group.id === 'other' && !visibleGroups.some(item => item.moduleIds.includes(mod.id)))
         if (included) assigned.add(mod.id)
         return included
       })
@@ -1537,10 +1553,10 @@ const [mappingsSearch, setMappingsSearch] = useState('')
 
     const unassigned = otherModuleDefs.filter(mod => !assigned.has(mod.id))
     if (unassigned.length > 0) {
-      groups.push({ ...ACCOUNTING_MODULE_GROUPS[ACCOUNTING_MODULE_GROUPS.length - 1], modules: unassigned })
+      groups.push({ ...visibleGroups[visibleGroups.length - 1], modules: unassigned })
     }
     return groups
-  }, [otherModuleDefs])
+  }, [otherModuleDefs, user?.enabledModules, user?.managerEnabledModules, user?.managerMode])
 
   const modConfigStatus = (mod: (typeof allModuleDefs)[number], fields: ModuleField[] = mod.fields) => {
     const mapping = accountMappings[mod.id] || {}
