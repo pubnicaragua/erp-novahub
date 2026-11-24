@@ -633,6 +633,13 @@ const platformMenuItems: MenuItem[] = [
     section: 'NovaHub Platform',
     superadminOnly: true,
   },
+  {
+    id: 'novachat',
+    label: 'Nova Suite · WhatsApp',
+    icon: <MessageCircle className="size-5" />,
+    section: 'NovaHub Platform',
+    superadminOnly: true,
+  },
   auditWorkspaceMenuItem,
   {
     id: 'centro-capacitacion',
