@@ -7,6 +7,7 @@ import { Combobox } from '../ui/Combobox';
 import { useAuth } from '../../contexts/AuthContext';
 import { canAccessModuleView } from '../../utils/moduleViewAccess';
 import { useTenantQuery } from '../../hooks/useTenantQuery';
+import { useEnabledTenantFeatures } from '../../hooks/useEnabledTenantFeatures';
 import {
   flotaService, type DriverType, type FleetRoute, type FleetVehicle, type PriceResult, type SavedTripCost, type TripCostInput, type TripCostResult, type TripMeta, type TripSourceType,
 } from '../../services/flota.service';
@@ -129,7 +130,10 @@ export function TripCostBlock({ sourceType, sourceId, lineId = '', revenue, quan
   // Cada bloque depende de SU vista, que el superadmin habilita por empresa: la remisión (órdenes de venta) y el costo interno
   // (facturas y cotizaciones) no se dan por añadidura. La política de la empresa también aplica al administrador.
   const viewId = full ? 'FLEET_COSTS' : 'FLEET_REMISSION';
-  const allowedByCompany = canAccessModuleView(user?.roleModuleAccessPolicies || user?.moduleAccessPolicies, viewId);
+  // Primera capa: la función específica que el superadmin habilita para la empresa. Sin ella no se muestra, ni al administrador.
+  const tenantFeatures = useEnabledTenantFeatures();
+  const allowedByCompany = tenantFeatures.has(full ? 'FLEET_TRIP_COSTS' : 'FLEET_TRIP_REMISSION')
+    && canAccessModuleView(user?.roleModuleAccessPolicies || user?.moduleAccessPolicies, viewId);
   const canView = allowedByCompany && canPerform(viewId, 'view');
   const canEdit = allowedByCompany && canPerform(viewId, 'edit') && !readOnly;
   const refresh = useFleetRefresh();

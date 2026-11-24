@@ -29,6 +29,9 @@ export function canManageTenantFeatures(role?: string | null) {
 }
 
 export const tenantFeaturesService = {
+  /** Funciones específicas que el superadmin habilitó para la empresa de la sesión. */
+  getMine: (signal?: AbortSignal) => api.get<string[]>('/tenant-features/me', { signal }),
+
   getCatalog: (signal?: AbortSignal) =>
     api.get<TenantFeatureDefinition[]>('/tenant-features/platform/catalog', { signal }),
 

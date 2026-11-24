@@ -35,6 +35,7 @@ import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogTitle } f
 import { PdfDocumentCustomizer } from './configuracion/PdfDocumentCustomizer';
 import { ConfirmDialog } from './ui/ConfirmDialog';
 import { useTenantQuery, asList } from '../hooks/useTenantQuery';
+import { useEnabledTenantFeatures } from '../hooks/useEnabledTenantFeatures';
 import { allowedModulesFromPermissions, hydratePermissionActions, permissionValue, PERMISSION_ACTION_DEFINITIONS, SENSITIVE_PERMISSION_ACTION_DEFINITIONS, serializePermissionActions, supportsInventoryCostPermission, supportsPermissionAction, type PermissionMatrixAction } from '../utils/permissions';
 import {
   HIDDEN_PERMISSION_MODULE_IDS,
@@ -100,6 +101,9 @@ const AVAILABLE_MODULES = [
 ];
 
 // Submódulos para permisos ultra-granulares
+/** Permisos de rol que solo existen para la empresa si el superadmin habilitó la función específica correspondiente. */
+const TENANT_FEATURE_PERMISSION_MODULES: Record<string, string> = { FLEET_REMISSION: 'FLEET_TRIP_REMISSION', FLEET_COSTS: 'FLEET_TRIP_COSTS' };
+
 export const LEGACY_SUBMODULES_FOR_PERMS = [
   // Ventas
   { id: 'SALES_CLIENTS', label: 'Clientes', parent: 'SALES' },
@@ -649,6 +653,8 @@ export function ConfiguracionPage({ initialTab = 'branding', onTabChange, isSide
     setEnabledModulesLoaded(false);
   }, [user?.tenantId]);
 
+  // Remisión y costo interno de Flota solo se ofrecen en los roles si el superadmin habilitó la función para esta empresa.
+  const tenantFeatures = useEnabledTenantFeatures();
   const tenantPermModules = React.useMemo(() => {
     if (!user) return [];
     const normalize = (value: unknown) => String(value || '').trim().toUpperCase();
@@ -661,6 +667,7 @@ export function ConfiguracionPage({ initialTab = 'branding', onTabChange, isSide
     return ALL_PERM_MODULES
       .filter(m => !HIDDEN_PERMISSION_MODULE_IDS.has(String(m.id).toUpperCase()))
       .filter((m) => canAccessModuleView(user.roleModuleAccessPolicies || user.moduleAccessPolicies, m.id))
+      .filter((m) => !TENANT_FEATURE_PERMISSION_MODULES[normalize(m.id)] || tenantFeatures.has(TENANT_FEATURE_PERMISSION_MODULES[normalize(m.id)]))
       .filter(m => {
         const moduleId = normalize(m.id);
         const parentMod = 'parent' in m ? normalize((m as any).parent) : null;
@@ -681,7 +688,7 @@ export function ConfiguracionPage({ initialTab = 'branding', onTabChange, isSide
         // vistas hijas. Los hermanos que no están en el alcance no entran.
         return !parentMod && sessionModules.some((candidate) => isEnterpriseModuleInFamily(candidate, moduleId));
       });
-  }, [enabledModules, enabledModulesLoaded, user]);
+  }, [enabledModules, enabledModulesLoaded, user, tenantFeatures.features]);
 
   const tenantPermModuleIds = React.useMemo(
     () => new Set(tenantPermModules.map((module) => String(module.id).toUpperCase())),
