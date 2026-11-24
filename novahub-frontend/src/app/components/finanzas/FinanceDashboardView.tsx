@@ -41,7 +41,10 @@ export function FinanceDashboardView({ incomes, expenses, undatedExpenses = [], 
   const { displayCurrency, displayMode, valuationMode, valuationModeSuffix, formatCurrentAmount, formatExplicitAmount, convertAmount, convertCurrentAmount } = useCurrency();
   const { user, canPerform } = useAuth();
   const canReadSales = canPerform('SALES', 'view');
-  const canReadPurchases = canPerform('PURCHASES', 'view');
+  const canReadPurchases = canPerform('PURCHASES', 'view')
+    || canPerform('FINANCIAL_PAYABLES', 'view')
+    || canPerform('FINANCIAL_DASHBOARD', 'view')
+    || canPerform('FINANCIAL', 'view');
   const canReadFinancial = canPerform('FINANCIAL', 'view');
   const tenantKey = user?.clientTenantId || user?.tenantId || 'current';
   const sym = displayCurrency === 'USD' ? '$' : 'C$';

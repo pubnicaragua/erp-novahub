@@ -553,9 +553,6 @@ export function PagosRealizadosView({ data, summaryData, summaryLoading, summary
 
   const handleUpdate = async (id: string | number, updates: Partial<PaymentMade>) => {
     if (!canPerform('PURCHASES_PAYMENTS', 'read') || !canPerform('PURCHASES_PAYMENTS', 'edit')) return;
-    const existingPayment = data.find((payment) => payment.id === id);
-    if ((existingPayment?.supplierInvoiceId || updates.supplierInvoiceId)
-      && !canPerform('PURCHASES_RECEIPTS', 'read')) return;
     const updateToastId = toast.loading('Guardando cambios en el pago...');
     try {
       const payload = { ...updates } as any;
@@ -592,7 +589,6 @@ export function PagosRealizadosView({ data, summaryData, summaryLoading, summary
       ? canPerform('PURCHASES_PAYMENTS', 'read') && canPerform('PURCHASES_PAYMENTS', 'pay')
       : canPerform('PURCHASES_PAYMENTS', 'read') && canPerform('PURCHASES_PAYMENTS', 'edit');
     if (!canSavePayment) return;
-    if (localDoc?.supplierInvoiceId && !canPerform('PURCHASES_RECEIPTS', 'read')) return;
     const canManagePaymentEvidence = canPerform('PURCHASES_RECEIPTS', 'read')
       && canPerform('PURCHASES_RECEIPTS', 'registerInvoice');
     if (!localDoc?.supplierId) return toast.error('Seleccione un proveedor');

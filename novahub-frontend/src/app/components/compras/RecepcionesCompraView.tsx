@@ -2228,6 +2228,11 @@ export function RecepcionesCompraView({ data, summaryData, summaryLoading, summa
             const canAccessPaymentAction = Boolean(payableInvoice)
               && canPerform('PURCHASES_PAYMENTS', 'read')
               && canPerform('PURCHASES_PAYMENTS', 'pay');
+            const canAccessInvoiceAndPaymentAction = isPayableReceipt && !activeInvoice && !needsInventorySync
+              && canPerform('PURCHASES_PAYMENTS', 'read')
+              && canPerform('PURCHASES_PAYMENTS', 'pay')
+              && canPerform('PURCHASES_RECEIPTS', 'read')
+              && canPerform('PURCHASES_RECEIPTS', 'registerInvoice');
             const canAccessInvoiceAction = isPayableReceipt && !activeInvoice
               && canPerform('PURCHASES_RECEIPTS', 'read')
               && canPerform('PURCHASES_RECEIPTS', 'registerInvoice');
@@ -2258,6 +2263,18 @@ export function RecepcionesCompraView({ data, summaryData, summaryLoading, summa
                     onClick={() => openPaymentModal(row, undefined, true)}
                   >
                     <FileText className="size-4" />
+                  </Button>
+                )}
+                {canAccessInvoiceAndPaymentAction && (
+                  <Button
+                    title="Registrar factura y pagar"
+                    aria-label={`Registrar factura y pagar ${row.number || 'recepción'}`}
+                    variant="ghost"
+                    size="icon"
+                    className="size-8 shrink-0 rounded-lg text-emerald-600 hover:bg-emerald-500/10 hover:text-emerald-700"
+                    onClick={() => openPaymentModal(row)}
+                  >
+                    <Banknote className="size-4" />
                   </Button>
                 )}
                 {canAccessPaymentAction && (
@@ -2349,12 +2366,18 @@ export function RecepcionesCompraView({ data, summaryData, summaryLoading, summa
           const canAccessPaymentAction = Boolean(payableInvoice)
             && canPerform('PURCHASES_PAYMENTS', 'read')
             && canPerform('PURCHASES_PAYMENTS', 'pay');
+          const canAccessInvoiceAndPaymentAction = isPayableReceipt && !activeInvoice && !needsInventorySync
+            && canPerform('PURCHASES_PAYMENTS', 'read')
+            && canPerform('PURCHASES_PAYMENTS', 'pay')
+            && canPerform('PURCHASES_RECEIPTS', 'read')
+            && canPerform('PURCHASES_RECEIPTS', 'registerInvoice');
           const canAccessInvoiceAction = isPayableReceipt && !activeInvoice
             && canPerform('PURCHASES_RECEIPTS', 'read')
             && canPerform('PURCHASES_RECEIPTS', 'registerInvoice');
           return <>
             {canReceiveRow && <Button type="button" className="rounded-xl bg-primary text-primary-foreground" onClick={() => { setDetailReceipt(null); openReceiptEditor(detailReceipt.id); }}><PackageCheck className="mr-2 size-4" />Recepcionar</Button>}
             {canAccessInvoiceAction && <Button type="button" variant="outline" className="rounded-xl" onClick={() => { setDetailReceipt(null); openPaymentModal(detailReceipt, undefined, true); }}><FileText className="mr-2 size-4" />Registrar compra a crédito</Button>}
+            {canAccessInvoiceAndPaymentAction && <Button type="button" variant="outline" className="rounded-xl border-emerald-500/30 text-emerald-600 hover:bg-emerald-500/10" onClick={() => { setDetailReceipt(null); openPaymentModal(detailReceipt); }}><Banknote className="mr-2 size-4" />Registrar factura y pagar</Button>}
             {canAccessPaymentAction && <Button type="button" variant="outline" className="rounded-xl" onClick={() => { setDetailReceipt(null); openPaymentModal(detailReceipt, payableInvoice); }}><Banknote className="mr-2 size-4" />Registrar pago</Button>}
             {canAccessCreditAction && <Button type="button" variant="outline" className={cn('rounded-xl', creditBlockedReason && 'cursor-not-allowed opacity-50')} disabled={Boolean(creditBlockedReason)} onClick={() => openReceiptCredit(detailReceipt, activeInvoice)}><Send className="mr-2 size-4" />Crear nota de crédito</Button>}
             {needsInventorySync && canPerform('PURCHASES_RECEIPTS', 'read') && canPerform('PURCHASES_RECEIPTS', 'retryInventory') && <Button type="button" variant="outline" className="rounded-xl" onClick={() => { setDetailReceipt(null); void handleRepairInventory(detailReceipt); }}><RefreshCw className="mr-2 size-4" />Reintentar inventario</Button>}
