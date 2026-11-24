@@ -19,7 +19,7 @@ export interface WaOverview {
 }
 export type WaPairingState = 'open' | 'connecting' | 'close';
 export interface WaPairing { state: WaPairingState; qr?: string; pairingCode?: string; ownerPhone?: string }
-export interface WaContact { id: string; phone: string; name: string; leadId: string | null; customerId: string | null }
+export interface WaContact { id: string; phone: string; name: string; isGroup?: boolean; leadId: string | null; customerId: string | null }
 export interface WaConversation {
   id: string; lineId: string; line: { id: string; name: string; color: string | null; provider: WaProvider };
   status: WaConversationStatus; unreadCount: number; assigneeId: string | null; assigneeName: string | null;
@@ -29,7 +29,7 @@ export interface WaConversation {
 }
 export interface WaMessage {
   id: string; direction: 'IN' | 'OUT'; status: WaMessageStatus; type: string; body: string | null; mediaMime: string | null; mediaName: string | null;
-  hasMedia: boolean; error: string | null; timestamp: string; clientRef: string | null; senderName: string | null; fromPhone: boolean;
+  hasMedia: boolean; error: string | null; timestamp: string; clientRef: string | null; senderName: string | null; fromPhone: boolean; participantName?: string | null; participantPhone?: string | null;
 }
 export interface WaStats {
   from: string; to: string;

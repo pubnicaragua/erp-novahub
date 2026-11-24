@@ -1,6 +1,6 @@
 import { useCallback, useDeferredValue, useEffect, useRef, useState } from 'react';
 import { useInfiniteQuery, useQueryClient } from '@tanstack/react-query';
-import { Loader2, MessageSquare, Search } from 'lucide-react';
+import { Loader2, MessageSquare, Search, Users } from 'lucide-react';
 import { Button } from '../../ui/button';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../../ui/select';
 import { whatsappService, type WaConversation, type WaOverview, type WaScope } from '../../../services/whatsapp.service';
@@ -22,7 +22,7 @@ function ConversationRow({ item, active, onSelect, showLine }: { item: WaConvers
       onClick={onSelect}
       className={`flex w-full items-start gap-3 border-b border-border/20 px-3 py-3 text-left transition-colors hover:bg-muted/40 ${active ? 'bg-primary/[0.06] shadow-[inset_3px_0_0_hsl(var(--primary))]' : ''}`}
     >
-      <div className="flex size-11 shrink-0 items-center justify-center rounded-full text-sm font-black text-white" style={{ backgroundColor: item.line.color || FALLBACK_LINE_COLOR }}>{initials(item.contact.name)}</div>
+      <div className="flex size-11 shrink-0 items-center justify-center rounded-full text-sm font-black text-white" style={{ backgroundColor: item.line.color || FALLBACK_LINE_COLOR }}>{item.contact.isGroup ? <Users className="size-5" /> : initials(item.contact.name)}</div>
       <div className="min-w-0 flex-1">
         <div className="flex items-baseline justify-between gap-2">
           <span className={`truncate text-[13px] ${item.unreadCount ? 'font-black' : 'font-bold'}`}>{item.contact.name}</span>

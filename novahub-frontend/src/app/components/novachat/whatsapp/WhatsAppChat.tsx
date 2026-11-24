@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
-import { AlertTriangle, ArrowLeft, CheckCircle2, ChevronDown, FileText, Info, Loader2, Mic, Paperclip, RotateCcw, Send, Square, X } from 'lucide-react';
+import { AlertTriangle, ArrowLeft, CheckCircle2, ChevronDown, FileText, Info, Loader2, Mic, Paperclip, RotateCcw, Send, Square, Users, X } from 'lucide-react';
 import { Button } from '../../ui/button';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../../ui/select';
 import { toast } from '@/app/services/toast';
@@ -50,6 +50,7 @@ function Bubble({ message, onRetry }: { message: WaMessage; onRetry: (message: W
   return (
     <div className={`flex ${mine ? 'justify-end' : 'justify-start'}`}>
       <div className={`max-w-[85%] rounded-2xl px-3 py-2 text-[13px] shadow-sm sm:max-w-[70%] ${mine ? 'rounded-br-md bg-emerald-100 text-emerald-950 dark:bg-emerald-900/40 dark:text-emerald-50' : 'rounded-bl-md border border-border/40 bg-card'} ${failed ? 'ring-1 ring-rose-400' : ''}`}>
+        {!mine && (message.participantName || message.participantPhone) && <p className="mb-0.5 text-[10px] font-bold text-sky-700 dark:text-sky-300">{message.participantName || formatPhone(message.participantPhone)}</p>}
         {mine && message.senderName && <p className="mb-0.5 text-[10px] font-bold text-emerald-700 dark:text-emerald-300">{message.senderName}</p>}
         {mine && message.fromPhone && <p className="mb-0.5 text-[10px] font-bold text-muted-foreground">Enviado desde el teléfono</p>}
         {['image', 'audio', 'video', 'document', 'sticker'].includes(message.type) && <div className="mb-1"><MediaView message={message} /></div>}
@@ -133,7 +134,7 @@ export function WhatsAppChat({ conversationId, overview, onBack, onChanged }: Ch
     qc.setQueryData(key('messages', conversationId), (old: any) => (old ? { ...old, items: fn(old.items) } : old));
   };
 
-  const doSend = async (text: string, clientRef = crypto.randomUUID()) => {
+  const doSend = async (text: string, clientRef: string = crypto.randomUUID()) => {
     const optimistic: WaMessage = {
       id: `tmp-${clientRef}`, direction: 'OUT', status: 'QUEUED', type: 'text', body: text, mediaMime: null, mediaName: null, hasMedia: false,
       error: null, timestamp: new Date().toISOString(), clientRef, senderName: user?.name || null, fromPhone: false,
@@ -240,10 +241,10 @@ export function WhatsAppChat({ conversationId, overview, onBack, onChanged }: Ch
       <div className="flex min-w-0 flex-1 flex-col">
         <div className="flex flex-wrap items-center gap-2 border-b border-border/40 bg-card px-3 py-2.5">
           <Button type="button" variant="ghost" size="icon" className="size-8 md:hidden" onClick={onBack} aria-label="Volver"><ArrowLeft className="size-4" /></Button>
-          <div className="flex size-9 shrink-0 items-center justify-center rounded-full text-xs font-black text-white" style={{ backgroundColor: c.line.color || FALLBACK_LINE_COLOR }}>{initials(c.contact.name)}</div>
+          <div className="flex size-9 shrink-0 items-center justify-center rounded-full text-xs font-black text-white" style={{ backgroundColor: c.line.color || FALLBACK_LINE_COLOR }}>{c.contact.isGroup ? <Users className="size-4" /> : initials(c.contact.name)}</div>
           <div className="min-w-0 flex-1">
             <p className="truncate text-sm font-black">{c.contact.name}</p>
-            <p className="flex items-center gap-2 truncate text-[11px] text-muted-foreground">{formatPhone(c.contact.phone)} <LineChip name={c.line.name} color={c.line.color} /></p>
+            <p className="flex items-center gap-2 truncate text-[11px] text-muted-foreground">{c.contact.isGroup ? 'Grupo' : formatPhone(c.contact.phone)} <LineChip name={c.line.name} color={c.line.color} /></p>
           </div>
           {overview.isAdmin ? (
             <Select value={c.assigneeId || 'none'} onValueChange={(value) => void act(() => whatsappService.assign(c.id, value === 'none' ? null : value), 'No se pudo asignar.')}>
@@ -334,9 +335,9 @@ export function WhatsAppChat({ conversationId, overview, onBack, onChanged }: Ch
             <button type="button" onClick={() => setShowInfo(false)} aria-label="Cerrar"><X className="size-4 text-muted-foreground" /></button>
           </div>
           <div className="text-center">
-            <div className="mx-auto flex size-16 items-center justify-center rounded-full text-lg font-black text-white" style={{ backgroundColor: c.line.color || FALLBACK_LINE_COLOR }}>{initials(c.contact.name)}</div>
+            <div className="mx-auto flex size-16 items-center justify-center rounded-full text-lg font-black text-white" style={{ backgroundColor: c.line.color || FALLBACK_LINE_COLOR }}>{c.contact.isGroup ? <Users className="size-7" /> : initials(c.contact.name)}</div>
             <p className="mt-2 text-sm font-black">{c.contact.name}</p>
-            <p className="text-xs text-muted-foreground">{formatPhone(c.contact.phone)}</p>
+            <p className="text-xs text-muted-foreground">{c.contact.isGroup ? 'Grupo de WhatsApp' : formatPhone(c.contact.phone)}</p>
           </div>
           <dl className="space-y-3 text-xs">
             <div><dt className="font-bold text-muted-foreground">Número que atiende</dt><dd className="mt-1"><LineChip name={c.line.name} color={c.line.color} /></dd></div>
