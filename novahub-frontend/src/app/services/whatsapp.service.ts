@@ -10,6 +10,8 @@ export interface WaLine {
   id: string; name: string; phone: string | null; provider: WaProvider; status: WaLineStatus; color: string | null;
   qualityRating: string | null; assignmentMode: 'MANUAL' | 'ROUND_ROBIN'; lastSyncAt: string | null; lastError: string | null;
   hasCredentials: boolean; members: WaLineMember[]; openConversations: number; unread: number;
+  disconnectedAt?: string | null;
+  history?: { days: number; status: 'PENDING' | 'IMPORTING' | 'DONE'; messages: number; updatedAt: string | null } | null;
   capabilities: { deliveryStatus: boolean; phoneEchoes: boolean; serviceWindow: boolean; media: boolean } | null;
 }
 export interface WaOverview {
@@ -37,23 +39,50 @@ export interface WaStats {
   lines: Array<{ lineId: string; name: string; color: string | null; newConversations: number; avgFirstResponseSec: number | null; unanswered: number; unassigned: number; messagesIn: number; messagesOut: number }>;
   agents: Array<{ userId: string; name: string; conversations: number; avgFirstResponseSec: number | null; unanswered: number }>;
 }
+export interface WaSuiteFlags { whatsappActive: boolean; chatwootVisible: boolean }
+export interface WaReportQuery { from: string; to: string; lineIds?: string[]; agentIds?: string[]; tz?: string }
+export interface WaReport {
+  from: string; to: string; tz: string;
+  kpis: {
+    messagesIn: number; messagesOut: number; conversationsActive: number; conversationsNew: number; groupConversations: number; resolved: number;
+    messagesPerConversation: number | null; openNow: number; unansweredNow: number; unassignedNow: number;
+    firstResponse: { sample: number; avgSec: number | null; medianSec: number | null; p90Sec: number | null; answeredPct: number | null; within5Pct: number | null; within15Pct: number | null; within60Pct: number | null };
+  };
+  daily: Array<{ day: string; in: number; out: number }>;
+  hourly: Array<{ dow: number; hour: number; count: number }>;
+  lines: Array<{ lineId: string; name: string; color: string | null; conversations: number; avgFirstResponseSec: number | null; unanswered: number }>;
+  agents: Array<{ userId: string; name: string; conversations: number; avgFirstResponseSec: number | null; messagesSent: number; resolved: number; unanswered: number }>;
+  types: Array<{ type: string; count: number }>;
+  topContacts: Array<{ id: string; name: string; isGroup: boolean; messages: number }>;
+  backlogAging: Array<{ bucket: string; count: number }>;
+}
+export type WaReportSection = 'daily' | 'lines' | 'agents' | 'hourly' | 'conversations';
 export type WaScope = 'all' | 'unread' | 'unassigned' | 'mine' | 'resolved';
 export interface WaRealtimeEvent { type: 'message' | 'status' | 'conversation' | 'line' | 'resync'; tenantId?: string; lineId?: string; conversationId?: string; messageId?: string }
 
 const base = '/novachat/wa';
 const enc = encodeURIComponent;
 
+function reportParams(query: WaReportQuery) {
+  return {
+    from: query.from, to: query.to, tz: query.tz || Intl.DateTimeFormat().resolvedOptions().timeZone,
+    ...(query.lineIds?.length ? { lineIds: query.lineIds.join(',') } : {}), ...(query.agentIds?.length ? { agentIds: query.agentIds.join(',') } : {}),
+  };
+}
+
 export const whatsappService = {
   overview: (signal?: AbortSignal) => api.get<WaOverview>(`${base}/overview`, { signal }),
   createLine: (body: Record<string, unknown>) => api.post<WaLine & { pairing?: WaPairing }>(`${base}/lines`, body),
   pairingStatus: (id: string, withQr = false, signal?: AbortSignal) => api.get<WaPairing>(`${base}/lines/${enc(id)}/pairing`, { params: withQr ? { qr: '1' } : {}, signal }),
-  restartPairing: (id: string) => api.post<WaPairing>(`${base}/lines/${enc(id)}/pairing`, {}),
+  restartPairing: (id: string, body: { historyDays?: number | null } = {}) => api.post<WaPairing>(`${base}/lines/${enc(id)}/pairing`, body),
+  suiteFlags: (signal?: AbortSignal) => api.get<WaSuiteFlags>(`${base}/suite-flags`, { signal }),
+  reportSummary: (query: WaReportQuery, signal?: AbortSignal) => api.get<WaReport>(`${base}/reports/summary`, { params: reportParams(query), signal }),
   updateLine: (id: string, body: Record<string, unknown>) => api.patch<WaLine>(`${base}/lines/${enc(id)}`, body),
   setMembers: (id: string, members: Array<{ userId: string; canReply: boolean }>) => api.put<{ ok: boolean }>(`${base}/lines/${enc(id)}/members`, { members }),
   verifyLine: (id: string) => api.post<WaLine>(`${base}/lines/${enc(id)}/verify`, {}),
   archiveLine: (id: string) => api.delete<{ ok: boolean }>(`${base}/lines/${enc(id)}`),
   simulateIncoming: (id: string, body: { phone?: string; name?: string; body?: string }) => api.post<{ ok: boolean }>(`${base}/lines/${enc(id)}/simulate-incoming`, body),
-  conversations: (params: { lineId?: string; scope?: WaScope; q?: string; cursor?: string; limit?: number }, signal?: AbortSignal) =>
+  conversations: (params: { lineId?: string; lineIds?: string; scope?: WaScope; q?: string; cursor?: string; limit?: number }, signal?: AbortSignal) =>
     api.get<{ items: WaConversation[]; nextCursor: string | null }>(`${base}/conversations`, { params, signal }),
   conversation: (id: string, signal?: AbortSignal) => api.get<WaConversation>(`${base}/conversations/${enc(id)}`, { signal }),
   messages: (id: string, params: { before?: string; limit?: number } = {}, signal?: AbortSignal) =>
@@ -74,6 +103,19 @@ export const whatsappService = {
   setStatus: (id: string, status: WaConversationStatus) => api.patch<{ ok: boolean }>(`${base}/conversations/${enc(id)}/status`, { status }),
   stats: (params: { from?: string; to?: string }, signal?: AbortSignal) => api.get<WaStats>(`${base}/stats`, { params, signal }),
 };
+
+/** Descarga un reporte en CSV con la sesión actual. */
+export async function downloadWhatsAppReport(section: WaReportSection, query: WaReportQuery): Promise<void> {
+  const params = new URLSearchParams({ section, ...reportParams(query) } as Record<string, string>);
+  const response = await fetch(getApiUrl(`${base}/reports/export?${params.toString()}`), { headers: { ...getAuthHeaders() } });
+  if (!response.ok) throw new Error('No se pudo generar el reporte.');
+  const name = /filename="([^"]+)"/.exec(response.headers.get('Content-Disposition') || '')?.[1] || `whatsapp-${section}.csv`;
+  const url = URL.createObjectURL(await response.blob());
+  const link = document.createElement('a');
+  link.href = url; link.download = name;
+  document.body.appendChild(link); link.click(); link.remove();
+  window.setTimeout(() => URL.revokeObjectURL(url), 10_000);
+}
 
 /** Descarga un archivo de una conversación con la sesión actual y devuelve una URL temporal para mostrarlo. */
 export async function fetchWhatsAppMediaUrl(messageId: string, signal?: AbortSignal): Promise<string> {

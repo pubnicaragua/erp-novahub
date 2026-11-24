@@ -1,15 +1,16 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useQueryClient } from '@tanstack/react-query';
-import { BarChart3, Inbox, Loader2, Smartphone, WifiOff } from 'lucide-react';
+import { AlertTriangle, BarChart3, FileBarChart, Inbox, Loader2, Smartphone, WifiOff } from 'lucide-react';
 import { useTenantQuery } from '../../../hooks/useTenantQuery';
 import { subscribeToWhatsAppEvents, whatsappService, type WaRealtimeEvent } from '../../../services/whatsapp.service';
 import { WhatsAppInbox } from './WhatsAppInbox';
 import { WhatsAppLines } from './WhatsAppLines';
 import { WhatsAppTeam } from './WhatsAppTeam';
+import { WhatsAppReports } from './WhatsAppReports';
 import { useWaTenantKey } from './WhatsAppChat';
 import { WhatsAppEventsContext } from './whatsappUi';
 
-type Tab = 'inbox' | 'lines' | 'team';
+type Tab = 'inbox' | 'lines' | 'team' | 'reports';
 
 export function WhatsAppModule() {
   const qc = useQueryClient();
@@ -63,7 +64,9 @@ export function WhatsAppModule() {
     { id: 'inbox', label: 'Bandeja', icon: Inbox, badge: totalUnread },
     { id: 'lines', label: 'Mis números', icon: Smartphone },
     { id: 'team', label: 'Equipo', icon: BarChart3, admin: true },
+    { id: 'reports', label: 'Reportes', icon: FileBarChart, admin: true },
   ];
+  const down = data.lines.filter((l) => l.provider === 'QR' && (l.status === 'DISCONNECTED' || l.status === 'ERROR') && l.disconnectedAt);
 
   return (
     <WhatsAppEventsContext.Provider value={api}>
@@ -84,10 +87,21 @@ export function WhatsAppModule() {
           </div>
           {!online && <span className="ml-auto inline-flex items-center gap-1.5 rounded-full bg-amber-100 px-3 py-1 text-[11px] font-bold text-amber-900"><WifiOff className="size-3.5" />Reconectando…</span>}
         </div>
+        {down.length > 0 && (
+          <div role="alert" className="flex flex-wrap items-center gap-3 border-b border-rose-300/50 bg-rose-50 px-4 py-2.5 text-xs text-rose-900 dark:bg-rose-950/30 dark:text-rose-100">
+            <AlertTriangle className="size-4 shrink-0" />
+            <span className="min-w-0 flex-1 font-bold">
+              {down.length === 1 ? `El número «${down[0].name}» está desconectado.` : `${down.length} números están desconectados: ${down.map((l) => l.name).join(', ')}.`}{' '}
+              <span className="font-normal">{data.isAdmin ? 'No se reciben ni se envían mensajes hasta que lo vuelvas a vincular.' : 'Avisa al administrador para que lo vuelva a vincular.'}</span>
+            </span>
+            {data.isAdmin && <button type="button" onClick={() => setTab('lines')} className="shrink-0 rounded-lg bg-rose-600 px-3 py-1.5 font-bold text-white hover:bg-rose-700">Volver a vincular</button>}
+          </div>
+        )}
         <div className="flex min-h-0 flex-1">
           {tab === 'inbox' && <WhatsAppInbox overview={data} />}
           {tab === 'lines' && <WhatsAppLines overview={data} />}
           {tab === 'team' && data.isAdmin && <WhatsAppTeam />}
+          {tab === 'reports' && data.isAdmin && <WhatsAppReports overview={data} />}
         </div>
       </div>
     </WhatsAppEventsContext.Provider>

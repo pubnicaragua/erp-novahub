@@ -1,12 +1,13 @@
 import { useState } from 'react';
 import { useQueryClient } from '@tanstack/react-query';
 import { Loader2, Search } from 'lucide-react';
+import { Switch } from '../../ui/switch';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../../ui/select';
 import { toast } from '@/app/services/toast';
 import { api, getApiErrorMessage } from '../../../services/api';
 import { useTenantQuery } from '../../../hooks/useTenantQuery';
 
-interface PlanRow { id: string; name: string; plan: { planName: string; maxLines: number; isActive: boolean } | null; linesUsed: number }
+interface PlanRow { id: string; name: string; plan: { planName: string; maxLines: number; isActive: boolean } | null; linesUsed: number; chatwootVisible?: boolean }
 interface PlansResponse { plans: Array<{ code: string; name: string; maxLines: number; priceUsd: number }>; tenants: PlanRow[] }
 
 const base = '/novachat/wa/admin';
@@ -32,11 +33,24 @@ export function WhatsAppPlatformPlans() {
     }
   };
 
+  const toggleChatwoot = async (row: PlanRow, enabled: boolean) => {
+    setSaving(row.id);
+    try {
+      await api.put(`${base}/chatwoot/${encodeURIComponent(row.id)}`, { enabled });
+      toast.success(enabled ? `${row.name} ahora ve los canales de Chatwoot.` : `${row.name} ya no ve los canales de Chatwoot.`);
+      await qc.invalidateQueries({ queryKey: ['tenant-module'] });
+    } catch (error) {
+      toast.error(getApiErrorMessage(error, 'No se pudo cambiar la visibilidad.'));
+    } finally {
+      setSaving(null);
+    }
+  };
+
   const plans = data.data?.plans || [];
   return (
     <div className="min-h-0 flex-1 overflow-y-auto p-4 sm:p-6">
       <div className="mx-auto max-w-4xl space-y-4">
-        <div><p className="text-base font-black">Planes de WhatsApp multilínea</p><p className="text-xs text-muted-foreground">Activa el servicio por empresa y elige cuántos números puede conectar. Sin plan activo, la empresa no ve esta función.</p></div>
+        <div><p className="text-base font-black">Planes de WhatsApp multilínea</p><p className="text-xs text-muted-foreground">Activa el servicio por empresa y elige cuántos números puede conectar. Sin plan activo, la empresa no ve esta función. «Ve Chatwoot» controla si la empresa ve la pestaña de canales de Chatwoot (apágala si no quieres que sepa que existe).</p></div>
         <div className="relative max-w-sm">
           <Search className="absolute left-3 top-1/2 size-3.5 -translate-y-1/2 text-muted-foreground" />
           <input value={q} onChange={(e) => setQ(e.target.value)} placeholder="Buscar empresa" aria-label="Buscar empresa" className="h-9 w-full rounded-xl border border-border/60 bg-background pl-8 pr-3 text-xs outline-none focus:border-primary" />
@@ -45,8 +59,8 @@ export function WhatsAppPlatformPlans() {
         {data.isError && <p className="rounded-xl bg-rose-50 p-3 text-sm text-rose-800">No se pudieron cargar las empresas.</p>}
         {data.data && (
           <div className="overflow-x-auto rounded-2xl border border-border/50 bg-card">
-            <table className="w-full min-w-[520px] text-xs">
-              <thead><tr className="border-b border-border/40 text-left text-[10px] uppercase tracking-wider text-muted-foreground"><th className="px-4 py-3">Empresa</th><th className="px-3 py-3">Plan</th><th className="px-4 py-3 text-right">Números en uso</th></tr></thead>
+            <table className="w-full min-w-[640px] text-xs">
+              <thead><tr className="border-b border-border/40 text-left text-[10px] uppercase tracking-wider text-muted-foreground"><th className="px-4 py-3">Empresa</th><th className="px-3 py-3">Plan</th><th className="px-4 py-3 text-right">Números en uso</th><th className="px-4 py-3 text-center">Ve Chatwoot</th></tr></thead>
               <tbody>
                 {data.data.tenants.map((row) => {
                   const active = row.plan?.isActive ? plans.find((p) => p.name === row.plan?.planName)?.code || 'CUSTOM' : 'none';
@@ -67,10 +81,11 @@ export function WhatsAppPlatformPlans() {
                         </div>
                       </td>
                       <td className="px-4 py-3 text-right tabular-nums">{row.linesUsed}{row.plan?.isActive ? ` / ${row.plan.maxLines}` : ''}</td>
+                      <td className="px-4 py-3 text-center"><Switch checked={row.chatwootVisible !== false} onCheckedChange={(on) => void toggleChatwoot(row, on)} disabled={saving === row.id} aria-label={`Mostrar canales de Chatwoot a ${row.name}`} /></td>
                     </tr>
                   );
                 })}
-                {data.data.tenants.length === 0 && <tr><td colSpan={3} className="px-4 py-8 text-center text-muted-foreground">No se encontraron empresas.</td></tr>}
+                {data.data.tenants.length === 0 && <tr><td colSpan={4} className="px-4 py-8 text-center text-muted-foreground">No se encontraron empresas.</td></tr>}
               </tbody>
             </table>
           </div>

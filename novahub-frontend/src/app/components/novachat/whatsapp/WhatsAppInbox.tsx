@@ -2,11 +2,11 @@ import { useCallback, useDeferredValue, useEffect, useRef, useState } from 'reac
 import { useInfiniteQuery, useQueryClient } from '@tanstack/react-query';
 import { Loader2, MessageSquare, Search } from 'lucide-react';
 import { Button } from '../../ui/button';
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../../ui/select';
 import { whatsappService, type WaConversation, type WaOverview, type WaScope } from '../../../services/whatsapp.service';
 import { WhatsAppChat, useWaTenantKey } from './WhatsAppChat';
-import { FALLBACK_LINE_COLOR, LineChip, formatListTime, useWhatsAppEvents } from './whatsappUi';
+import { LineChip, formatListTime, useWhatsAppEvents } from './whatsappUi';
 import { WaAvatar } from './WaAvatar';
+import { LineMultiSelect } from './LineMultiSelect';
 
 const SCOPES: Array<{ id: WaScope; label: string }> = [
   { id: 'all', label: 'Todos' },
@@ -49,16 +49,19 @@ export function WhatsAppInbox({ overview }: { overview: WaOverview }) {
   const qc = useQueryClient();
   const key = useWaTenantKey();
   const events = useWhatsAppEvents();
-  const [lineId, setLineId] = useState('all');
+  const [lineIds, setLineIds] = useState<string[]>([]);
   const [scope, setScope] = useState<WaScope>('all');
   const [search, setSearch] = useState('');
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const q = useDeferredValue(search.trim());
+  // Solo cuentan los números que siguen existiendo; vacío = todos.
+  const validLineIds = lineIds.filter((id) => overview.lines.some((l) => l.id === id));
+  const lineKey = [...validLineIds].sort().join(',');
   const refreshTimer = useRef<number | null>(null);
 
   const list = useInfiniteQuery({
-    queryKey: key('conversations', lineId, scope, q),
-    queryFn: ({ pageParam, signal }) => whatsappService.conversations({ lineId: lineId === 'all' ? undefined : lineId, scope, q: q || undefined, cursor: pageParam || undefined, limit: 30 }, signal),
+    queryKey: key('conversations', lineKey, scope, q),
+    queryFn: ({ pageParam, signal }) => whatsappService.conversations({ lineIds: lineKey || undefined, scope, q: q || undefined, cursor: pageParam || undefined, limit: 30 }, signal),
     initialPageParam: '' as string,
     getNextPageParam: (last) => last.nextCursor || undefined,
     staleTime: 10_000,
@@ -82,7 +85,6 @@ export function WhatsAppInbox({ overview }: { overview: WaOverview }) {
     void qc.invalidateQueries({ queryKey: key('overview') });
   }, [qc, key]);
 
-  const totalUnread = overview.lines.reduce((sum, l) => sum + l.unread, 0);
   const connected = overview.lines.filter((l) => l.status === 'CONNECTED').length;
 
   if (!overview.lines.length) {
@@ -101,17 +103,7 @@ export function WhatsAppInbox({ overview }: { overview: WaOverview }) {
     <div className="flex min-h-0 flex-1">
       <div className={`flex w-full shrink-0 flex-col border-r border-border/40 bg-card md:w-[22rem] ${selectedId ? 'hidden md:flex' : 'flex'}`}>
         <div className="space-y-2.5 border-b border-border/40 p-3">
-          <Select value={lineId} onValueChange={setLineId}>
-            <SelectTrigger className="h-10 rounded-xl text-xs font-bold" aria-label="Número de WhatsApp"><SelectValue /></SelectTrigger>
-            <SelectContent>
-              <SelectItem value="all">Todos los números ({connected}/{overview.lines.length}){totalUnread ? ` · ${totalUnread} sin leer` : ''}</SelectItem>
-              {overview.lines.map((l) => (
-                <SelectItem key={l.id} value={l.id}>
-                  <span className="inline-flex items-center gap-2"><span className="size-2.5 rounded-full" style={{ backgroundColor: l.color || FALLBACK_LINE_COLOR }} />{l.name}{l.unread ? ` · ${l.unread}` : ''}{l.status !== 'CONNECTED' ? ' · desconectado' : ''}</span>
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
+          <LineMultiSelect lines={overview.lines.map((l) => ({ id: l.id, name: l.name, color: l.color, unread: l.unread, disconnected: l.status !== 'CONNECTED' }))} value={validLineIds} onChange={setLineIds} allLabel={`Todos los números (${connected}/${overview.lines.length})`} />
           <div className="relative">
             <Search className="absolute left-3 top-1/2 size-3.5 -translate-y-1/2 text-muted-foreground" />
             <input
@@ -140,7 +132,7 @@ export function WhatsAppInbox({ overview }: { overview: WaOverview }) {
             <p className="p-8 text-center text-xs text-muted-foreground">{q ? 'Nada coincide con tu búsqueda.' : 'No hay conversaciones en esta vista.'}</p>
           )}
           {items.map((item) => (
-            <ConversationRow key={item.id} item={item} active={item.id === selectedId} showLine={lineId === 'all' && overview.lines.length > 1} onSelect={() => setSelectedId(item.id)} />
+            <ConversationRow key={item.id} item={item} active={item.id === selectedId} showLine={(validLineIds.length === 0 || validLineIds.length > 1) && overview.lines.length > 1} onSelect={() => setSelectedId(item.id)} />
           ))}
           {list.hasNextPage && (
             <div className="p-3 text-center">

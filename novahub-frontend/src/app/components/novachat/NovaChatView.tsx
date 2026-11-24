@@ -22,7 +22,7 @@ import {
 import { asList, useTenantQuery } from '../../hooks/useTenantQuery';
 import { useNotificationDomainRefresh } from '../../hooks/useNotificationDomainRefresh';
 
-const NOVACHAT_ENABLED = import.meta.env.VITE_NOVACHAT_ENABLED === 'true';
+const NOVACHAT_ENV_ENABLED = import.meta.env.VITE_NOVACHAT_ENABLED === 'true';
 
 const CHANNEL_ICONS: Record<string, LucideIcon> = {
   WHATSAPP: Phone,
@@ -62,7 +62,9 @@ function formatRelativeTime(date: string) {
   return `Hace ${days}d`;
 }
 
-export function NovaChatView() {
+/** `forceEnabled` lo usa Nova Suite cuando ya comprobó que la empresa tiene canales conectados (así no se siembran datos de ejemplo). */
+export function NovaChatView({ forceEnabled = false }: { forceEnabled?: boolean } = {}) {
+  const NOVACHAT_ENABLED = forceEnabled || NOVACHAT_ENV_ENABLED;
   const [selectedConversation, setSelectedConversation] = useState<ChatConversation | null>(null);
   const [newMessage, setNewMessage] = useState('');
   const [sending, setSending] = useState(false);
