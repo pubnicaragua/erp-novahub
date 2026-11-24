@@ -1,4 +1,4 @@
-import { api, getApiUrl, getAuthHeaders } from './api';
+import { api, apiRequest, getApiUrl, getAuthHeaders } from './api';
 
 export type WaProvider = 'META_CLOUD' | 'QR' | 'SIMULATED';
 export type WaLineStatus = 'PENDING' | 'CONNECTED' | 'DISCONNECTED' | 'ERROR' | 'ARCHIVED';
@@ -100,7 +100,8 @@ export const whatsappService = {
     form.append('file', file, file.name);
     if (caption) form.append('caption', caption);
     form.append('clientRef', clientRef);
-    return api.post<WaMessage>(`${base}/conversations/${enc(id)}/media`, form);
+    // Archivos: va como multipart (rawBody). Con `api.post` se convertiría a JSON y el servidor nunca recibiría el archivo.
+    return apiRequest<WaMessage>(`${base}/conversations/${enc(id)}/media`, { method: 'POST', rawBody: form });
   },
   retry: (messageId: string) => api.post<WaMessage>(`${base}/messages/${enc(messageId)}/retry`, {}),
   assign: (id: string, assigneeId: string | null) => api.patch<{ ok: boolean }>(`${base}/conversations/${enc(id)}/assign`, { assigneeId }),
