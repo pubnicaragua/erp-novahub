@@ -42,7 +42,6 @@ export function FinanceDashboardView({ incomes, expenses, undatedExpenses = [], 
   const { user, canPerform } = useAuth();
   const canReadSales = canPerform('SALES', 'view');
   const canReadPurchases = canPerform('PURCHASES', 'view')
-    || canPerform('FINANCIAL_PAYABLES', 'view')
     || canPerform('FINANCIAL_DASHBOARD', 'view')
     || canPerform('FINANCIAL', 'view');
   const canReadFinancial = canPerform('FINANCIAL', 'view');
