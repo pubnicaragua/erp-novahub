@@ -30,7 +30,7 @@ function ConversationRow({ item, active, onSelect, showLine }: { item: WaConvers
           <span className={`shrink-0 text-[10px] ${item.unreadCount ? 'font-black text-emerald-600' : 'text-muted-foreground'}`}>{formatListTime(item.lastMessageAt)}</span>
         </div>
         <div className="mt-0.5 flex items-center gap-2">
-          <p className={`flex-1 truncate text-xs ${item.unreadCount ? 'font-bold text-foreground' : 'text-muted-foreground'}`}>{item.lastMessagePreview || 'Sin mensajes'}</p>
+          <p className={`flex-1 truncate text-xs ${item.unreadCount ? 'font-bold text-foreground' : 'text-muted-foreground'}`}>{item.lastMessagePreview?.replace(/@\d{8,20}/g, '@…') || 'Sin mensajes'}</p>
           {item.unreadCount > 0 && <span className="flex h-5 min-w-5 shrink-0 items-center justify-center rounded-full bg-emerald-500 px-1.5 text-[10px] font-black text-white">{item.unreadCount > 99 ? '99+' : item.unreadCount}</span>}
         </div>
         <div className="mt-1.5 flex flex-wrap items-center gap-1.5">
