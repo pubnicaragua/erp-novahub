@@ -295,6 +295,7 @@ export const supplierPricesService = {
 
 // ─── SOLICITUDES DE COMPRA ──────────────────────────────────────────────────
 export const purchaseRequestsService = {
+  getRequesterOptions: (search?: string, signal?: AbortSignal) => api.get<PurchaseRequesterOptions>('/purchases/requests/requesters', { params: { search }, signal }),
   getAll: (filters?: ApiFilters, signal?: AbortSignal) => api.get<PaginatedResponse<PurchaseRequest>>('/purchases/requests', { params: filters as any, signal }),
   getSummary: (filters?: ApiFilters, signal?: AbortSignal) => api.get<PurchaseRequestSummary>('/purchases/requests/summary', { params: filters as any, signal }),
   getById: (id: string) => api.get<PurchaseRequest>(`/purchases/requests/${id}`),
@@ -304,6 +305,11 @@ export const purchaseRequestsService = {
   changeStatus: (id: string, status: string, reason?: string, supplierId?: string) => api.post<PurchaseRequest>(`/purchases/requests/${id}/status`, { status, reason, supplierId }),
   approve: (id: string, supplierId: string, idempotencyKey?: string) => api.idempotentPost<any>(`/purchases/requests/${id}/approve`, { supplierId }, idempotencyKey),
 };
+
+export interface PurchaseRequesterOptions {
+  mode: 'EMPLOYEE' | 'SALES_SELLER';
+  data: Array<{ id: string; name: string; code?: string }>;
+}
 
 export interface PurchaseRequestSummary {
   total: number;

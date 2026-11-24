@@ -12,6 +12,7 @@ import { BankAccountSelect } from '../ui/BankAccountSelect';
 import { useTenantQuery, invalidateTenantQueries } from '../../hooks/useTenantQuery';
 import { useCurrency } from '../../contexts/CurrencyContext';
 import { salesSellersService, type SalesSellerCommissionRule } from '../../services/sales-sellers.service';
+import { areCommissionScaleRulesConsecutive } from '../../utils/commission-scale';
 
 type Section = 'vendedores' | 'comisiones' | 'metas' | 'pagos';
 type CommissionBasis = 'PER_SALE' | 'MONTHLY_TOTAL';
@@ -120,7 +121,8 @@ export function VendedoresView({ historicalOnly = false }: { historicalOnly?: bo
       }
       if (rules[0].minAmount !== 0 || rules[rules.length - 1].maxAmount !== null) throw new Error('La escala debe iniciar en cero y terminar sin límite máximo.');
       for (let index = 0; index < rules.length - 1; index += 1) {
-        if (rules[index].maxAmount === null || Math.round(rules[index + 1].minAmount * 100) !== Math.round(rules[index].maxAmount * 100) + 1) {
+        const currentMax = rules[index].maxAmount;
+        if (currentMax === null || !areCommissionScaleRulesConsecutive(currentMax, rules[index + 1].minAmount)) {
           throw new Error(`Los tramos ${index + 1} y ${index + 2} deben ser consecutivos.`);
         }
       }

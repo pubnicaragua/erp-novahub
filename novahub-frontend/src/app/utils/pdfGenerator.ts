@@ -4347,7 +4347,12 @@ export const generatePurchaseRequestPDF = async ({
 }) => {
   ensurePdfBrowserPreview('Solicitud de compra');
   const requestLines = Array.isArray(request.items) ? request.items : Array.isArray(request.lines) ? request.lines : [];
-  const configured = await renderConfiguredDefinition({ targetKey: 'compras.purchase-request', tenantName, tenantLogo, fileName: buildLabeledPdfFileName('Solicitud de compra', request.number, 'configured'), data: { document: { title: 'SOLICITUD DE COMPRA', number: request.number || request.id || 'N/A', date: request.createdAt || request.date, status: request.status, extra: [request.requiredDate ? `Fecha requerida: ${new Date(request.requiredDate).toLocaleDateString('es-NI')}` : '', request.justification ? `Justificación: ${request.justification}` : ''].filter(Boolean).join(' · '), notes: request.notes || '' }, party: { ...(request.requester || request.requestedBy || {}), name: request.requester?.name || request.requestedBy?.name || '' }, items: requestLines.map((line: any) => ({ description: commercialItemDescription(line, line.description || line.product?.name || 'Producto'), quantity: line.quantity || 0, unitPrice: line.unitPrice || '', total: line.total || '' })), totals: { total: formatAmount(Number(request.total || 0), request.currency, request.exchangeRate) } } });
+  const requesterName = request.requester?.name
+    || request.requestedBy?.name
+    || [request.requestedBy?.firstName, request.requestedBy?.lastName].filter(Boolean).join(' ').trim()
+    || request.requestedBySalesSeller?.name
+    || '';
+  const configured = await renderConfiguredDefinition({ targetKey: 'compras.purchase-request', tenantName, tenantLogo, fileName: buildLabeledPdfFileName('Solicitud de compra', request.number, 'configured'), data: { document: { title: 'SOLICITUD DE COMPRA', number: request.number || request.id || 'N/A', date: request.createdAt || request.date, status: request.status, extra: [request.requiredDate ? `Fecha requerida: ${new Date(request.requiredDate).toLocaleDateString('es-NI')}` : '', request.justification ? `Justificación: ${request.justification}` : ''].filter(Boolean).join(' · '), notes: request.notes || '' }, party: { ...(request.requester || request.requestedBy || request.requestedBySalesSeller || {}), name: requesterName }, items: requestLines.map((line: any) => ({ description: commercialItemDescription(line, line.description || line.product?.name || 'Producto'), quantity: line.quantity || 0, unitPrice: line.unitPrice || '', total: line.total || '' })), totals: { total: formatAmount(Number(request.total || 0), request.currency, request.exchangeRate) } } });
   if (configured) return configured.doc;
   const settings = await getPdfDesignSettings('compras.purchase-request');
   const doc = new jsPDF(pdfDesignPaper(settings));
@@ -4378,7 +4383,7 @@ export const generatePurchaseRequestPDF = async ({
     margin: { left: doc.internal.pageSize.getWidth() * 0.05, right: doc.internal.pageSize.getWidth() * 0.05 },
     head: [['Campo', 'Detalle']],
     body: [
-      ['Solicitante', request.requestedBy ? `${request.requestedBy.firstName || ''} ${request.requestedBy.lastName || ''}`.trim() : '-'],
+      ['Solicitante', requesterName || '-'],
       ['Bodega', request.warehouse?.name || '-'],
       ['Prioridad', getPurchasePriorityOption(request.priority).label],
       ['Fecha requerida', request.requiredDate ? new Date(request.requiredDate).toLocaleDateString() : '-'],

@@ -87,6 +87,11 @@ function normalizeRequestStatus(status?: string): 'PENDING_APPROVAL' | 'APPROVED
   return 'PENDING_APPROVAL';
 }
 
+function getPurchaseRequestRequesterName(request: PurchaseRequest): string {
+  const employeeName = [request.requestedBy?.firstName, request.requestedBy?.lastName].filter(Boolean).join(' ').trim();
+  return employeeName || request.requestedBySalesSeller?.name || '';
+}
+
 interface SolicitudCompraViewProps {
   data: PurchaseRequest[];
   summaryData?: PurchaseRequestSummary;
@@ -158,8 +163,7 @@ export function SolicitudCompraView({ data, summaryData, summaryLoading, summary
       if (!search) return true;
       const s = search.toLowerCase();
       return (r.number || '').toLowerCase().includes(s)
-        || (r.requestedBy?.firstName?.toLowerCase().includes(s))
-        || (r.requestedBy?.lastName?.toLowerCase().includes(s))
+        || getPurchaseRequestRequesterName(r).toLowerCase().includes(s)
         || (r.warehouse?.name?.toLowerCase().includes(s))
         || (r.supplier?.name?.toLowerCase().includes(s))
         || (r.management?.[0]?.supplier?.name?.toLowerCase().includes(s));
@@ -193,8 +197,7 @@ export function SolicitudCompraView({ data, summaryData, summaryLoading, summary
         if (!search) return true;
         const value = search.toLowerCase();
         return (request.number || '').toLowerCase().includes(value)
-          || (request.requestedBy?.firstName?.toLowerCase().includes(value))
-          || (request.requestedBy?.lastName?.toLowerCase().includes(value))
+          || getPurchaseRequestRequesterName(request).toLowerCase().includes(value)
           || (request.warehouse?.name?.toLowerCase().includes(value))
           || (request.supplier?.name?.toLowerCase().includes(value))
           || (request.management?.[0]?.supplier?.name?.toLowerCase().includes(value));
@@ -250,12 +253,12 @@ export function SolicitudCompraView({ data, summaryData, summaryLoading, summary
         if (statusFilter !== 'all' && normalizeRequestStatus(request.status) !== statusFilter) return false;
         if (!search) return true;
         const value = search.toLowerCase();
-        return [request.number, request.requestedBy?.firstName, request.requestedBy?.lastName, request.warehouse?.name, request.supplier?.name, request.management?.[0]?.supplier?.name].filter(Boolean).join(' ').toLowerCase().includes(value);
+        return [request.number, getPurchaseRequestRequesterName(request), request.warehouse?.name, request.supplier?.name, request.management?.[0]?.supplier?.name].filter(Boolean).join(' ').toLowerCase().includes(value);
       });
       createReportWorkbook({
         fileName: 'solicitudes_de_compra.xlsx',
         sheets: [
-          { name: 'Solicitudes', rows: exportRows.map((request) => { const management = request.management?.[0]; const sourceCurrency = management?.currency || displayCurrency; return { Numero: request.number || '—', Solicitante: [request.requestedBy?.firstName, request.requestedBy?.lastName].filter(Boolean).join(' ') || '—', Proveedor: request.supplier?.name || management?.supplier?.name || 'Sin proveedor', Fecha: request.date || '—', Estado: STATUS_LABELS[normalizeRequestStatus(request.status)], Total: convertDisplayAmount(Number(management?.total || 0), sourceCurrency, management?.exchangeRate), Moneda: displayMode === 'ORIGINAL' ? sourceCurrency : displayCurrency }; }) },
+          { name: 'Solicitudes', rows: exportRows.map((request) => { const management = request.management?.[0]; const sourceCurrency = management?.currency || displayCurrency; return { Numero: request.number || '—', Solicitante: getPurchaseRequestRequesterName(request) || '—', Proveedor: request.supplier?.name || management?.supplier?.name || 'Sin proveedor', Fecha: request.date || '—', Estado: STATUS_LABELS[normalizeRequestStatus(request.status)], Total: convertDisplayAmount(Number(management?.total || 0), sourceCurrency, management?.exchangeRate), Moneda: displayMode === 'ORIGINAL' ? sourceCurrency : displayCurrency }; }) },
           { name: 'Detalle', rows: exportRows.flatMap((request) => (request.items || []).map((item: any) => ({ Solicitud: request.number || request.id, Producto: item.product?.name || item.name || item.description || '—', Codigo: item.product?.code || item.sku || '—', Cantidad: Number(item.quantity || 0), Observaciones: item.notes || '—' }))) },
         ],
         filters: { Buscar: search, Estado: statusFilter, Alcance: scope === 'all' ? 'Todos los registros' : 'Página visible', Moneda: displayMode === 'ORIGINAL' ? 'Original por operación' : displayCurrencyLabel },
@@ -358,7 +361,7 @@ export function SolicitudCompraView({ data, summaryData, summaryLoading, summary
       key: 'requestedBy',
       header: 'Solicitante',
       width: '190px',
-      render: (_value, row) => <span className="text-xs">{`${row.requestedBy?.firstName || ''} ${row.requestedBy?.lastName || ''}`.trim() || '—'}</span>,
+      render: (_value, row) => <span className="text-xs">{getPurchaseRequestRequesterName(row) || '—'}</span>,
     },
     {
       key: 'date',
@@ -538,7 +541,7 @@ export function SolicitudCompraView({ data, summaryData, summaryLoading, summary
           status: STATUS_LABELS[normalizeRequestStatus(request.status)],
           supplier: request.supplier?.name || management?.supplier?.name || 'Sin proveedor',
           fields: [
-            { label: 'Solicitante', value: `${request.requestedBy?.firstName || ''} ${request.requestedBy?.lastName || ''}`.trim() || '—' },
+            { label: 'Solicitante', value: getPurchaseRequestRequesterName(request) || '—' },
             { label: 'Bodega', value: request.warehouse?.name || '—' },
             { label: 'Prioridad', value: getPurchasePriorityOption(request.priority).label },
             { label: 'Fecha requerida', value: request.requiredDate ? new Date(request.requiredDate).toLocaleDateString('es-NI') : '—' },
@@ -579,7 +582,7 @@ export function SolicitudCompraView({ data, summaryData, summaryLoading, summary
         { label: 'Bodega', value: request.warehouse?.name || 'No indicada' },
       ],
       metadata: [
-        { label: 'Solicitante', value: `${request.requestedBy?.firstName || ''} ${request.requestedBy?.lastName || ''}`.trim() || 'No disponible' },
+        { label: 'Solicitante', value: getPurchaseRequestRequesterName(request) || 'No disponible' },
         { label: 'Proveedor', value: request.supplier?.name || management?.supplier?.name || 'No asignado' },
         { label: 'Fecha requerida', value: request.requiredDate ? new Date(request.requiredDate).toLocaleDateString('es-NI') : 'No disponible' },
         ...(management ? [{ label: 'Cotización', value: management.quotationNumber || 'No indicada' }] : []),
@@ -714,7 +717,7 @@ export function SolicitudCompraView({ data, summaryData, summaryLoading, summary
                   </div>
                   <div className="border-t border-border/30 pt-3">
                     <p className="truncate text-xs text-muted-foreground">
-                      Solicitante: <span className="font-semibold text-foreground">{req.requestedBy?.firstName} {req.requestedBy?.lastName}</span>
+                      Solicitante: <span className="font-semibold text-foreground">{getPurchaseRequestRequesterName(req) || '—'}</span>
                     </p>
                     <div className="mt-3">{renderRequestActions(req, true)}</div>
                   </div>

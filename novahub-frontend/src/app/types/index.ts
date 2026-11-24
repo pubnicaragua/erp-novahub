@@ -2157,8 +2157,10 @@ export interface PurchaseRequest {
   supplier?: Supplier;
   branchId?: string;
   branch?: any;
-  requestedById: string;
-  requestedBy?: { id: string; firstName: string; lastName: string; employeeNumber?: string };
+  requestedById?: string | null;
+  requestedBy?: { id: string; firstName: string; lastName: string; employeeNumber?: string } | null;
+  requestedBySalesSellerId?: string | null;
+  requestedBySalesSeller?: { id: string; code?: string; name: string } | null;
   userId?: string;
   date: string;
   requiredDate?: string;

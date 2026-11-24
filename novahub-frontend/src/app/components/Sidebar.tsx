@@ -815,6 +815,8 @@ export function Sidebar({ activeModule, activeSubModule, onModuleChange, isOpen,
 
   const hasSubmenuAccess = (parentId: Module | 'overview', subId: string) => {
     if (!user || parentId === 'overview') return false;
+    if (parentId === 'ventas' && subId === 'vendedores'
+      && (user.enabledModules || []).some((module) => isEnterpriseModuleInFamily(String(module), 'HR'))) return false;
     if (parentId === 'auditoria' && (user.isPlatformAdmin || user.auditWorkspaceEnabled)) return true;
     if (parentId === 'suscripciones' && user.isPlatformAdmin) {
       if (user.role === 'platform_quote_user') return subId === 'quotes';

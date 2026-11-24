@@ -94,10 +94,11 @@ export function VentasPage({ activeSubModule, onSubModuleChange, isSidebarCollap
   const customerLoansEnabled = Boolean(customerLoansCapability.data?.enabled);
   const canViewSalesSection = useCallback((sectionId: string) => {
     const section = SALES_SECTIONS.find((candidate) => candidate.id === sectionId);
+    if (sectionId === 'vendedores' && hrSellerDirectoryEnabled) return false;
     if (sectionId === 'leads' && !leadsEnabled) return false;
     if (sectionId === 'prestamos' && !customerLoansEnabled) return false;
     return Boolean(section?.requiredModules.some((module) => canPerform(module, 'view')));
-  }, [canPerform, customerLoansEnabled, leadsEnabled]);
+  }, [canPerform, customerLoansEnabled, hrSellerDirectoryEnabled, leadsEnabled]);
   const queryClient = useQueryClient();
   const [activeSection, setActiveSection] = useState(activeSubModule || 'clientes');
   const [invoiceDraft, setInvoiceDraft] = useState<Partial<Invoice> | null>(null);
@@ -730,7 +731,7 @@ export function VentasPage({ activeSubModule, onSubModuleChange, isSidebarCollap
                   initialSection={controlCajaTargetParams?.section}
                 />
               )}
-              {activeSection === 'vendedores' && <VendedoresView historicalOnly={hrSellerDirectoryEnabled} />}
+              {activeSection === 'vendedores' && !hrSellerDirectoryEnabled && <VendedoresView />}
             </motion.div>
           </AnimatePresence>
           </Tabs>

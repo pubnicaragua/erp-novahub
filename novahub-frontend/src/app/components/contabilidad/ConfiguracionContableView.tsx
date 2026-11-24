@@ -35,6 +35,7 @@ import { CHART_ACCOUNT_CSV_HEADERS, csvRowsToText, downloadXlsx, templateRows } 
 import { accountingList, useAccountingQuery } from '../../hooks/useAccountingQuery'
 import { useAuth } from '../../contexts/AuthContext'
 import { todayIso } from '../../utils/dateFormat'
+import { isEnterpriseModuleInFamily } from '../../constants/enterpriseModules'
 
 const INDUSTRIES = [
   { value: 'RETAIL', label: 'Comercio Minorista' },
@@ -337,6 +338,42 @@ const BUILTIN_MODULES: { id: string; label: string; icon: typeof FileText; descr
 const SALES_MODULE_IDS = new Set(['invoice', 'payment', 'cashSale', 'customerLoan', 'saleReturn', 'creditNote', 'cashRegister'])
 
 const OPERATIONAL_ONLY_MODULE_IDS = new Set(['paymentMade'])
+
+const ACCOUNTING_MODULE_REQUIRED_FAMILIES: Record<string, string[]> = {
+  invoice: ['SALES'],
+  payment: ['SALES'],
+  cashSale: ['SALES'],
+  customerLoan: ['SALES'],
+  saleReturn: ['SALES'],
+  creditNote: ['SALES'],
+  cashRegister: ['SALES'],
+  purchaseReceipt: ['PURCHASES'],
+  expense: ['PURCHASES'],
+  supplierCredit: ['PURCHASES'],
+  payroll: ['HR'],
+  hrTraining: ['HR', 'HR_TRAINING'],
+  hrBenefit: ['HR'],
+  hrExpense: ['HR'],
+  financialIncome: ['FINANCIAL'],
+  financialExpense: ['FINANCIAL'],
+  currencyRevaluation: ['FINANCIAL'],
+  fixedAsset: ['FINANCIAL'],
+  bankReconciliation: ['FINANCIAL'],
+  inventoryAdjustment: ['INVENTORY'],
+  inventoryShortfall: ['INVENTORY'],
+  inventory: ['INVENTORY'],
+  projects: ['PROJECTS', 'PROYECTOS'],
+  openingBalance: ['ACCOUNTING'],
+}
+
+const isMappedModuleEnabled = (moduleId: string, enabledModules: readonly string[]) => {
+  const requiredFamilies = ACCOUNTING_MODULE_REQUIRED_FAMILIES[moduleId]
+  if (!requiredFamilies) return true
+
+  return requiredFamilies.some(family => enabledModules.some(enabledModule =>
+    isEnterpriseModuleInFamily(enabledModule, family),
+  ))
+}
 
 const ACCOUNTING_MODULE_GROUPS = [
   {
@@ -1396,7 +1433,11 @@ const [mappingsSearch, setMappingsSearch] = useState('')
 
   // builtin + custom modules combined for display
   const allModuleDefs = useMemo(() => {
+    const activeModules = (user?.managerMode && Array.isArray(user.managerEnabledModules)
+      ? user.managerEnabledModules
+      : user?.enabledModules || []).map(module => String(module).toUpperCase())
     const builtins = BUILTIN_MODULES.filter(m => !OPERATIONAL_ONLY_MODULE_IDS.has(m.id)
+      && isMappedModuleEnabled(m.id, activeModules)
       && (m.id !== 'customerLoan' || customerLoansEnabled)).map(m => ({
       ...m,
       isBuiltin: true as const,
@@ -1411,7 +1452,7 @@ const [mappingsSearch, setMappingsSearch] = useState('')
       fields: m.fields,
     }))
     return [...builtins, ...customs]
-  }, [customModules, customerLoansEnabled])
+  }, [customModules, customerLoansEnabled, user?.enabledModules, user?.managerEnabledModules, user?.managerMode])
   const standardModuleDefs = allModuleDefs.filter(module => module.isBuiltin)
   const suggestionsForField = (moduleId: string, fieldKey: string) =>
     suggestedAccountsQuery.data?.mappings?.[moduleId]?.[fieldKey]?.matches || []

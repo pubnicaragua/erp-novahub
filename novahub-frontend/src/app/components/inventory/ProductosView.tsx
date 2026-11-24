@@ -56,6 +56,7 @@ import { priceListsService, type PriceList } from '../../services/price-lists.se
 import { useLocalStorageState } from '../../hooks/useLocalStorageState';
 import { beginNotificationAction, completeNotificationAction, failNotificationAction } from '../../services/notification-action-coordinator';
 import { resolveInventoryValuation } from '../../utils/inventory-valuation';
+import { isEnterpriseModuleInFamily } from '../../constants/enterpriseModules';
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger, DropdownMenuSeparator } from '../ui/dropdown-menu';
 import { generateConfiguredReportSectionsPDF } from '../../utils/pdfGenerator';
 import type { PdfPaperFormat } from '../../utils/pdfDownloadFormats';
@@ -1419,9 +1420,12 @@ export function ProductosView({ products, summaryProducts, summaryProductsLoaded
   const [solicitudRequiredDate, setSolicitudRequiredDate] = useState('');
   const [solicitudPriority, setSolicitudPriority] = useState('NORMAL');
   const [solicitudCreating, setSolicitudCreating] = useState(false);
+  const [solicitudRequesterMode, setSolicitudRequesterMode] = useState<'EMPLOYEE' | 'SALES_SELLER' | null>(null);
   const [solicitudEmployees, setSolicitudEmployees] = useState<any[]>([]);
   const [solicitudEmployeeId, setSolicitudEmployeeId] = useState('');
-  const [solicitudEmployeesLoading, setSolicitudEmployeesLoading] = useState(false);
+  const [solicitudSalesSellers, setSolicitudSalesSellers] = useState<Array<{ id: string; code?: string; name: string }>>([]);
+  const [solicitudSalesSellerId, setSolicitudSalesSellerId] = useState('');
+  const [solicitudRequesterLoading, setSolicitudRequesterLoading] = useState(false);
   const [solicitudProductSearch, setSolicitudProductSearch] = useState('');
   const [solicitudCategoryFilter, setSolicitudCategoryFilter] = useState('ALL');
   const [solicitudStockFilter, setSolicitudStockFilter] = useState<'ALL' | 'AVAILABLE' | 'LOW' | 'OUT'>('ALL');
@@ -1453,19 +1457,49 @@ export function ProductosView({ products, summaryProducts, summaryProductsLoaded
     setSolicitudOpen(false);
   };
 
-  const loadSolicitudEmployees = async () => {
-    if (solicitudEmployees.length > 0) return;
-    setSolicitudEmployeesLoading(true);
+  const loadSolicitudRequesters = async () => {
+    setSolicitudRequesterLoading(true);
     try {
-      const res = await employeesService.getAll({ page: 1, pageSize: 200 });
-      const list = Array.isArray(res) ? res : ((res as any)?.data || []);
-      setSolicitudEmployees(list);
-      const linked = list.find((e: any) => e.userId === user?.id);
-      setSolicitudEmployeeId(linked?.id || '');
-    } catch {
-      setSolicitudEmployees([]);
+      const requesterOptions = await purchaseRequestsService.getRequesterOptions();
+      setSolicitudRequesterMode(requesterOptions.mode);
+      if (requesterOptions.mode === 'EMPLOYEE') {
+        const res = await employeesService.getAll({ page: 1, pageSize: 200 });
+        const list = Array.isArray(res) ? res : ((res as any)?.data || []);
+        setSolicitudEmployees(list);
+        setSolicitudSalesSellers([]);
+        setSolicitudSalesSellerId('');
+        const linked = list.find((employee: any) => employee.userId === user?.id);
+        setSolicitudEmployeeId(linked?.id || '');
+      } else {
+        setSolicitudEmployees([]);
+        setSolicitudEmployeeId('');
+        setSolicitudSalesSellers(requesterOptions.data || []);
+        setSolicitudSalesSellerId('');
+      }
+    } catch (error: any) {
+      const hrEnabled = Array.isArray(user?.enabledModules)
+        && user.enabledModules.some((module: string) => isEnterpriseModuleInFamily(module, 'HR'));
+      setSolicitudRequesterMode(hrEnabled ? 'EMPLOYEE' : 'SALES_SELLER');
+      setSolicitudSalesSellers([]);
+      setSolicitudSalesSellerId('');
+      if (hrEnabled) {
+        try {
+          const res = await employeesService.getAll({ page: 1, pageSize: 200 });
+          const list = Array.isArray(res) ? res : ((res as any)?.data || []);
+          setSolicitudEmployees(list);
+          const linked = list.find((employee: any) => employee.userId === user?.id);
+          setSolicitudEmployeeId(linked?.id || '');
+        } catch {
+          setSolicitudEmployees([]);
+          setSolicitudEmployeeId('');
+        }
+      } else {
+        setSolicitudEmployees([]);
+        setSolicitudEmployeeId('');
+      }
+      toast.error(error?.message || 'No se pudo cargar el catálogo de solicitantes.');
     } finally {
-      setSolicitudEmployeesLoading(false);
+      setSolicitudRequesterLoading(false);
     }
   };
 
@@ -1651,7 +1685,7 @@ export function ProductosView({ products, summaryProducts, summaryProductsLoaded
   const openLowStockSolicitud = () => {
     if (!canCreatePurchaseRequest) return;
     clearSolicitudPreparation();
-    loadSolicitudEmployees();
+    void loadSolicitudRequesters();
     setSolicitudWarehouseId('');
     setSolicitudOnlySelected(false);
     setSolicitudWarehouseFilter('ALL');
@@ -1695,7 +1729,7 @@ export function ProductosView({ products, summaryProducts, summaryProductsLoaded
   const openSelectedSolicitud = () => {
     if (!canCreatePurchaseRequest) return;
     if (selectedIds.size === 0) { toast.error('Selecciona al menos un producto'); return; }
-    loadSolicitudEmployees();
+    void loadSolicitudRequesters();
     // La selección puede contener productos de distintas páginas. El listado
     // `products` solo representa la página actual, por lo que reconstruimos
     // la selección desde el catálogo completo y priorizamos el registro que
@@ -1796,7 +1830,11 @@ export function ProductosView({ products, summaryProducts, summaryProductsLoaded
     setSolicitudCreating(true);
     let actionToken: string | null = null;
     try {
-      if (!solicitudEmployeeId) { setSolicitudCreating(false); toast.error('Selecciona el empleado solicitante'); return; }
+      if (solicitudRequesterMode === 'EMPLOYEE' && !solicitudEmployeeId) {
+        setSolicitudCreating(false);
+        toast.error('Selecciona el empleado solicitante');
+        return;
+      }
       const invalidAllocation = solicitudProducts.find((item) => !getSolicitudVariantAllocation(item).complete);
       if (invalidAllocation) {
         const allocation = getSolicitudVariantAllocation(invalidAllocation);
@@ -1850,7 +1888,8 @@ export function ProductosView({ products, summaryProducts, summaryProductsLoaded
         justification: solicitudJustification || 'Solicitud generada desde inventario',
         warehouseId: solicitudWarehouseId,
         requiredDate: solicitudRequiredDate || undefined,
-        requestedById: solicitudEmployeeId,
+        requestedById: solicitudRequesterMode === 'EMPLOYEE' ? solicitudEmployeeId : undefined,
+        requestedBySalesSellerId: solicitudRequesterMode === 'SALES_SELLER' ? solicitudSalesSellerId || undefined : undefined,
         userId: user?.id,
         items,
       } as any);
@@ -5741,18 +5780,42 @@ export function ProductosView({ products, summaryProducts, summaryProductsLoaded
           <div className="min-h-0 flex-1 overflow-y-auto overflow-x-hidden pr-1" data-tour="inventory-request-data">
           <div className="space-y-4 pt-4">
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
-              <div className="space-y-1.5">
-                <label className="text-xs font-bold">Empleado solicitante *</label>
-                <Select value={solicitudEmployeeId} onValueChange={setSolicitudEmployeeId} disabled={solicitudCreating || solicitudEmployeesLoading}>
-                  <SelectTrigger className="h-9"><SelectValue placeholder={solicitudEmployeesLoading ? 'Cargando...' : 'Seleccionar...'} /></SelectTrigger>
-                  <SelectContent>
-                    {solicitudEmployees.length === 0 && <SelectItem value="__none__" disabled>No hay empleados registrados</SelectItem>}
-                    {solicitudEmployees.map((emp: any) => (
-                      <SelectItem key={emp.id} value={emp.id}>{emp.firstName} {emp.lastName}</SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </div>
+              {solicitudRequesterMode === 'EMPLOYEE' ? (
+                <div className="space-y-1.5">
+                  <label className="text-xs font-bold">Empleado solicitante *</label>
+                  <Select value={solicitudEmployeeId} onValueChange={setSolicitudEmployeeId} disabled={solicitudCreating || solicitudRequesterLoading}>
+                    <SelectTrigger className="h-9"><SelectValue placeholder={solicitudRequesterLoading ? 'Cargando...' : 'Seleccionar empleado...'} /></SelectTrigger>
+                    <SelectContent>
+                      {solicitudEmployees.length === 0 && <SelectItem value="__none__" disabled>No hay empleados registrados</SelectItem>}
+                      {solicitudEmployees.map((emp: any) => (
+                        <SelectItem key={emp.id} value={emp.id}>{emp.firstName} {emp.lastName}</SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+              ) : solicitudRequesterMode === 'SALES_SELLER' ? (
+                <div className="space-y-1.5">
+                  <label className="text-xs font-bold">Vendedor (opcional)</label>
+                  <Select
+                    value={solicitudSalesSellerId || '__none__'}
+                    onValueChange={(value) => setSolicitudSalesSellerId(value === '__none__' ? '' : value)}
+                    disabled={solicitudCreating || solicitudRequesterLoading}
+                  >
+                    <SelectTrigger className="h-9"><SelectValue placeholder={solicitudRequesterLoading ? 'Cargando...' : 'Seleccionar vendedor (opcional)'} /></SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="__none__">Sin vendedor asignado</SelectItem>
+                      {solicitudSalesSellers.length === 0
+                        ? <SelectItem value="__empty__" disabled>No hay vendedores activos</SelectItem>
+                        : solicitudSalesSellers.map((seller) => <SelectItem key={seller.id} value={seller.id}>{seller.name}{seller.code ? ` · ${seller.code}` : ''}</SelectItem>)}
+                    </SelectContent>
+                  </Select>
+                </div>
+              ) : (
+                <div className="space-y-1.5">
+                  <label className="text-xs font-bold">Solicitante</label>
+                  <Select value="" disabled><SelectTrigger className="h-9"><SelectValue placeholder="Cargando configuración de la sucursal..." /></SelectTrigger></Select>
+                </div>
+              )}
               <div className="space-y-1.5">
                 <label className="text-xs font-bold">Bodega destino *</label>
                 <Select value={solicitudWarehouseId} onValueChange={setSolicitudWarehouseId} disabled={solicitudCreating}>
@@ -5998,7 +6061,7 @@ export function ProductosView({ products, summaryProducts, summaryProductsLoaded
           </div>
           <DialogFooter className="shrink-0 gap-2 border-t border-border/40 pt-4 sm:gap-0" data-tour="inventory-request-actions">
             <Button className="w-full sm:w-auto" variant="outline" onClick={closeSolicitud} disabled={solicitudCreating}><X className="mr-1 size-3.5" /> Cancelar</Button>
-            <Button className="w-full sm:w-auto" onClick={handleCreateSolicitud} disabled={solicitudCreating || solicitudProducts.length === 0 || !solicitudWarehouseId || !solicitudEmployeeId}>
+            <Button className="w-full sm:w-auto" onClick={handleCreateSolicitud} disabled={solicitudCreating || solicitudRequesterLoading || !solicitudRequesterMode || solicitudProducts.length === 0 || !solicitudWarehouseId || (solicitudRequesterMode === 'EMPLOYEE' && !solicitudEmployeeId)}>
               {solicitudCreating && <Loader2 className="size-3.5 mr-1 animate-spin" />}
               <Send className="size-3.5 mr-1" /> Crear Solicitud
             </Button>

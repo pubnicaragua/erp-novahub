@@ -510,7 +510,7 @@ export function ComprasPage({ activeSubModule, onSubModuleChange, isSidebarColla
     }).map((request) => ({
       id: String(request.id),
       label: request.number,
-      detail: request.supplier?.name || `${request.requestedBy?.firstName || ''} ${request.requestedBy?.lastName || ''}`.trim() || 'Sin proveedor asignado',
+      detail: request.supplier?.name || `${request.requestedBy?.firstName || ''} ${request.requestedBy?.lastName || ''}`.trim() || request.requestedBySalesSeller?.name || 'Sin proveedor asignado',
     }));
     const orderItems: PurchaseAlertItem[] = (filteredData.ordenes as PurchaseOrder[])
       .filter((order) => PURCHASE_ORDER_ACTIONABLE_STATUSES.includes(normalizePurchaseOrderStatus(order.status)))
