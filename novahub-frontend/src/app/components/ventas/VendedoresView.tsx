@@ -17,6 +17,7 @@ import { hrService } from '../../services/hr.service';
 import { areCommissionScaleRulesConsecutive } from '../../utils/commission-scale';
 import { DateField } from '../ui/DateField';
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from '../ui/dialog';
+import { Sheet, SheetContent, SheetDescription, SheetHeader, SheetTitle } from '../ui/sheet';
 
 type Section = 'vendedores' | 'comisiones' | 'metas' | 'pagos';
 type CommissionBasis = 'PER_SALE' | 'MONTHLY_TOTAL';
@@ -32,16 +33,35 @@ const money = (amount: number, currency: string) => new Intl.NumberFormat('es-NI
 const localDateInputValue = (date: Date) => `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`;
 
 const commissionStatusLabels: Record<string, string> = {
-  PENDING: 'Pendiente de cobro', EARNED: 'Disponible para pago', PAID_DIRECT: 'Pagada', CANCELLED: 'Anulada',
+  PENDING: 'Pendiente de cobro', EARNED: 'Disponible para pago', IN_PAYROLL: 'Incluida en nómina',
+  PAID_IN_PAYROLL: 'Pagada en nómina', PAID_DIRECT: 'Pagada directamente', CANCELLED: 'Anulada',
 };
-const commissionStatus = (status: string) => commissionStatusLabels[status] || status;
+const commissionStatus = (status: string) => commissionStatusLabels[String(status || '').toUpperCase()] || 'Estado registrado';
 
 const payoutStatusLabels: Record<string, string> = { PAID: 'Pagado', REVERSED: 'Revertido', REVERSAL: 'Reversión' };
-const payoutStatus = (status: string) => payoutStatusLabels[status] || status;
+const payoutStatus = (status: string) => payoutStatusLabels[String(status || '').toUpperCase()] || 'Estado registrado';
 const goalAwardStatusLabels: Record<string, string> = {
   PENDING_APPROVAL: 'Por aprobar', APPROVED: 'Aprobada', IN_PAYROLL: 'Incluida en nómina',
-  PAID_IN_PAYROLL: 'Pagada en nómina', PAID: 'Pagada directamente', REJECTED: 'Rechazada',
+  PAID_IN_PAYROLL: 'Pagada en nómina', PAID: 'Pagada directamente', REJECTED: 'Rechazada', CANCELLED: 'Anulada',
 };
+const documentStatusLabels: Record<string, string> = {
+  DRAFT: 'Borrador', PENDING: 'En proceso', PARTIAL: 'Pago parcial', CREDIT: 'A crédito', PAID: 'Pagada',
+  OVERDUE: 'Vencida', CANCELLED: 'Anulada', REFUNDED: 'Reembolsada', ISSUED: 'Emitida', APPLIED: 'Aplicada',
+  VOIDED: 'Anulada', APPROVED: 'Aprobada', CONFIRMED: 'Confirmada', IN_PROCESS: 'En proceso',
+  IN_PROGRESS: 'En proceso', SENT: 'Enviada', ACTIVE: 'Activa', INACTIVE: 'Inactiva', REJECTED: 'Rechazada',
+};
+const documentStatus = (status: string) => documentStatusLabels[String(status || '').toUpperCase()] || 'Estado registrado';
+const paymentMethodLabels: Record<string, string> = {
+  CASH: 'Efectivo', TRANSFER: 'Transferencia', BANK_TRANSFER: 'Transferencia bancaria', CHECK: 'Cheque',
+  CARD: 'Tarjeta', QR: 'Código QR', VOUCHER: 'Comprobante', CREDIT: 'Crédito', MIXED: 'Pago mixto', OTHER: 'Otro',
+};
+const paymentMethod = (method: string) => {
+  const normalized = String(method || '').trim().toUpperCase();
+  if (paymentMethodLabels[normalized]) return paymentMethodLabels[normalized];
+  return normalized ? normalized.replace(/_/g, ' ').toLocaleLowerCase('es-NI').replace(/^./, (letter) => letter.toLocaleUpperCase('es-NI')) : 'No especificado';
+};
+const goalLevelLabels: Record<string, string> = { TARGET: 'Principal', MINIMUM: 'Mínimo', STRETCH: 'Superior' };
+const goalLevel = (level: string) => goalLevelLabels[String(level || '').toUpperCase()] || 'Recompensa';
 
 const stickyHeaderCell = 'sticky top-0 z-10 bg-card px-3 py-2 text-left text-[10px] font-black uppercase tracking-wider text-muted-foreground';
 
@@ -53,7 +73,7 @@ function InvoiceDetailContent({ invoice }: { invoice?: SalesSellerSale | null })
       <div className="rounded-xl border border-border p-3"><p className="text-xs text-muted-foreground">Factura</p><p className="font-semibold">{invoice.number}</p></div>
       <div className="rounded-xl border border-border p-3"><p className="text-xs text-muted-foreground">Fecha</p><p className="font-semibold">{new Date(invoice.date).toLocaleDateString('es-NI')}</p></div>
       <div className="rounded-xl border border-border p-3"><p className="text-xs text-muted-foreground">Cliente</p><p className="break-words font-semibold">{customer}</p></div>
-      <div className="rounded-xl border border-border p-3"><p className="text-xs text-muted-foreground">Estado</p><p className="font-semibold">{invoice.status}</p></div>
+      <div className="rounded-xl border border-border p-3"><p className="text-xs text-muted-foreground">Estado</p><p className="font-semibold">{documentStatus(invoice.status)}</p></div>
       <div className="rounded-xl border border-border p-3"><p className="text-xs text-muted-foreground">Total</p><p className="font-semibold">{money(Number(invoice.total), invoice.currency)}</p></div>
       <div className="rounded-xl border border-border p-3"><p className="text-xs text-muted-foreground">Abonado</p><p className="font-semibold">{money(Number(invoice.amountPaid), invoice.currency)}</p></div>
       <div className="rounded-xl border border-border p-3"><p className="text-xs text-muted-foreground">Saldo</p><p className="font-semibold">{money(Number(invoice.balance), invoice.currency)}</p></div>
@@ -70,7 +90,7 @@ function InvoiceDetailContent({ invoice }: { invoice?: SalesSellerSale | null })
     <div className="min-w-0 space-y-2">
       <h3 className="font-semibold">Pagos recibidos</h3>
       {invoice.payments.length === 0 ? <p className="rounded-xl border border-border p-3 text-sm text-muted-foreground">Sin pagos registrados.</p> : <div className="max-h-48 overflow-auto rounded-xl border border-border"><table className="w-full min-w-[480px] text-sm"><thead><tr><th className={stickyHeaderCell}>Fecha</th><th className={stickyHeaderCell}>Referencia</th><th className={stickyHeaderCell}>Método</th><th className={`${stickyHeaderCell} text-right`}>Importe</th></tr></thead><tbody>
-        {invoice.payments.map((payment) => <tr key={payment.id} className="border-t border-border/60"><td className="px-3 py-2">{new Date(payment.date).toLocaleDateString('es-NI')}</td><td className="px-3 py-2">{payment.reference || payment.number}</td><td className="px-3 py-2">{payment.method}</td><td className="px-3 py-2 text-right font-medium">{money(Number(payment.amount), payment.currency)}</td></tr>)}
+        {invoice.payments.map((payment) => <tr key={payment.id} className="border-t border-border/60"><td className="px-3 py-2">{new Date(payment.date).toLocaleDateString('es-NI')}</td><td className="px-3 py-2">{payment.reference || payment.number}</td><td className="px-3 py-2">{paymentMethod(payment.method)}</td><td className="px-3 py-2 text-right font-medium">{money(Number(payment.amount), payment.currency)}</td></tr>)}
       </tbody></table></div>}
     </div>
   </div>;
@@ -201,7 +221,7 @@ export function VendedoresView({ historicalOnly = false, employeeMode = false, o
   const selectedAwards = useMemo(() => payable.awards.filter((item) => selectedAwardIds.includes(item.id)), [payable.awards, selectedAwardIds]);
   const payableItems = useMemo(() => [
     ...payable.commissions.map((item) => ({ id: item.id, type: 'commission' as const, seller: item.seller, amount: item.amount, currency: item.currency, label: item.invoice?.number || item.creditNote?.number || 'Comisión por venta', status: 'Disponible' })),
-    ...payable.awards.map((item) => ({ id: item.id, type: 'award' as const, seller: item.goal.seller, amount: item.amount, currency: item.currency, label: `${item.goal.title} · ${item.level}`, status: 'Aprobada' })),
+    ...payable.awards.map((item) => ({ id: item.id, type: 'award' as const, seller: item.goal.seller, amount: item.amount, currency: item.currency, label: `${item.goal.title} · ${goalLevel(item.level)}`, status: 'Aprobada' })),
   ].filter((item) => !selectedSellerId || selectedSellerId === 'all' || item.seller?.id === selectedSellerId), [payable, selectedSellerId]);
   const selectedCurrency = selectedCommissions[0]?.currency || selectedAwards[0]?.currency || baseCurrency || 'NIO';
   const mixedCurrency = [...selectedCommissions, ...selectedAwards].some((item) => item.currency !== selectedCurrency);
@@ -434,12 +454,14 @@ export function VendedoresView({ historicalOnly = false, employeeMode = false, o
         {!historicalOnly && canCreateEmployeeGoals && <Card className="min-w-0 rounded-2xl border-border bg-card shadow-sm">
           <CardHeader className="flex flex-row items-center justify-between gap-3"><CardTitle>Nueva meta de ventas</CardTitle>{canEvaluateEmployeeGoals && <Button size="sm" variant="outline" onClick={() => evaluateGoals.mutate()} disabled={evaluateGoals.isPending}><RefreshCw className="mr-2 size-4" />Evaluar cierres</Button>}</CardHeader>
           <CardContent className="grid gap-3 sm:grid-cols-2">
-            <div className="space-y-2 sm:col-span-2"><Label htmlFor="seller-goal-seller">{employeeMode ? 'Empleado vendedor' : 'Vendedor'}</Label><Select value={selectedSellerId} onValueChange={setSelectedSellerId}><SelectTrigger id="seller-goal-seller"><SelectValue placeholder={employeeMode ? 'Seleccionar empleado' : 'Seleccionar vendedor'} /></SelectTrigger><SelectContent>{sellers.filter((seller) => seller.isActive).map((seller) => <SelectItem key={seller.id} value={seller.id}>{seller.name} · {seller.code}</SelectItem>)}</SelectContent></Select></div>
+            <div className="grid min-w-0 gap-3 sm:col-span-2 sm:grid-cols-[minmax(0,1fr)_minmax(0,0.55fr)]">
+              <div className="min-w-0 space-y-2"><Label htmlFor="seller-goal-seller">{employeeMode ? 'Empleado vendedor' : 'Vendedor'}</Label><Select value={selectedSellerId} onValueChange={setSelectedSellerId}><SelectTrigger id="seller-goal-seller" className="max-w-full"><SelectValue placeholder={employeeMode ? 'Seleccionar empleado' : 'Seleccionar vendedor'} /></SelectTrigger><SelectContent>{sellers.filter((seller) => seller.isActive).map((seller) => <SelectItem key={seller.id} value={seller.id}>{seller.name} · {seller.code}</SelectItem>)}</SelectContent></Select></div>
+              <div className="min-w-0 space-y-2"><Label htmlFor="seller-goal-currency">Moneda de la meta</Label><Select value={effectiveGoalCurrency} onValueChange={setGoalCurrency}><SelectTrigger id="seller-goal-currency" className="max-w-full"><SelectValue /></SelectTrigger><SelectContent><SelectItem value="NIO">Córdobas (NIO)</SelectItem><SelectItem value="USD">Dólares (USD)</SelectItem></SelectContent></Select></div>
+            </div>
             {employeeMode && <div className="sm:col-span-2"><Button type="button" variant="outline" disabled={!selectedSellerId || selectedSellerId === 'all'} onClick={() => showSellerDetails()}><Eye className="mr-2 size-4" />Ver ventas del empleado</Button></div>}
             <div className="space-y-2 sm:col-span-2"><Label htmlFor="seller-goal-title">Descripción</Label><Input id="seller-goal-title" value={goalTitle} onChange={(event) => setGoalTitle(event.target.value)} /></div>
             <div className="space-y-2"><Label htmlFor="seller-goal-start">Desde</Label><Input id="seller-goal-start" type="date" value={periodStart} onChange={(event) => setPeriodStart(event.target.value)} /></div>
             <div className="space-y-2"><Label htmlFor="seller-goal-end">Hasta</Label><Input id="seller-goal-end" type="date" value={periodEnd} onChange={(event) => setPeriodEnd(event.target.value)} /></div>
-            <div className="space-y-2"><Label htmlFor="seller-goal-currency">Moneda de la meta</Label><Select value={effectiveGoalCurrency} onValueChange={setGoalCurrency}><SelectTrigger id="seller-goal-currency"><SelectValue /></SelectTrigger><SelectContent><SelectItem value="NIO">Córdobas (NIO)</SelectItem><SelectItem value="USD">Dólares (USD)</SelectItem></SelectContent></Select></div>
             <div className="space-y-2"><Label htmlFor="seller-goal-target">Meta principal ({effectiveGoalCurrency})</Label><Input id="seller-goal-target" type="number" min="0.01" step="0.01" value={targetAmount} onChange={(event) => setTargetAmount(event.target.value)} /></div>
             <div className="space-y-2"><Label htmlFor="seller-goal-reward">Recompensa principal ({effectiveGoalCurrency})</Label><Input id="seller-goal-reward" type="number" min="0.01" step="0.01" value={rewardAmount} onChange={(event) => setRewardAmount(event.target.value)} /></div>
             <div className="space-y-2"><Label htmlFor="seller-goal-minimum">Nivel mínimo ({effectiveGoalCurrency}, opcional)</Label><Input id="seller-goal-minimum" type="number" min="0.01" step="0.01" value={minimumAmount} onChange={(event) => setMinimumAmount(event.target.value)} /></div>
@@ -456,9 +478,9 @@ export function VendedoresView({ historicalOnly = false, employeeMode = false, o
             {goalsQuery.isPending ? <p className="text-sm text-muted-foreground">Cargando metas…</p> : (goalsQuery.data || []).length === 0 ? <p className="text-sm text-muted-foreground">Todavía no hay metas configuradas.</p> : (goalsQuery.data || []).map((goal) => {
               const progress = Math.min(100, goal.targetAmount > 0 ? (goal.achievedAmount / goal.targetAmount) * 100 : 0);
               return <div key={goal.id} className="rounded-xl border border-border p-3">
-                <div className="flex flex-wrap items-start justify-between gap-2"><div><p className="font-semibold">{goal.title}</p><p className="text-xs text-muted-foreground">{goal.seller?.name || 'Empleado vendedor'} · {goal.periodStartDate || goal.periodStart.slice(0, 10)} — {goal.periodEndDate || goal.periodEnd.slice(0, 10)}</p></div>{goal.award && <Badge variant={goal.award.status === 'PENDING_APPROVAL' ? 'secondary' : 'default'}>{goalAwardStatusLabels[goal.award.status] || goal.award.status}</Badge>}</div>
+                <div className="flex flex-wrap items-start justify-between gap-2"><div><p className="font-semibold">{goal.title}</p><p className="text-xs text-muted-foreground">{goal.seller?.name || 'Empleado vendedor'} · {goal.periodStartDate || goal.periodStart.slice(0, 10)} — {goal.periodEndDate || goal.periodEnd.slice(0, 10)}</p></div>{goal.award && <Badge variant={goal.award.status === 'PENDING_APPROVAL' ? 'secondary' : 'default'}>{goalAwardStatusLabels[goal.award.status] || 'Estado registrado'}</Badge>}</div>
                 <div className="mt-3 h-2 overflow-hidden rounded-full bg-muted"><div className="h-full rounded-full bg-primary" style={{ width: `${progress}%` }} /></div>
-                <div className="mt-2 flex flex-wrap justify-between gap-2 text-xs"><span>{money(goal.achievedAmount, goal.currency)} de {money(goal.targetAmount, goal.currency)}</span>{goal.award && <span>Recompensa {money(goal.award.amount, goal.award.currency)} · {goal.award.level}</span>}</div>
+                <div className="mt-2 flex flex-wrap justify-between gap-2 text-xs"><span>{money(goal.achievedAmount, goal.currency)} de {money(goal.targetAmount, goal.currency)}</span>{goal.award && <span>Recompensa {money(goal.award.amount, goal.award.currency)} · {goalLevel(goal.award.level)}</span>}</div>
                 {goal.award?.status === 'PENDING_APPROVAL' && canApproveEmployeeAwards && <Button className="mt-3" size="sm" onClick={() => approveAward.mutate(goal.award!.id)} disabled={approveAward.isPending}><BadgeCheck className="mr-2 size-4" />Aprobar recompensa</Button>}
               </div>;
             })}
@@ -504,7 +526,7 @@ export function VendedoresView({ historicalOnly = false, employeeMode = false, o
           <CardContent>
             <div className="max-h-[440px] overflow-auto rounded-xl border border-border"><table className="w-full min-w-[760px] text-sm"><thead><tr><th className={stickyHeaderCell}>Fecha</th><th className={stickyHeaderCell}>{employeeMode ? 'Empleado' : 'Vendedor'}</th><th className={stickyHeaderCell}>Método / referencia</th><th className={stickyHeaderCell}>Estado</th><th className={`${stickyHeaderCell} text-right`}>Importe</th><th className={stickyHeaderCell}>Detalle</th><th className={stickyHeaderCell}>Acción</th></tr></thead>
               <tbody>{(payoutsQuery.data || []).map((payout) => <tr key={payout.id} className="border-t border-border/60">
-                <td className="whitespace-nowrap px-3 py-2">{new Date(payout.paidAt).toLocaleString('es-NI')}</td><td className="px-3 py-2">{payout.seller?.name || (employeeMode ? 'Empleado vendedor' : 'Vendedor')}</td><td className="max-w-xs whitespace-normal break-words px-3 py-2">{payout.method}{payout.reference ? ` · ${payout.reference}` : ''}</td><td className="px-3 py-2">{payoutStatus(payout.status)}</td><td className="px-3 py-2 text-right font-semibold">{money(Number(payout.amount), payout.currency)}</td>
+                <td className="whitespace-nowrap px-3 py-2">{new Date(payout.paidAt).toLocaleString('es-NI')}</td><td className="px-3 py-2">{payout.seller?.name || (employeeMode ? 'Empleado vendedor' : 'Vendedor')}</td><td className="max-w-xs whitespace-normal break-words px-3 py-2">{paymentMethod(payout.method)}{payout.reference ? ` · ${payout.reference}` : ''}</td><td className="px-3 py-2">{payoutStatus(payout.status)}</td><td className="px-3 py-2 text-right font-semibold">{money(Number(payout.amount), payout.currency)}</td>
                 <td className="px-3 py-2"><Button size="sm" variant="outline" onClick={() => setSelectedPayoutDetailId(payout.id)}><Eye className="mr-2 size-4" />Ver detalle</Button></td><td className="px-3 py-2">{payout.status === 'PAID' && canReverseEmployeePayouts && <Button size="sm" variant="outline" onClick={() => reversePayout.mutate(payout.id)} disabled={reversePayout.isPending}>Revertir</Button>}</td>
               </tr>)}
                 {(payoutsQuery.data || []).length === 0 && <tr><td colSpan={7} className="px-3 py-5 text-center text-muted-foreground">No hay pagos registrados.</td></tr>}
@@ -528,13 +550,13 @@ export function VendedoresView({ historicalOnly = false, employeeMode = false, o
         </Card>
       </div>}
 
-      <Dialog open={Boolean(sellerDetailId)} onOpenChange={(open) => { if (!open) setSellerDetailId(''); }}>
-        <DialogContent className="sm:!max-w-5xl">
-          <DialogHeader className="pr-10">
-            <DialogTitle>{sellerForDetail?.name || (employeeMode ? 'Detalle del empleado vendedor' : 'Detalle del vendedor')}</DialogTitle>
-            <DialogDescription>{sellerForDetail ? `${sellerForDetail.code}${sellerForDetail.email ? ` · ${sellerForDetail.email}` : ''}` : 'Ventas registradas para el vendedor seleccionado.'}</DialogDescription>
-          </DialogHeader>
-          <div className="min-w-0 space-y-4">
+      <Sheet open={Boolean(sellerDetailId)} onOpenChange={(open) => { if (!open) setSellerDetailId(''); }}>
+        <SheetContent side="right" className="erp-detail-panel erp-detail-panel--wide flex w-full min-w-0 flex-col gap-0 overflow-hidden border-l border-border/50 bg-background p-0">
+          <SheetHeader className="sticky top-0 z-10 space-y-2 border-b border-border/50 bg-background/95 px-5 py-5 pr-12 backdrop-blur-md sm:px-6">
+            <SheetTitle className="break-words text-lg font-black tracking-tight">{sellerForDetail?.name || (employeeMode ? 'Detalle del empleado vendedor' : 'Detalle del vendedor')}</SheetTitle>
+            <SheetDescription className="break-words">{sellerForDetail ? `${sellerForDetail.code}${sellerForDetail.email ? ` · ${sellerForDetail.email}` : ''}` : 'Ventas registradas para el vendedor seleccionado.'}</SheetDescription>
+          </SheetHeader>
+          <div className="min-w-0 space-y-4 px-4 pb-5 sm:px-6">
             <div className="flex min-w-0 flex-wrap items-end gap-3 rounded-xl border border-border p-3">
               <div className="min-w-0 flex-1 space-y-1"><Label htmlFor="seller-detail-from">Desde</Label><DateField id="seller-detail-from" ariaLabel="Filtrar ventas desde" value={salesDateFrom} onChange={(value) => { setSalesDateFrom(value); if (value && salesDateTo && value > salesDateTo) setSalesDateTo(value); }} maxDate={salesDateTo || undefined} clearable /></div>
               <div className="min-w-0 flex-1 space-y-1"><Label htmlFor="seller-detail-to">Hasta</Label><DateField id="seller-detail-to" ariaLabel="Filtrar ventas hasta" value={salesDateTo} onChange={setSalesDateTo} minDate={salesDateFrom || undefined} clearable /></div>
@@ -543,18 +565,19 @@ export function VendedoresView({ historicalOnly = false, employeeMode = false, o
             <div className="flex flex-wrap items-center justify-between gap-2"><h3 className="font-semibold">Ventas del periodo</h3>{sellerSalesQuery.data && <Badge variant="secondary">{sellerSalesQuery.data.length} facturas</Badge>}</div>
             {sellerSalesQuery.isPending ? <div className="rounded-xl border border-border p-6 text-center text-sm text-muted-foreground">Cargando ventas…</div>
               : sellerSalesQuery.isError ? <div className="rounded-xl border border-destructive/40 p-4 text-sm text-destructive">No se pudieron cargar las ventas del vendedor.</div>
-                : <div className="max-h-[52vh] overflow-auto rounded-xl border border-border"><table className="w-full min-w-[820px] text-sm"><thead><tr><th className={stickyHeaderCell}>Fecha</th><th className={stickyHeaderCell}>Factura</th><th className={stickyHeaderCell}>Cliente</th><th className={stickyHeaderCell}>Estado</th><th className={`${stickyHeaderCell} text-right`}>Total</th><th className={`${stickyHeaderCell} text-right`}>Abonado</th><th className={`${stickyHeaderCell} text-right`}>Saldo</th></tr></thead>
-                  <tbody>{(sellerSalesQuery.data || []).map((sale) => <tr key={sale.id} className="border-t border-border/60"><td className="whitespace-nowrap px-3 py-2">{new Date(sale.date).toLocaleDateString('es-NI')}</td><td className="px-3 py-2 font-medium">{sale.number}</td><td className="max-w-xs whitespace-normal break-words px-3 py-2">{sale.customer?.name || sale.customCustomerName || 'Cliente general'}</td><td className="px-3 py-2">{sale.status}</td><td className="px-3 py-2 text-right">{money(Number(sale.total), sale.currency)}</td><td className="px-3 py-2 text-right">{money(Number(sale.amountPaid), sale.currency)}</td><td className="px-3 py-2 text-right">{money(Number(sale.balance), sale.currency)}</td></tr>)}
+              : <div className="max-h-[calc(100dvh-19rem)] overflow-auto rounded-xl border border-border"><table className="w-full min-w-[820px] text-sm"><thead><tr><th className={stickyHeaderCell}>Fecha</th><th className={stickyHeaderCell}>Factura</th><th className={stickyHeaderCell}>Cliente</th><th className={stickyHeaderCell}>Estado</th><th className={`${stickyHeaderCell} text-right`}>Total</th><th className={`${stickyHeaderCell} text-right`}>Abonado</th><th className={`${stickyHeaderCell} text-right`}>Saldo</th></tr></thead>
+                  <tbody>{(sellerSalesQuery.data || []).map((sale) => <tr key={sale.id} className="border-t border-border/60"><td className="whitespace-nowrap px-3 py-2">{new Date(sale.date).toLocaleDateString('es-NI')}</td><td className="px-3 py-2 font-medium">{sale.number}</td><td className="max-w-xs whitespace-normal break-words px-3 py-2">{sale.customer?.name || sale.customCustomerName || 'Cliente general'}</td><td className="px-3 py-2">{documentStatus(sale.status)}</td><td className="px-3 py-2 text-right">{money(Number(sale.total), sale.currency)}</td><td className="px-3 py-2 text-right">{money(Number(sale.amountPaid), sale.currency)}</td><td className="px-3 py-2 text-right">{money(Number(sale.balance), sale.currency)}</td></tr>)}
                     {!(sellerSalesQuery.data || []).length && <tr><td colSpan={7} className="px-3 py-6 text-center text-muted-foreground">No se encontraron ventas para las fechas seleccionadas.</td></tr>}
                   </tbody>
                 </table></div>}
           </div>
-        </DialogContent>
-      </Dialog>
+        </SheetContent>
+      </Sheet>
 
-      <Dialog open={Boolean(selectedCommissionDetailId)} onOpenChange={(open) => { if (!open) setSelectedCommissionDetailId(''); }}>
-        <DialogContent className="sm:!max-w-5xl">
-          <DialogHeader className="pr-10"><DialogTitle>Detalle de comisión</DialogTitle><DialogDescription>Comisión asociada al documento y datos de la venta.</DialogDescription></DialogHeader>
+      <Sheet open={Boolean(selectedCommissionDetailId)} onOpenChange={(open) => { if (!open) setSelectedCommissionDetailId(''); }}>
+        <SheetContent side="right" className="erp-detail-panel erp-detail-panel--wide flex w-full min-w-0 flex-col gap-0 overflow-hidden border-l border-border/50 bg-background p-0">
+          <SheetHeader className="sticky top-0 z-10 space-y-2 border-b border-border/50 bg-background/95 px-5 py-5 pr-12 backdrop-blur-md sm:px-6"><SheetTitle className="text-lg font-black tracking-tight">Detalle de comisión</SheetTitle><SheetDescription>Comisión asociada al documento y los datos de la venta.</SheetDescription></SheetHeader>
+          <div className="min-w-0 space-y-4 p-4 sm:p-6">
           {commissionDetailsQuery.isPending ? <p className="py-8 text-center text-sm text-muted-foreground">Cargando detalle…</p>
             : commissionDetailsQuery.isError ? <p className="rounded-xl border border-destructive/40 p-4 text-sm text-destructive">No se pudo cargar el detalle de la comisión.</p>
               : commissionDetailsQuery.data && <div className="min-w-0 space-y-4">
@@ -565,11 +588,12 @@ export function VendedoresView({ historicalOnly = false, employeeMode = false, o
                   <div className="rounded-xl border border-border p-3"><p className="text-xs text-muted-foreground">Comisión</p><p className="font-semibold">{money(Number(commissionDetailsQuery.data.amount), commissionDetailsQuery.data.currency)}</p></div>
                 </div>
                 {commissionDetailsQuery.data.invoice ? <InvoiceDetailContent invoice={commissionDetailsQuery.data.invoice} />
-                  : commissionDetailsQuery.data.creditNote ? <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4 rounded-xl border border-border p-4"><div><p className="text-xs text-muted-foreground">Nota de crédito</p><p className="font-semibold">{commissionDetailsQuery.data.creditNote.number}</p></div><div><p className="text-xs text-muted-foreground">Fecha</p><p className="font-semibold">{new Date(commissionDetailsQuery.data.creditNote.date).toLocaleDateString('es-NI')}</p></div><div><p className="text-xs text-muted-foreground">Estado</p><p className="font-semibold">{commissionDetailsQuery.data.creditNote.status}</p></div><div><p className="text-xs text-muted-foreground">Importe</p><p className="font-semibold">{money(Number(commissionDetailsQuery.data.creditNote.total), commissionDetailsQuery.data.creditNote.currency)}</p></div></div>
+                  : commissionDetailsQuery.data.creditNote ? <div className="grid gap-3 rounded-xl border border-border p-4 sm:grid-cols-2 lg:grid-cols-4"><div><p className="text-xs text-muted-foreground">Nota de crédito</p><p className="font-semibold">{commissionDetailsQuery.data.creditNote.number}</p></div><div><p className="text-xs text-muted-foreground">Fecha</p><p className="font-semibold">{new Date(commissionDetailsQuery.data.creditNote.date).toLocaleDateString('es-NI')}</p></div><div><p className="text-xs text-muted-foreground">Estado</p><p className="font-semibold">{documentStatus(commissionDetailsQuery.data.creditNote.status)}</p></div><div><p className="text-xs text-muted-foreground">Importe</p><p className="font-semibold">{money(Number(commissionDetailsQuery.data.creditNote.total), commissionDetailsQuery.data.creditNote.currency)}</p></div></div>
                     : <p className="rounded-xl border border-border p-4 text-sm text-muted-foreground">No hay factura ni nota de crédito vinculada.</p>}
               </div>}
-        </DialogContent>
-      </Dialog>
+          </div>
+        </SheetContent>
+      </Sheet>
 
       <Dialog open={Boolean(selectedPayoutDetailId)} onOpenChange={(open) => { if (!open) setSelectedPayoutDetailId(''); }}>
         <DialogContent className="sm:!max-w-3xl">
@@ -579,7 +603,7 @@ export function VendedoresView({ historicalOnly = false, employeeMode = false, o
               <div className="rounded-xl border border-border p-3"><p className="text-xs text-muted-foreground">Vendedor</p><p className="font-semibold">{payoutForDetail.seller?.name || (employeeMode ? 'Empleado vendedor' : 'Vendedor')}</p></div>
               <div className="rounded-xl border border-border p-3"><p className="text-xs text-muted-foreground">Fecha</p><p className="font-semibold">{new Date(payoutForDetail.paidAt).toLocaleString('es-NI')}</p></div>
               <div className="rounded-xl border border-border p-3"><p className="text-xs text-muted-foreground">Estado</p><p className="font-semibold">{payoutStatus(payoutForDetail.status)}</p></div>
-              <div className="rounded-xl border border-border p-3"><p className="text-xs text-muted-foreground">Método</p><p className="font-semibold">{payoutForDetail.method}</p></div>
+              <div className="rounded-xl border border-border p-3"><p className="text-xs text-muted-foreground">Método</p><p className="font-semibold">{paymentMethod(payoutForDetail.method)}</p></div>
               <div className="rounded-xl border border-border p-3"><p className="text-xs text-muted-foreground">Referencia</p><p className="break-words font-semibold">{payoutForDetail.reference || '—'}</p></div>
               <div className="rounded-xl border border-border p-3"><p className="text-xs text-muted-foreground">Total</p><p className="font-semibold">{money(Number(payoutForDetail.amount), payoutForDetail.currency)}</p></div>
             </div>
@@ -591,7 +615,7 @@ export function VendedoresView({ historicalOnly = false, employeeMode = false, o
                 const goal = line.goalAward?.goal;
                 const source = invoice?.number || creditNote?.number || goal?.title || 'Incentivo';
                 const date = invoice?.date || creditNote?.date;
-                const type = goal ? `Recompensa · ${line.goalAward.level || ''}` : 'Comisión';
+                const type = goal ? `Recompensa · ${goalLevel(line.goalAward.level || '')}` : 'Comisión';
                 return <tr key={line.id} className="border-t border-border/60"><td className="px-3 py-2">{type}</td><td className="px-3 py-2">{source}</td><td className="px-3 py-2">{date ? new Date(date).toLocaleDateString('es-NI') : '—'}</td><td className="px-3 py-2 text-right font-semibold">{money(Number(line.amount), line.currency || payoutForDetail.currency)}</td></tr>;
               })}
               {!(payoutForDetail.lines || []).length && <tr><td colSpan={4} className="px-3 py-5 text-center text-muted-foreground">Este pago no tiene líneas de detalle disponibles.</td></tr>}
