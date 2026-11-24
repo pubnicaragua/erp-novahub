@@ -20,6 +20,7 @@ export interface WaOverview {
 export type WaPairingState = 'open' | 'connecting' | 'close';
 export interface WaPairing { state: WaPairingState; qr?: string; pairingCode?: string; ownerPhone?: string }
 export interface WaContact { id: string; phone: string; name: string; isGroup?: boolean; leadId: string | null; customerId: string | null }
+export interface WaParticipant { id: string; phone: string | null; name: string | null; admin: boolean }
 export interface WaConversation {
   id: string; lineId: string; line: { id: string; name: string; color: string | null; provider: WaProvider };
   status: WaConversationStatus; unreadCount: number; assigneeId: string | null; assigneeName: string | null;
@@ -58,7 +59,9 @@ export const whatsappService = {
   messages: (id: string, params: { before?: string; limit?: number } = {}, signal?: AbortSignal) =>
     api.get<{ items: WaMessage[]; nextBefore: string | null }>(`${base}/conversations/${enc(id)}/messages`, { params, signal }),
   markRead: (id: string) => api.post<{ ok: boolean }>(`${base}/conversations/${enc(id)}/read`, {}),
-  sendText: (id: string, body: string, clientRef: string) => api.post<WaMessage>(`${base}/conversations/${enc(id)}/messages`, { body, clientRef }),
+  sendText: (id: string, body: string, clientRef: string, mentions?: string[]) => api.post<WaMessage>(`${base}/conversations/${enc(id)}/messages`, { body, clientRef, ...(mentions?.length ? { mentions } : {}) }),
+  participants: (id: string, signal?: AbortSignal) => api.get<{ items: WaParticipant[] }>(`${base}/conversations/${enc(id)}/participants`, { signal }),
+  photo: (id: string, signal?: AbortSignal) => api.get<{ url: string | null }>(`${base}/conversations/${enc(id)}/photo`, { signal }),
   sendMedia: (id: string, file: File, caption: string, clientRef: string) => {
     const form = new FormData();
     form.append('file', file, file.name);
