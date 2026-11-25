@@ -37,7 +37,7 @@ export function TaskTraceLine({ task, className, compact = false }: TaskTraceLin
   return (
     <div className={cn('min-w-0 space-y-0.5 text-[11px] text-muted-foreground', className)} title={title} data-testid="activities-task-created-by">
       {step(UserPlus, <>Creó <span className="font-semibold text-foreground/80">{who}</span> · {shortDateTime(created.at)}</>, 'activities-task-trace-created')}
-      {!compact && started.done && step(Play, <>Tomó{started.who ? <> <span className="font-semibold text-foreground/80">{started.who}</span></> : null} · {shortDateTime(started.at)}{durationLabel(created.at, started.at) ? ` (esperó ${durationLabel(created.at, started.at)})` : ''}</>, 'activities-task-trace-started')}
+      {!compact && started.done && step(Play, <>En progreso · {shortDateTime(started.at)}</>, 'activities-task-trace-started')}
       {!compact && submitted.done && step(Send, <>A revisión · {shortDateTime(submitted.at)}</>, 'activities-task-trace-submitted')}
       {!compact && completed.done && step(CheckCircle2, <>Completada · {shortDateTime(completed.at)}{durationLabel(started.at || created.at, completed.at) ? ` (tardó ${durationLabel(started.at || created.at, completed.at)})` : ''}</>, 'activities-task-trace-completed', 'text-emerald-700 dark:text-emerald-400')}
       {!compact && waiting && step(Hourglass, <>Sin tomar hace {waiting}</>, 'activities-task-trace-waiting', 'font-semibold text-amber-700 dark:text-amber-400')}
