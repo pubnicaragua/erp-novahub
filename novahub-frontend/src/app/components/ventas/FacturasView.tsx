@@ -224,6 +224,9 @@ export function FacturasView({ data, summaryData, summaryLoading, summaryError, 
   const findProductForItem = (item: any) => products.find((product: any) => String(product.id) === String(item?.productId))
     || products.find((product: any) => product.code && String(product.code).trim().toUpperCase() === String(item?.code || item?.productCode || '').trim().toUpperCase())
     || products.find((product: any) => String(product.name || '').trim().toLowerCase() === String(item?.description || '').trim().toLowerCase());
+  const getEffectiveServiceTaxRate = (item: any) => item?.taxRate !== undefined && item?.taxRate !== null
+    ? normalizeCatalogTaxRatePercent(item.taxRate)
+    : normalizeCatalogTaxRatePercent(findProductForItem(item)?.taxRate);
   const resolveItemType = (item: any) => {
     const catalogType = getCatalogItemType(findProductForItem(item));
     return catalogType === 'SERVICE' ? 'SERVICE' : (item.itemType || 'PRODUCT');
@@ -669,12 +672,7 @@ export function FacturasView({ data, summaryData, summaryLoading, summaryError, 
       const updatePricingMode = String((updates as any).pricingMode || pricingMode).toLowerCase();
       if (Array.isArray(payload.items)) {
         payload.items = payload.items.map((item: any) => resolveItemType(item) === 'SERVICE' && updatePricingMode === 'global'
-          ? {
-            ...item,
-            taxRate: Number(item.taxRate || 0) > 0
-              ? Number(item.taxRate)
-              : normalizeCatalogTaxRatePercent(findProductForItem(item)?.taxRate),
-          }
+          ? { ...item, taxRate: getEffectiveServiceTaxRate(item) }
           : item);
       }
       await invoicesService.update(id.toString(), payload);
@@ -1407,7 +1405,7 @@ export function FacturasView({ data, summaryData, summaryLoading, summaryError, 
             unitPrice: Number(item.unitPrice || 0),
             productCode: item.productCode || item.code || findProductForItem(item)?.code || undefined,
             taxRate: resolveItemType(item) === 'SERVICE' && pricingMode === 'global'
-              ? (Number(item.taxRate || 0) > 0 ? Number(item.taxRate) : normalizeCatalogTaxRatePercent(findProductForItem(item)?.taxRate))
+              ? getEffectiveServiceTaxRate(item)
               : Number(item.taxRate || 0),
             discount: Number(item.discount || 0),
             priceListId: item.priceListId || localDoc.priceListId || undefined,
@@ -1691,7 +1689,7 @@ export function FacturasView({ data, summaryData, summaryLoading, summaryError, 
     const productSubtotal = items.filter((it: any) => resolveItemType(it) !== 'SERVICE')
       .reduce((acc: number, it: any) => acc + Number(it.quantity || 0) * Number(it.unitPrice || 0), 0);
     const taxableServiceSubtotal = items.filter((it: any) => resolveItemType(it) === 'SERVICE'
-      && (Number(it.taxRate || 0) > 0 || normalizeCatalogTaxRatePercent(findProductForItem(it)?.taxRate) > 0))
+      && getEffectiveServiceTaxRate(it) > 0)
       .reduce((acc: number, it: any) => acc + Number(it.quantity || 0) * Number(it.unitPrice || 0), 0);
     const taxableSubtotal = productSubtotal + taxableServiceSubtotal;
     const taxAmount = Math.max(0, taxableSubtotal - taxableSubtotal * (dRate / 100)) * (tRate / 100);
@@ -1730,6 +1728,15 @@ export function FacturasView({ data, summaryData, summaryLoading, summaryError, 
     return { items: pricedItems, subtotal, discountAmount, taxAmount, total: subtotal - discountAmount + taxAmount + additionalChargesTotal() };
   };
 
+  const updateInvoiceItemTaxRate = (index: number, taxRate: number) => {
+    if (!localDoc) return;
+    const nextItems = [...(localDoc.items || [])];
+    nextItems[index] = { ...nextItems[index], taxRate };
+    const calc = recalcTotals(nextItems, localRates.dRate, localRates.tRate);
+    setLocalDoc({ ...localDoc, ...calc });
+    if (!isCreating && localDoc.id) void handleUpdate(localDoc.id, calc as any);
+  };
+
   const changePricingMode = (mode: 'global' | 'individual') => {
     const nextRates = mode === 'global' ? { dRate: 0, tRate: 15 } : { dRate: 0, tRate: 0 };
     setPricingMode(mode);
@@ -1738,7 +1745,7 @@ export function FacturasView({ data, summaryData, summaryLoading, summaryError, 
 
     const sourceItems = localDoc.items || [];
     const itemsForMode = mode === 'individual'
-      ? sourceItems.map((item: any) => Number(item.taxRate || 0) > 0
+      ? sourceItems.map((item: any) => item.taxRate !== undefined && item.taxRate !== null
         ? item
         : { ...item, taxRate: normalizeCatalogTaxRatePercent(findProductForItem(item)?.taxRate) })
       : sourceItems;
@@ -2423,7 +2430,7 @@ export function FacturasView({ data, summaryData, summaryLoading, summaryError, 
                      }} className="w-16 h-8 text-right font-bold text-rose-500 bg-transparent" disabled={isInvoiceLocked} currencyPrecision /> : null} {pricingMode === 'global' && <span className="ml-1 text-xs font-black">%</span>}</div>
                     <span className="min-w-[7.5rem] text-right tabular-nums">-{localDoc?.currency === 'USD' ? '$' : 'C$'} {formatSalesAmount(localDoc?.discountAmount)}</span>
                   </div></div>
-                <div className="flex min-w-0 flex-wrap items-center justify-between gap-2 text-sm"><span className="text-muted-foreground">IVA de productos</span>
+                <div className="flex min-w-0 flex-wrap items-center justify-between gap-2 text-sm"><span className="text-muted-foreground">IVA global</span>
                   <div className="flex min-w-[9rem] flex-wrap items-center justify-end gap-2">
                     {pricingMode === 'global' && <label className="flex h-8 items-center gap-1.5 rounded-md bg-muted/30 px-2 text-xs font-black">
                       <input type="checkbox" checked={Number(localRates.tRate || 0) > 0} onChange={(e) => {
@@ -2555,6 +2562,19 @@ export function FacturasView({ data, summaryData, summaryLoading, summaryError, 
                           }}
                           placeholder={resolveItemType(item) === 'SERVICE' ? 'Seleccionar servicio...' : 'Seleccionar producto...'}
                         />
+                        {pricingMode === 'global' && resolveItemType(item) === 'SERVICE' && <label className="mt-1 inline-flex max-w-full items-center gap-2 text-[10px] font-semibold text-muted-foreground">
+                          <input
+                            type="checkbox"
+                            aria-label="IVA del servicio en esta factura"
+                            checked={getEffectiveServiceTaxRate(item) > 0}
+                            onChange={(event) => updateInvoiceItemTaxRate(
+                              idx,
+                              event.target.checked ? (getEffectiveServiceTaxRate(item) || 15) : 0,
+                            )}
+                            disabled={isInvoiceLocked}
+                          />
+                          IVA del servicio en esta factura (15%)
+                        </label>}
                         </div>
                       {resolveItemType(item) !== 'SERVICE' && <SalesVariantSelect
                         className="sales-line-variant sales-quote-line-variant-column"
@@ -2703,11 +2723,7 @@ export function FacturasView({ data, summaryData, summaryLoading, summaryError, 
                       <label className="relative flex min-w-0 flex-1 items-center font-black uppercase tracking-wider">
                         <span className="flex h-8 w-full items-center gap-1.5 rounded-md border border-input bg-background px-2">
                           <input type="checkbox" checked={Number(item.taxRate || 0) > 0} onChange={(event) => {
-                            const nextItems = [...(localDoc.items || [])];
-                            nextItems[idx] = { ...nextItems[idx], taxRate: event.target.checked ? 15 : 0 };
-                            const recalculated = recalcTotals(nextItems, 0, 0);
-                            setLocalDoc({ ...localDoc, ...recalculated });
-                            if (!isCreating) void handleUpdate(localDoc!.id, recalculated as any);
+                            updateInvoiceItemTaxRate(idx, event.target.checked ? (getEffectiveServiceTaxRate(item) || 15) : 0);
                        }} disabled={isInvoiceLocked} />
                           <span className="text-xs">IVA</span>
                         </span>
