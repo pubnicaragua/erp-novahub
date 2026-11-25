@@ -22,6 +22,16 @@ import { AuditHistoryDisclosure } from '../ui/AuditHistoryDisclosure';
 import { GuidedTour, type GuidedTourStep } from '../ui/GuidedTour';
 import { canAccessModuleView } from '../../utils/moduleViewAccess';
 import { isEnterpriseModuleInFamily } from '../../constants/enterpriseModules';
+import { useEnabledTenantFeatures } from '../../hooks/useEnabledTenantFeatures';
+
+/** Vistas de Flota que el administrador reparte por rol, y la función específica que el superadmin debe haber habilitado. */
+const TRIP_VIEW_FEATURES: Record<string, string> = { FLEET_REMISSION: 'FLEET_TRIP_REMISSION', FLEET_COSTS: 'FLEET_TRIP_COSTS' };
+/** En qué vista de Ventas se ofrece cada una, para que el administrador la encuentre donde la usa. */
+const TRIP_VIEW_PLACEMENTS: Record<string, { viewId: 'FLEET_REMISSION' | 'FLEET_COSTS'; title: string; description: string }> = {
+  SALES_ORDERS: { viewId: 'FLEET_REMISSION', title: 'Datos de remisión del viaje', description: 'Quién ve y llena la remisión (origen, destino, camión, conductor, galones) en la orden de venta. Nunca ve costos.' },
+  SALES_INVOICES: { viewId: 'FLEET_COSTS', title: 'Costo interno del viaje', description: 'Quién ve y edita el costo interno del viaje, el precio y la ganancia en la factura.' },
+  SALES_QUOTES: { viewId: 'FLEET_COSTS', title: 'Costo interno del viaje', description: 'Quién ve y edita el costo interno del viaje en la cotización.' },
+};
 
 interface TeamAccessPanelProps {
   tenantId: string;
@@ -481,6 +491,10 @@ export function TeamAccessPanel({ tenantId, tenantName, users, onBack, onRolesCh
     },
   );
 
+  // Remisión y costo del viaje solo se ofrecen si el superadmin habilitó la función para ESTA empresa (sin saberlo, no se muestran).
+  const tenantFeatures = useEnabledTenantFeatures();
+  const tripViewOffered = (viewId: string) => currentUser?.tenantId === tenantId && tenantFeatures.has(TRIP_VIEW_FEATURES[viewId]);
+
   const rolePermissionModules = useMemo(() => {
     const fallback = currentUser?.tenantId === tenantId && Array.isArray(currentUser.enabledModules)
       ? currentUser.enabledModules
@@ -498,6 +512,7 @@ export function TeamAccessPanel({ tenantId, tenantName, users, onBack, onRolesCh
     // acceso a Roles puede administrarlas, aunque no sean módulos facturables.
     return ROLE_PERMISSION_MODULES.filter((module: any) => {
       if (HIDDEN_PERMISSION_MODULE_IDS.has(String(module.id).toUpperCase())) return false;
+      if (TRIP_VIEW_FEATURES[module.id] && !tripViewOffered(module.id)) return false;
       if (!canAccessModuleView(currentUser?.moduleAccessPolicies, module.id)) return false;
       if (module.id === 'DASHBOARD') return true;
       if (module.parent === 'MY_COMPANY' || module.parent === 'CONFIGURATION') return true;
@@ -506,7 +521,7 @@ export function TeamAccessPanel({ tenantId, tenantName, users, onBack, onRolesCh
       if (!module.parent) return hasParentScope(module.id);
       return hasParentScope(module.parent) && scope.has(module.parent);
     });
-  }, [currentUser, enabledModulesData, tenantId]);
+  }, [currentUser, enabledModulesData, tenantId, tenantFeatures.features]);
 
   useEffect(() => {
     if (!roleHighlightRequest?.roleId) return;
@@ -1097,6 +1112,26 @@ export function TeamAccessPanel({ tenantId, tenantName, users, onBack, onRolesCh
                                     <div className="min-w-0"><p className="text-xs font-semibold">{getActionLabel(key, module.id)}</p><p className="text-[10px] leading-relaxed text-muted-foreground">{getViewActionDescription(module, key)}</p></div>
                                  </div>
                                ))}
+                               {TRIP_VIEW_PLACEMENTS[module.id] && tripViewOffered(TRIP_VIEW_PLACEMENTS[module.id].viewId) && (() => {
+                                 const placement = TRIP_VIEW_PLACEMENTS[module.id];
+                                 const tripPermission = normalizePermissions(editingRole.permissions).find((item: any) => item.module === placement.viewId) || {};
+                                 return (
+                                   <div className="col-span-full space-y-2 rounded-lg border border-primary/20 bg-primary/5 p-3 sm:p-4" data-testid={`trip-access-${module.id}`}>
+                                     <div className="min-w-0">
+                                       <p className="text-xs font-bold">{placement.title}</p>
+                                       <p className="text-[10px] leading-relaxed text-muted-foreground">{placement.description}</p>
+                                     </div>
+                                     <div className="grid gap-2 sm:grid-cols-2">
+                                       {(['read', 'edit'] as const).map((tripAction) => (
+                                         <label key={tripAction} className="flex min-w-0 cursor-pointer items-center gap-2 rounded-lg border border-border/50 bg-card px-3 py-2">
+                                           <Checkbox checked={permissionValue(tripPermission, tripAction, placement.viewId)} onCheckedChange={() => togglePermission(placement.viewId, tripAction)} disabled={roleSaving || (!canEditRoles && !canCreateRoles)} aria-label={`${placement.title}: ${tripAction === 'read' ? 'Ver' : 'Editar'}`} />
+                                           <span className="text-xs font-semibold">{tripAction === 'read' ? 'Puede ver' : 'Puede llenar y editar'}</span>
+                                         </label>
+                                       ))}
+                                     </div>
+                                   </div>
+                                 );
+                               })()}
                                {module.id === 'SALES_PRICE_LISTS' && (
                                  <div className="col-span-full space-y-3 rounded-lg border border-primary/20 bg-primary/5 p-3 sm:p-4">
                                    <div className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
