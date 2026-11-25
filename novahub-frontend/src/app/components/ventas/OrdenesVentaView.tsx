@@ -28,6 +28,7 @@ import { storageService } from '../../services/storage.service';
 import { publicAccessService, publicLinkUrl } from '../../services/public-access.service';
 import { useAuth } from '../../contexts/AuthContext';
 import { useTheme } from '../../contexts/ThemeContext';
+import { useEnabledTenantFeatures } from '../../hooks/useEnabledTenantFeatures';
 import { SalesLinePriceListSelect, PriceMissingBadge } from './SalesLinePriceListSelect';
 import { SalesAccountingLegend } from './SalesAccountingLegend';
 import { getCatalogUnitPrice, formatSalesAmount, getMissingSalesPriceMessage, hasSalesProductPriceListConflict, hasSalesProductPriceListConflicts } from '../../utils/salesPriceList';
@@ -133,6 +134,8 @@ const getOrderWorkflowIssues = (order: SalesOrder | null | undefined): string[] 
 export function OrdenesVentaView({ data, summaryData, summaryLoading, summaryError, loading, onRefresh, onGenerateInvoice, targetOrderId, onClearTargetOrderId, customers = [], products = [], productsLoading = false, productsError = false, warehouses = [], employees = [], pagination, onSearchChange, dateFrom = '', dateTo = '', onDateRangeChange, selectedBranchId = '', statusFilter: controlledStatusFilter, onStatusFilterChange, salesAlert }: OrdenesVentaViewProps) {
   const { exchangeRate: globalRate, displayCurrency, baseCurrency, displayMode, formatConvertedAmount, formatExplicitAmount, toBaseAmount, formatAmount } = useCurrency();
   const { user, canPerform } = useAuth();
+  // Función específica por empresa: el superadmin la enciende solo para quien no maneja forma de pago en el pedido.
+  const hidePaymentMethod = useEnabledTenantFeatures().has('SALES_ORDER_HIDE_PAYMENT_METHOD');
   const tenantKey = user?.tenantId || user?.clientTenantId || 'anonymous';
   const { themeConfig } = useTheme();
   const salesDraftStorageKey = getSalesEditorDraftKey('sales-order', user?.tenantId, user?.id);
@@ -1038,21 +1041,23 @@ export function OrdenesVentaView({ data, summaryData, summaryLoading, summaryErr
                     Tasa de cambio configurada: <span className="font-bold">{formatNumber2(Number(localDoc?.currency === 'NIO' ? 1 : localDoc?.exchangeRate || globalRate || 1))}</span>
                   </p>
                 </div>
-                <div>
-                  <p className="text-[10px] text-muted-foreground mb-1">Forma de pago</p>
-                  <Select
-                    value={localDoc?.paymentMethod || ''}
-                    onValueChange={(paymentMethod) => {
-                      setLocalDoc({ ...localDoc, paymentMethod } as any);
-                      void handleUpdate(localDoc!.id, { paymentMethod } as Partial<SalesOrder>);
-                    }}
-                  >
-                    <SelectTrigger className="h-8 text-xs"><SelectValue placeholder="Seleccionar forma de pago" /></SelectTrigger>
-                    <SelectContent>
-                      {paymentMethodOptions.map((method) => <SelectItem key={method.value} value={method.value}>{method.label}</SelectItem>)}
-                    </SelectContent>
-                  </Select>
-                </div>
+                {!hidePaymentMethod && (
+                  <div>
+                    <p className="text-[10px] text-muted-foreground mb-1">Forma de pago</p>
+                    <Select
+                      value={localDoc?.paymentMethod || ''}
+                      onValueChange={(paymentMethod) => {
+                        setLocalDoc({ ...localDoc, paymentMethod } as any);
+                        void handleUpdate(localDoc!.id, { paymentMethod } as Partial<SalesOrder>);
+                      }}
+                    >
+                      <SelectTrigger className="h-8 text-xs"><SelectValue placeholder="Seleccionar forma de pago" /></SelectTrigger>
+                      <SelectContent>
+                        {paymentMethodOptions.map((method) => <SelectItem key={method.value} value={method.value}>{method.label}</SelectItem>)}
+                      </SelectContent>
+                    </Select>
+                  </div>
+                )}
               </div>
             </CardContent>
           </Card>
