@@ -666,8 +666,9 @@ export function FacturasView({ data, summaryData, summaryLoading, summaryError, 
   const handleUpdate = async (id: string | number, updates: Partial<Invoice>) => {
     try {
       const payload = { ...updates } as any;
+      const updatePricingMode = String((updates as any).pricingMode || pricingMode).toLowerCase();
       if (Array.isArray(payload.items)) {
-        payload.items = payload.items.map((item: any) => resolveItemType(item) === 'SERVICE' && pricingMode === 'global'
+        payload.items = payload.items.map((item: any) => resolveItemType(item) === 'SERVICE' && updatePricingMode === 'global'
           ? {
             ...item,
             taxRate: Number(item.taxRate || 0) > 0
@@ -1683,8 +1684,8 @@ export function FacturasView({ data, summaryData, summaryLoading, summaryError, 
     if (!isCreating) void handleUpdate(localDoc.id, { ...updates, total } as any);
   };
 
-  const recalcTotals = (items: any[], dRate: number, tRate: number) => {
-    if (pricingMode === 'individual') return recalcIndividualTotals(items);
+  const recalcTotals = (items: any[], dRate: number, tRate: number, mode: 'global' | 'individual' = pricingMode) => {
+    if (mode === 'individual') return recalcIndividualTotals(items);
     const subtotal = items.reduce((acc: number, it: any) => acc + Number(it.quantity || 0) * Number(it.unitPrice || 0), 0);
     const discountAmount = subtotal * (dRate / 100);
     const productSubtotal = items.filter((it: any) => resolveItemType(it) !== 'SERVICE')
@@ -1727,6 +1728,25 @@ export function FacturasView({ data, summaryData, summaryLoading, summaryError, 
       return sum + (gross - gross * Number(line.discount || 0) / 100) * Number(line.taxRate || 0) / 100;
     }, 0);
     return { items: pricedItems, subtotal, discountAmount, taxAmount, total: subtotal - discountAmount + taxAmount + additionalChargesTotal() };
+  };
+
+  const changePricingMode = (mode: 'global' | 'individual') => {
+    const nextRates = mode === 'global' ? { dRate: 0, tRate: 15 } : { dRate: 0, tRate: 0 };
+    setPricingMode(mode);
+    setLocalRates(nextRates);
+    if (!localDoc) return;
+
+    const sourceItems = localDoc.items || [];
+    const itemsForMode = mode === 'individual'
+      ? sourceItems.map((item: any) => Number(item.taxRate || 0) > 0
+        ? item
+        : { ...item, taxRate: normalizeCatalogTaxRatePercent(findProductForItem(item)?.taxRate) })
+      : sourceItems;
+    const calc = recalcTotals(itemsForMode, nextRates.dRate, nextRates.tRate, mode);
+    setLocalDoc({ ...localDoc, ...calc });
+    if (!isCreating && localDoc.id) {
+      void handleUpdate(localDoc.id, { ...calc, pricingMode: mode } as any);
+    }
   };
 
   const applyVoiceLinesToInvoice = (lines: VoiceSaleLine<Product>[], metadata: VoiceSaleMetadata) => {
@@ -2388,8 +2408,8 @@ export function FacturasView({ data, summaryData, summaryLoading, summaryError, 
               <p className="text-xs font-black uppercase tracking-widest text-muted-foreground">Resumen Financiero</p>
               <div className="flex flex-wrap items-center gap-2 rounded-xl border border-border/50 bg-muted/10 p-2 text-[10px] font-black uppercase tracking-widest">
                 <span className="text-muted-foreground">Aplicar impuestos/descuentos:</span>
-                 <Button type="button" disabled={isInvoiceLocked} size="sm" variant={pricingMode === 'global' ? 'default' : 'outline'} className="h-7 rounded-lg px-2 text-[10px]" onClick={() => { setPricingMode('global'); setLocalRates({ dRate: 0, tRate: 15 }); }}>Global</Button>
-                 <Button type="button" disabled={isInvoiceLocked} size="sm" variant={pricingMode === 'individual' ? 'default' : 'outline'} className="h-7 rounded-lg px-2 text-[10px]" onClick={() => { setPricingMode('individual'); setLocalRates({ dRate: 0, tRate: 0 }); }}>{'Por producto'}</Button>
+                 <Button type="button" disabled={isInvoiceLocked} size="sm" variant={pricingMode === 'global' ? 'default' : 'outline'} className="h-7 rounded-lg px-2 text-[10px]" onClick={() => changePricingMode('global')}>Global</Button>
+                 <Button type="button" disabled={isInvoiceLocked} size="sm" variant={pricingMode === 'individual' ? 'default' : 'outline'} className="h-7 rounded-lg px-2 text-[10px]" onClick={() => changePricingMode('individual')}>{'Por producto'}</Button>
               </div>
               <div className="space-y-3">
                 <div className="flex min-w-0 flex-wrap items-center justify-between gap-2 text-sm"><span className="text-muted-foreground">Subtotal</span>

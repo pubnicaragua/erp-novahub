@@ -17,6 +17,7 @@
     "check:names": "node scripts/check-undefined-names.mjs",
     "check:currency": "node scripts/check-currency-practices.mjs",
     "test:sales-unit-price": "node scripts/test-sales-unit-price.mjs",
+    "test:sales-global-vat-mode": "node scripts/test-invoice-global-vat-mode.mjs",
     "test:input-step": "node scripts/test-input-step.mjs",
     "audit:inputs": "node scripts/audit-inputs.mjs",
     "audit": "npm run check:force-sales-map && npm run check:names && npm run check:init && npm run check:currency && npm run test:currency-equivalent && npm run audit:inputs && npm run audit:ids && npm run test:input-step && npm run test:sales-unit-price && npm run test:check-init && npm run test:display-text && npm run test:money-rounding",
