@@ -522,7 +522,7 @@ const ProductImportPreviewRow = memo(function ProductImportPreviewRow({
       </TableCell>
       <TableCell className="p-1"><Input value={row.code} onChange={(event) => onRowUpdate(index, 'code', event.target.value)} className={`h-8 text-xs font-mono ${!row.code ? 'border-destructive' : ''}`} /></TableCell>
       <TableCell className="min-w-[220px] p-1"><div className="space-y-1"><Input value={row.name} title={row.name} onChange={(event) => onRowUpdate(index, 'name', event.target.value)} className={`h-8 w-full text-xs ${!row.name ? 'border-destructive' : ''}`} />{isService && <Input value={row.description || ''} title={row.description || ''} onChange={(event) => onRowUpdate(index, 'description', event.target.value)} className="h-8 w-full text-xs" placeholder="Descripción" />}{hasVariants && <span className="flex flex-wrap items-center gap-1 text-[10px] font-black text-primary"><span>Producto padre</span><Badge variant="outline" className="border-primary/25 bg-primary/5 text-[9px] text-primary">{row._variantCount} variantes</Badge></span>}</div></TableCell>
-      <TableCell className="p-1"><Input value={row.brand || ''} title={row.brand || ''} onChange={(event) => onRowUpdate(index, 'brand', event.target.value)} className="h-8 text-xs" /></TableCell>
+      {!isService && <TableCell className="p-1"><Input value={row.brand || ''} title={row.brand || ''} onChange={(event) => onRowUpdate(index, 'brand', event.target.value)} className="h-8 text-xs" /></TableCell>}
       <TableCell className="min-w-[180px] p-1"><Input value={row.commercialNote || ''} maxLength={100} title={row.commercialNote || ''} onChange={(event) => onRowUpdate(index, 'commercialNote', event.target.value)} className="h-8 w-full text-xs" /></TableCell>
       <TableCell className="p-1 text-center">
         {row._imageStatus === 'matched' ? <span role="img" aria-label="Imagen vinculada" title="Imagen vinculada"><ImageIcon className="mx-auto size-4 text-success" /></span> : row._imageStatus === 'missing' ? <span role="img" aria-label="Imagen no vinculada" title="No se encontró una imagen con el mismo SKU"><ImageOff className="mx-auto size-4 text-destructive" /></span> : <span role="img" aria-label="Sin archivo de imágenes" title="No se cargó un ZIP o RAR de imágenes"><ImageOff className="mx-auto size-4 text-muted-foreground/50" /></span>}
@@ -546,7 +546,10 @@ const ProductImportPreviewRow = memo(function ProductImportPreviewRow({
       </TableCell>
       <TableCell className="p-1"><Input value={row.unit ?? ''} onChange={(event) => onRowUpdate(index, 'unit', event.target.value)} className="h-8 text-right text-xs" /></TableCell>
       {isService && <TableCell className="p-1"><Input type="number" min={0} step="1" value={row.estimatedDuration ?? ''} onChange={(event) => onRowUpdate(index, 'estimatedDuration', event.target.value === '' ? undefined : Number(event.target.value))} aria-label="Duración estimada en minutos" className="h-8 text-right text-xs" /></TableCell>}
-      {isService ? <TableCell className="p-1"><ImportMoneyInput type="number" min={0} value={row.salePrice ?? ''} onChange={(event) => onRowUpdate(index, 'servicePrice', event.target.value)} aria-label="Precio del servicio" className="h-8 text-right text-xs" currencySymbol={currencySymbol} /></TableCell> : priceLists.map((list) => <TableCell key={list.code} className="p-1"><ImportMoneyInput type="number" min={0} value={row.prices?.[list.code] ?? ''} onChange={(event) => onRowUpdate(index, `price.${list.code}`, event.target.value)} aria-label={`Precio ${list.name}`} className="h-8 text-right text-xs" currencySymbol={currencySymbol} /></TableCell>)}
+      {isService ? <>
+        <TableCell className="p-1"><ImportMoneyInput type="number" min={0} value={row.salePrice ?? ''} onChange={(event) => onRowUpdate(index, 'servicePrice', event.target.value)} aria-label="Precio del servicio" className="h-8 text-right text-xs" currencySymbol={currencySymbol} /></TableCell>
+        <TableCell className="p-1"><Input type="number" min={0} max={100} step="0.01" value={row.taxRate === undefined || row.taxRate === null ? '' : Number(row.taxRate) * 100} placeholder="0" aria-label="Tasa IVA del servicio" onChange={(event) => onRowUpdate(index, 'serviceTaxRate', event.target.value)} className="h-8 text-right text-xs" /></TableCell>
+      </> : priceLists.map((list) => <TableCell key={list.code} className="p-1"><ImportMoneyInput type="number" min={0} value={row.prices?.[list.code] ?? ''} onChange={(event) => onRowUpdate(index, `price.${list.code}`, event.target.value)} aria-label={`Precio ${list.name}`} className="h-8 text-right text-xs" currencySymbol={currencySymbol} /></TableCell>)}
       {canViewInventoryCost && <TableCell className="p-1"><ImportMoneyInput type="number" min={0} value={row.costPrice ?? ''} onChange={(event) => onRowUpdate(index, 'costPrice', event.target.value)} aria-label={isService ? 'Costo del servicio' : 'Costo'} className="h-8 text-right text-xs" currencySymbol={currencySymbol} /></TableCell>}
       {isService ? <>
         <TableCell className="p-1"><Select value={row.isActive === false ? 'false' : 'true'} onValueChange={(value) => onRowUpdate(index, 'isActive', value === 'true')}><SelectTrigger className="h-8 text-xs"><SelectValue /></SelectTrigger><SelectContent><SelectItem value="true">Disponible</SelectItem><SelectItem value="false">No disponible</SelectItem></SelectContent></Select></TableCell>
@@ -708,8 +711,8 @@ function ImportPreviewPage({
   const mobileScrollRef = useRef<HTMLDivElement>(null);
   const [rowsReady, setRowsReady] = useState(false);
   const gridTemplate = [
-    '32px', '128px', 'minmax(220px, 1fr)', '144px', '180px', '80px', '128px', '112px',
-    ...(isService ? ['112px'] : visiblePriceLists.map(() => '112px')),
+    '32px', '128px', 'minmax(220px, 1fr)', ...(!isService ? ['144px'] : []), '180px', '80px', '128px', '112px',
+    ...(isService ? ['112px', '80px'] : visiblePriceLists.map(() => '112px')),
     ...(canViewInventoryCost ? ['112px'] : []),
     ...(isService ? ['130px'] : ['96px', '96px', '220px']),
     '160px',
@@ -824,13 +827,16 @@ function ImportPreviewPage({
           <ImportPreviewField label="Unidad"><Input value={row.unit ?? ''} onChange={(event) => onRowUpdate(index, 'unit', event.target.value)} className={importPreviewFieldClass} disabled={importing} /></ImportPreviewField>
           {isService && <ImportPreviewField label="Duración (min)"><Input type="number" min={0} step="1" value={row.estimatedDuration ?? ''} onChange={(event) => onRowUpdate(index, 'estimatedDuration', event.target.value === '' ? undefined : Number(event.target.value))} className={`${importPreviewFieldClass} text-right`} disabled={importing} /></ImportPreviewField>}
           <ImportPreviewField label="Nombre *" className="sm:col-span-2"><Input value={row.name} title={row.name} onChange={(event) => onRowUpdate(index, 'name', event.target.value)} className={`${importPreviewFieldClass} ${!row.name ? 'border-destructive' : ''}`} disabled={importing} /></ImportPreviewField>
-          <ImportPreviewField label="Marca"><Input value={row.brand || ''} title={row.brand || ''} onChange={(event) => onRowUpdate(index, 'brand', event.target.value)} className={importPreviewFieldClass} disabled={importing} /></ImportPreviewField>
+          {!isService && <ImportPreviewField label="Marca"><Input value={row.brand || ''} title={row.brand || ''} onChange={(event) => onRowUpdate(index, 'brand', event.target.value)} className={importPreviewFieldClass} disabled={importing} /></ImportPreviewField>}
           {isService && <ImportPreviewField label="Descripción" className="sm:col-span-2"><Input value={row.description || ''} onChange={(event) => onRowUpdate(index, 'description', event.target.value)} className={importPreviewFieldClass} disabled={importing} /></ImportPreviewField>}
           <ImportPreviewField label="Nota comercial" className="sm:col-span-2"><Input value={row.commercialNote || ''} maxLength={100} title={row.commercialNote || ''} onChange={(event) => onRowUpdate(index, 'commercialNote', event.target.value)} className={importPreviewFieldClass} disabled={importing} /><span className="text-[10px] text-muted-foreground">{Array.from(String(row.commercialNote || '')).length}/100</span></ImportPreviewField>
           <ImportPreviewField label="Categoría" className="sm:col-span-2">
             {categoryExists ? <Input value={row.category} onChange={(event) => onRowUpdate(index, 'category', event.target.value)} className={importPreviewFieldClass} disabled={importing} /> : <div className="flex min-w-0 items-center gap-1"><Select value="__none__" onValueChange={(value) => { const category = categoryOptions.find((item: any) => item.id === value); if (category) onRowUpdate(index, 'category', category.name); }} disabled={importing}><SelectTrigger className={`${importPreviewFieldClass} min-w-0 flex-1 border-warning/60 text-warning`}><SelectValue /></SelectTrigger><SelectContent><SelectItem value="__none__">{row.category ? `No existe: ${row.category}` : 'Seleccionar categoría'}</SelectItem>{categoryOptions.length === 0 && <SelectItem value="__no_categories__" disabled>No hay registros</SelectItem>}{categoryOptions.map((category: any) => <SelectItem key={category.id} value={category.id}>{category.name}</SelectItem>)}</SelectContent></Select>{canCreateCategory && <Button type="button" variant="outline" size="sm" className="size-9 shrink-0 rounded-lg p-0 text-warning" title="Crear esta categoría" aria-label="Crear esta categoría" onClick={() => onCreateCategory(index, row.category || '')} disabled={importing}><Plus className="size-3.5" /></Button>}</div>}
           </ImportPreviewField>
-          {isService ? <ImportPreviewField label="Precio"><ImportMoneyInput type="number" min={0} value={row.salePrice ?? ''} onChange={(event) => onRowUpdate(index, 'servicePrice', event.target.value)} className={`${importPreviewFieldClass} text-right`} disabled={importing} currencySymbol={currencySymbol} /></ImportPreviewField> : visiblePriceLists.map((list) => <ImportPreviewField key={list.code} label={list.name}><ImportMoneyInput type="number" min={0} value={row.prices?.[list.code] ?? ''} onChange={(event) => onRowUpdate(index, `price.${list.code}`, event.target.value)} className={`${importPreviewFieldClass} text-right`} disabled={importing} currencySymbol={currencySymbol} /></ImportPreviewField>)}
+          {isService ? <>
+            <ImportPreviewField label="Precio"><ImportMoneyInput type="number" min={0} value={row.salePrice ?? ''} onChange={(event) => onRowUpdate(index, 'servicePrice', event.target.value)} className={`${importPreviewFieldClass} text-right`} disabled={importing} currencySymbol={currencySymbol} /></ImportPreviewField>
+            <ImportPreviewField label="Tasa IVA (%)"><Input type="number" min={0} max={100} step="0.01" value={row.taxRate === undefined || row.taxRate === null ? '' : Number(row.taxRate) * 100} placeholder="0" onChange={(event) => onRowUpdate(index, 'serviceTaxRate', event.target.value)} className={`${importPreviewFieldClass} text-right`} disabled={importing} /></ImportPreviewField>
+          </> : visiblePriceLists.map((list) => <ImportPreviewField key={list.code} label={list.name}><ImportMoneyInput type="number" min={0} value={row.prices?.[list.code] ?? ''} onChange={(event) => onRowUpdate(index, `price.${list.code}`, event.target.value)} className={`${importPreviewFieldClass} text-right`} disabled={importing} currencySymbol={currencySymbol} /></ImportPreviewField>)}
           {canViewInventoryCost && <ImportPreviewField label={isService ? 'Costo del servicio' : 'Costo'}><ImportMoneyInput type="number" min={0} value={row.costPrice ?? ''} onChange={(event) => onRowUpdate(index, 'costPrice', event.target.value)} className={`${importPreviewFieldClass} text-right`} disabled={importing} currencySymbol={currencySymbol} /></ImportPreviewField>}
           {isService ? <>
             <ImportPreviewField label="Disponibilidad"><Select value={row.isActive === false ? 'false' : 'true'} onValueChange={(value) => onRowUpdate(index, 'isActive', value === 'true')} disabled={importing}><SelectTrigger className={importPreviewFieldClass}><SelectValue /></SelectTrigger><SelectContent><SelectItem value="true">Disponible</SelectItem><SelectItem value="false">No disponible</SelectItem></SelectContent></Select></ImportPreviewField>
@@ -1042,13 +1048,13 @@ function ImportPreviewPage({
                 <TableHead className="w-8 text-[10px] uppercase"></TableHead>
                 <TableHead className="w-32 text-[10px] uppercase">{isService ? 'Código' : 'Código/Sku'}</TableHead>
                 <TableHead className="min-w-[220px] text-[10px] uppercase">{isService ? 'Nombre / descripción' : 'Nombre'}</TableHead>
-                <TableHead className="w-36 text-[10px] uppercase">Marca</TableHead>
+                {!isService && <TableHead className="w-36 text-[10px] uppercase">Marca</TableHead>}
                 <TableHead className="w-44 text-[10px] uppercase">Nota comercial</TableHead>
                 <TableHead className="w-20 text-center text-[10px] uppercase">Imagen</TableHead>
                 <TableHead className="w-32 text-[10px] uppercase">Categoría</TableHead>
                 <TableHead className="w-28 text-right text-[10px] uppercase">Unidad</TableHead>
                 {isService && <TableHead className="w-28 text-right text-[10px] uppercase">Duración (min)</TableHead>}
-                {isService ? <TableHead className="w-28 text-right text-[10px] uppercase">Precio</TableHead> : visiblePriceLists.map((list) => <TableHead key={list.code} className="w-28 text-right text-[10px] uppercase">{list.name}</TableHead>)}
+                {isService ? <><TableHead className="w-28 text-right text-[10px] uppercase">Precio</TableHead><TableHead className="w-20 text-right text-[10px] uppercase">IVA (%)</TableHead></> : visiblePriceLists.map((list) => <TableHead key={list.code} className="w-28 text-right text-[10px] uppercase">{list.name}</TableHead>)}
                   {canViewInventoryCost && <TableHead className="w-28 text-right text-[10px] uppercase">Costo</TableHead>}
                 {isService ? <TableHead className="w-32 text-[10px] uppercase">Disponibilidad</TableHead> : <><TableHead className="w-24 text-right text-[10px] uppercase">Stock</TableHead><TableHead className="w-24 text-right text-[10px] uppercase">Min</TableHead><TableHead className="w-56 text-[10px] uppercase">Bodega</TableHead></>}
                 <TableHead className="w-40 text-[10px] uppercase">Validación</TableHead>
@@ -1162,6 +1168,12 @@ export function ProductosView({ products, summaryProducts, summaryProductsLoaded
     resolved.forEach((list) => unique.set(normalizePriceListImportKey(list.code), list));
     return Array.from(unique.values());
   }, [configuredPriceLists]);
+  const servicePriceLists = useMemo(() => {
+    const activeLists = configuredPriceLists
+      .filter((list) => list.isActive !== false)
+      .map((list) => ({ code: list.code, name: list.name }));
+    return activeLists.length > 0 ? activeLists : importPriceLists;
+  }, [configuredPriceLists, importPriceLists]);
   const importPriceListsForView = isServiceView ? [] : importPriceLists;
   const getPrimaryImportPrice = useCallback((prices: Record<string, any> = {}) => {
     const first = importPriceListsForView.find((list) => prices[list.code] !== undefined && prices[list.code] !== null && prices[list.code] !== '');
@@ -3270,8 +3282,8 @@ export function ProductosView({ products, summaryProducts, summaryProductsLoaded
   const handleDownloadTemplate = useCallback(() => {
     const wb = XLSX.utils.book_new();
     if (isServiceView) {
-      const headers = ['Código', 'Nombre', 'Marca', 'Descripción', 'Nota comercial', 'Categoría', 'Unidad', 'Duración estimada (min)', 'Precio', ...(canViewInventoryCost ? ['Costo del servicio'] : []), 'Disponible'];
-      const sampleRow: any[] = ['SRV-001', 'Ejemplo de servicio', '', 'Descripción que aparecerá en ventas y documentos', 'Detalle comercial opcional', categories[0]?.name || 'Categoría de servicios', 'servicio', 60, 150, ...(canViewInventoryCost ? [80] : []), 'SI'];
+      const headers = ['Código', 'Nombre', 'Descripción', 'Nota comercial', 'Categoría', 'Unidad', 'Duración estimada (min)', 'Precio', 'Tasa IVA (%)', ...(canViewInventoryCost ? ['Costo del servicio'] : []), 'Disponible'];
+      const sampleRow: any[] = ['SRV-001', 'Ejemplo de servicio', 'Descripción que aparecerá en ventas y documentos', 'Detalle comercial opcional', categories[0]?.name || 'Categoría de servicios', 'servicio', 60, 150, 0, ...(canViewInventoryCost ? [80] : []), 'SI'];
       const ws = XLSX.utils.aoa_to_sheet([headers, sampleRow]);
       ws['!cols'] = headers.map((header) => ({ wch: Math.max(12, Math.min(28, header.length + 2)) }));
       XLSX.utils.book_append_sheet(wb, ws, 'Servicios');
@@ -3281,12 +3293,12 @@ export function ProductosView({ products, summaryProducts, summaryProductsLoaded
         ['Campo', 'Regla'],
         ['Código', 'Obligatorio y único dentro de la sucursal.'],
         ['Nombre', 'Obligatorio.'],
-        ['Marca', 'Opcional. Se guarda con el servicio al crear o actualizar la importación.'],
         ['Descripción', 'Opcional. Texto descriptivo del servicio.'],
         ['Nota comercial', 'Opcional; máximo 100 caracteres. Se muestra en ventas y documentos.'],
         ['Categoría', 'Debe existir y ser de tipo servicio.'],
         ['Precio', 'Obligatorio. Es el precio base/Minorista del servicio. Después de importarlo puedes configurar precios propios para otras listas desde la vista Servicios.'],
-        ['Importante', 'Los servicios no llevan IVA, no se vinculan a bodegas, no manejan stock y no tienen variantes.'],
+        ['Tasa IVA (%)', 'Opcional. Indica 0 para exento o la tasa aplicable, por ejemplo 15.'],
+        ['Importante', 'Los servicios pueden llevar IVA según la tasa indicada. No se vinculan a bodegas, no manejan stock y no tienen variantes.'],
         ['Imágenes', 'Las imágenes se cargan únicamente mediante ZIP/RAR y se vinculan por coincidencia exacta del código.'],
         ['Contabilidad', 'La importación de servicios no crea asiento de apertura porque no crea existencias físicas. El costo se conserva en el servicio y se contabiliza cuando corresponda en una venta.'],
       ]);
@@ -3316,13 +3328,13 @@ export function ProductosView({ products, summaryProducts, summaryProductsLoaded
   const handleDownloadImportErrors = useCallback(() => {
     const errors = importData.filter((row) => row._hasError || row._hasWarning).map((row) => ({
       [isServiceView ? 'Código' : 'Código/Sku']: row.code || '', Nombre: row.name || '', ...(isServiceView ? {
-        Marca: row.brand || '',
         Descripción: row.description || '',
         'Nota comercial': row.commercialNote || '',
         Categoría: row.category || '',
         Unidad: row.unit || '',
         'Duración estimada (min)': row.estimatedDuration ?? '',
         Precio: row.salePrice ?? '',
+        'Tasa IVA (%)': row.taxRate === undefined || row.taxRate === null ? '' : Number(row.taxRate) * 100,
         ...(canViewInventoryCost ? { 'Costo del servicio': row.costPrice ?? '' } : {}),
         Disponible: row.isActive === false ? 'NO' : 'SI',
       } : {
@@ -3359,8 +3371,12 @@ export function ProductosView({ products, summaryProducts, summaryProductsLoaded
       const categoryWillBeCreated = Boolean(String(row.category || '').trim())
         && (isServiceView || (!isServiceView && Boolean(row._advanced)));
       const cost = row.costPrice === '' || row.costPrice === undefined || row.costPrice === null ? undefined : Number(row.costPrice);
-      const rawTaxRate = isServiceView ? 0 : (row.taxRate === '' || row.taxRate === undefined || row.taxRate === null ? 0.15 : Number(row.taxRate));
+      const rawTaxRate = row.taxRate === '' || row.taxRate === undefined || row.taxRate === null
+        ? (isServiceView ? undefined : 0.15)
+        : Number(row.taxRate);
       const taxRate = rawTaxRate > 1 ? rawTaxRate / 100 : rawTaxRate;
+      const invalidTaxRate = rawTaxRate !== undefined
+        && (!Number.isFinite(Number(rawTaxRate)) || Number(rawTaxRate) < 0 || !Number.isFinite(Number(taxRate)) || Number(taxRate) > 1);
       const prices = row.prices || {};
       const servicePrice = row.salePrice === '' || row.salePrice === undefined || row.salePrice === null ? undefined : Number(row.salePrice);
       const priceEntries = isServiceView ? [['Precio', servicePrice] as const] : importPriceListsForView.map((list) => [`Precio ${list.name}`, prices[list.code]] as const);
@@ -3417,6 +3433,7 @@ export function ProductosView({ products, summaryProducts, summaryProductsLoaded
         !code ? 'SKU requerido' : codeCounts.get(code.toLowerCase())! > 1 ? 'SKU duplicado en la plantilla' : '',
         !String(row.name || '').trim() ? 'Nombre requerido' : '',
         Array.from(commercialNote).length > 100 ? 'Nota comercial supera 100 caracteres' : '',
+        invalidTaxRate ? 'Tasa de IVA inválida' : '',
          !categoryOk && !categoryWillBeCreated ? 'Categoría no encontrada' : '',
          !isServiceView && canViewInventoryCost && (cost === undefined || !Number.isFinite(cost) || cost < 0) ? 'Costo requerido y debe ser válido' : '',
          stockCostError,
@@ -3438,7 +3455,7 @@ export function ProductosView({ products, summaryProducts, summaryProductsLoaded
          name: String(row.name || '').trim(),
          description: String(row.description || '').trim(),
         commercialNote,
-        taxRate: isServiceView ? 0 : taxRate,
+        taxRate,
         ...(isServiceView ? { estimatedDuration: row.estimatedDuration === undefined || row.estimatedDuration === '' ? undefined : Number(row.estimatedDuration) } : {}),
          ...(isServiceView ? { initialStock: 0, minStock: 0, warehouse: '', warehouseId: undefined } : {}),
          ...(canViewInventoryCost ? { costPrice: cost } : {}),
@@ -3541,7 +3558,7 @@ export function ProductosView({ products, summaryProducts, summaryProductsLoaded
             category: String(get('category') || '').trim(),
             itemType: catalogItemType,
             commercialNote: String(get('commercialNote') || '').trim(),
-            description: String(get('description') || '').trim(), taxRate: catalogItemType === 'SERVICE' ? 0 : (toNumber('taxRate') ?? 0.15), isActive: !['NO', 'N', '0', 'FALSE', 'INACTIVO', 'NO DISPONIBLE'].includes(String(get('isActive') ?? 'SI').trim().toUpperCase()), brand: colMap.brand === undefined ? undefined : (String(get('brand') ?? '').trim() || null), estimatedDuration: toNumber('estimatedDuration'), trackInventory: String(get('trackInventory') || 'SI').toUpperCase() !== 'NO', trackBatch: String(get('trackBatch') || '').toUpperCase() === 'SI', attributes,
+            description: String(get('description') || '').trim(), taxRate: toNumber('taxRate') ?? (catalogItemType === 'SERVICE' ? undefined : 0.15), isActive: !['NO', 'N', '0', 'FALSE', 'INACTIVO', 'NO DISPONIBLE'].includes(String(get('isActive') ?? 'SI').trim().toUpperCase()), brand: colMap.brand === undefined ? undefined : (String(get('brand') ?? '').trim() || null), estimatedDuration: toNumber('estimatedDuration'), trackInventory: String(get('trackInventory') || 'SI').toUpperCase() !== 'NO', trackBatch: String(get('trackBatch') || '').toUpperCase() === 'SI', attributes,
             unit: String(get('unit') ?? '').trim().toLowerCase(),
             salePrice: catalogItemType === 'SERVICE'
               ? servicePrice
@@ -3712,7 +3729,9 @@ export function ProductosView({ products, summaryProducts, summaryProductsLoaded
       const row = { ...next[index], prices: { ...(next[index].prices || {}) } };
       if (field === 'servicePrice') {
         row.salePrice = value === '' ? undefined : Number(value);
-        row.taxRate = 0;
+      } else if (field === 'serviceTaxRate') {
+        const percent = value === '' ? undefined : Number(value);
+        row.taxRate = percent === undefined || !Number.isFinite(percent) ? undefined : percent / 100;
       } else if (field.startsWith('price.')) {
         const priceCode = field.split('.')[1];
         row.prices[priceCode] = value === '' ? undefined : Number(value);
@@ -3876,7 +3895,7 @@ export function ProductosView({ products, summaryProducts, summaryProductsLoaded
           categoryId: cat?.id,
           category: row.category,
           commercialNote: row.commercialNote,
-          description: row.description, taxRate: isServiceView ? 0 : row.taxRate, brand: row.brand, estimatedDuration: row.estimatedDuration, trackInventory: row.trackInventory, trackBatch: row.trackBatch, attributes: row.attributes,
+          description: row.description, taxRate: row.taxRate, ...(isServiceView ? {} : { brand: row.brand }), estimatedDuration: row.estimatedDuration, trackInventory: row.trackInventory, trackBatch: row.trackBatch, attributes: row.attributes,
           unit: String(row.unit ?? '').trim(),
           ...(canViewInventoryCost ? { costPrice: row.costPrice } : {}),
            ...(isServiceView ? {} : { initialStock: row.initialStock, minStock: row.minStock || 0, warehouseId: warehouse?.id }),
@@ -5264,7 +5283,7 @@ export function ProductosView({ products, summaryProducts, summaryProductsLoaded
         onOpenChange={setCreateModalOpen}
         categories={categories}
         warehouses={warehouses}
-        priceLists={importPriceLists}
+        priceLists={isServiceView ? servicePriceLists : importPriceLists}
         onRefresh={onRefresh}
         onSelectExistingProduct={(match) => {
           setCreateModalOpen(false);
@@ -5458,12 +5477,12 @@ export function ProductosView({ products, summaryProducts, summaryProductsLoaded
                           <TableHead className="text-[10px] uppercase w-8"></TableHead>
                           <TableHead className="text-[10px] uppercase w-32">{isServiceView ? 'Código' : 'Código/Sku'}</TableHead>
                           <TableHead className="text-[10px] uppercase">Nombre</TableHead>
-                          <TableHead className="text-[10px] uppercase w-36">Marca</TableHead>
+                          {!isServiceView && <TableHead className="text-[10px] uppercase w-36">Marca</TableHead>}
                           {isServiceView && <TableHead className="text-[10px] uppercase w-52">Descripción</TableHead>}
                           <TableHead className="text-[10px] uppercase w-44">Nota comercial</TableHead>
                             <TableHead className="text-[10px] uppercase w-32">Categoría</TableHead>
-                          <TableHead className="text-[10px] uppercase w-28 text-right">Unidad</TableHead>
-                          {isServiceView ? <><TableHead className="text-[10px] uppercase w-28 text-right">Duración (min)</TableHead><TableHead className="text-[10px] uppercase w-28 text-right">Precio</TableHead></> : <><TableHead className="text-[10px] uppercase w-28 text-right">Minorista</TableHead><TableHead className="text-[10px] uppercase w-28 text-right">Mayorista</TableHead><TableHead className="text-[10px] uppercase w-28 text-right">Distribuidor</TableHead></>}
+                            <TableHead className="text-[10px] uppercase w-28 text-right">Unidad</TableHead>
+                          {isServiceView ? <><TableHead className="text-[10px] uppercase w-28 text-right">Duración (min)</TableHead><TableHead className="text-[10px] uppercase w-28 text-right">Precio</TableHead><TableHead className="text-[10px] uppercase w-24 text-right">IVA (%)</TableHead></> : <><TableHead className="text-[10px] uppercase w-28 text-right">Minorista</TableHead><TableHead className="text-[10px] uppercase w-28 text-right">Mayorista</TableHead><TableHead className="text-[10px] uppercase w-28 text-right">Distribuidor</TableHead></>}
                           {canViewInventoryCost && <TableHead className="text-[10px] uppercase w-28 text-right">Costo</TableHead>}
                           {!isServiceView && <><TableHead className="text-[10px] uppercase w-24 text-right">Stock</TableHead><TableHead className="text-[10px] uppercase w-24 text-right">Min</TableHead><TableHead className="text-[10px] uppercase w-32">Bodega</TableHead></>}
                           <TableHead className="text-[10px] uppercase w-36">Validación</TableHead>
@@ -5495,7 +5514,7 @@ export function ProductosView({ products, summaryProducts, summaryProductsLoaded
                                 className={`h-8 text-xs ${!row.name ? 'border-destructive' : ''}`}
                               />
                             </TableCell>
-                            <TableCell className="p-1"><Input value={row.brand || ''} onChange={(e) => handleImportRowUpdate(i, 'brand', e.target.value)} className="h-8 text-xs" /></TableCell>
+                            {!isServiceView && <TableCell className="p-1"><Input value={row.brand || ''} onChange={(e) => handleImportRowUpdate(i, 'brand', e.target.value)} className="h-8 text-xs" /></TableCell>}
                             {isServiceView && <TableCell className="p-1"><Input value={row.description || ''} title={row.description || ''} onChange={(e) => handleImportRowUpdate(i, 'description', e.target.value)} className="h-8 text-xs" /></TableCell>}
                             <TableCell className="p-1"><Input value={row.commercialNote || ''} maxLength={100} title={row.commercialNote || ''} onChange={(e) => handleImportRowUpdate(i, 'commercialNote', e.target.value)} className="h-8 text-xs" /><span className="text-[10px] text-muted-foreground">{Array.from(String(row.commercialNote || '')).length}/100</span></TableCell>
                             <TableCell className="p-1">
@@ -5533,7 +5552,7 @@ export function ProductosView({ products, summaryProducts, summaryProductsLoaded
                                 className="h-8 text-xs"
                               />
                             </TableCell>
-                            {isServiceView ? <><TableCell className="p-1"><Input type="number" min={0} value={row.estimatedDuration ?? ''} onChange={(e) => handleImportRowUpdate(i, 'estimatedDuration', e.target.value === '' ? undefined : Number(e.target.value))} className="h-8 text-xs text-right" /></TableCell><TableCell className="p-1"><Input type="number" min={0} value={row.salePrice ?? ''} onChange={(e) => handleImportRowUpdate(i, 'servicePrice', e.target.value)} className="h-8 text-xs text-right" currencyPrecision /></TableCell></> : <><TableCell className="p-1"><Input type="number" min={0} value={row.prices?.RETAIL ?? ''} onChange={(e) => handleImportRowUpdate(i, 'price.RETAIL', e.target.value)} className="h-8 text-xs text-right" currencyPrecision /></TableCell><TableCell className="p-1"><Input type="number" min={0} value={row.prices?.WHOLESALE ?? ''} onChange={(e) => handleImportRowUpdate(i, 'price.WHOLESALE', e.target.value)} className="h-8 text-xs text-right" currencyPrecision /></TableCell><TableCell className="p-1"><Input type="number" min={0} value={row.prices?.DISTRIBUTOR ?? ''} onChange={(e) => handleImportRowUpdate(i, 'price.DISTRIBUTOR', e.target.value)} className="h-8 text-xs text-right" currencyPrecision /></TableCell></>}
+                            {isServiceView ? <><TableCell className="p-1"><Input type="number" min={0} value={row.estimatedDuration ?? ''} onChange={(e) => handleImportRowUpdate(i, 'estimatedDuration', e.target.value === '' ? undefined : Number(e.target.value))} className="h-8 text-xs text-right" /></TableCell><TableCell className="p-1"><Input type="number" min={0} value={row.salePrice ?? ''} onChange={(e) => handleImportRowUpdate(i, 'servicePrice', e.target.value)} className="h-8 text-xs text-right" currencyPrecision /></TableCell><TableCell className="p-1"><Input type="number" min={0} max={100} step="0.01" value={row.taxRate === undefined || row.taxRate === null ? '' : Number(row.taxRate) * 100} placeholder="0" aria-label="Tasa IVA del servicio" onChange={(e) => handleImportRowUpdate(i, 'serviceTaxRate', e.target.value)} className="h-8 text-xs text-right" /></TableCell></> : <><TableCell className="p-1"><Input type="number" min={0} value={row.prices?.RETAIL ?? ''} onChange={(e) => handleImportRowUpdate(i, 'price.RETAIL', e.target.value)} className="h-8 text-xs text-right" currencyPrecision /></TableCell><TableCell className="p-1"><Input type="number" min={0} value={row.prices?.WHOLESALE ?? ''} onChange={(e) => handleImportRowUpdate(i, 'price.WHOLESALE', e.target.value)} className="h-8 text-xs text-right" currencyPrecision /></TableCell><TableCell className="p-1"><Input type="number" min={0} value={row.prices?.DISTRIBUTOR ?? ''} onChange={(e) => handleImportRowUpdate(i, 'price.DISTRIBUTOR', e.target.value)} className="h-8 text-xs text-right" currencyPrecision /></TableCell></>}
                             {canViewInventoryCost && <TableCell className="p-1">
                               <Input type="number" min={0} value={row.costPrice ?? ''} onChange={(e) => handleImportRowUpdate(i, 'costPrice', e.target.value)} className="h-8 text-xs text-right" currencyPrecision />
                             </TableCell>}
@@ -5613,7 +5632,7 @@ export function ProductosView({ products, summaryProducts, summaryProductsLoaded
                 <p>• <b>Categoría</b></p>
                 <p>• <b>{isServiceView ? 'Precio base / Minorista' : 'Precios por lista'}</b></p>
                 {canViewInventoryCost && <p>• <b>{isServiceView ? 'Costo del servicio' : 'Costo'}</b></p>}
-                {isServiceView ? <><p>• <b>Disponible</b> (SI/NO)</p><p>• Sin IVA, bodega, stock ni variantes</p></> : <><p>• <b>Productos</b> y <b>Variantes</b></p><p>• <b>Atributos</b> dinámicos por fila</p><p>• <b>Precios</b>: PRODUCTO / VARIANTE</p><p>• <b>Inventario</b> por SKU y bodega</p><p>• Sin stock automático para variantes</p></>}
+                {isServiceView ? <><p>• <b>Tasa IVA (%)</b> (0 para exento)</p><p>• <b>Disponible</b> (SI/NO)</p><p>• Sin bodega, stock ni variantes</p></> : <><p>• <b>Productos</b> y <b>Variantes</b></p><p>• <b>Atributos</b> dinámicos por fila</p><p>• <b>Precios</b>: PRODUCTO / VARIANTE</p><p>• <b>Inventario</b> por SKU y bodega</p><p>• Sin stock automático para variantes</p></>}
               </div>
               <Button variant="outline" size="sm" className="mt-4 w-full text-xs font-bold" onClick={handleDownloadTemplate}>
                 <Download className="mr-2 size-3" />
@@ -5642,7 +5661,7 @@ export function ProductosView({ products, summaryProducts, summaryProductsLoaded
         <DialogContent>
           <DialogHeader data-tour="inventory-initial-confirm-title">
              <DialogTitle>Formalizar importación</DialogTitle>
-             <DialogDescription>Esta acción procesará {importData.filter((row) => !row._hasError).length} {isServiceView ? 'servicios' : 'registros de catálogo'} y omitirá {importData.filter((row) => row._hasError).length} fila(s) con errores. {isServiceView ? 'Los servicios no manejan IVA, bodega, stock ni variantes.' : 'Los SKU existentes se controlan por sucursal y sin distinguir mayúsculas/minúsculas.'} {isServiceView ? `El precio base Minorista se guardará en ${importCurrency}; las demás listas se configuran desde Servicios.` : `Los precios configurados se guardarán en ${importCurrency}; las listas sin precio quedarán pendientes.`} Escribe IMPORTAR para confirmar.</DialogDescription>
+             <DialogDescription>Esta acción procesará {importData.filter((row) => !row._hasError).length} {isServiceView ? 'servicios' : 'registros de catálogo'} y omitirá {importData.filter((row) => row._hasError).length} fila(s) con errores. {isServiceView ? 'La tasa IVA indicada se guardará en el servicio; los servicios no manejan bodega, stock ni variantes.' : 'Los SKU existentes se controlan por sucursal y sin distinguir mayúsculas/minúsculas.'} {isServiceView ? `El precio base Minorista se guardará en ${importCurrency}; las demás listas se configuran desde Servicios.` : `Los precios configurados se guardarán en ${importCurrency}; las listas sin precio quedarán pendientes.`} Escribe IMPORTAR para confirmar.</DialogDescription>
           <InventoryViewTutorial label="Cómo confirmar importación" targetPrefix="inventory-initial-confirm" copy={{ data: { description: 'Escribe IMPORTAR únicamente después de revisar las filas válidas, errores y advertencias.' }, actions: { description: `Confirma la importación para crear ${isServiceView ? 'los servicios' : 'los productos nuevos'}.` } }} />
           </DialogHeader>
           <div className="space-y-3" data-tour="inventory-initial-confirm-data">

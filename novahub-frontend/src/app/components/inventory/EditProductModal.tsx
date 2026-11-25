@@ -71,6 +71,7 @@ export function EditProductModal({ product, categories, itemType = 'PRODUCT', ba
           ),
           itemType: String(product.itemType || product.type || itemType || 'PRODUCT').toUpperCase(),
           salePrice: product.salePriceOriginal ?? product.salePrice ?? 0,
+          taxRate: Number(product.taxRate || 0),
           priceCurrency: String(product.priceCurrency || tenantBaseCurrency).toUpperCase(),
           isActive: product.isActive !== false,
           unit: product.unit || 'unidad',
@@ -289,6 +290,7 @@ export function EditProductModal({ product, categories, itemType = 'PRODUCT', ba
           salePriceOriginal: servicePrice,
           priceCurrency,
           priceExchangeRate: appliedExchangeRate,
+          taxRate: Number(draft.taxRate || 0),
         } : {}),
         attributeIds: draft.attributeIds?.length > 0 ? draft.attributeIds : [],
         linkedAttributes: draft.linkedAttributes?.length > 0 ? draft.linkedAttributes : [],
@@ -472,6 +474,16 @@ export function EditProductModal({ product, categories, itemType = 'PRODUCT', ba
                     disabled={isSaving} currencyPrecision />
                 </div>
               )}
+              {isService && <label className="col-span-1 flex items-center gap-2 self-end rounded-lg border border-border/60 px-3 py-2 text-xs font-bold sm:col-span-2 md:col-span-2">
+                <input
+                  type="checkbox"
+                  checked={Number(draft.taxRate || 0) > 0}
+                  onChange={(event) => handleUpdate('taxRate', event.target.checked ? 0.15 : 0)}
+                  aria-label="Aplicar IVA al servicio"
+                  disabled={isSaving}
+                />
+                Aplica IVA (15%)
+              </label>}
 
               {!isService && (
                 <div className="col-span-1">

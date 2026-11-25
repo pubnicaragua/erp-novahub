@@ -213,7 +213,8 @@ export function VentasPage({ activeSubModule, onSubModuleChange, isSidebarCollap
   const searchFor = (section: string) => debouncedSearchState[section]?.trim() || undefined;
   const isListSection = !['facturacion-caja', 'control-caja'].includes(activeSection);
   const needsCatalogs = isListSection && !['clientes', 'prestamos'].includes(activeSection);
-  const needsCreditCapacity = activeSection === 'notas-credito';
+  const needsCreditCapacity = activeSection === 'notas-credito'
+    || (activeSection === 'facturas' && canPerform('SALES_INVOICES', 'sendToCredit'));
   const needsGenericCustomersCatalog = needsCatalogs && !needsCreditCapacity;
   const needsProducts = ['estimaciones', 'ordenes-venta', 'facturas', 'facturas-recurrentes', 'devoluciones-venta', 'notas-credito'].includes(activeSection);
   const needsInvoices = ['ordenes-venta', 'facturas', 'pagos-recibidos', 'devoluciones-venta'].includes(activeSection);
@@ -271,7 +272,7 @@ export function VentasPage({ activeSubModule, onSubModuleChange, isSidebarCollap
   const customersCreditCapacityQuery = useQuery({
     queryKey: ['sales', 'customers-credit-capacity-catalog', tenantKey, 'active'],
     queryFn: ({ signal }) => customersService.getAllCreditCapacityLookup({ status: 'ACTIVE' }, signal),
-    enabled: canViewSalesSection('notas-credito') && needsCreditCapacity,
+    enabled: canViewSalesSection(activeSection) && needsCreditCapacity,
     placeholderData: keepPreviousData,
   });
   const estimatesQuery = useQuery({

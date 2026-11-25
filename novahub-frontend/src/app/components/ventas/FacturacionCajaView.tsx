@@ -352,11 +352,16 @@ function calculateLineTotal(quantity: number, unitPrice: number) {
   return quantity * unitPrice;
 }
 
+function normalizeCatalogTaxRatePercent(value: unknown) {
+  const rate = Math.max(0, Number(value || 0));
+  return rate > 0 && rate <= 1 ? rate * 100 : rate;
+}
+
 function calculateIndividualLineTotal(item: CartItem) {
   const gross = Number(item.quantity || 0) * Number(item.unitPrice || 0);
   const discount = gross * Number(item.discount || 0) / 100;
   const taxable = Math.max(0, gross - discount);
-  const tax = item.itemType === 'SERVICE' ? 0 : taxable * Number(item.taxRate || 0) / 100;
+  const tax = taxable * Number(item.taxRate || 0) / 100;
   return taxable + tax;
 }
 
@@ -389,16 +394,15 @@ function calculateInvoiceSummary(
     const tax = cart.reduce((sum, item) => {
       const gross = Number(item.quantity || 0) * Number(item.unitPrice || 0);
       const taxable = Math.max(0, gross - gross * Number(item.discount || 0) / 100);
-      return sum + (item.itemType === 'SERVICE' ? 0 : taxable * Number(item.taxRate || 0) / 100);
+      return sum + taxable * Number(item.taxRate || 0) / 100;
     }, 0);
     return { subtotal, tax, discount, ir: 0, extraCost: Math.max(0, Number(extraCostAmount || 0)), delivery: Math.max(0, Number(deliveryAmount || 0)), total: subtotal + tax - discount + additionalCharges };
   }
   const discount = subtotal * (discountPercent / 100);
-  const productSubtotal = cart.filter((item) => item.itemType !== 'SERVICE')
+  const taxableSubtotal = cart.filter((item) => item.itemType !== 'SERVICE' || Number(item.taxRate || 0) > 0)
     .reduce((sum, item) => sum + Number(item.quantity || 0) * Number(item.unitPrice || 0), 0);
-  const productDiscount = productSubtotal * (discountPercent / 100);
-  const taxableSubtotal = Math.max(0, productSubtotal - productDiscount);
-  const tax = includeTax ? taxableSubtotal * (NICARAGUA_IVA_RATE / 100) : 0;
+  const taxableAfterDiscount = Math.max(0, taxableSubtotal - taxableSubtotal * discountPercent / 100);
+  const tax = includeTax ? taxableAfterDiscount * (NICARAGUA_IVA_RATE / 100) : 0;
   return {
     subtotal,
     tax,
@@ -420,7 +424,7 @@ function buildInvoiceItems(cart: CartItem[]): PosInvoiceItem[] {
     quantity: item.quantity,
     unitPrice: item.unitPrice,
     priceListId: item.priceListId,
-    taxRate: item.itemType === 'SERVICE' ? 0 : item.taxRate,
+    taxRate: item.taxRate,
     discount: item.discount,
     irRate: 0,
     irTaxId: null,
@@ -1306,15 +1310,20 @@ export function FacturacionCajaView({ onNavigateToControlCaja, branchId, employe
     setCart((current) => {
       let changed = false;
       const normalized = current.map((item) => {
-        const catalogItemType = productsById.get(item.productId)?.itemType;
+        const catalogProduct = productsById.get(item.productId);
+        const catalogItemType = catalogProduct?.itemType;
         if (!catalogItemType) return item;
         const isService = catalogItemType === 'SERVICE';
-        if (item.itemType === catalogItemType && (!isService || item.taxRate === 0)) return item;
+        const catalogTaxRate = normalizeCatalogTaxRatePercent(catalogProduct.taxRate);
+        const effectiveServiceTaxRate = isService
+          ? (pricingMode === 'global' || item.taxRate === undefined || item.taxRate === null ? catalogTaxRate : item.taxRate)
+          : item.taxRate;
+        if (item.itemType === catalogItemType && Number(item.taxRate || 0) === Number(effectiveServiceTaxRate || 0)) return item;
         changed = true;
         return {
           ...item,
           itemType: catalogItemType,
-          taxRate: isService ? 0 : item.taxRate,
+          taxRate: isService ? effectiveServiceTaxRate : item.taxRate,
           variantId: isService ? undefined : item.variantId,
           warehouseId: isService ? undefined : item.warehouseId,
           priceListId: item.priceListId,
@@ -1322,7 +1331,7 @@ export function FacturacionCajaView({ onNavigateToControlCaja, branchId, employe
       });
       return changed ? normalized : current;
     });
-  }, [productsById]);
+  }, [productsById, pricingMode]);
 
   // Búsqueda dinámica en el backend
   useEffect(() => {
@@ -1517,7 +1526,7 @@ export function FacturacionCajaView({ onNavigateToControlCaja, branchId, employe
           priceListId: selectedPriceListId || undefined,
           priceMissing,
           discount: 0,
-          taxRate: isService ? 0 : NICARAGUA_IVA_RATE,
+          taxRate: isService ? normalizeCatalogTaxRatePercent(product.taxRate) : NICARAGUA_IVA_RATE,
           lineTotal: calculateLineTotal(quantity, effectivePrice),
         },
       ];
@@ -1585,8 +1594,8 @@ export function FacturacionCajaView({ onNavigateToControlCaja, branchId, employe
           priceListId: selectedPriceListId || undefined,
           priceMissing,
           discount: 0,
-          // En modo global este valor se ignora; en modo por producto solo los productos parten con IVA.
-          taxRate: isService ? 0 : NICARAGUA_IVA_RATE,
+          // En modo global este valor solo indica si el servicio está gravado.
+          taxRate: isService ? normalizeCatalogTaxRatePercent(product.taxRate) : NICARAGUA_IVA_RATE,
           lineTotal: calculateLineTotal(quantity, effectivePrice),
         },
       ];
@@ -1671,7 +1680,7 @@ export function FacturacionCajaView({ onNavigateToControlCaja, branchId, employe
       quantity: availabilityQuantity,
       unitPrice: configuredPrice ?? 0,
       priceListId: selectedPriceListId || undefined,
-      taxRate: isService ? 0 : NICARAGUA_IVA_RATE,
+      taxRate: isService ? normalizeCatalogTaxRatePercent(product.taxRate) : NICARAGUA_IVA_RATE,
       deliveryWarehouseId: isService ? undefined : selection.deliveryWarehouseId || undefined,
     }];
     const dto: CreatePosHoldDto = {
@@ -1826,10 +1835,19 @@ export function FacturacionCajaView({ onNavigateToControlCaja, branchId, employe
       setDiscountPercent(0);
       setCart((current) => current.map((item) => ({
         ...item,
-        taxRate: item.itemType === 'SERVICE' ? 0 : Number(item.taxRate || 0) > 0 ? Number(item.taxRate) : (includeTax ? NICARAGUA_IVA_RATE : 0),
+        taxRate: Number(item.taxRate || 0) > 0
+          ? Number(item.taxRate)
+          : item.itemType === 'SERVICE'
+            ? (includeTax ? normalizeCatalogTaxRatePercent(productsById.get(item.productId)?.taxRate) : 0)
+            : (includeTax ? NICARAGUA_IVA_RATE : 0),
       })));
     } else {
-      setIncludeTax(cart.some((item) => item.itemType !== 'SERVICE' && Number(item.taxRate || 0) > 0));
+      setIncludeTax(cart.some((item) => item.itemType === 'SERVICE'
+        ? normalizeCatalogTaxRatePercent(productsById.get(item.productId)?.taxRate) > 0
+        : Number(item.taxRate || 0) > 0));
+      setCart((current) => current.map((item) => item.itemType === 'SERVICE'
+        ? { ...item, taxRate: normalizeCatalogTaxRatePercent(productsById.get(item.productId)?.taxRate) }
+        : item));
       setDiscountPercent(0);
     }
     setPricingMode(mode);
@@ -1844,7 +1862,7 @@ export function FacturacionCajaView({ onNavigateToControlCaja, branchId, employe
     setCart((current) => current.map((item) => item.productId === productId
       && item.variantId === variantId
       && item.warehouseId === warehouseId
-      ? { ...item, ...changes, taxRate: item.itemType === 'SERVICE' ? 0 : Math.min(100, Math.max(0, Number(changes.taxRate ?? item.taxRate) || 0)), discount: Math.min(100, Math.max(0, Number(changes.discount ?? item.discount) || 0)) }
+      ? { ...item, ...changes, taxRate: Math.min(100, Math.max(0, Number(changes.taxRate ?? item.taxRate) || 0)), discount: Math.min(100, Math.max(0, Number(changes.discount ?? item.discount) || 0)) }
       : item));
   };
 
@@ -1894,8 +1912,8 @@ export function FacturacionCajaView({ onNavigateToControlCaja, branchId, employe
         ? getConfiguredPrice(nextListId, item.productId, null, true)
         : getConfiguredPrice(nextListId, item.productId, item.variantId);
       return price === undefined
-        ? { ...item, itemType: isService ? 'SERVICE' : item.itemType, taxRate: isService ? 0 : item.taxRate, priceListId: nextListId || undefined, unitPrice: 0, lineTotal: 0, priceMissing: true }
-        : { ...item, itemType: isService ? 'SERVICE' : item.itemType, taxRate: isService ? 0 : item.taxRate, priceListId: nextListId || undefined, unitPrice: price, lineTotal: calculateLineTotal(item.quantity, price), priceMissing: false };
+        ? { ...item, itemType: isService ? 'SERVICE' : item.itemType, priceListId: nextListId || undefined, unitPrice: 0, lineTotal: 0, priceMissing: true }
+        : { ...item, itemType: isService ? 'SERVICE' : item.itemType, priceListId: nextListId || undefined, unitPrice: price, lineTotal: calculateLineTotal(item.quantity, price), priceMissing: false };
     });
     if (hasSalesProductPriceListConflicts(nextCart, nextListId)) {
       toast.error('No se puede aplicar esta lista: hay productos repetidos con la misma lista de precios.');
@@ -2922,18 +2940,20 @@ export function FacturacionCajaView({ onNavigateToControlCaja, branchId, employe
                               )}
                             </td>
                             <td className="px-3.5 py-3 text-center">
-                              {productsById.get(item.productId)?.itemType === 'SERVICE' ? <span className="text-[10px] text-muted-foreground">Exento</span> : pricingMode === 'individual' ? (
+                              {pricingMode === 'individual' ? (
                                 <label className="inline-flex items-center gap-1.5 text-[10px] font-bold text-muted-foreground">
                                   <input
                                     type="checkbox"
                                     checked={Number(item.taxRate || 0) > 0}
-                                    onChange={(event) => updateCartItemCharges(item.productId, { taxRate: event.target.checked ? NICARAGUA_IVA_RATE : 0 }, item.variantId, item.warehouseId)}
+                                    onChange={(event) => updateCartItemCharges(item.productId, { taxRate: event.target.checked ? (normalizeCatalogTaxRatePercent(productsById.get(item.productId)?.taxRate) || NICARAGUA_IVA_RATE) : 0 }, item.variantId, item.warehouseId)}
                                     disabled={isRegisterDisabled}
                                     className="size-3.5 accent-primary"
                                   />
                                   {Number(item.taxRate || 0) > 0 ? `${Number(item.taxRate)}%` : 'No'}
                                 </label>
-                              ) : <span className="text-[10px] text-muted-foreground">Global</span>}
+                              ) : productsById.get(item.productId)?.itemType === 'SERVICE'
+                                ? <span className="text-[10px] text-muted-foreground">{Number(item.taxRate || 0) > 0 ? 'IVA global' : 'Exento'}</span>
+                                : <span className="text-[10px] text-muted-foreground">Global</span>}
                             </td>
                             <td className="px-3.5 py-3 text-right">
                               {pricingMode === 'individual' ? (
@@ -3015,7 +3035,7 @@ export function FacturacionCajaView({ onNavigateToControlCaja, branchId, employe
                             </div>
                             <div className="min-w-0 space-y-1.5">
                               <Label className="block text-[10px] font-black uppercase leading-4 tracking-widest text-muted-foreground">IVA</Label>
-                              {product?.itemType === 'SERVICE' ? <span className="flex h-9 items-center text-xs text-muted-foreground">Exento</span> : pricingMode === 'individual' ? <label className="flex h-9 items-center gap-2 rounded-lg border border-border/60 px-3 text-xs font-bold text-muted-foreground"><input type="checkbox" checked={Number(item.taxRate || 0) > 0} onChange={(event) => updateCartItemCharges(item.productId, { taxRate: event.target.checked ? NICARAGUA_IVA_RATE : 0 }, item.variantId, item.warehouseId)} disabled={isRegisterDisabled} className="size-3.5 accent-primary" />{Number(item.taxRate || 0) > 0 ? `${Number(item.taxRate)}%` : 'No aplica'}</label> : <span className="flex h-9 items-center text-xs text-muted-foreground">Global</span>}
+                              {pricingMode === 'individual' ? <label className="flex h-9 items-center gap-2 rounded-lg border border-border/60 px-3 text-xs font-bold text-muted-foreground"><input type="checkbox" checked={Number(item.taxRate || 0) > 0} onChange={(event) => updateCartItemCharges(item.productId, { taxRate: event.target.checked ? (normalizeCatalogTaxRatePercent(product?.taxRate) || NICARAGUA_IVA_RATE) : 0 }, item.variantId, item.warehouseId)} disabled={isRegisterDisabled} className="size-3.5 accent-primary" />{Number(item.taxRate || 0) > 0 ? `${Number(item.taxRate)}%` : 'No aplica'}</label> : product?.itemType === 'SERVICE' ? <span className="flex h-9 items-center text-xs text-muted-foreground">{Number(item.taxRate || 0) > 0 ? 'IVA global' : 'Exento'}</span> : <span className="flex h-9 items-center text-xs text-muted-foreground">Global</span>}
                             </div>
                             <div className="min-w-0 space-y-1.5">
                               <Label className="block text-[10px] font-black uppercase leading-4 tracking-widest text-muted-foreground">Descuento (%)</Label>
@@ -3161,13 +3181,13 @@ export function FacturacionCajaView({ onNavigateToControlCaja, branchId, employe
                       />
                     </div>
                     <div className="flex items-center justify-between pt-2">
-                      <Label className="text-[10px] uppercase font-black tracking-widest text-muted-foreground">Incluir IVA en productos</Label>
+                      <Label className="text-[10px] uppercase font-black tracking-widest text-muted-foreground">Incluir IVA en productos y servicios gravados</Label>
                       <Switch checked={includeTax} onCheckedChange={setIncludeTax} disabled={isRegisterDisabled} />
                     </div>
                   </>
                 ) : (
                   <p className="rounded-lg bg-primary/5 px-3 py-2 text-[11px] text-muted-foreground">
-                    El IVA aplica solo a productos; el descuento puede configurarse por línea para productos y servicios.
+                    El IVA individual se configura por línea para productos y servicios; el descuento puede configurarse por línea para ambos.
                   </p>
                 )}
                 <div className="space-y-2 pt-2 border-t border-border/30">

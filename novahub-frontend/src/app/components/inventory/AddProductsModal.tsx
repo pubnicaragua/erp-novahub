@@ -48,7 +48,7 @@ const makeDefaultDraft = (categoryId: string, itemType: string) => ({
   priceCurrency: 'NIO',
   prices: {} as Record<string, number | string>,
   costPrice: '',
-  taxRate: '0.15',
+  taxRate: itemType === 'SERVICE' ? '0' : '0.15',
   unit: 'unidad',
   productClass: '',
   presentation: '',
@@ -158,9 +158,9 @@ function ProductSimilarityDecisionPanel({ groups, itemType, canEditExistingProdu
                   <p className="text-xs text-muted-foreground">
                     Coincidencia por: {(match.reasons || []).join(', ') || 'datos del producto'}
                   </p>
-                  {(match.brand || match.category) && (
+                  {(itemType !== 'SERVICE' && match.brand || match.category) && (
                     <p className="text-xs text-muted-foreground">
-                      {match.brand ? `Marca: ${match.brand}` : ''}{match.brand && match.category ? ' · ' : ''}{match.category ? `Categoría: ${match.category}` : ''}
+                      {itemType !== 'SERVICE' && match.brand ? `Marca: ${match.brand}` : ''}{itemType !== 'SERVICE' && match.brand && match.category ? ' · ' : ''}{match.category ? `Categoría: ${match.category}` : ''}
                     </p>
                   )}
                 </div>
@@ -250,8 +250,14 @@ export function AddProductsModal({ open, onOpenChange, categories, warehouses, b
     { code: 'WHOLESALE', name: 'Mayorista' },
     { code: 'DISTRIBUTOR', name: 'Distribuidor' },
   ]);
-  const effectivePriceLists = resolveStandardProductPriceLists(priceLists && priceLists.length > 0 ? priceLists : internalPriceLists);
   const catalogItemType = itemType;
+  const sourcePriceLists = priceLists && priceLists.length > 0 ? priceLists : internalPriceLists;
+  const effectivePriceLists = catalogItemType === 'SERVICE'
+    ? Array.from(new Map(sourcePriceLists
+      .map((list) => ({ code: String(list.code || '').trim(), name: String(list.name || '').trim() }))
+      .filter((list) => list.code && list.name)
+      .map((list) => [list.code.toUpperCase(), list] as const)).values())
+    : resolveStandardProductPriceLists(sourcePriceLists);
   const categoryRequired = catalogItemType !== 'SERVICE';
   const canCreateServiceCategory = canPerform('INVENTORY_ATTRIBUTES', 'create');
   const isPagePresentation = presentation === 'page';
@@ -467,7 +473,13 @@ export function AddProductsModal({ open, onOpenChange, categories, warehouses, b
     setDraftProduct((prev: any) => ({
       ...prev,
       prices: { ...(prev.prices || {}), [code]: value },
-      salePrice: String(code).toUpperCase() === 'RETAIL' ? value : prev.salePrice,
+      salePrice: (() => {
+        const nextPrices = { ...(prev.prices || {}), [code]: value };
+        const hasPrice = (list: Pick<PriceList, 'code' | 'name'>) => nextPrices[list.code] !== undefined && nextPrices[list.code] !== null && nextPrices[list.code] !== '';
+        const retailList = effectivePriceLists.find((list) => list.code.toUpperCase() === 'RETAIL');
+        const primaryList = (retailList && hasPrice(retailList) ? retailList : undefined) || effectivePriceLists.find(hasPrice);
+        return primaryList ? nextPrices[primaryList.code] ?? '' : '';
+      })(),
     }));
   };
 
@@ -518,7 +530,7 @@ export function AddProductsModal({ open, onOpenChange, categories, warehouses, b
   };
 
   const hasValidSellingPrice = (product: any) => {
-    if (product.itemType === 'SERVICE') return product.salePrice !== '' && Number.isFinite(Number(product.salePrice)) && Number(product.salePrice) >= 0;
+    if (product.itemType === 'SERVICE') return effectivePriceLists.some((list) => product.prices?.[list.code] !== undefined && product.prices?.[list.code] !== '' && Number.isFinite(Number(product.prices[list.code])) && Number(product.prices[list.code]) >= 0);
     const hasParentPrice = effectivePriceLists.some((list) => product.prices?.[list.code] !== undefined && product.prices?.[list.code] !== '' && Number.isFinite(Number(product.prices[list.code])) && Number(product.prices[list.code]) >= 0);
     const hasVariantPrice = product.isVariable && Object.values(product.variantPrices || {}).some((prices: any) =>
       effectivePriceLists.some((list) => prices?.[list.code] !== undefined && prices?.[list.code] !== '' && Number.isFinite(Number(prices[list.code])) && Number(prices[list.code]) >= 0),
@@ -798,9 +810,15 @@ export function AddProductsModal({ open, onOpenChange, categories, warehouses, b
           ? (product.priceCurrency === 'USD' ? exchangeRate : (1 / exchangeRate))
           : 1;
         const convertedCost = Number(product.costPrice || 0) * rate;
-        const primaryPrice = product.itemType === 'SERVICE'
-          ? Number(product.salePrice || 0)
-          : Number((product.prices?.RETAIL ?? product.prices?.[effectivePriceLists[0]?.code || ''] ?? product.salePrice) || 0);
+        const hasPrice = (list: Pick<PriceList, 'code' | 'name'>) => product.prices?.[list.code] !== undefined && product.prices?.[list.code] !== null && product.prices?.[list.code] !== '';
+        const retailList = effectivePriceLists.find((list) => list.code.toUpperCase() === 'RETAIL');
+        const primaryList = (retailList && hasPrice(retailList) ? retailList : undefined) || effectivePriceLists.find(hasPrice);
+        const primaryPrice = Number((primaryList ? product.prices?.[primaryList.code] : product.salePrice) || 0);
+        const prices = Object.fromEntries(
+          effectivePriceLists
+            .map((list) => [list.code, product.prices?.[list.code]] as const)
+            .filter(([, value]) => value !== undefined && value !== null && value !== '' && Number.isFinite(Number(value)) && Number(value) >= 0),
+        );
 
         const createdResponse = await inventoryService.createProduct({
           code: product.code,
@@ -816,13 +834,13 @@ export function AddProductsModal({ open, onOpenChange, categories, warehouses, b
           salePriceOriginal: primaryPrice,
           priceCurrency: product.priceCurrency || baseCurrency,
           priceExchangeRate: Number(product.priceCurrency === baseCurrency ? 1 : exchangeRate),
-          prices: product.itemType === 'PRODUCT' ? product.prices : undefined,
-          taxRate: product.itemType === 'SERVICE' ? 0 : Number(product.taxRate || 0.15),
+          prices,
+          taxRate: Number(product.taxRate ?? 0),
           trackSerialNumbers: Boolean(product.trackSerialNumbers),
           isActive: product.isActive !== false,
           description: product.description || '',
           commercialNote: product.commercialNote || '',
-          brand: product.brand || undefined,
+          ...(product.itemType === 'PRODUCT' ? { brand: product.brand || undefined } : {}),
           unit: product.unit || 'unidad',
           productClass: product.productClass || undefined,
           presentation: product.productClass ? (product.presentation || undefined) : undefined,
@@ -955,7 +973,7 @@ export function AddProductsModal({ open, onOpenChange, categories, warehouses, b
         code: product.code,
         name: product.name,
         description: product.description,
-        brand: product.brand,
+        ...(product.itemType === 'PRODUCT' ? { brand: product.brand } : {}),
         categoryId: product.categoryId,
         categoryName: allCategories.find((category: any) => String(category.id) === String(product.categoryId))?.name,
         linkedAttributes: product.linkedAttributes,
@@ -1191,24 +1209,7 @@ export function AddProductsModal({ open, onOpenChange, categories, warehouses, b
                 </div>
               </>}
               {catalogItemType === 'SERVICE' && (
-                <div className="col-span-1 md:col-start-1 md:row-start-2 md:col-span-3">
-                  <label className="text-[10px] uppercase font-bold text-muted-foreground">Marca (opcional)</label>
-                  <Combobox
-                    value={draftProduct.brand}
-                    onChange={value => handleUpdateDraft('brand', value)}
-                    options={brandOptions}
-                    allowCustomValue
-                    searchPlaceholder="Buscar o escribir una marca..."
-                    emptyMessage="No hay marcas registradas. Puedes escribir una nueva."
-                    className="mt-1 !h-8 !rounded-none text-xs"
-                    contentClassName="!z-[70] min-w-[320px]"
-                    placeholder="Marca del servicio"
-                    ariaLabel="Marca del servicio"
-                  />
-                </div>
-              )}
-              {catalogItemType === 'SERVICE' && (
-                <div className={isPagePresentation ? 'sm:col-span-2 md:col-start-4 md:row-start-2 md:col-span-4' : 'col-span-1 sm:col-span-2 md:col-start-4 md:row-start-2 md:col-span-4'}>
+                <div className={isPagePresentation ? 'sm:col-span-2 md:col-start-2 md:row-start-2 md:col-span-5' : 'col-span-1 sm:col-span-2 md:col-start-1 md:row-start-2 md:col-span-8'}>
                   <label className="text-[10px] uppercase font-bold text-muted-foreground">Categoría del servicio (opcional)</label>
                   {newCategoryOpen ? (
                     <div className="mt-1 space-y-1.5 rounded-lg border border-primary/40 bg-primary/5 p-2">
@@ -1329,17 +1330,31 @@ export function AddProductsModal({ open, onOpenChange, categories, warehouses, b
                   </SelectContent>
                 </Select>
               </div>
-              {catalogItemType === 'SERVICE' && <div className={isPagePresentation ? 'col-span-1 md:row-start-4 md:col-span-2' : 'col-span-1'}>
-                <label className="text-[10px] uppercase font-bold text-muted-foreground">Precio</label>
-                <Input
-                  type="number"
-                  min={0}
-                  step="any"
-                  value={draftProduct.salePrice}
-                  onChange={e => handleUpdateDraft('salePrice', e.target.value)}
-                  className="h-8 text-xs text-right mt-1 tabular-nums"
-                  placeholder="0.00" currencyPrecision />
-              </div>}
+              {catalogItemType === 'SERVICE' && effectivePriceLists.map((list) => (
+                <div key={list.code} className={isPagePresentation ? 'col-span-1 md:row-start-4 md:col-span-2' : 'col-span-1'}>
+                  <label className="text-[10px] uppercase font-bold text-muted-foreground">Precio {list.name}</label>
+                  <Input
+                    data-testid={`inventory-service-price-${list.code}`}
+                    type="number"
+                    min={0}
+                    step="any"
+                    value={draftProduct.prices?.[list.code] ?? ''}
+                    onChange={e => updatePrice(list.code, e.target.value)}
+                    className="mt-1 h-8 text-right text-xs tabular-nums"
+                    placeholder="0.00"
+                    currencyPrecision
+                  />
+                </div>
+              ))}
+              {catalogItemType === 'SERVICE' && <label className={isPagePresentation ? 'col-span-1 flex items-center gap-2 self-end rounded-lg border border-border/60 px-3 py-2 text-xs font-bold md:row-start-4 md:col-span-2' : 'col-span-1 flex items-center gap-2 self-end rounded-lg border border-border/60 px-3 py-2 text-xs font-bold'}>
+                <input
+                  type="checkbox"
+                  checked={Number(draftProduct.taxRate || 0) > 0}
+                  onChange={(event) => handleUpdateDraft('taxRate', event.target.checked ? '0.15' : '0')}
+                  aria-label="Aplicar IVA al servicio"
+                />
+                Aplica IVA (15%)
+              </label>}
               {catalogItemType !== 'SERVICE' && effectivePriceLists.map((list) => (
                 <div key={list.code} className={isPagePresentation ? 'col-span-1 md:row-start-4 md:col-span-2' : 'col-span-1'}>
                   <label className="text-[10px] uppercase font-bold text-muted-foreground">Precio {list.name}</label>

@@ -215,6 +215,10 @@ export function FacturasView({ data, summaryData, summaryLoading, summaryError, 
   const [highlightedAlertId, setHighlightedAlertId] = useState<string | null>(null);
 
   const getCatalogItemType = (product: any) => String(product?.itemType || product?.type || 'PRODUCT').toUpperCase();
+  const normalizeCatalogTaxRatePercent = (value: unknown) => {
+    const rate = Math.max(0, Number(value || 0));
+    return rate > 0 && rate <= 1 ? rate * 100 : rate;
+  };
   const productCatalog = products.filter((p) => getCatalogItemType(p) !== 'SERVICE');
   const serviceCatalog = products.filter((p) => getCatalogItemType(p) === 'SERVICE');
   const findProductForItem = (item: any) => products.find((product: any) => String(product.id) === String(item?.productId))
@@ -307,7 +311,7 @@ export function FacturasView({ data, summaryData, summaryLoading, summaryError, 
       ? {
         ...nextDoc,
         items: nextDoc.items.map((item: any) => resolveItemType(item) === 'SERVICE'
-          ? { ...item, itemType: 'SERVICE', taxRate: 0, variantId: null, warehouseId: undefined }
+          ? { ...item, itemType: 'SERVICE', variantId: null, warehouseId: undefined }
           : item),
       }
       : nextDoc;
@@ -661,7 +665,18 @@ export function FacturasView({ data, summaryData, summaryLoading, summaryError, 
 
   const handleUpdate = async (id: string | number, updates: Partial<Invoice>) => {
     try {
-      await invoicesService.update(id.toString(), updates);
+      const payload = { ...updates } as any;
+      if (Array.isArray(payload.items)) {
+        payload.items = payload.items.map((item: any) => resolveItemType(item) === 'SERVICE' && pricingMode === 'global'
+          ? {
+            ...item,
+            taxRate: Number(item.taxRate || 0) > 0
+              ? Number(item.taxRate)
+              : normalizeCatalogTaxRatePercent(findProductForItem(item)?.taxRate),
+          }
+          : item);
+      }
+      await invoicesService.update(id.toString(), payload);
       onRefresh();
     } catch (e: any) {
       toast.error(e?.response?.data?.message || e?.message || 'Error al actualizar');
@@ -753,12 +768,19 @@ export function FacturasView({ data, summaryData, summaryLoading, summaryError, 
   );
 
   const getInvoiceCreditAvailable = (invoice: Invoice) => {
-    const apiAvailable = Number(invoice.creditAvailableBase);
-    if (Number.isFinite(apiAvailable)) return Math.max(0, apiAvailable);
+    const rawApiAvailable = invoice.creditAvailableBase;
+    const apiAvailable = Number(rawApiAvailable);
+    if (rawApiAvailable !== undefined && rawApiAvailable !== null && Number.isFinite(apiAvailable)) return Math.max(0, apiAvailable);
 
     // Compatibilidad con respuestas antiguas: el saldo firmado incluye la
     // factura actual, por lo que se excluye antes de calcular lo disponible.
-    const customer = invoice.customer || customers.find((item) => item.id === invoice.customerId);
+    const customer = (!invoice.id ? undefined : invoice.customer)
+      || customers.find((item) => item.id === invoice.customerId)
+      || invoice.customer;
+    const customerAvailable = Number(customer?.availableCredit);
+    if (customer?.availableCredit !== undefined && customer.availableCredit !== null && Number.isFinite(customerAvailable)) {
+      return Math.max(0, customerAvailable);
+    }
     const limitCurrency = customer?.creditLimitCurrency === 'USD' ? 'USD' : 'NIO';
     const limit = Math.max(0, toBaseAmount(
       Number(customer?.creditLimit || 0),
@@ -766,7 +788,9 @@ export function FacturasView({ data, summaryData, summaryLoading, summaryError, 
       limitCurrency === baseCurrency ? 1 : Number(globalRate || 1),
     ));
     const currentDebt = getCustomerDebtAmount(customer);
-    const debtWithoutInvoice = Math.max(0, currentDebt - getInvoiceBalanceInBase(invoice));
+    const debtWithoutInvoice = invoice.id
+      ? Math.max(0, currentDebt - getInvoiceBalanceInBase(invoice))
+      : currentDebt;
     return Math.max(0, Number((limit - debtWithoutInvoice).toFixed(2)));
   };
 
@@ -1381,7 +1405,9 @@ export function FacturasView({ data, summaryData, summaryLoading, summaryError, 
             quantity: Number(item.quantity || 1),
             unitPrice: Number(item.unitPrice || 0),
             productCode: item.productCode || item.code || findProductForItem(item)?.code || undefined,
-            taxRate: resolveItemType(item) === 'SERVICE' ? 0 : Number(item.taxRate || 0),
+            taxRate: resolveItemType(item) === 'SERVICE' && pricingMode === 'global'
+              ? (Number(item.taxRate || 0) > 0 ? Number(item.taxRate) : normalizeCatalogTaxRatePercent(findProductForItem(item)?.taxRate))
+              : Number(item.taxRate || 0),
             discount: Number(item.discount || 0),
             priceListId: item.priceListId || localDoc.priceListId || undefined,
             incomeAccountId: item.incomeAccountId || undefined,
@@ -1663,14 +1689,27 @@ export function FacturasView({ data, summaryData, summaryLoading, summaryError, 
     const discountAmount = subtotal * (dRate / 100);
     const productSubtotal = items.filter((it: any) => resolveItemType(it) !== 'SERVICE')
       .reduce((acc: number, it: any) => acc + Number(it.quantity || 0) * Number(it.unitPrice || 0), 0);
-    const taxAmount = Math.max(0, productSubtotal - productSubtotal * (dRate / 100)) * (tRate / 100);
+    const taxableServiceSubtotal = items.filter((it: any) => resolveItemType(it) === 'SERVICE'
+      && (Number(it.taxRate || 0) > 0 || normalizeCatalogTaxRatePercent(findProductForItem(it)?.taxRate) > 0))
+      .reduce((acc: number, it: any) => acc + Number(it.quantity || 0) * Number(it.unitPrice || 0), 0);
+    const taxableSubtotal = productSubtotal + taxableServiceSubtotal;
+    const taxAmount = Math.max(0, taxableSubtotal - taxableSubtotal * (dRate / 100)) * (tRate / 100);
     const base = subtotal - discountAmount;
     const total = base + taxAmount + additionalChargesTotal();
     // Mantener las líneas en ambos modos. El selector de lista de precios
     // también recalcula los totales cuando su matriz termina de cargar; si
     // este retorno no incluye `items`, esa actualización visualiza la factura
     // sin líneas aunque la base de datos las conserve.
-    return { items, subtotal, discountAmount, taxAmount, total };
+    return {
+      items: items.map((line: any) => ({
+        ...line,
+        total: Number(line.quantity || 0) * Number(line.unitPrice || 0),
+      })),
+      subtotal,
+      discountAmount,
+      taxAmount,
+      total,
+    };
   };
 
   const recalcIndividualTotals = (items: any[]) => {
@@ -1678,14 +1717,14 @@ export function FacturasView({ data, summaryData, summaryLoading, summaryError, 
       const gross = Number(line.quantity || 0) * Number(line.unitPrice || 0);
       const discount = gross * (Number(line.discount || 0) / 100);
       const taxable = gross - discount;
-      const tax = resolveItemType(line) === 'SERVICE' ? 0 : taxable * (Number(line.taxRate || 0) / 100);
+      const tax = taxable * (Number(line.taxRate || 0) / 100);
       return { ...line, total: taxable + tax };
     });
     const subtotal = pricedItems.reduce((sum: number, line: any) => sum + Number(line.quantity || 0) * Number(line.unitPrice || 0), 0);
     const discountAmount = pricedItems.reduce((sum: number, line: any) => sum + (Number(line.quantity || 0) * Number(line.unitPrice || 0) * Number(line.discount || 0) / 100), 0);
     const taxAmount = pricedItems.reduce((sum: number, line: any) => {
       const gross = Number(line.quantity || 0) * Number(line.unitPrice || 0);
-      return sum + (resolveItemType(line) === 'SERVICE' ? 0 : (gross - gross * Number(line.discount || 0) / 100) * Number(line.taxRate || 0) / 100);
+      return sum + (gross - gross * Number(line.discount || 0) / 100) * Number(line.taxRate || 0) / 100;
     }, 0);
     return { items: pricedItems, subtotal, discountAmount, taxAmount, total: subtotal - discountAmount + taxAmount + additionalChargesTotal() };
   };
@@ -1743,7 +1782,7 @@ export function FacturasView({ data, summaryData, summaryLoading, summaryError, 
         unitPrice,
         priceListId: priceListId || null,
         discount: 0,
-        taxRate: itemType === 'SERVICE' ? 0 : Number((product as any).taxRate || 0),
+        taxRate: normalizeCatalogTaxRatePercent((product as any).taxRate),
         total: quantity * unitPrice,
       };
     });
@@ -2105,6 +2144,14 @@ export function FacturasView({ data, summaryData, summaryLoading, summaryError, 
   if ((editingId || isCreating) && localDoc && !paymentDialogOpen && !creditInvoice) {
     const isInvoiceLocked = !isCreating && ['PAID', 'CANCELLED'].includes(String(localDoc?.status || '').toUpperCase());
     const isDraftInvoice = isCreating || String(localDoc?.status || '').toUpperCase() === 'DRAFT';
+    const newInvoiceCreditCandidate = { ...localDoc, status: 'PENDING' } as Invoice;
+    const canEmitNewInvoiceToCredit = Boolean(
+      isCreating
+      && localDoc.customerId
+      && (localDoc.items || []).length > 0
+      && getInvoiceBalance(newInvoiceCreditCandidate) > 0.01
+      && invoiceFitsAvailableCredit(newInvoiceCreditCandidate),
+    );
     return (
       <div className="sales-document-editor min-w-0 space-y-6 animate-in slide-in-from-right duration-300" data-tour="sales-form-title">
         <div className="sales-document-header flex min-w-0 flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
@@ -2157,6 +2204,16 @@ export function FacturasView({ data, summaryData, summaryLoading, summaryError, 
                   onClick={() => void handleSaveInvoice(isDraftInvoice ? 'PENDING' : 'SAVE')}
                 >
                   Emitir factura
+                </Button>}
+                {isCreating && isDraftInvoice && canPerform('SALES_INVOICES', 'create') && canPerform('SALES_INVOICES', 'submit') && canPerform('SALES_INVOICES', 'sendToCredit') && <Button
+                  type="button"
+                  variant="outline"
+                  className="w-full rounded-xl border-primary/40 px-4 text-[10px] font-black uppercase tracking-widest text-primary hover:bg-primary/10 sm:w-auto"
+                  disabled={!canEmitNewInvoiceToCredit}
+                  title={!localDoc.customerId ? 'Selecciona un cliente con crédito disponible' : 'El crédito disponible debe cubrir el saldo de la factura'}
+                  onClick={() => openInvoiceCredit({ ...localDoc, status: 'DRAFT' } as Invoice)}
+                >
+                  <Send className="mr-2 size-4" />Emitir a crédito
                 </Button>}
                 {!isDraftInvoice && <Button
                   variant="default"
@@ -2459,7 +2516,9 @@ export function FacturasView({ data, summaryData, summaryLoading, summaryError, 
                           itemType: selectedItemType,
                           priceListId: newItems[idx].priceListId || localDoc.priceListId || getCustomerPriceListId(localDoc.customerId),
                           warehouseId: selectedItemType === 'SERVICE' ? undefined : newItems[idx].warehouseId || localDoc?.warehouseId || getDefaultWarehouseId(),
-                          taxRate: selectedItemType === 'SERVICE' ? 0 : Number(newItems[idx].taxRate || 0),
+                          taxRate: selectedProd
+                            ? normalizeCatalogTaxRatePercent((selectedProd as any).taxRate)
+                            : Number(newItems[idx].taxRate || 0),
                           serialNumbers: [],
                         };
                         if (selectedProd) {
@@ -2621,7 +2680,7 @@ export function FacturasView({ data, summaryData, summaryLoading, summaryError, 
                   </div>
                   {pricingMode === 'individual' && (
                     <div className="col-span-2 mt-0 grid min-w-0 grid-cols-2 items-start gap-1.5 self-start text-[10px]">
-                      {resolveItemType(item) === 'SERVICE' ? <span className="flex h-8 items-center rounded-md border border-input bg-background px-2 text-xs font-bold text-muted-foreground">Exento</span> : <label className="relative flex min-w-0 flex-1 items-center font-black uppercase tracking-wider">
+                      <label className="relative flex min-w-0 flex-1 items-center font-black uppercase tracking-wider">
                         <span className="flex h-8 w-full items-center gap-1.5 rounded-md border border-input bg-background px-2">
                           <input type="checkbox" checked={Number(item.taxRate || 0) > 0} onChange={(event) => {
                             const nextItems = [...(localDoc.items || [])];
@@ -2632,7 +2691,7 @@ export function FacturasView({ data, summaryData, summaryLoading, summaryError, 
                        }} disabled={isInvoiceLocked} />
                           <span className="text-xs">IVA</span>
                         </span>
-                      </label>}
+                      </label>
                       <label className="relative flex min-w-0 flex-1 items-center font-black uppercase tracking-wider">
                         <Input type="number" min="0" max="100" value={item.discount || ''} onChange={(event) => {
                           const nextItems = [...(localDoc.items || [])];
@@ -3072,7 +3131,7 @@ export function FacturasView({ data, summaryData, summaryLoading, summaryError, 
           {creditInvoice && (
             <div className="min-h-0 flex-1 space-y-4 overflow-y-auto overscroll-contain pr-3 [scrollbar-gutter:stable]">
               <div className="rounded-2xl border border-primary/20 bg-primary/5 p-4">
-                <p className="text-[10px] font-black uppercase tracking-widest text-muted-foreground">{creditInvoice.number} · {creditInvoice.customer?.name || 'Cliente'}</p>
+                <p className="text-[10px] font-black uppercase tracking-widest text-muted-foreground">{creditInvoice.number || 'Nueva factura'} · {creditInvoice.customer?.name || customers.find((customer) => customer.id === creditInvoice.customerId)?.name || 'Cliente'}</p>
                 <p className="mt-1 text-2xl font-black text-primary">Saldo a crédito: {formatInvoiceAmount(getInvoiceBalance(creditInvoice), creditInvoice.currency, creditInvoice.exchangeRate)}</p>
                 <p className="mt-1 text-xs text-muted-foreground">Interés estimado: {formatInvoiceAmount(creditInterestMode === 'NONE' ? 0 : creditInterestMode === 'PERCENTAGE' ? getInvoiceBalance(creditInvoice) * Number(creditInterestValue || 0) / 100 : Number(creditInterestValue || 0), creditInvoice.currency, creditInvoice.exchangeRate)} · Total pactado: {formatInvoiceAmount(getInvoiceBalance(creditInvoice) + (creditInterestMode === 'NONE' ? 0 : creditInterestMode === 'PERCENTAGE' ? getInvoiceBalance(creditInvoice) * Number(creditInterestValue || 0) / 100 : Number(creditInterestValue || 0)), creditInvoice.currency, creditInvoice.exchangeRate)}</p>
                 <p className="mt-2 text-[10px] font-bold text-muted-foreground">La factura conservará el estado A CRÉDITO y el registro aparecerá en la vista Créditos.</p>
