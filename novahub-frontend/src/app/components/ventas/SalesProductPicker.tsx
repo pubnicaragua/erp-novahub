@@ -149,6 +149,7 @@ export function SalesProductPicker({
   const [quickOpen, setQuickOpen] = useState(false);
   const [quickName, setQuickName] = useState('');
   const [quickPrice, setQuickPrice] = useState('');
+  const [quickServiceTaxable, setQuickServiceTaxable] = useState(true);
   const [quickBusy, setQuickBusy] = useState(false);
   const canViewOtherLocations = canPerform(otherLocationsPermissionModule, 'viewOtherLocations');
   const [search, setSearch] = useState('');
@@ -264,7 +265,11 @@ export function SalesProductPicker({
   const createQuickService = async () => {
     setQuickBusy(true);
     try {
-      const created: any = await inventoryService.createQuickService({ name: quickName.trim(), salePrice: Number(quickPrice) });
+      const created: any = await inventoryService.createQuickService({
+        name: quickName.trim(),
+        salePrice: Number(quickPrice),
+        taxRate: quickServiceTaxable ? 0.15 : 0,
+      });
       const item = (created?.data?.data ?? created?.data ?? created) as SalesCatalogItem;
       void queryClient.invalidateQueries({ queryKey: ['tenant-module'] });
       void queryClient.invalidateQueries({ queryKey: ['sales', 'price-lists', 'services'] });
@@ -461,6 +466,16 @@ export function SalesProductPicker({
                     <Button type="button" size="sm" disabled={quickBusy || !quickName.trim() || quickPrice === '' || !(Number(quickPrice) >= 0)} onClick={() => void createQuickService()}>{quickBusy ? 'Creando…' : 'Crear y usar'}</Button>
                     <Button type="button" size="sm" variant="outline" disabled={quickBusy} onClick={() => setQuickOpen(false)}>Cancelar</Button>
                   </div>
+                  <label className="flex items-center gap-2 text-xs font-semibold sm:col-span-3">
+                    <input
+                      type="checkbox"
+                      checked={quickServiceTaxable}
+                      onChange={(event) => setQuickServiceTaxable(event.target.checked)}
+                      aria-label="Aplicar IVA al servicio rápido"
+                      disabled={quickBusy}
+                    />
+                    Aplica IVA (15%)
+                  </label>
                 </div>
               )}
             </div>
