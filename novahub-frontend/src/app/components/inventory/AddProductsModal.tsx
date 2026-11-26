@@ -259,6 +259,7 @@ export function AddProductsModal({ open, onOpenChange, categories, warehouses, b
       .map((list) => [list.code.toUpperCase(), list] as const)).values())
     : resolveStandardProductPriceLists(sourcePriceLists);
   const categoryRequired = catalogItemType !== 'SERVICE';
+  const codeRequired = catalogItemType === 'PRODUCT';
   const canCreateServiceCategory = canPerform('INVENTORY_ATTRIBUTES', 'create');
   const isPagePresentation = presentation === 'page';
 
@@ -734,8 +735,8 @@ export function AddProductsModal({ open, onOpenChange, categories, warehouses, b
   };
 
   const handleAddToList = async () => {
-    if (!draftProduct.code.trim() || !draftProduct.name.trim() || (categoryRequired && !draftProduct.categoryId)) {
-      toast.error('Código, Nombre y Categoría son obligatorios');
+    if ((codeRequired && !draftProduct.code.trim()) || !draftProduct.name.trim() || (categoryRequired && !draftProduct.categoryId)) {
+      toast.error(catalogItemType === 'SERVICE' ? 'El nombre del servicio es obligatorio' : 'Código, Nombre y Categoría son obligatorios');
       return;
     }
     if (skuError) {
@@ -928,8 +929,8 @@ export function AddProductsModal({ open, onOpenChange, categories, warehouses, b
     }));
 
     if (productsList.length === 0) {
-      if (!draftProduct.code.trim() || !draftProduct.name.trim() || (categoryRequired && !draftProduct.categoryId)) {
-        toast.error('Código, Nombre y Categoría son obligatorios');
+      if ((codeRequired && !draftProduct.code.trim()) || !draftProduct.name.trim() || (categoryRequired && !draftProduct.categoryId)) {
+        toast.error(catalogItemType === 'SERVICE' ? 'El nombre del servicio es obligatorio' : 'Código, Nombre y Categoría son obligatorios');
         return;
       }
       if (!hasValidSellingPrice(draftProduct)) {
@@ -1055,7 +1056,7 @@ export function AddProductsModal({ open, onOpenChange, categories, warehouses, b
             label={catalogItemType === 'SERVICE' ? 'Cómo crear servicio' : 'Cómo crear producto'}
             targetPrefix="inventory-product-add"
             stepKeys={['title', 'data', 'items', 'actions']}
-            copy={{ data: { description: 'Completa código, nombre, categoría, moneda, costos, bodega y el stock de cada variante cuando corresponda.' }, items: { description: 'Revisa la lista de productos o servicios que agregarás en una sola operación.' }, actions: { description: 'Guarda uno o varios registros para incorporarlos al catálogo.' } }}
+            copy={{ data: { description: catalogItemType === 'SERVICE' ? 'Completa nombre, categoría, moneda, costo y precios. El código es opcional y se asigna al guardar si lo dejas vacío.' : 'Completa código, nombre, categoría, moneda, costos, bodega y el stock de cada variante cuando corresponda.' }, items: { description: 'Revisa la lista de productos o servicios que agregarás en una sola operación.' }, actions: { description: 'Guarda uno o varios registros para incorporarlos al catálogo.' } }}
           />
         </DialogHeader>
 
@@ -1078,22 +1079,30 @@ export function AddProductsModal({ open, onOpenChange, categories, warehouses, b
           )}
           
           {/* FORMULARIO SUPERIOR */}
-          <div className={isPagePresentation
-            ? 'grid min-w-0 grid-cols-1 gap-2 rounded-xl border border-dashed bg-muted/30 p-3 sm:grid-cols-2 md:grid-cols-12'
-            : 'grid min-w-0 grid-cols-1 gap-3 rounded-xl border border-dashed bg-muted/30 p-4 sm:grid-cols-2 md:grid-cols-8'}>
+          <div className={catalogItemType === 'SERVICE'
+            ? 'grid min-w-0 grid-cols-1 gap-3 rounded-xl border border-dashed bg-muted/30 p-3 sm:grid-cols-2 lg:grid-cols-12'
+            : isPagePresentation
+              ? 'grid min-w-0 grid-cols-1 gap-2 rounded-xl border border-dashed bg-muted/30 p-3 sm:grid-cols-2 md:grid-cols-12'
+              : 'grid min-w-0 grid-cols-1 gap-3 rounded-xl border border-dashed bg-muted/30 p-4 sm:grid-cols-2 md:grid-cols-8'}>
             <div className={isPagePresentation
-              ? 'flex items-start justify-center sm:col-span-1 md:col-span-1 md:row-span-2 md:items-center md:pt-0'
-              : 'flex items-start justify-center sm:col-span-1 md:row-span-2 md:items-center md:pt-0'}>
+              ? catalogItemType === 'SERVICE'
+                ? 'flex items-center justify-center sm:col-span-1 lg:col-span-1'
+                : 'flex items-start justify-center sm:col-span-1 md:col-span-1 md:row-span-2 md:items-center md:pt-0'
+              : catalogItemType === 'SERVICE'
+                ? 'flex items-center justify-center sm:col-span-1 lg:col-span-1'
+                : 'flex items-start justify-center sm:col-span-1 md:row-span-2 md:items-center md:pt-0'}>
               <ProductImagePicker
                 src={draftProduct.imagePreviewUrl}
                 productName={draftProduct.name}
                 onSelect={handleImageSelected}
                 onRemove={handleImageRemoved}
-                className="!size-24 !rounded-xl"
+                className={catalogItemType === 'SERVICE' ? '!size-16 !rounded-xl' : '!size-24 !rounded-xl'}
               />
             </div>
-              <div className={isPagePresentation ? 'col-span-1 md:col-start-2 md:row-start-1 md:col-span-2' : 'col-span-1 md:col-start-2 md:row-start-1'}>
-                <label className="text-[10px] uppercase font-bold text-muted-foreground">{draftProduct.itemType === 'SERVICE' ? 'Código' : 'Código/Sku'} *</label>
+              <div className={catalogItemType === 'SERVICE'
+                ? 'col-span-1 min-w-0 lg:col-span-2'
+                : isPagePresentation ? 'col-span-1 md:col-start-2 md:row-start-1 md:col-span-2' : 'col-span-1 md:col-start-2 md:row-start-1'}>
+                <label className="text-[10px] uppercase font-bold text-muted-foreground">{catalogItemType === 'SERVICE' ? 'Código (opcional)' : 'Código/Sku *'}</label>
                 <div className="flex flex-col gap-1 mt-1 w-full">
                   <Input
                     data-testid="inventory-product-code"
@@ -1106,13 +1115,16 @@ export function AddProductsModal({ open, onOpenChange, categories, warehouses, b
                     value={draftProduct.code} 
                     onChange={e => handleUpdateDraft('code', e.target.value)} 
                     className={`h-8 text-xs font-mono w-full ${skuError ? 'border-warning focus-visible:ring-warning' : ''}`}
-                    placeholder="SKU-001" 
+                    placeholder={catalogItemType === 'SERVICE' ? 'Código del servicio' : 'SKU-001'}
                   />
                   {skuError && <p id="inventory-product-sku-error" role="alert" className="text-xs text-warning leading-snug">{skuError}</p>}
                   {skuConflictNeedsList && <p id="inventory-product-sku-recovery-hint" role="status" className="text-xs text-muted-foreground leading-snug">Después de cambiar el SKU, agrega este producto a la lista para conservarlo en el lote.</p>}
+                  {catalogItemType === 'SERVICE' && !skuError && !skuConflictNeedsList && <p className="text-[10px] leading-snug text-muted-foreground">Déjalo vacío para asignarlo automáticamente.</p>}
                 </div>
               </div>
-              <div className={isPagePresentation ? 'sm:col-span-2 md:col-start-4 md:row-start-1 md:col-span-9' : 'sm:col-span-2 md:col-start-3 md:row-start-1 md:col-span-3'}>
+              <div className={catalogItemType === 'SERVICE'
+                ? 'col-span-full min-w-0 sm:col-span-1 lg:col-span-4'
+                : isPagePresentation ? 'sm:col-span-2 md:col-start-4 md:row-start-1 md:col-span-9' : 'sm:col-span-2 md:col-start-3 md:row-start-1 md:col-span-3'}>
                 <label className="text-[10px] uppercase font-bold text-muted-foreground">Nombre *</label>
                 <Input
                   data-testid="inventory-product-name"
@@ -1209,7 +1221,7 @@ export function AddProductsModal({ open, onOpenChange, categories, warehouses, b
                 </div>
               </>}
               {catalogItemType === 'SERVICE' && (
-                <div className={isPagePresentation ? 'sm:col-span-2 md:col-start-2 md:row-start-2 md:col-span-5' : 'col-span-1 sm:col-span-2 md:col-start-1 md:row-start-2 md:col-span-8'}>
+                <div className="col-span-full min-w-0 lg:col-span-5">
                   <label className="text-[10px] uppercase font-bold text-muted-foreground">Categoría del servicio (opcional)</label>
                   {newCategoryOpen ? (
                     <div className="mt-1 space-y-1.5 rounded-lg border border-primary/40 bg-primary/5 p-2">
@@ -1267,25 +1279,27 @@ export function AddProductsModal({ open, onOpenChange, categories, warehouses, b
                   )}
                 </div>
               )}
-              <div className={isPagePresentation
-                ? 'sm:col-span-2 md:col-start-1 md:row-start-3 md:col-span-12 md:grid md:grid-cols-2 md:gap-2'
-                : 'sm:col-span-2 md:col-start-1 md:row-start-3 md:col-span-8'}>
+              <div className={catalogItemType === 'SERVICE'
+                ? 'col-span-full grid min-w-0 grid-cols-1 gap-2'
+                : isPagePresentation
+                  ? 'sm:col-span-2 md:col-start-1 md:row-start-3 md:col-span-12 md:grid md:grid-cols-2 md:gap-2'
+                  : 'sm:col-span-2 md:col-start-1 md:row-start-3 md:col-span-8'}>
                 <div className="min-w-0">
                   <label className="text-[10px] uppercase font-bold text-muted-foreground">Descripción <span className="normal-case font-medium">(opcional)</span></label>
                   <Textarea
                     value={draftProduct.description}
                     onChange={e => handleUpdateDraft('description', e.target.value)}
-                    className={isPagePresentation ? 'mt-1 min-h-12 text-xs' : 'mt-1 min-h-16 text-xs'}
+                    className={catalogItemType === 'SERVICE' ? 'mt-1 min-h-12 text-xs' : isPagePresentation ? 'mt-1 min-h-12 text-xs' : 'mt-1 min-h-16 text-xs'}
                     placeholder={`Descripción del ${catalogItemType === 'SERVICE' ? 'servicio' : 'producto'}`}
                   />
                 </div>
-                <div className={isPagePresentation ? 'min-w-0' : 'mt-2'}>
+                <div className={catalogItemType === 'SERVICE' ? 'min-w-0' : isPagePresentation ? 'min-w-0' : 'mt-2'}>
                   <label className="text-[10px] uppercase font-bold text-muted-foreground">Nota comercial <span className="normal-case font-medium">(opcional)</span></label>
                   <Textarea
                     value={draftProduct.commercialNote || ''}
                     onChange={e => handleUpdateDraft('commercialNote', Array.from(e.target.value).slice(0, 100).join(''))}
                     maxLength={100}
-                    className={isPagePresentation ? 'mt-1 min-h-12 text-xs' : 'mt-1 min-h-14 text-xs'}
+                    className={catalogItemType === 'SERVICE' ? 'mt-1 min-h-12 text-xs' : isPagePresentation ? 'mt-1 min-h-12 text-xs' : 'mt-1 min-h-14 text-xs'}
                     placeholder="Nota visible en ventas, compras y facturas"
                   />
                    <p className="mt-0.5 text-right text-[10px] text-muted-foreground">{Array.from(String(draftProduct.commercialNote || '')).length}/100</p>
@@ -1320,7 +1334,9 @@ export function AddProductsModal({ open, onOpenChange, categories, warehouses, b
                 </Button>
               </div>}
 
-              <div className={isPagePresentation ? 'col-span-1 md:row-start-4 md:col-span-1' : 'col-span-1'}>
+              <div className={catalogItemType === 'SERVICE'
+                ? 'col-span-1 min-w-0 lg:col-span-2'
+                : isPagePresentation ? 'col-span-1 md:row-start-4 md:col-span-1' : 'col-span-1'}>
                 <label className="text-[10px] uppercase font-bold text-muted-foreground">Moneda</label>
                 <Select value={draftProduct.priceCurrency} onValueChange={v => handleUpdateDraft('priceCurrency', v)}>
                   <SelectTrigger className="h-8 !rounded-none text-xs mt-1"><SelectValue /></SelectTrigger>
@@ -1330,9 +1346,21 @@ export function AddProductsModal({ open, onOpenChange, categories, warehouses, b
                   </SelectContent>
                 </Select>
               </div>
+              {canViewInventoryCost && <div className={catalogItemType === 'SERVICE'
+                ? 'col-span-1 min-w-0 lg:col-span-2'
+                : isPagePresentation ? 'col-span-1 md:row-start-4 md:col-span-2' : 'col-span-1'}>
+                <label className="text-[10px] uppercase font-bold text-muted-foreground">Costo</label>
+                <Input
+                  data-testid="inventory-product-cost"
+                  type="number" min={0}
+                  value={draftProduct.costPrice}
+                  onChange={e => handleUpdateDraft('costPrice', e.target.value)}
+                  className="h-8 text-xs text-right mt-1 tabular-nums"
+                  placeholder="0.00" currencyPrecision />
+              </div>}
               {catalogItemType === 'SERVICE' && effectivePriceLists.map((list) => (
-                <div key={list.code} className={isPagePresentation ? 'col-span-1 md:row-start-4 md:col-span-2' : 'col-span-1'}>
-                  <label className="text-[10px] uppercase font-bold text-muted-foreground">Precio {list.name}</label>
+                <div key={list.code} className="col-span-1 min-w-0 lg:col-span-2">
+                  <label className="text-[10px] uppercase font-bold text-muted-foreground">{list.name}</label>
                   <Input
                     data-testid={`inventory-service-price-${list.code}`}
                     type="number"
@@ -1340,24 +1368,27 @@ export function AddProductsModal({ open, onOpenChange, categories, warehouses, b
                     step="any"
                     value={draftProduct.prices?.[list.code] ?? ''}
                     onChange={e => updatePrice(list.code, e.target.value)}
-                    className="mt-1 h-8 text-right text-xs tabular-nums"
+                    className="mt-1 h-8 w-full text-right text-xs tabular-nums"
                     placeholder="0.00"
                     currencyPrecision
                   />
                 </div>
               ))}
-              {catalogItemType === 'SERVICE' && <label className={isPagePresentation ? 'col-span-1 flex items-center gap-2 self-end rounded-lg border border-border/60 px-3 py-2 text-xs font-bold md:row-start-4 md:col-span-2' : 'col-span-1 flex items-center gap-2 self-end rounded-lg border border-border/60 px-3 py-2 text-xs font-bold'}>
-                <input
-                  type="checkbox"
-                  checked={Number(draftProduct.taxRate || 0) > 0}
-                  onChange={(event) => handleUpdateDraft('taxRate', event.target.checked ? '0.15' : '0')}
-                  aria-label="Aplicar IVA al servicio"
-                />
-                Aplica IVA (15%)
-              </label>}
+              {catalogItemType === 'SERVICE' && (
+                <div className="col-span-1 min-w-0 lg:col-span-2">
+                  <label className="text-[10px] uppercase font-bold text-muted-foreground">Disponibilidad</label>
+                  <Select value={draftProduct.isActive === false ? 'unavailable' : 'available'} onValueChange={v => handleUpdateDraft('isActive', v === 'available')}>
+                    <SelectTrigger className="mt-1 h-8 w-full !rounded-none text-xs"><SelectValue /></SelectTrigger>
+                    <SelectContent className="!rounded-none">
+                      <SelectItem value="available">Disponible</SelectItem>
+                      <SelectItem value="unavailable">No disponible</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+              )}
               {catalogItemType !== 'SERVICE' && effectivePriceLists.map((list) => (
                 <div key={list.code} className={isPagePresentation ? 'col-span-1 md:row-start-4 md:col-span-2' : 'col-span-1'}>
-                  <label className="text-[10px] uppercase font-bold text-muted-foreground">Precio {list.name}</label>
+                  <label className="text-[10px] uppercase font-bold text-muted-foreground">{list.name}</label>
                   <Input
                     data-testid={`inventory-product-price-${list.code}`}
                     type="number"
@@ -1369,18 +1400,7 @@ export function AddProductsModal({ open, onOpenChange, categories, warehouses, b
                     placeholder="0.00" currencyPrecision />
                 </div>
               ))}
-              
-              {canViewInventoryCost && <div className={isPagePresentation ? 'col-span-1 md:row-start-4 md:col-span-2' : 'col-span-1'}>
-                <label className="text-[10px] uppercase font-bold text-muted-foreground">Costo</label>
-                <Input 
-                  data-testid="inventory-product-cost"
-                  type="number" min={0}
-                  value={draftProduct.costPrice} 
-                  onChange={e => handleUpdateDraft('costPrice', e.target.value)} 
-                  className="h-8 text-xs text-right mt-1 tabular-nums" 
-                  placeholder="0.00" currencyPrecision />
-              </div>}
-              {canViewInventoryCost && <MarginPriceSuggestion cost={draftProduct.costPrice} onApply={applySuggestedPrice} />}
+              {canViewInventoryCost && <MarginPriceSuggestion cost={draftProduct.costPrice} onApply={applySuggestedPrice} compact />}
                {catalogItemType !== 'SERVICE' && <div className={isPagePresentation ? 'col-span-1 md:row-start-4 md:col-span-2' : 'col-span-1'}>
                  <label className="text-[10px] uppercase font-bold text-muted-foreground">Serie/IMEI</label>
                 <Button
@@ -1478,22 +1498,11 @@ export function AddProductsModal({ open, onOpenChange, categories, warehouses, b
                   </div>
                 </>
                 )
-              ) : (
-                <>
-                  <div className={isPagePresentation ? 'col-span-1 md:row-start-5 md:col-span-4' : 'col-span-1'}>
-                    <label className="text-[10px] uppercase font-bold text-muted-foreground">Disponibilidad</label>
-                    <Select value={draftProduct.isActive === false ? 'unavailable' : 'available'} onValueChange={v => handleUpdateDraft('isActive', v === 'available')}>
-                      <SelectTrigger className="h-8 !rounded-none text-xs mt-1"><SelectValue /></SelectTrigger>
-                      <SelectContent className="!rounded-none">
-                        <SelectItem value="available">Disponible</SelectItem>
-                        <SelectItem value="unavailable">No disponible</SelectItem>
-                      </SelectContent>
-                    </Select>
-                  </div>
-                </>
-              )}
+              ) : null}
               
-              <div className={`sm:col-span-2 ${isPagePresentation ? 'md:col-span-12 md:row-start-6' : 'md:col-span-8'} flex justify-end`}>
+              <div className={catalogItemType === 'SERVICE'
+                ? 'col-span-full flex justify-end'
+                : `sm:col-span-2 ${isPagePresentation ? 'md:col-span-12 md:row-start-6' : 'md:col-span-8'} flex justify-end`}>
                 <Button data-testid="inventory-product-add-to-list" onClick={handleAddToList} className="h-8 text-xs font-bold" variant="secondary" disabled={isCheckingAccounting || isSaving}>
                   <Plus className="size-3 mr-2" />
                   {isCheckingAccounting ? 'Validando contabilidad...' : 'Agregar a la lista'}
@@ -1722,7 +1731,7 @@ export function AddProductsModal({ open, onOpenChange, categories, warehouses, b
                                   <Input type="number" min={0} step="any" value={draftProduct.variantCostPrices?.[key] ?? ''} onChange={(e) => updateVariantCostPrice(combination, e.target.value)} className="h-8 w-full text-right text-xs tabular-nums" placeholder="Hereda base" aria-label={`Costo propio para ${combinationLabel}`} currencyPrecision />
                                 </div>}
                                 {effectivePriceLists.map((list) => <div key={list.code} className="min-w-0">
-                                  <span className="mb-1 block text-[9px] font-bold uppercase tracking-wide text-muted-foreground">Precio {list.name}</span>
+                                  <span className="mb-1 block text-[9px] font-bold uppercase tracking-wide text-muted-foreground">{list.name}</span>
                                   <Input type="number" min={0} step="any" value={draftProduct.variantPrices?.[key]?.[list.code] ?? ''} onChange={(e) => updateVariantPrice(combination, list.code, e.target.value)} className="h-8 w-full text-right text-xs tabular-nums" placeholder="Hereda base" aria-label={`Precio ${list.name} para ${combinationLabel}`} currencyPrecision />
                                 </div>)}
                               </div>
@@ -1805,7 +1814,7 @@ export function AddProductsModal({ open, onOpenChange, categories, warehouses, b
           <Button
             data-testid="inventory-product-save"
             onClick={handleSave} 
-            disabled={isSaving || isCheckingAccounting || skuConflictNeedsList || (productsList.length === 0 && (!draftProduct.code.trim() || !draftProduct.name.trim()))}
+            disabled={isSaving || isCheckingAccounting || skuConflictNeedsList || (productsList.length === 0 && ((codeRequired && !draftProduct.code.trim()) || !draftProduct.name.trim()))}
             className="font-bold bg-primary text-primary-foreground"
           >
             {isSaving ? 'Guardando...' : (productsList.length > 0 ? `Guardar ${productsList.length} ${catalogItemType === 'SERVICE' ? 'servicio(s)' : 'producto(s)'}` : `Guardar ${catalogItemType === 'SERVICE' ? 'servicio' : 'producto'}`)}
