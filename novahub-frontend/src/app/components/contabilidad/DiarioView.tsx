@@ -347,9 +347,7 @@ export function DiarioView() {
     }
     })();
   };
-  const journalGridCols = viewJournal
-    ? '48px 1fr 1.15fr 0.85fr 1.35fr 1.35fr 1fr 1.35fr 84px'
-    : '48px 1fr 2.2fr 0.85fr 1fr 1fr 1fr 1.35fr 84px';
+  const journalGridCols = '48px 1fr 2.2fr 0.85fr 1fr 1fr 1fr 1.35fr 84px';
   const loading = journalsQuery.isLoading || journalsQuery.isFetching;
   const accounts = useMemo(() => {
     const flatten = (items: ChartAccount[]): ChartAccount[] => items.flatMap(account => [account, ...flatten(account.children ?? [])]);
@@ -857,7 +855,7 @@ export function DiarioView() {
         </CardContent>
       </Card>
 
-      <div className={cn('grid min-w-0 grid-cols-1 gap-6', viewJournal ? 'lg:grid-cols-[13fr_7fr]' : 'lg:grid-cols-1')}>
+      <div className="grid min-w-0 grid-cols-1 gap-6">
       <div className="min-w-0">
 
       {/* Journal List */}
@@ -875,7 +873,7 @@ export function DiarioView() {
             </div>
           ) : (
             <>
-              <div className="hidden max-h-[600px] overflow-y-auto sm:block">
+              <div className="hidden max-h-[600px] overflow-y-auto xl:block">
                 <div className="min-w-0 divide-y divide-border/60">
                 <div className="hidden min-w-0 items-center gap-0 bg-muted/30 px-3 py-2 text-[10px] font-black uppercase tracking-widest text-muted-foreground/60 sm:grid" style={{ gridTemplateColumns: journalGridCols }}>
                   <span className="px-1">#</span>
@@ -912,7 +910,7 @@ export function DiarioView() {
                 })}
                 </div>
               </div>
-              <div className="max-h-[600px] space-y-3 overflow-y-auto p-3 sm:hidden">
+              <div className="max-h-[600px] space-y-3 overflow-y-auto p-3 xl:hidden">
                 {journals.map((j) => {
                   const totalDeb = j.lines?.reduce((s, l) => s + Number(l.debit), 0) || 0;
                   const totalCred = j.lines?.reduce((s, l) => s + Number(l.credit), 0) || 0;
@@ -966,25 +964,23 @@ export function DiarioView() {
 
       </div>
 
-      {/* Detail Panel */}
-      {viewJournal && (
-        <div className="min-w-0 lg:sticky lg:top-4 lg:self-start">
-          <Card className="overflow-hidden">
+      <Dialog open={Boolean(viewJournal)} onOpenChange={(open) => { if (!open) setViewJournalId(null); }}>
+        <DialogContent className="w-[calc(100%-1rem)] max-w-5xl p-0 sm:!max-w-5xl">
+          <DialogHeader className="sr-only">
+            <DialogTitle>Detalle del asiento{viewJournal ? ` #${viewJournal.number}` : ''}</DialogTitle>
+            <DialogDescription>Información y movimientos contables del asiento seleccionado.</DialogDescription>
+          </DialogHeader>
+          {viewJournal && <Card className="flex min-h-0 flex-1 flex-col overflow-hidden border-0 shadow-none">
             <CardHeader className="py-3 px-4">
               <div className="flex items-center justify-between">
                 <div className="flex items-center gap-2">
                   <FileText className="w-4 h-4 text-muted-foreground" />
                   <CardTitle className="text-sm font-medium">Detalle del Asiento</CardTitle>
                 </div>
-                {viewJournal && (
-                  <Button type="button" variant="ghost" size="icon" className="size-7 text-muted-foreground hover:bg-muted hover:text-foreground" onClick={() => setViewJournalId(null)} aria-label="Cerrar detalle del asiento" title="Cerrar">
-                    <X className="w-3.5 h-3.5" />
-                  </Button>
-                )}
               </div>
             </CardHeader>
             <Separator />
-            <CardContent className="space-y-5 p-4 sm:p-5">
+            <CardContent className="max-h-[calc(90dvh-5rem)] min-h-0 flex-1 space-y-5 overflow-y-auto p-4 sm:p-5">
               {journalDetailQuery.isLoading ? (
                 <div className="flex items-center justify-center rounded-xl border border-dashed border-border/60 py-16">
                   <div className="size-6 rounded-full border-2 border-primary border-t-transparent animate-spin" />
@@ -1093,27 +1089,28 @@ export function DiarioView() {
                       </div>
                     ) : (
                       <div className="overflow-hidden rounded-xl border border-border/60">
-                        <div className="grid grid-cols-[minmax(0,1fr)_minmax(92px,auto)_minmax(92px,auto)] items-center gap-3 border-b border-border/60 bg-muted/30 px-3 py-2 text-[9px] font-black uppercase tracking-widest text-muted-foreground">
+                        <div className="hidden grid-cols-[minmax(0,1fr)_minmax(92px,auto)_minmax(92px,auto)] items-center gap-3 border-b border-border/60 bg-muted/30 px-3 py-2 text-[9px] font-black uppercase tracking-widest text-muted-foreground sm:grid">
                           <span>Cuenta / concepto</span>
                           <span className="text-right text-emerald-600">Debe</span>
                           <span className="text-right text-rose-500">Haber</span>
                         </div>
                         <div className="divide-y divide-border/60">
                           {viewJournal.lines.map((line) => (
-                            <div key={line.id} className="grid min-w-0 grid-cols-[minmax(0,1fr)_minmax(92px,auto)_minmax(92px,auto)] items-center gap-3 px-3 py-3">
-                              <div className="min-w-0">
+                            <div key={line.id} className="grid min-w-0 grid-cols-2 items-start gap-x-3 gap-y-2 px-3 py-3 sm:grid-cols-[minmax(0,1fr)_minmax(92px,auto)_minmax(92px,auto)] sm:items-center sm:gap-3">
+                              <div className="col-span-2 min-w-0 sm:col-span-1">
                                 <div className="flex min-w-0 items-start gap-2">
                                   <div className={cn('mt-0.5 flex size-6 shrink-0 items-center justify-center rounded-lg', line.debit > 0 ? 'bg-emerald-500/10' : 'bg-rose-500/10')}>
                                     {line.debit > 0 ? <ArrowDownLeft className="size-3.5 text-emerald-600" /> : <ArrowUpRight className="size-3.5 text-rose-500" />}
                                   </div>
-                                  <p className="min-w-0 truncate text-xs font-semibold" title={line.account ? `${line.account.code} - ${line.account.name}` : firstReadable(line.accountId)}>
-                                    {line.account ? `${line.account.code} - ${line.account.name}` : firstReadable(line.accountId)}
+                                  <p className="min-w-0 whitespace-normal break-words text-xs font-semibold leading-relaxed" title={line.account ? `${line.account.code} - ${line.account.name}` : firstReadable(line.accountId)}>
+                                    <span className="block break-all font-mono text-[10px] text-muted-foreground">{line.account?.code || firstReadable(line.accountId)}</span>
+                                    {line.account?.name && <span className="block break-words">{line.account.name}</span>}
                                   </p>
                                 </div>
-                                {line.description && <p className="ml-8 mt-1 truncate text-[10px] text-muted-foreground" title={accountingDescriptionLabel(line.description)}>{accountingDescriptionLabel(line.description)}</p>}
+                                {line.description && <p className="ml-8 mt-1 whitespace-normal break-words text-[10px] text-muted-foreground" title={accountingDescriptionLabel(line.description)}>{accountingDescriptionLabel(line.description)}</p>}
                               </div>
-                              <p className="text-right font-mono text-[11px] font-bold tabular-nums text-emerald-600">{line.debit > 0 ? formatCurrency(line.debit) : '—'}</p>
-                              <p className="text-right font-mono text-[11px] font-bold tabular-nums text-rose-500">{line.credit > 0 ? formatCurrency(line.credit) : '—'}</p>
+                              <p className="min-w-0 text-right font-mono text-[11px] font-bold tabular-nums text-emerald-600"><span className="mr-1 font-sans text-[9px] uppercase text-muted-foreground sm:hidden">Debe</span>{line.debit > 0 ? formatCurrency(line.debit) : '—'}</p>
+                              <p className="min-w-0 text-right font-mono text-[11px] font-bold tabular-nums text-rose-500"><span className="mr-1 font-sans text-[9px] uppercase text-muted-foreground sm:hidden">Haber</span>{line.credit > 0 ? formatCurrency(line.credit) : '—'}</p>
                             </div>
                           ))}
                         </div>
@@ -1134,9 +1131,9 @@ export function DiarioView() {
                 </>
               )}
             </CardContent>
-          </Card>
-        </div>
-      )}
+          </Card>}
+        </DialogContent>
+      </Dialog>
 
       <ConfirmDialog
         open={pendingDeleteJournal !== null}

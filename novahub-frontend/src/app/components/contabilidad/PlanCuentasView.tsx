@@ -105,8 +105,8 @@ function readableTransactionDescription(transaction: AccountTransaction): string
 }
 
 const ACCOUNT_COLUMN_DEFS = [
-  { key: 'code', label: 'Código', width: 'minmax(48px,.7fr)' },
-  { key: 'name', label: 'Nombre', width: 'minmax(90px,1.45fr)' },
+  { key: 'code', label: 'Código', width: 'minmax(100px,.9fr)' },
+  { key: 'name', label: 'Nombre', width: 'minmax(180px,2fr)' },
   { key: 'type', label: 'Tipo', width: 'minmax(54px,.75fr)' },
   { key: 'subtype', label: 'Subtipo', width: 'minmax(78px,1fr)' },
   { key: 'detailType', label: 'Tipo detalle', width: 'minmax(78px,1fr)' },
@@ -766,12 +766,12 @@ export function PlanCuentasView({ isSidebarCollapsed = true, helpTrigger }: Plan
 
           <div className="min-w-0 flex-1">
             <div className="flex min-w-0 items-center gap-1.5">
-              <span className="shrink-0 font-mono text-[10px] text-muted-foreground">{account.code}</span>
+              <span className="max-w-full shrink font-mono text-[10px] text-muted-foreground break-all">{account.code}</span>
               <Badge variant="outline" className={cn('shrink-0 px-1.5 py-0 text-[9px] font-medium', TYPE_COLOR_MAP[account.type])}>
                 {getTypeLabel(account.type)}
               </Badge>
             </div>
-            <p className={cn('mt-0.5 truncate text-sm font-medium', !account.isActive && 'line-through')} title={account.name}>
+            <p className={cn('mt-0.5 whitespace-normal break-words text-sm font-medium', !account.isActive && 'line-through')} title={account.name}>
               {account.name}
             </p>
             <p className="mt-1 truncate text-[10px] text-muted-foreground">
@@ -836,8 +836,8 @@ export function PlanCuentasView({ isSidebarCollapsed = true, helpTrigger }: Plan
               {isExpanded ? <ChevronDown className="size-4" /> : <ChevronRight className="size-4" />}
             </button>
           </div>
-          {effectiveColumnKeys.includes('code') && <span className="min-w-0 truncate px-2 font-mono text-xs text-muted-foreground">{account.code}</span>}
-          {effectiveColumnKeys.includes('name') && <span className={cn('min-w-0 truncate px-2 text-xs', !account.isActive && 'line-through')}>{account.name}</span>}
+          {effectiveColumnKeys.includes('code') && <span className="min-w-0 whitespace-normal break-all px-2 font-mono text-xs text-muted-foreground">{account.code}</span>}
+          {effectiveColumnKeys.includes('name') && <span className={cn('min-w-0 whitespace-normal break-words px-2 text-xs', !account.isActive && 'line-through')}>{account.name}</span>}
           {effectiveColumnKeys.includes('type') && <Badge variant="outline" className={cn('mx-2 max-w-full justify-center truncate px-1.5 py-0 text-[10px] font-medium', TYPE_COLOR_MAP[account.type])}>{getTypeLabel(account.type)}</Badge>}
           {effectiveColumnKeys.includes('subtype') && <span className="min-w-0 truncate px-2 text-[10px] text-muted-foreground" title={getSubtypeLabel(account.subtype)}>{getSubtypeLabel(account.subtype)}</span>}
           {effectiveColumnKeys.includes('detailType') && <span className="min-w-0 truncate px-2 text-[10px] text-muted-foreground" title={getDetailTypeLabel(account.detailType)}>{getDetailTypeLabel(account.detailType)}</span>}
@@ -1062,10 +1062,7 @@ export function PlanCuentasView({ isSidebarCollapsed = true, helpTrigger }: Plan
       </div>
 
       {/* Main Content */}
-      <div className={cn(
-        'grid min-w-0 grid-cols-1 gap-6',
-        selectedAccount ? 'lg:grid-cols-[13fr_7fr]' : 'lg:grid-cols-1'
-      )}>
+      <div className="grid min-w-0 grid-cols-1 gap-6">
         {/* Tree Table */}
         <div className="min-w-0">
           <Card>
@@ -1142,24 +1139,23 @@ export function PlanCuentasView({ isSidebarCollapsed = true, helpTrigger }: Plan
           </Card>
         </div>
 
-        {/* Detail Panel */}
-        {selectedAccount && <div className="min-w-0 lg:sticky lg:top-4 lg:max-h-[calc(100vh-2rem)] lg:self-start">
-          <Card className="overflow-hidden">
+        <Dialog open={Boolean(selectedAccount)} onOpenChange={(open) => { if (!open) { setSelectedAccount(null); setSelectedTransaction(null); } }}>
+          <DialogContent className="w-[calc(100%-1rem)] max-w-4xl p-0 sm:!max-w-4xl">
+            <DialogHeader className="sr-only">
+              <DialogTitle>Detalle de cuenta{selectedAccount ? ` ${selectedAccount.code}` : ''}</DialogTitle>
+              <DialogDescription>Información y transacciones de la cuenta seleccionada.</DialogDescription>
+            </DialogHeader>
+            {selectedAccount && <Card className="flex min-h-0 flex-1 flex-col overflow-hidden border-0 shadow-none">
             <CardHeader className="py-3 px-4">
               <div className="flex items-center justify-between">
                 <div className="flex items-center gap-2">
                   <Info className="w-4 h-4 text-muted-foreground" />
                   <CardTitle className="text-sm font-medium">Detalle de Cuenta</CardTitle>
                 </div>
-                {selectedAccount && (
-                  <Button type="button" variant="ghost" size="icon" className="size-7 text-muted-foreground hover:bg-muted hover:text-foreground" onClick={() => { setSelectedAccount(null); setSelectedTransaction(null); }} aria-label="Cerrar detalle de cuenta" title="Cerrar">
-                    <X className="w-3.5 h-3.5" />
-                  </Button>
-                )}
               </div>
             </CardHeader>
             <Separator />
-            <CardContent className="max-h-[calc(100vh-6rem)] space-y-5 overflow-y-auto p-4 sm:p-5">
+            <CardContent className="max-h-[calc(90dvh-5rem)] min-h-0 flex-1 space-y-5 overflow-y-auto p-4 sm:p-5">
                 <div className="rounded-2xl border border-primary/15 bg-primary/5 p-4">
                   <div className="flex min-w-0 items-start justify-between gap-3">
                     <div className="min-w-0">
@@ -1335,8 +1331,9 @@ export function PlanCuentasView({ isSidebarCollapsed = true, helpTrigger }: Plan
                   </div>
                 </section>
             </CardContent>
-          </Card>
-        </div>}
+            </Card>}
+          </DialogContent>
+        </Dialog>
       </div>
 
       <Dialog open={selectedTransaction !== null} onOpenChange={(open) => { if (!open) setSelectedTransaction(null); }}>

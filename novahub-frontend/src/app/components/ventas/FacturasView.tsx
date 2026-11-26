@@ -39,7 +39,7 @@ import type { PdfDownloadFormat } from '../../utils/pdfDownloadFormats';
 import { publicAccessService, publicLinkUrl } from '../../services/public-access.service';
 import { InvoiceDetailSheet } from './InvoiceDetailSheet';
 import { SalesLinePriceListSelect, PriceMissingBadge } from './SalesLinePriceListSelect';
-import { getCatalogUnitPrice, formatSalesAmount, getMissingSalesPriceMessage, hasSalesProductPriceListConflict, hasSalesProductPriceListConflicts } from '../../utils/salesPriceList';
+import { getCatalogUnitPrice, formatSalesAmount, hasSalesProductPriceListConflict, hasSalesProductPriceListConflicts } from '../../utils/salesPriceList';
 import { getSalesInvoiceOriginBadge } from '../../utils/document-origin-badges';
 import { SalesDateRangeFilter } from './SalesDateRangeFilter';
 import { SalesViewTutorial } from './SalesViewTutorial';
@@ -1310,13 +1310,6 @@ export function FacturasView({ data, summaryData, summaryLoading, summaryError, 
     if (!isDraftAction && (!localDoc.items || localDoc.items.length === 0)) {
       toast.error('Agrega al menos un producto');
       return;
-    }
-    if (!isDraftAction) {
-      const priceMessage = getMissingSalesPriceMessage(localDoc.items);
-      if (priceMessage) {
-        toast.error(priceMessage);
-        return;
-      }
     }
     if (!isDraftAction && !localDoc.salesOrderId) {
       for (const item of localDoc.items || []) {
