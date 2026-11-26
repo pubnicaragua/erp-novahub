@@ -457,12 +457,12 @@ export function GastosRecurrentesView({ data, summaryData, summaryLoading, summa
         </div>
 
 
-        <div className="grid min-w-0 gap-4 md:grid-cols-2">
-          <Card className="col-span-1 min-w-0 rounded-2xl border-border/50 md:col-span-2" data-tour="purchases-form-data">
+        <div className="grid min-w-0 grid-cols-1 gap-4 md:grid-cols-2">
+          <Card className="min-w-0 rounded-2xl border-border/50" data-tour="purchases-form-data">
             <CardContent className="p-6 space-y-3">
               <p className="text-xs font-black uppercase tracking-widest text-muted-foreground">Detalles del Servicio/Concepto</p>
-              <div className="grid grid-cols-1 gap-3 text-sm sm:grid-cols-2 lg:grid-cols-4">
-                <div className="md:col-span-2">
+              <div className="grid min-w-0 grid-cols-1 gap-3 text-sm sm:grid-cols-2">
+                <div className="min-w-0 sm:col-span-2">
                   <p className="text-[10px] text-muted-foreground mb-1">Descripción / Nombre</p>
                   <Input 
                     disabled={isNew ? !canPerform('PURCHASES_EXPENSES_REC', 'create') : !canPerform('PURCHASES_EXPENSES_REC', 'edit')}
@@ -472,7 +472,7 @@ export function GastosRecurrentesView({ data, summaryData, summaryLoading, summa
                     placeholder="Ej. Suscripción a Software, AWS, etc" 
                   />
                 </div>
-                <div className="md:col-span-2">
+                <div className="min-w-0 sm:col-span-2">
                   <p className="text-[10px] text-muted-foreground mb-1">Proveedor (Opcional)</p>
                   <Combobox
                     disabled={isNew ? !canPerform('PURCHASES_EXPENSES_REC', 'create') : !canPerform('PURCHASES_EXPENSES_REC', 'edit')}
