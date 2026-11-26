@@ -824,7 +824,7 @@ export function BalanceComprobacionView() {
                       />
                     ) : null;
                     const dropProps = siblingOrder && !searchTerm.trim()
-                      ? accountOrderDropProps(row.id, (sourceId, targetId) => accountOrder.moveBefore(siblingOrder.sectionKey, siblingOrder.ids, sourceId, targetId))
+                      ? accountOrderDropProps(row.id, siblingOrder.ids, (from, to) => accountOrder.moveToIndex(siblingOrder.sectionKey, siblingOrder.ids, from, to))
                       : {};
 
                     return [
@@ -958,7 +958,7 @@ export function BalanceComprobacionView() {
                     />
                   ) : null;
                   const dropProps = siblingOrder && !searchTerm.trim()
-                    ? accountOrderDropProps(row.id, (sourceId, targetId) => accountOrder.moveBefore(siblingOrder.sectionKey, siblingOrder.ids, sourceId, targetId))
+                    ? accountOrderDropProps(row.id, siblingOrder.ids, (from, to) => accountOrder.moveToIndex(siblingOrder.sectionKey, siblingOrder.ids, from, to))
                     : {};
 
                   return (

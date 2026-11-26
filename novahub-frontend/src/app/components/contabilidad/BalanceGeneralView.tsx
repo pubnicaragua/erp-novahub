@@ -260,7 +260,7 @@ export function BalanceGeneralView() {
       />
     ) : null;
     const dropProps = (accountId: string) => canReorder
-      ? accountOrderDropProps(accountId, (sourceId, targetId) => accountOrder.moveBefore(sectionKey, accountIds, sourceId, targetId))
+      ? accountOrderDropProps(accountId, accountIds, (from, to) => accountOrder.moveToIndex(sectionKey, accountIds, from, to))
       : {};
     return (
     <div className="mb-6">

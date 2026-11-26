@@ -2,6 +2,16 @@ import { useCallback, useMemo, useState, type DragEvent } from 'react';
 import { useAuth } from '../../contexts/AuthContext';
 
 type AccountOrderMap = Record<string, string[]>;
+let activeDraggedAccountId: string | null = null;
+
+export function setActiveDraggedAccountId(accountId: string | null) {
+  activeDraggedAccountId = accountId;
+  if (accountId === null && typeof document !== 'undefined') {
+    document.querySelectorAll<HTMLElement>('[data-account-order-drag-over="true"]').forEach((element) => {
+      delete element.dataset.accountOrderDragOver;
+    });
+  }
+}
 
 function readOrder(key: string): AccountOrderMap {
   if (typeof window === 'undefined') return {};
@@ -64,38 +74,60 @@ export function useAccountingAccountOrder(view: string) {
     const next = [...ids];
     const [moved] = next.splice(fromIndex, 1);
     next.splice(toIndex, 0, moved);
+    if (next.every((id, index) => id === ids[index])) return;
     save(section, next);
   }, [save]);
 
-  const moveBefore = useCallback((section: string, ids: string[], sourceId: string, targetId: string) => {
-    const fromIndex = ids.indexOf(sourceId);
-    const targetIndex = ids.indexOf(targetId);
-    if (fromIndex < 0 || targetIndex < 0 || fromIndex === targetIndex) return;
-    const next = [...ids];
-    const [moved] = next.splice(fromIndex, 1);
-    next.splice(next.indexOf(targetId), 0, moved);
-    save(section, next);
-  }, [save]);
-
-  return useMemo(() => ({ sort, moveToIndex, moveBefore }), [sort, moveToIndex, moveBefore]);
+  return useMemo(() => ({ sort, moveToIndex }), [sort, moveToIndex]);
 }
 
 export function accountOrderDropProps(
   targetId: string,
-  onMoveBefore: (sourceId: string, targetId: string) => void,
+  accountIds: string[],
+  onMoveIndex: (fromIndex: number, toIndex: number) => void,
 ) {
+  const isAccountDrag = (event: DragEvent<HTMLElement>) =>
+    activeDraggedAccountId !== null || Array.from(event.dataTransfer.types).includes('text/plain');
+
+  const moveFromPointer = (event: DragEvent<HTMLElement>) => {
+    const sourceId = event.dataTransfer.getData('text/plain') || activeDraggedAccountId || '';
+    const sourceIndex = accountIds.indexOf(sourceId);
+    const targetIndex = accountIds.indexOf(targetId);
+    if (!sourceId || sourceIndex < 0 || targetIndex < 0 || sourceId === targetId) return;
+
+    const rect = event.currentTarget.getBoundingClientRect();
+    const placeAfter = event.clientY >= rect.top + rect.height / 2;
+    let nextIndex = targetIndex + (placeAfter ? 1 : 0);
+    if (sourceIndex < nextIndex) nextIndex -= 1;
+    nextIndex = Math.max(0, Math.min(accountIds.length - 1, nextIndex));
+    onMoveIndex(sourceIndex, nextIndex);
+  };
+
   return {
+    'data-account-order-item': 'true',
+    onDragEnter: (event: DragEvent<HTMLElement>) => {
+      if (isAccountDrag(event)) {
+        event.currentTarget.dataset.accountOrderDragOver = 'true';
+      }
+    },
     onDragOver: (event: DragEvent<HTMLElement>) => {
-      if (Array.from(event.dataTransfer.types).includes('text/plain')) {
+      if (isAccountDrag(event)) {
         event.preventDefault();
         event.dataTransfer.dropEffect = 'move';
+        event.currentTarget.dataset.accountOrderDragOver = 'true';
+        moveFromPointer(event);
+      }
+    },
+    onDragLeave: (event: DragEvent<HTMLElement>) => {
+      if (!event.currentTarget.contains(event.relatedTarget as Node | null)) {
+        delete event.currentTarget.dataset.accountOrderDragOver;
       }
     },
     onDrop: (event: DragEvent<HTMLElement>) => {
-      const sourceId = event.dataTransfer.getData('text/plain');
-      if (!sourceId || sourceId === targetId) return;
       event.preventDefault();
-      onMoveBefore(sourceId, targetId);
+      moveFromPointer(event);
+      delete event.currentTarget.dataset.accountOrderDragOver;
+      setActiveDraggedAccountId(null);
     },
   };
 }

@@ -202,7 +202,7 @@ export function EstadoResultadosView() {
       <AccountOrderControls accountId={account.accountId} accountName={account.cuenta} accountIds={accountIds} onMoveIndex={(from, to) => accountOrder.moveToIndex(sectionKey, accountIds, from, to)} />
     ) : null;
     const dropProps = (accountId: string) => canReorder
-      ? accountOrderDropProps(accountId, (sourceId, targetId) => accountOrder.moveBefore(sectionKey, accountIds, sourceId, targetId))
+      ? accountOrderDropProps(accountId, accountIds, (from, to) => accountOrder.moveToIndex(sectionKey, accountIds, from, to))
       : {};
     return (    <div className="mb-6">
       <div className={cn("px-4 py-2 rounded-t-lg font-black text-sm uppercase tracking-widest text-white", color)}>

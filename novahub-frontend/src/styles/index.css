@@ -3069,6 +3069,22 @@ main.module-notificaciones:has([data-message-scroll-layout="contained"]) {
   align-items: start;
 }
 
+.accounting-module-content [data-account-order-item="true"] {
+  transition: background-color 120ms ease, outline-color 120ms ease;
+}
+
+.accounting-module-content [data-account-order-item="true"][data-account-order-drag-over="true"] {
+  outline: 2px solid hsl(var(--primary) / 0.55);
+  outline-offset: -2px;
+  background-color: hsl(var(--primary) / 0.08) !important;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .accounting-module-content [data-account-order-item="true"] {
+    transition: none;
+  }
+}
+
 .accounting-module-content [data-accounting-metrics="true"] > * {
   min-width: 0;
   text-align: left !important;

@@ -132,7 +132,7 @@ export function CambiosPatrimonioView() {
     if (searchTerm.trim()) return {};
     const sectionKey = orderSectionFor(row);
     const ids = (data?.rows || []).filter((candidate) => orderSectionFor(candidate) === orderSectionFor(row)).map((candidate) => candidate.accountId);
-    return accountOrderDropProps(row.accountId, (sourceId, targetId) => accountOrder.moveBefore(sectionKey, ids, sourceId, targetId));
+    return accountOrderDropProps(row.accountId, ids, (from, to) => accountOrder.moveToIndex(sectionKey, ids, from, to));
   };
 
   return (

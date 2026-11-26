@@ -1,6 +1,6 @@
-import type { DragEvent } from 'react';
-import { ArrowDown, ArrowUp, GripVertical } from 'lucide-react';
-import { Button } from '../ui/button';
+import type { DragEvent, KeyboardEvent } from 'react';
+import { GripVertical } from 'lucide-react';
+import { setActiveDraggedAccountId } from './useAccountingAccountOrder';
 
 export function AccountOrderControls({
   accountId,
@@ -19,6 +19,14 @@ export function AccountOrderControls({
   const startDrag = (event: DragEvent<HTMLButtonElement>) => {
     event.dataTransfer.effectAllowed = 'move';
     event.dataTransfer.setData('text/plain', accountId);
+    setActiveDraggedAccountId(accountId);
+  };
+
+  const handleKeyDown = (event: KeyboardEvent<HTMLButtonElement>) => {
+    if (!event.altKey || (event.key !== 'ArrowUp' && event.key !== 'ArrowDown')) return;
+    event.preventDefault();
+    const nextIndex = index + (event.key === 'ArrowUp' ? -1 : 1);
+    if (nextIndex >= 0 && nextIndex < accountIds.length) onMoveIndex(index, nextIndex);
   };
 
   return (
@@ -27,18 +35,15 @@ export function AccountOrderControls({
         type="button"
         draggable
         onDragStart={startDrag}
-        title={`Arrastrar para reordenar ${accountName}`}
-        aria-label={`Arrastrar para reordenar ${accountName}`}
+        onDragEnd={() => setActiveDraggedAccountId(null)}
+        onKeyDown={handleKeyDown}
+        aria-keyshortcuts="Alt+ArrowUp Alt+ArrowDown"
+        title={`Arrastrar para reordenar ${accountName}. También puedes usar Alt + ↑/↓.`}
+        aria-label={`Arrastrar para reordenar ${accountName}. Atajo: Alt más flecha arriba o abajo.`}
         className="inline-flex size-6 cursor-grab items-center justify-center rounded text-muted-foreground hover:bg-muted active:cursor-grabbing focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary"
       >
         <GripVertical className="size-3.5" />
       </button>
-      <Button type="button" variant="ghost" size="icon" className="size-6" disabled={index === 0} onClick={() => onMoveIndex(index, index - 1)} title={`Subir ${accountName}`} aria-label={`Subir ${accountName}`}>
-        <ArrowUp className="size-3.5" />
-      </Button>
-      <Button type="button" variant="ghost" size="icon" className="size-6" disabled={index === accountIds.length - 1} onClick={() => onMoveIndex(index, index + 1)} title={`Bajar ${accountName}`} aria-label={`Bajar ${accountName}`}>
-        <ArrowDown className="size-3.5" />
-      </Button>
     </span>
   );
 }
