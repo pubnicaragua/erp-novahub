@@ -39,9 +39,9 @@ import { CuentasSaldosView } from './CuentasSaldosView';
 const SECTIONS = [
   { id: 'plan-cuentas', label: 'Plan de Cuentas', icon: BookOpen },
   { id: 'diario', label: 'Libro Diario', icon: FileText },
+  { id: 'libro-mayor', label: 'Libro Mayor', icon: BookOpenCheck },
   { id: 'cuentas-cobrar', label: 'Cuentas por Cobrar', icon: CircleDollarSign },
   { id: 'cuentas-pagar', label: 'Cuentas por Pagar', icon: CircleDollarSign },
-  { id: 'libro-mayor', label: 'Libro Mayor', icon: BookOpenCheck },
   { id: 'balance-comprobacion', label: 'Balance de Comprobación', icon: Scale },
   { id: 'estado-resultados', label: 'Estado de Resultados', icon: TrendingUp },
   { id: 'balance-general-contable', label: 'Balance General', icon: PieChart },

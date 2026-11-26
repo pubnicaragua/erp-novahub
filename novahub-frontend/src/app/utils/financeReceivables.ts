@@ -8,7 +8,7 @@ type FinanceReceivableCandidate = {
 };
 
 const OPEN_INVOICE_STATUSES = new Set(['PENDING', 'OVERDUE', 'PARTIAL', 'CREDIT']);
-const OPEN_DIRECT_CREDIT_STATUSES = new Set(['ISSUED', 'PARTIAL']);
+const OPEN_DIRECT_CREDIT_STATUSES = new Set(['ACTIVE', 'ISSUED', 'PARTIAL']);
 
 export function isOutstandingFinanceReceivable(document: FinanceReceivableCandidate): boolean {
   const isDirectCredit = String(document.documentType || '').trim().toUpperCase() === 'CUSTOMER_CREDIT';
