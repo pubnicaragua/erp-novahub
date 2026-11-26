@@ -162,7 +162,7 @@ export function AccountingBalanceDetailSheet({ open, onOpenChange, document, det
                   : <p className="rounded-xl border border-dashed border-border p-4 text-sm text-muted-foreground">No hay pagos vinculados a este documento.</p>}
               </section>
               <section className="space-y-3"><SectionTitle title="Asientos contables relacionados" count={details?.journalEntries.length || 0} />
-                {details?.journalEntries.length ? <div className="space-y-3">{details.journalEntries.map((entry) => <article key={entry.id} className="overflow-hidden rounded-xl border border-border/60"><div className="flex min-w-0 flex-wrap items-start justify-between gap-2 border-b border-border/50 bg-muted/20 px-3 py-3"><div className="min-w-0"><p className="font-mono text-sm font-bold">{entry.number}</p><p className="mt-1 break-words text-xs text-muted-foreground">{entry.description}</p></div><div className="flex shrink-0 items-center gap-2"><span className="text-xs text-muted-foreground">{dateLabel(entry.date)}</span><Badge variant="outline" className="text-[10px]">{entry.status}</Badge></div></div>
+                {details?.journalEntries.length ? <div className="space-y-3">{details.journalEntries.map((entry) => <article key={entry.id} className="overflow-hidden rounded-xl border border-border/60"><div className="flex min-w-0 flex-wrap items-start justify-between gap-2 border-b border-border/50 bg-muted/20 px-3 py-3"><div className="min-w-0"><p className="font-mono text-sm font-bold">{entry.number}</p><p className="mt-1 break-words text-xs text-muted-foreground">{entry.description}</p></div><div className="flex shrink-0 items-center gap-2"><span className="text-xs text-muted-foreground">{dateLabel(entry.date)}</span><Badge variant="outline" className="text-[10px]">{journalStatusLabel(entry.status)}</Badge></div></div>
                     <div className="divide-y divide-border/40">{entry.lines.map((line) => <div key={line.id} className="grid min-w-0 grid-cols-[minmax(0,1fr)_auto_auto] gap-3 px-3 py-2.5 text-xs"><div className="min-w-0"><p className="truncate font-semibold">{line.account?.code || '—'} · {line.account?.name || 'Cuenta'}</p>{line.description && <p className="mt-1 break-words text-muted-foreground">{line.description}</p>}</div><div className="whitespace-nowrap text-right"><span className="block text-[9px] uppercase text-muted-foreground">Debe</span><span className="font-semibold tabular-nums">{money(line.debit, selected.currency)}</span></div><div className="whitespace-nowrap text-right"><span className="block text-[9px] uppercase text-muted-foreground">Haber</span><span className="font-semibold tabular-nums">{money(line.credit, selected.currency)}</span></div></div>)}</div>
                   </article>)}</div>
                   : <p className="rounded-xl border border-dashed border-border p-4 text-sm text-muted-foreground">No hay asientos directamente vinculados. El asiento puede depender de la configuración contable del documento.</p>}
@@ -176,6 +176,11 @@ export function AccountingBalanceDetailSheet({ open, onOpenChange, document, det
 function StatusBadge({ status, side }: { status: string; side: AccountingBalanceSide }) {
   const paid = status === 'PAID';
   return <Badge variant="outline" className={cn('whitespace-nowrap', paid ? 'border-emerald-500/30 bg-emerald-500/10 text-emerald-600' : 'border-amber-500/30 bg-amber-500/10 text-amber-600')}>{paid ? 'Pagado' : side === 'RECEIVABLES' ? 'Por cobrar' : 'Por pagar'}</Badge>;
+}
+
+function journalStatusLabel(status?: string): string {
+  const labels: Record<string, string> = { DRAFT: 'Borrador', POSTED: 'Contabilizado', VOIDED: 'Anulado' };
+  return labels[String(status || '').toUpperCase()] || 'Sin estado';
 }
 
 function MoneyField({ label, value, currency, emphasized = false }: { label: string; value: unknown; currency?: string; emphasized?: boolean }) {
