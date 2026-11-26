@@ -20,6 +20,11 @@ export function AccountOrderControls({
     event.dataTransfer.effectAllowed = 'move';
     event.dataTransfer.setData('text/plain', accountId);
     setActiveDraggedAccountId(accountId);
+    const dragSurface = event.currentTarget.closest<HTMLElement>('[data-account-order-item="true"]');
+    if (dragSurface) {
+      const bounds = dragSurface.getBoundingClientRect();
+      event.dataTransfer.setDragImage(dragSurface, Math.min(24, bounds.width / 2), Math.min(24, bounds.height / 2));
+    }
   };
 
   const handleKeyDown = (event: KeyboardEvent<HTMLButtonElement>) => {

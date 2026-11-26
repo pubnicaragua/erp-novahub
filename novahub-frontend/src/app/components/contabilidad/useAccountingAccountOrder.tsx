@@ -6,9 +6,16 @@ let activeDraggedAccountId: string | null = null;
 
 export function setActiveDraggedAccountId(accountId: string | null) {
   activeDraggedAccountId = accountId;
-  if (accountId === null && typeof document !== 'undefined') {
-    document.querySelectorAll<HTMLElement>('[data-account-order-drag-over="true"]').forEach((element) => {
-      delete element.dataset.accountOrderDragOver;
+  if (typeof document !== 'undefined') {
+    document.querySelectorAll<HTMLElement>('[data-account-order-item="true"]').forEach((element) => {
+      if (accountId !== null && element.dataset.accountOrderId === accountId) {
+        element.dataset.accountOrderDragging = 'true';
+        element.querySelector<HTMLElement>('[draggable="true"]')?.setAttribute('aria-grabbed', 'true');
+      } else {
+        delete element.dataset.accountOrderDragging;
+        element.querySelector<HTMLElement>('[draggable="true"]')?.removeAttribute('aria-grabbed');
+      }
+      if (accountId === null) delete element.dataset.accountOrderDragOver;
     });
   }
 }
@@ -105,6 +112,7 @@ export function accountOrderDropProps(
 
   return {
     'data-account-order-item': 'true',
+    'data-account-order-id': targetId,
     onDragEnter: (event: DragEvent<HTMLElement>) => {
       if (isAccountDrag(event)) {
         event.currentTarget.dataset.accountOrderDragOver = 'true';
