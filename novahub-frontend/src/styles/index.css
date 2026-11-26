@@ -2945,6 +2945,61 @@ main.module-notificaciones:has([data-message-scroll-layout="contained"]) {
   }
 }
 
+/* Contabilidad: mantiene acotados los listados y permite que códigos y cifras
+   largos se adapten al ancho disponible en vez de recortarse o desbordarse. */
+.accounting-module-content {
+  min-width: 0;
+  max-width: 100%;
+}
+
+.accounting-module-content :where(.flex, .grid, [data-slot="table-container"]) {
+  min-width: 0;
+  max-width: 100%;
+}
+
+.accounting-module-content :where(input, select, textarea) {
+  min-width: 0;
+  max-width: 100%;
+}
+
+.accounting-module-content :where(.font-mono, .tabular-nums):not(input):not(textarea) {
+  min-width: 0;
+  max-width: 100%;
+  overflow-wrap: anywhere;
+  white-space: normal !important;
+}
+
+.accounting-module-content [data-slot="table-cell"] {
+  min-width: 0;
+  max-width: 100%;
+  overflow-wrap: anywhere;
+}
+
+.accounting-module-content [data-slot="table-container"] {
+  overscroll-behavior-inline: contain;
+  scrollbar-gutter: stable;
+}
+
+@media (max-width: 1279px) {
+  .accounting-module-content table[data-responsive-cards="true"] > tbody > tr > td {
+    overflow-wrap: anywhere;
+  }
+
+  .accounting-module-content table[data-responsive-cards="true"] > tbody > tr > td > :where(p, span, code, div) {
+    min-width: 0;
+    max-width: 100%;
+    overflow-wrap: anywhere;
+    text-overflow: clip;
+    white-space: normal !important;
+  }
+
+  .accounting-module-content table:not([data-responsive-cards="true"]) :is(th, td) {
+    max-width: 100%;
+    overflow-wrap: anywhere;
+    white-space: normal;
+  }
+}
+
 /* Tareas: mantiene títulos legibles y tarjetas bien delimitadas cuando la
    tabla compartida cambia a tarjetas, sin alterar las demás vistas. */
 .activities-module [data-activities-task-table="true"] [data-slot="table-cell"] {

@@ -401,6 +401,7 @@ export function ContabilidadPage({ activeSubModule, onSubModuleChange, isSidebar
                   animate={{ opacity: 1, y: 0 }}
                   exit={{ opacity: 0, y: -12 }}
                   transition={{ duration: 0.2 }}
+                  className="accounting-module-content min-w-0 max-w-full"
                 >
                   {SECTIONS_WITHOUT_OWN_TITLE.has(activeSection) && (
                     <h2 className="nh-module-title mb-4">{SECTIONS.find((section) => section.id === activeSection)?.label}</h2>
