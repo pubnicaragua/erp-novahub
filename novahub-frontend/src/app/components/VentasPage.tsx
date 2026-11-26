@@ -103,6 +103,7 @@ export function VentasPage({ activeSubModule, onSubModuleChange, isSidebarCollap
   const [activeSection, setActiveSection] = useState(activeSubModule || 'clientes');
   const [invoiceDraft, setInvoiceDraft] = useState<Partial<Invoice> | null>(null);
   const [targetInvoiceId, setTargetInvoiceId] = useState<string | null>(null);
+  const [targetInvoiceDetailId, setTargetInvoiceDetailId] = useState<string | null>(null);
   const [targetOrderId, setTargetOrderId] = useState<string | null>(null);
   const [controlCajaTargetParams, setControlCajaTargetParams] = useState<{registerId?: string, section?: 'dashboard' | 'session' | 'history'} | null>(null);
   const [searchState, setSearchState] = useState<Record<string, string>>({});
@@ -599,6 +600,7 @@ export function VentasPage({ activeSubModule, onSubModuleChange, isSidebarCollap
   const fetchData = useCallback(async () => {
     await queryClient.invalidateQueries({ queryKey: ['sales'] });
   }, [queryClient]);
+  const clearTargetInvoiceDetailId = useCallback(() => setTargetInvoiceDetailId(null), []);
 
   const handleGenerateInvoice = async (order: SalesOrder) => {
     const invoice = await salesOrdersService.convertToInvoice(order.id, {
@@ -620,6 +622,14 @@ export function VentasPage({ activeSubModule, onSubModuleChange, isSidebarCollap
     setTargetOrderId(orderId);
     setActiveSection('ordenes-venta');
     onSubModuleChange?.('ordenes-venta');
+  };
+
+  const handleConvertedQuoteToInvoice = (invoiceId: string) => {
+    setInvoiceDraft(null);
+    setTargetInvoiceId(null);
+    setTargetInvoiceDetailId(invoiceId);
+    setActiveSection('facturas');
+    onSubModuleChange?.('facturas');
   };
 
   return (
@@ -660,7 +670,7 @@ export function VentasPage({ activeSubModule, onSubModuleChange, isSidebarCollap
                 <ClientesView data={filteredData.clientes} loading={loading} error={customersListQuery.error} summaryData={customersSummaryQuery.data} summaryLoading={customersSummaryQuery.isPending || customersSummaryQuery.isFetching} summaryError={customersSummaryQuery.isError} onRefresh={fetchData} pagination={pagination.clientes} onSearchChange={(value) => updateSearch('clientes', value)} dateFrom={customersDates.dateFrom} dateTo={customersDates.dateTo} onDateRangeChange={(from, to) => updateDateRange('clientes', from, to)} isSidebarCollapsed={isSidebarCollapsed} />
               )}
               {activeSection === 'estimaciones' && (
-                <AdvancedQuotesGate simple={<EstimacionesView data={filteredData.estimaciones} summaryData={estimatesSummaryQuery.data} summaryLoading={estimatesSummaryQuery.isPending || estimatesSummaryQuery.isFetching} summaryError={estimatesSummaryQuery.isError} loading={loading} onRefresh={fetchData} onConvertedToOrder={handleConvertedQuoteToOrder} customers={filteredData.clientes} products={data.productos} productsLoading={productCatalogLoading} productsError={productCatalogError} warehouses={data.warehouses} pagination={pagination.estimaciones} onSearchChange={(value) => updateSearch('estimaciones', value)} dateFrom={estimatesDates.dateFrom} dateTo={estimatesDates.dateTo} selectedBranchId={selectedBranchId || ''} onDateRangeChange={(from, to) => updateDateRange('estimaciones', from, to)} salesAlert={salesAlert || undefined} />} />
+                <AdvancedQuotesGate simple={<EstimacionesView data={filteredData.estimaciones} summaryData={estimatesSummaryQuery.data} summaryLoading={estimatesSummaryQuery.isPending || estimatesSummaryQuery.isFetching} summaryError={estimatesSummaryQuery.isError} loading={loading} onRefresh={fetchData} onConvertedToOrder={handleConvertedQuoteToOrder} onConvertedToInvoice={handleConvertedQuoteToInvoice} customers={filteredData.clientes} products={data.productos} productsLoading={productCatalogLoading} productsError={productCatalogError} warehouses={data.warehouses} pagination={pagination.estimaciones} onSearchChange={(value) => updateSearch('estimaciones', value)} dateFrom={estimatesDates.dateFrom} dateTo={estimatesDates.dateTo} selectedBranchId={selectedBranchId || ''} onDateRangeChange={(from, to) => updateDateRange('estimaciones', from, to)} salesAlert={salesAlert || undefined} />} />
               )}
               {activeSection === 'ordenes-venta' && (
                 <OrdenesVentaView data={filteredData.ordenes} summaryData={ordersSummaryQuery.data} summaryLoading={ordersSummaryQuery.isPending || ordersSummaryQuery.isFetching} summaryError={ordersSummaryQuery.isError} loading={loading} onRefresh={fetchData} onGenerateInvoice={handleGenerateInvoice} targetOrderId={targetOrderId} onClearTargetOrderId={() => setTargetOrderId(null)} customers={filteredData.clientes} products={data.productos} productsLoading={productCatalogLoading} productsError={productCatalogError} warehouses={data.warehouses} employees={data.employees} pagination={pagination.ordenes} onSearchChange={(value) => updateSearch('ordenes-venta', value)} dateFrom={ordersDates.dateFrom} dateTo={ordersDates.dateTo} selectedBranchId={selectedBranchId || ''} onDateRangeChange={(from, to) => updateDateRange('ordenes-venta', from, to)} statusFilter={ordersStatusFilter} onStatusFilterChange={(value) => { setOrdersStatusFilter(value); updatePage('ordenes-venta', 1); }} salesAlert={salesAlert || undefined} />
@@ -684,6 +694,8 @@ export function VentasPage({ activeSubModule, onSubModuleChange, isSidebarCollap
                   onClearInvoiceDraft={() => setInvoiceDraft(null)}
                   targetInvoiceId={targetInvoiceId}
                   onClearTargetInvoiceId={() => setTargetInvoiceId(null)}
+                  targetInvoiceDetailId={targetInvoiceDetailId}
+                  onClearTargetInvoiceDetailId={clearTargetInvoiceDetailId}
                   pagination={pagination.facturas}
                   onSearchChange={(value) => updateSearch('facturas', value)}
                   dateFrom={invoicesDates.dateFrom}

@@ -444,7 +444,7 @@ export function OrdenesVentaView({ data, summaryData, summaryLoading, summaryErr
       ...(Number(order.deliveryAmount || 0) > 0 ? [{ label: order.deliveryDescription || 'Delivery', value: formatConvertedAmount(Number(order.deliveryAmount), order.currency, order.exchangeRate) }] : []),
     ],
     metadata: [
-      { label: 'Fecha', value: formatDateEs(order.date) },
+      { label: 'Fecha', value: formatDateEs(order.date, true) },
       { label: 'Entrega estimada', value: order.expectedDelivery ? formatDateEs(order.expectedDelivery) : 'No definida' },
       ...(order.invoiceNumber ? [{ label: 'Factura relacionada', value: order.invoiceNumber }] : []),
     ],

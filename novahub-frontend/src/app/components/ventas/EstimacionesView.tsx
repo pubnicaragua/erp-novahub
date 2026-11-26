@@ -68,6 +68,7 @@ interface EstimacionesViewProps {
   loading: boolean;
   onRefresh: () => Promise<void> | void;
   onConvertedToOrder?: (orderId: string) => void;
+  onConvertedToInvoice?: (invoiceId: string) => void;
   customers?: Customer[];
   products?: Product[];
   productsLoading?: boolean;
@@ -109,7 +110,7 @@ const isLocalEstimate = (id: string | number | undefined | null) => String(id ||
 const actionButtonClass = 'text-muted-foreground hover:bg-muted/40 hover:text-muted-foreground transition-colors';
 const actionIconClass = 'size-4 text-muted-foreground';
 
-export function EstimacionesView({ data, summaryData, summaryLoading, summaryError, loading: _loading, onRefresh, onConvertedToOrder, customers = [], products = [], productsLoading = false, productsError = false, warehouses = [], pagination, onSearchChange, dateFrom = '', dateTo = '', onDateRangeChange, selectedBranchId = '', salesAlert }: EstimacionesViewProps) {
+export function EstimacionesView({ data, summaryData, summaryLoading, summaryError, loading: _loading, onRefresh, onConvertedToOrder, onConvertedToInvoice, customers = [], products = [], productsLoading = false, productsError = false, warehouses = [], pagination, onSearchChange, dateFrom = '', dateTo = '', onDateRangeChange, selectedBranchId = '', salesAlert }: EstimacionesViewProps) {
   const { user, canPerform } = useAuth();
   const { themeConfig } = useTheme();
   const { exchangeRate: globalRate, displayCurrency, baseCurrency, displayMode, formatConvertedAmount, formatExplicitAmount, toBaseAmount } = useCurrency();
@@ -407,8 +408,13 @@ export function EstimacionesView({ data, summaryData, summaryLoading, summaryErr
         await estimatesService.update(sourceEstimateId, buildEstimateStatusPayload('DRAFT'));
       }
       const payload = { sellerEmployeeId: getLoggedInSellerEmployeeId(user) || null };
-      if (toCash) await estimatesService.convertToCash(sourceEstimateId, payload, globalThis.crypto?.randomUUID?.());
-      else await estimatesService.convertToInvoice(sourceEstimateId, payload, globalThis.crypto?.randomUUID?.());
+      let createdInvoiceId: string | null = null;
+      if (toCash) {
+        await estimatesService.convertToCash(sourceEstimateId, payload, globalThis.crypto?.randomUUID?.());
+      } else {
+        const converted = await estimatesService.convertToInvoice(sourceEstimateId, payload, globalThis.crypto?.randomUUID?.());
+        createdInvoiceId = String(converted?.invoice?.id || converted?.id || '') || null;
+      }
       toast.success(toCash ? 'Cotización enviada directamente a Caja' : 'Cotización enviada directamente a Facturas', { id: toastId });
       await onRefresh();
       clearSalesEditorDraft(salesDraftStorageKey);
@@ -416,6 +422,7 @@ export function EstimacionesView({ data, summaryData, summaryLoading, summaryErr
       localDocRef.current = null;
       setEditingId(null);
       setDetailEstimate(null);
+      if (!toCash && createdInvoiceId) onConvertedToInvoice?.(createdInvoiceId);
     } catch (error: any) {
       toast.error(error?.response?.data?.message || error?.message || 'No se pudo convertir la cotización', { id: toastId });
     } finally {
@@ -690,7 +697,7 @@ export function EstimacionesView({ data, summaryData, summaryLoading, summaryErr
       ...(Number(estimate.deliveryAmount || 0) > 0 ? [{ label: estimate.deliveryDescription || 'Delivery', value: formatConvertedAmount(Number(estimate.deliveryAmount), estimate.currency, estimate.exchangeRate) }] : []),
     ],
     metadata: [
-      { label: 'Fecha de emisión', value: formatDateEs(estimate.date) },
+      { label: 'Fecha de emisión', value: formatDateEs(estimate.date, true) },
       { label: 'Vigencia', value: formatDateEs(estimate.expiryDate) },
     ],
     lines: (estimate.items || []).map((item) => ({

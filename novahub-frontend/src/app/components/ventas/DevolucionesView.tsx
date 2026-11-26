@@ -451,7 +451,7 @@ export function DevolucionesView({ data, summaryData, summaryLoading, summaryErr
         value: formatConvertedAmount(Number(charge.amount || 0), row.currency, row.exchangeRate),
       })),
     metadata: [
-      { label: 'Fecha', value: formatDateEs(row.date) },
+      { label: 'Fecha', value: formatDateEs(row.date, true) },
       { label: 'Factura origen', value: row.invoice?.number || 'No disponible' },
     ],
     lines: (row.items || []).map((item) => ({

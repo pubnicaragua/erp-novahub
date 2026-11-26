@@ -99,6 +99,8 @@ interface FacturasViewProps {
   onClearInvoiceDraft?: () => void;
   targetInvoiceId?: string | null;
   onClearTargetInvoiceId?: () => void;
+  targetInvoiceDetailId?: string | null;
+  onClearTargetInvoiceDetailId?: () => void;
   pagination?: SalesPaginationControls;
   onSearchChange?: (value: string) => void;
   dateFrom?: string;
@@ -169,7 +171,7 @@ type InvoicePaymentLine = {
 
 type InvoiceSaveAction = 'SAVE' | 'DRAFT' | 'PENDING' | 'PAYMENT' | 'CREDIT' | 'CASH_QUEUE';
 
-export function FacturasView({ data, summaryData, summaryLoading, summaryError, loading, onRefresh, customers = [], products = [], productsLoading = false, productsError = false, series = [], warehouses = [], employees = [], invoiceDraft, onClearInvoiceDraft, targetInvoiceId, onClearTargetInvoiceId, pagination, onSearchChange, dateFrom = '', dateTo = '', onDateRangeChange, selectedBranchId = '', salesAlert, isSidebarCollapsed = false }: FacturasViewProps) {
+export function FacturasView({ data, summaryData, summaryLoading, summaryError, loading, onRefresh, customers = [], products = [], productsLoading = false, productsError = false, series = [], warehouses = [], employees = [], invoiceDraft, onClearInvoiceDraft, targetInvoiceId, onClearTargetInvoiceId, targetInvoiceDetailId, onClearTargetInvoiceDetailId, pagination, onSearchChange, dateFrom = '', dateTo = '', onDateRangeChange, selectedBranchId = '', salesAlert, isSidebarCollapsed = false }: FacturasViewProps) {
   const invoiceListStartedAt = useRef<number | null>(typeof performance === 'undefined' ? null : performance.now());
   const invoiceListSpan = useRef<ReturnType<typeof Sentry.startInactiveSpan> | null>(Sentry.startInactiveSpan({ op: 'ui.load', name: 'Sales invoices list ready' }));
   const invoiceListMeasured = useRef(false);
@@ -319,6 +321,7 @@ export function FacturasView({ data, summaryData, summaryLoading, summaryError, 
   const [cashLoading, setCashLoading] = useState(false);
   const [sendToCashLoadingId, setSendToCashLoadingId] = useState<string | null>(null);
   const [creditInvoice, setCreditInvoice] = useState<Invoice | null>(null);
+  const [creditInvoiceWasDraft, setCreditInvoiceWasDraft] = useState(false);
   const [creditDueDate, setCreditDueDate] = useState('');
   const [creditFirstInstallmentDate, setCreditFirstInstallmentDate] = useState('');
   const [creditInterestMode, setCreditInterestMode] = useState<'NONE' | 'FIXED_AMOUNT' | 'PERCENTAGE'>('NONE');
@@ -562,6 +565,12 @@ export function FacturasView({ data, summaryData, summaryLoading, summaryError, 
     const [y, m, d] = clean.split('-').map(Number);
     if (!y || !m || !d) return dateStr;
     return formatDateEs(new Date(y, m - 1, d));
+  };
+
+  const formatDateTimeSafe = (dateStr: string) => {
+    if (!dateStr) return 'N/A';
+    const parsed = new Date(dateStr);
+    return Number.isNaN(parsed.getTime()) ? dateStr : formatDateEs(dateStr, true);
   };
 
   useEffect(() => {
@@ -809,7 +818,8 @@ export function FacturasView({ data, summaryData, summaryLoading, summaryError, 
       limitCurrency === baseCurrency ? 1 : Number(globalRate || 1),
     ));
     const currentDebt = getCustomerDebtAmount(customer);
-    const debtWithoutInvoice = invoice.id
+    const sourceStatus = String((invoice as Invoice & { __creditSourceStatus?: string }).__creditSourceStatus || invoice.status || '').toUpperCase();
+    const debtWithoutInvoice = invoice.id && sourceStatus !== 'DRAFT'
       ? Math.max(0, currentDebt - getInvoiceBalanceInBase(invoice))
       : currentDebt;
     return Math.max(0, Number((limit - debtWithoutInvoice).toFixed(2)));
@@ -826,13 +836,36 @@ export function FacturasView({ data, summaryData, summaryLoading, summaryError, 
     }
   };
 
-  const canSendInvoiceToCash = (invoice?: Partial<Invoice> | null) => Boolean(
-    invoice?.id
-      && canPerform('SALES_INVOICES', 'sendToCash')
-      && !['DRAFT', 'PAID', 'CANCELLED', 'CREDIT'].includes(String(invoice.status || '').toUpperCase())
-      && getInvoiceBalance(invoice as Invoice) > 0.01
-      && !isInvoiceInCashQueue(invoice),
-  );
+  useEffect(() => {
+    if (!targetInvoiceDetailId) return;
+    let active = true;
+    const invoiceId = targetInvoiceDetailId;
+    void invoicesService.getById(invoiceId)
+      .then((invoice) => {
+        if (active) setDetailInvoice(invoice);
+      })
+      .catch((error: any) => {
+        if (active) {
+          toast.error(error?.response?.data?.message || error?.message || 'No se pudo abrir el detalle de la factura');
+        }
+      })
+      .finally(() => {
+        if (active) onClearTargetInvoiceDetailId?.();
+      });
+    return () => { active = false; };
+  }, [targetInvoiceDetailId, onClearTargetInvoiceDetailId]);
+
+  const canSendInvoiceToCash = (invoice?: Partial<Invoice> | null) => {
+    const status = String(invoice?.status || '').toUpperCase();
+    return Boolean(
+      invoice?.id
+        && canPerform('SALES_INVOICES', 'sendToCash')
+        && (status !== 'DRAFT' || canPerform('SALES_INVOICES', 'submit'))
+        && !['PAID', 'CANCELLED', 'CREDIT'].includes(status)
+        && getInvoiceActionBalance(invoice) > 0.01
+        && !isInvoiceInCashQueue(invoice),
+    );
+  };
 
   const handleSendInvoiceToCash = async (invoice: Invoice) => {
     if (!canPerform('SALES_INVOICES', 'sendToCash')) return;
@@ -841,6 +874,9 @@ export function FacturasView({ data, summaryData, summaryLoading, summaryError, 
     setSendToCashLoadingId(invoice.id);
     const sendToastId = toast.loading(`Enviando factura ${invoice.number} a Caja...`);
     try {
+      if (String(invoice.status || '').toUpperCase() === 'DRAFT') {
+        await invoicesService.submit(invoice.id);
+      }
       await invoicesService.sendToCash(invoice.id);
       toast.success(`Factura ${invoice.number} enviada a Caja`, { id: sendToastId });
       void onRefresh?.();
@@ -859,7 +895,11 @@ export function FacturasView({ data, summaryData, summaryLoading, summaryError, 
   };
 
   const invoiceFitsAvailableCredit = (invoice: Invoice) =>
-    getInvoiceCreditAvailable(invoice) + 0.01 >= getInvoiceBalanceInBase(invoice);
+    getInvoiceCreditAvailable(invoice) + 0.01 >= toBaseAmount(
+      getInvoiceActionBalance(invoice),
+      invoice.currency,
+      Number(invoice.exchangeRate || 1),
+    );
 
   const getInvoiceCreditTerm = (invoice: Invoice) => {
     const customer = invoice.customer || customers.find((item) => item.id === invoice.customerId);
@@ -878,14 +918,17 @@ export function FacturasView({ data, summaryData, summaryLoading, summaryError, 
   };
 
   const openInvoiceCredit = (invoice: Invoice) => {
-    const isNewDraft = !invoice.id && String(invoice.status || 'DRAFT').toUpperCase() === 'DRAFT';
-    if (!canPerform('SALES_INVOICES', 'sendToCredit') || (isNewDraft && (!canPerform('SALES_INVOICES', 'create') || !canPerform('SALES_INVOICES', 'submit')))) {
+    const status = String(invoice.status || (!invoice.id ? 'DRAFT' : '')).toUpperCase();
+    const isDraft = status === 'DRAFT';
+    const isNewDraft = !invoice.id && isDraft;
+    if (!canPerform('SALES_INVOICES', 'sendToCredit')
+      || (isDraft && !canPerform('SALES_INVOICES', 'submit'))
+      || (isNewDraft && !canPerform('SALES_INVOICES', 'create'))) {
       toast.error('No tienes permisos para enviar esta factura a crédito');
       return;
     }
-    const status = String(invoice.status || (!invoice.id ? 'DRAFT' : '')).toUpperCase();
-    const actionInvoice = !invoice.id && status === 'DRAFT'
-      ? ({ ...invoice, status: 'PENDING' } as Invoice)
+    const actionInvoice = isDraft
+      ? ({ ...invoice, status: 'PENDING', __creditSourceStatus: 'DRAFT' } as Invoice)
       : invoice;
     if (!['PENDING', 'CREDIT', 'PARTIAL', 'OVERDUE'].includes(String(actionInvoice.status || '').toUpperCase()) || getInvoiceBalance(actionInvoice) <= 0.01) {
       toast.error('Solo se puede enviar a crédito una factura con saldo pendiente');
@@ -907,6 +950,7 @@ export function FacturasView({ data, summaryData, summaryLoading, summaryError, 
         ? existingDueDate
         : today;
     setCreditInvoice(actionInvoice);
+    setCreditInvoiceWasDraft(isDraft && Boolean(invoice.id));
     setCreditDueDate(suggestedDueDate);
     setCreditFirstInstallmentDate(today);
     setCreditTermOverrideConfirmed(false);
@@ -966,6 +1010,7 @@ export function FacturasView({ data, summaryData, summaryLoading, summaryError, 
     const invoice = creditInvoice;
     if (!invoice.id) {
       setCreditInvoice(null);
+      setCreditInvoiceWasDraft(false);
       await handleSaveInvoice('CREDIT', {
         dueDate: new Date(`${currentCreditDueDate}T12:00:00`).toISOString(),
         creditTermOverrideConfirmed,
@@ -987,6 +1032,12 @@ export function FacturasView({ data, summaryData, summaryLoading, summaryError, 
     const creditToastId = toast.loading(`Enviando factura ${invoice.number} a crédito...`);
     try {
       setCreditLoading(true);
+      if (creditInvoiceWasDraft) {
+        const submittedInvoice = await invoicesService.submit(invoice.id);
+        setCreditInvoice(submittedInvoice);
+        setCreditInvoiceWasDraft(false);
+        if (detailInvoice?.id === invoice.id) setDetailInvoice(submittedInvoice);
+      }
       await invoicesService.sendToCredit(invoice.id, {
         dueDate: new Date(`${currentCreditDueDate}T12:00:00`).toISOString(),
         firstInstallmentDate: creditPlanEnabled ? currentCreditPlanEstimate?.firstInstallmentDate : undefined,
@@ -1004,12 +1055,20 @@ export function FacturasView({ data, summaryData, summaryLoading, summaryError, 
       });
       toast.success(`Factura ${invoice.number} enviada a Créditos por su saldo pendiente`, { id: creditToastId });
       setCreditInvoice(null);
+      setCreditInvoiceWasDraft(false);
       if (localDoc?.id === invoice.id) {
         setEditingId(null);
         setIsCreating(false);
         setLocalDoc(null);
       }
       await onRefresh();
+      if (detailInvoice?.id === invoice.id) {
+        try {
+          setDetailInvoice(await invoicesService.getById(invoice.id));
+        } catch (error) {
+          console.warn('No se pudo actualizar el detalle de la factura enviada a crédito.', error);
+        }
+      }
     } catch (error: any) {
       const message = error?.response?.data?.message || error?.message || 'No se pudo enviar la factura a crédito';
       toast.error(Array.isArray(message) ? message[0] : message, { id: creditToastId });
@@ -1868,6 +1927,13 @@ export function FacturasView({ data, summaryData, summaryLoading, summaryError, 
     return Math.max(0, Number(invoice.balance || 0));
   }
 
+  const getInvoiceActionBalance = (invoice: Partial<Invoice>) => {
+    if (String(invoice.status || '').toUpperCase() === 'DRAFT') {
+      return Math.max(0, Number((Number(invoice.total || 0) - Number(invoice.amountPaid || 0)).toFixed(getCurrencyDecimalPlaces())));
+    }
+    return getInvoiceBalance(invoice);
+  };
+
   const getPaymentAppliedAmountInInvoiceCurrency = (payment: PaymentReceived, invoice: Invoice) => {
     const sourceCurrency = (payment.currency || invoice.currency || baseCurrency) as 'NIO' | 'USD';
     const targetCurrency = (invoice.currency || baseCurrency) as 'NIO' | 'USD';
@@ -2135,13 +2201,13 @@ export function FacturasView({ data, summaryData, summaryLoading, summaryError, 
     {
       key: 'status',
       header: 'Estado',
-      width: '110px',
+      width: '145px',
       render: (val, row) => {
         const key = invoiceStatusFilterKey(row);
         const opt = statusOptions.find(o => o.value === key);
         return (
           <Badge variant="outline" className={cn(
-            "text-[9px] font-black uppercase tracking-widest px-2 py-0.5 border-none shadow-none",
+            "max-w-full whitespace-normal break-words text-center text-[9px] font-black uppercase leading-tight tracking-widest px-1.5 py-0.5 border-none shadow-none",
             opt?.color || 'bg-muted/20 text-muted-foreground'
           )}>
             {invoiceStatusLabel(row)}
@@ -3082,6 +3148,7 @@ export function FacturasView({ data, summaryData, summaryLoading, summaryError, 
         getBalance={getInvoiceBalance}
         formatAmount={formatInvoiceAmount}
         formatDate={formatDateSafe}
+        formatDateTime={formatDateTimeSafe}
         extraActions={detailInvoice ? <>
           <WhatsAppActionButton
             phone={resolveCustomerPhone(detailInvoice.customerId, detailInvoice.customer, customers, detailInvoice.customCustomerPhone)}
@@ -3089,7 +3156,7 @@ export function FacturasView({ data, summaryData, summaryLoading, summaryError, 
             onSend={() => handleWhatsApp(detailInvoice)}
           />
           {canSendInvoiceToCash(detailInvoice) && <Button type="button" variant="outline" title={hasOpenCash ? 'Enviar factura a Caja' : 'No hay una caja abierta en esta sucursal'} className={cn('rounded-xl border-emerald-500/30 text-emerald-700 hover:bg-emerald-500/10 dark:text-emerald-400', (!hasOpenCash || cashAvailabilityQuery.isLoading) && 'cursor-not-allowed opacity-50')} disabled={sendToCashLoadingId === detailInvoice.id || !hasOpenCash || cashAvailabilityQuery.isLoading} onClick={() => void handleSendInvoiceToCash(detailInvoice)}><Inbox className="mr-2 size-4" />Enviar a Caja</Button>}
-          {canPerform('SALES_INVOICES', 'sendToCredit') && !['PAID', 'CANCELLED', 'CREDIT'].includes(String(detailInvoice.status).toUpperCase()) && !detailInvoice.creditNotes?.some((credit) => ['ACTIVE', 'ISSUED', 'PARTIAL', 'APPLIED'].includes(String(credit.status).toUpperCase())) && getInvoiceBalance(detailInvoice) > 0.01 && <Button type="button" variant="outline" className={cn('rounded-xl border-primary/30 text-primary hover:bg-primary/10', !invoiceFitsAvailableCredit(detailInvoice) && 'cursor-not-allowed text-muted-foreground opacity-60')} disabled={!invoiceFitsAvailableCredit(detailInvoice)} onClick={() => openInvoiceCredit(detailInvoice)}><Send className="mr-2 size-4" />Enviar a crédito</Button>}
+          {canPerform('SALES_INVOICES', 'sendToCredit') && (String(detailInvoice.status).toUpperCase() !== 'DRAFT' || canPerform('SALES_INVOICES', 'submit')) && !['PAID', 'CANCELLED', 'CREDIT'].includes(String(detailInvoice.status).toUpperCase()) && !detailInvoice.creditNotes?.some((credit) => ['ACTIVE', 'ISSUED', 'PARTIAL', 'APPLIED'].includes(String(credit.status).toUpperCase())) && getInvoiceActionBalance(detailInvoice) > 0.01 && <Button type="button" variant="outline" className={cn('rounded-xl border-primary/30 text-primary hover:bg-primary/10', !invoiceFitsAvailableCredit(detailInvoice) && 'cursor-not-allowed text-muted-foreground opacity-60')} disabled={!invoiceFitsAvailableCredit(detailInvoice)} onClick={() => openInvoiceCredit(detailInvoice)}><Send className="mr-2 size-4" />Enviar a crédito</Button>}
           {canPerform('SALES_INVOICES', 'pay') && (String(detailInvoice.status).toUpperCase() !== 'DRAFT' || canPerform('SALES_INVOICES', 'submit')) && !['PAID', 'CANCELLED'].includes(String(detailInvoice.status).toUpperCase()) && getInvoicePaymentBalance(detailInvoice, getInvoiceBalance(detailInvoice)) > 0 && <Button type="button" variant="outline" className="rounded-xl border-primary/30 text-primary hover:bg-primary/10" disabled={paymentLoading && paymentInvoice?.id === detailInvoice.id} onClick={() => openInvoicePayment(detailInvoice)}><CreditCard className="mr-2 size-4" />Registrar pago</Button>}
           {(canPerform('SALES_INVOICES', 'createPaymentLink') || canPerform('SALES_INVOICES', 'reconcilePaymentLink') || canPerform('SALES_INVOICES', 'cancelPaymentLink')) && !['PAID', 'CANCELLED'].includes(String(detailInvoice.status).toUpperCase()) && getInvoiceBalance(detailInvoice) > 0.01 && <Button type="button" variant="outline" className="rounded-xl border-primary/30 text-primary hover:bg-primary/10" onClick={() => setPaylinkInvoice(detailInvoice)}><Link2 className="mr-2 size-4" />{canPerform('SALES_INVOICES', 'createPaymentLink') ? 'Links de pago' : 'Ver links de pago'}</Button>}
           {(canPerform('SALES_INVOICES', 'createAppToAppPayment') || canPerform('SALES_INVOICES', 'reconcileAppToAppPayment')) && !['PAID', 'CANCELLED'].includes(String(detailInvoice.status).toUpperCase()) && getInvoiceBalance(detailInvoice) > 0.01 && <Button type="button" variant="outline" className="rounded-xl border-primary/30 text-primary hover:bg-primary/10" onClick={() => setPoketAppInvoice(detailInvoice)}><Smartphone className="mr-2 size-4" />{canPerform('SALES_INVOICES', 'createAppToAppPayment') ? 'Cobrar con Poket' : 'Ver cobros Poket'}</Button>}
@@ -3181,7 +3248,7 @@ export function FacturasView({ data, summaryData, summaryLoading, summaryError, 
         }}
       />
 
-      <Dialog open={!!creditInvoice} onOpenChange={(open) => { if (!open && !creditLoading) setCreditInvoice(null); }}>
+      <Dialog open={!!creditInvoice} onOpenChange={(open) => { if (!open && !creditLoading) { setCreditInvoice(null); setCreditInvoiceWasDraft(false); } }}>
         <DialogContent className="!flex !flex-col !max-h-[calc(100dvh-1rem)] w-[calc(100%-1.5rem)] !max-w-6xl !overflow-hidden rounded-3xl p-4 sm:w-[calc(100%-3rem)] sm:p-6">
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2 nh-module-title">
@@ -3295,7 +3362,7 @@ export function FacturasView({ data, summaryData, summaryLoading, summaryError, 
             </div>
           )}
           <DialogFooter className="shrink-0">
-            <Button type="button" variant="outline" onClick={() => setCreditInvoice(null)} disabled={creditLoading}>Cancelar</Button>
+            <Button type="button" variant="outline" onClick={() => { setCreditInvoice(null); setCreditInvoiceWasDraft(false); }} disabled={creditLoading}>Cancelar</Button>
             <Button type="button" onClick={() => void handleSendInvoiceToCredit()} disabled={creditLoading || !effectiveCreditDueDate || (creditTermOverrideRequired && !creditTermOverrideConfirmed) || (creditInterestMode !== 'NONE' && !Number.isFinite(Number(creditInterestValue))) || (creditPlanEnabled && (!creditPlanEstimate || !creditPlanEstimate.isValid || (creditPlanCalculationMode !== 'MANUAL' && !creditFirstInstallmentDate) || (creditPlanCalculationMode === 'AMOUNT' && creditInstallmentAmount !== deferredCreditInstallmentAmount)))} className="bg-primary font-black text-primary-foreground hover:bg-primary/90">
               {creditLoading ? 'Enviando...' : 'Confirmar crédito'}
             </Button>

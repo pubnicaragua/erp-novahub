@@ -1177,7 +1177,7 @@ export function NotasCreditoView({ data, summaryData, summaryLoading, summaryErr
       ...(Number(row.deliveryAmount || 0) > 0 ? [{ label: row.deliveryDescription || 'Delivery', value: formatConvertedAmount(Number(row.deliveryAmount), row.currency, row.exchangeRate) }] : []),
     ],
     metadata: [
-      { label: 'Fecha', value: formatDate(row.date) },
+      { label: 'Fecha', value: row.date ? formatDateEs(row.date, true) : 'Sin fecha' },
       { label: 'Vencimiento', value: formatDate(row.dueDate) },
       ...(row.planEnabled ? [{ label: 'Frecuencia', value: row.planCalculationMode === 'MANUAL' ? 'Manual' : ({ DAILY: 'Diaria', WEEKLY: 'Semanal', BIWEEKLY: 'Quincenal', MONTHLY: 'Mensual' } as const)[row.frequency || 'WEEKLY'] }] : []),
       { label: 'Próximo abono', value: row.nextInstallment ? `${formatDate(row.nextInstallment.dueDate)} · ${formatConvertedAmount(Number(row.nextInstallment.remainingAmount || 0), row.currency, row.exchangeRate)}` : 'Sin abonos pendientes' },

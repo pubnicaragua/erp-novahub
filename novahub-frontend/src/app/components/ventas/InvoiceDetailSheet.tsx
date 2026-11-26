@@ -32,6 +32,7 @@ interface InvoiceDetailSheetProps {
   getBalance: (invoice: Invoice) => number;
   formatAmount: (amount: number, currency?: string, rate?: number) => string;
   formatDate: (date: string) => string;
+  formatDateTime?: (date: string) => string;
   extraActions?: ReactNode;
 }
 
@@ -82,6 +83,7 @@ export function InvoiceDetailSheet({
   getBalance,
   formatAmount,
   formatDate,
+  formatDateTime,
   extraActions,
 }: InvoiceDetailSheetProps) {
   const [activeTab, setActiveTab] = useState('general');
@@ -96,12 +98,15 @@ export function InvoiceDetailSheet({
       ? 'PAID_CREDIT'
       : ['PARTIAL', 'OVERDUE'].includes(rawStatus) ? 'CREDIT' : rawStatus;
   const statusColor = status === 'CASH_QUEUE' ? 'PENDING' : status === 'PAID_CREDIT' ? 'PAID' : status;
+  const isDraftInvoice = rawStatus === 'DRAFT';
   const dueDate = invoice.dueDate ? new Date(invoice.dueDate) : null;
   const today = new Date();
   today.setHours(0, 0, 0, 0);
   dueDate?.setHours(0, 0, 0, 0);
   const isLateCredit = status === 'CREDIT' && dueDate && dueDate < today && getBalance(invoice) > 0.01;
-  const balance = getBalance(invoice);
+  const balance = isDraftInvoice
+    ? Math.max(0, Number(invoice.total || 0) - Number(invoice.amountPaid || 0))
+    : getBalance(invoice);
   const paymentPresentation = getInvoicePaymentPresentation(invoice);
   const additionalCharges = getSalesAdditionalCharges(invoice);
 
@@ -141,7 +146,7 @@ export function InvoiceDetailSheet({
                     <p className="mt-1 text-3xl font-black tabular-nums text-primary">{formatAmount(Number(invoice.total || 0), invoice.currency, invoice.exchangeRate)}</p>
                   </div>
                   <div className="text-right">
-                    <p className="text-[10px] font-black uppercase tracking-widest text-muted-foreground">Saldo pendiente</p>
+                    <p className="text-[10px] font-black uppercase tracking-widest text-muted-foreground">{isDraftInvoice ? 'Total por emitir' : 'Saldo pendiente'}</p>
                     <p className={`mt-1 text-xl font-black tabular-nums ${balance > 0.01 ? 'text-orange-500' : 'text-emerald-600 dark:text-emerald-400'}`}>
                       {formatAmount(balance, invoice.currency, invoice.exchangeRate)}
                     </p>
@@ -166,7 +171,7 @@ export function InvoiceDetailSheet({
                 <p className="mb-3 text-[10px] font-black uppercase tracking-widest text-muted-foreground">Información general</p>
                 <div className="grid gap-3 text-sm sm:grid-cols-2">
                   <div className="flex min-w-0 gap-2"><UserRound className="mt-0.5 size-4 shrink-0 text-primary" /><div className="min-w-0"><p className="text-[10px] text-muted-foreground">Cliente</p><p className="mt-1 break-words font-semibold">{invoice.customer?.name || 'Varios'}</p></div></div>
-                  <div className="flex min-w-0 gap-2"><Clock3 className="mt-0.5 size-4 shrink-0 text-primary" /><div className="min-w-0"><p className="text-[10px] text-muted-foreground">Fecha de emisión</p><p className="mt-1 font-semibold">{formatDate(invoice.date)}</p></div></div>
+                  <div className="flex min-w-0 gap-2"><Clock3 className="mt-0.5 size-4 shrink-0 text-primary" /><div className="min-w-0"><p className="text-[10px] text-muted-foreground">Fecha de emisión</p><p className="mt-1 font-semibold">{(formatDateTime || formatDate)(invoice.date)}</p></div></div>
                   <div><p className="text-[10px] text-muted-foreground">Vencimiento</p><p className="mt-1 font-semibold">{formatDate(invoice.dueDate)}</p></div>
                   <div><p className="text-[10px] text-muted-foreground">Modalidad / forma de pago</p><p className="mt-1 font-semibold">{paymentPresentation.modalityLabel}{paymentPresentation.methodLabel ? ` · ${paymentPresentation.methodLabel}` : ''}</p></div>
                   {invoice.sourceLabel && <div><p className="text-[10px] text-muted-foreground">Origen</p><p className="mt-1 break-words font-semibold">{invoice.sourceLabel}</p></div>}
