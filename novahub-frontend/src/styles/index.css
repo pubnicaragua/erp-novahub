@@ -3319,6 +3319,73 @@ main.module-notificaciones:has([data-message-scroll-layout="contained"]) {
   }
 }
 
+/* Las vistas con una tabla y una versión propia en tarjetas cambian juntas
+   según el ancho del contenido. Si solo se estrecha la tabla interna, conserva
+   sus columnas con scroll local para evitar una segunda conversión a tarjetas. */
+@container accounting-table (max-width: 959px) {
+  .accounting-module-content [data-accounting-layout="table"] table[data-responsive-cards="true"] {
+    display: table !important;
+    width: max-content !important;
+    min-width: 100% !important;
+    max-width: none !important;
+    table-layout: auto !important;
+    border-collapse: separate !important;
+    border-spacing: 0 !important;
+  }
+
+  .accounting-module-content [data-accounting-layout="table"] table[data-responsive-cards="true"] > thead {
+    display: table-header-group !important;
+  }
+
+  .accounting-module-content [data-accounting-layout="table"] table[data-responsive-cards="true"] > tbody {
+    display: table-row-group !important;
+    width: auto !important;
+    padding: 0 !important;
+  }
+
+  .accounting-module-content [data-accounting-layout="table"] table[data-responsive-cards="true"] > tbody > tr {
+    display: table-row !important;
+    width: auto !important;
+    min-width: 0 !important;
+    margin: 0 !important;
+    overflow: visible !important;
+    border: 0 !important;
+    border-radius: 0 !important;
+    background: transparent;
+    box-shadow: none !important;
+  }
+
+  .accounting-module-content [data-accounting-layout="table"] table[data-responsive-cards="true"] > tbody > tr > td,
+  .accounting-module-content [data-accounting-layout="table"] table[data-responsive-cards="true"] > tfoot > tr > td {
+    display: table-cell !important;
+    grid-template-columns: none !important;
+    width: auto !important;
+    min-width: 0 !important;
+    max-width: none !important;
+    padding: 0.65rem 1rem !important;
+    overflow-wrap: anywhere;
+    white-space: normal !important;
+    border: 0 !important;
+    border-bottom: 1px solid hsl(var(--border) / 0.4) !important;
+  }
+
+  .accounting-module-content [data-accounting-layout="table"] table[data-responsive-cards="true"] > tbody > tr > td::before {
+    content: none !important;
+    display: none !important;
+  }
+
+  .accounting-module-content [data-accounting-layout="table"] table[data-responsive-cards="true"] td > * {
+    grid-column: auto !important;
+    max-width: 100%;
+  }
+
+  .accounting-module-content [data-accounting-layout="table"] table[data-responsive-cards="true"] > tfoot,
+  .accounting-module-content [data-accounting-layout="table"] table[data-responsive-cards="true"] > tfoot > tr {
+    display: table-row-group !important;
+    width: auto !important;
+  }
+}
+
 .accounting-chart-tree {
   container: accounting-chart / inline-size;
 }
