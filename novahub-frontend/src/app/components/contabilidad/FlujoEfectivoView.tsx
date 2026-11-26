@@ -251,7 +251,7 @@ export function FlujoEfectivoView() {
           </div>
           <p className="text-[9px] font-normal opacity-70 tracking-normal normal-case">{section.subtitle}</p>
         </div>
-        <div className="hidden md:block">
+        <div data-accounting-layout="table" className="hidden md:block">
         <Table>
           <TableHeader className="bg-muted/30">
             <TableRow className="hover:bg-transparent border-border/50">
@@ -312,7 +312,7 @@ export function FlujoEfectivoView() {
           </TableBody>
         </Table>
         </div>
-        <div className="space-y-2 p-3 md:hidden">
+        <div data-accounting-layout="cards" className="space-y-2 p-3 md:hidden">
           {secData.items.length === 0 ? (
             <div className="py-6 text-center text-xs text-muted-foreground">Sin movimientos</div>
           ) : secData.items.map((item, i) => {

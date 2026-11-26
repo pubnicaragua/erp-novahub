@@ -759,7 +759,7 @@ export function BalanceComprobacionView() {
           </div>
         </CardHeader>
         <CardContent className="p-0">
-          <div className="hidden overflow-x-auto md:block">
+          <div data-accounting-layout="table" className="hidden overflow-x-auto md:block">
             <Table>
               <TableHeader className="bg-muted/50">
                 <TableRow className="hover:bg-transparent border-border/50">
@@ -892,7 +892,7 @@ export function BalanceComprobacionView() {
             </Table>
           </div>
 
-          <div className="p-3 md:hidden">
+          <div data-accounting-layout="cards" className="p-3 md:hidden">
             {loading ? (
               <div className="py-10 text-center text-sm text-muted-foreground">Cargando balance...</div>
             ) : grouped.length === 0 ? (

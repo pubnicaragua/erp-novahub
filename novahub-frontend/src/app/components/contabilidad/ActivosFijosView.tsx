@@ -264,7 +264,7 @@ export function ActivosFijosView() {
               </div>
             ) : (
               <div className="space-y-2">
-                <div className="hidden overflow-x-auto md:block">
+                <div data-accounting-layout="table" className="hidden overflow-x-auto md:block">
                   <Table>
                     <TableHeader className="bg-muted/50">
                       <TableRow className="hover:bg-transparent border-border/50">
@@ -324,7 +324,7 @@ export function ActivosFijosView() {
                     </TableBody>
                   </Table>
                 </div>
-                <div className="space-y-2 p-3 md:hidden">
+                <div data-accounting-layout="cards" className="space-y-2 p-3 md:hidden">
                   {filtered.map((asset) => {
                     const isSelected = selectedAssetId === asset.id;
                     return (

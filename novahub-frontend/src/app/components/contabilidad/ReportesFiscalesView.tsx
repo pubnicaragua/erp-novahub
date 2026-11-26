@@ -335,7 +335,7 @@ export function ReportesFiscalesView() {
 
       <Card className="rounded-2xl border-border/50">
         <CardContent className="p-0">
-          <div className="hidden overflow-x-auto md:block">
+          <div data-accounting-layout="table" className="hidden overflow-x-auto md:block">
           <Table>
             <TableHeader>
               <TableRow>
@@ -448,7 +448,7 @@ export function ReportesFiscalesView() {
             </TableBody>
           </Table>
           </div>
-          <div className="space-y-2 p-3 md:hidden">
+          <div data-accounting-layout="cards" className="space-y-2 p-3 md:hidden">
             {loading ? <p className="py-8 text-center text-xs text-muted-foreground">Cargando...</p> : reports.length === 0 ? <p className="py-8 text-center text-xs text-muted-foreground">No hay respaldos registrados.</p> : reports.map((r) => {
               const isBackup = r.status === 'SUBMITTED' && r.fileUri;
               const submittedDate = r.submittedAt || r.generatedAt || r.createdAt;

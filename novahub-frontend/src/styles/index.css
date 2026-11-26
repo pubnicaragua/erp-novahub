@@ -2993,9 +2993,36 @@ main.module-notificaciones:has([data-message-scroll-layout="contained"]) {
     text-overflow: clip;
     white-space: normal !important;
   }
+
+  .accounting-module-content :where(.whitespace-nowrap) {
+    overflow-wrap: anywhere;
+    white-space: normal !important;
+  }
 }
 
 @container accounting-content (max-width: 959px) {
+  .accounting-module-content :where(.grid) {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .accounting-module-content :where(.grid > [class*="col-span-"]) {
+    grid-column: auto / span 1;
+  }
+
+  .accounting-module-content :where([class~="md:flex-row"], [class~="lg:flex-row"], [class~="xl:flex-row"]) {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .accounting-module-content :where([class*="min-w-"]) {
+    min-width: 0;
+  }
+
+  .accounting-module-content :where(button, [role="button"]) {
+    max-width: 100%;
+    white-space: normal;
+  }
+
   .accounting-module-content [data-responsive-cards-container="true"]:not([data-keep-scroll="true"]) {
     max-height: none !important;
     min-height: 0 !important;
@@ -3009,6 +3036,38 @@ main.module-notificaciones:has([data-message-scroll-layout="contained"]) {
 
   .accounting-module-content [data-accounting-layout="cards"] {
     display: block !important;
+  }
+
+  .accounting-module-content [data-accounting-layout="cards"] :where(.truncate, [class~="whitespace-nowrap"]) {
+    overflow-wrap: anywhere;
+    text-overflow: clip;
+    white-space: normal !important;
+  }
+
+  .accounting-module-content [data-accounting-layout="cards"] :where(.font-mono, .tabular-nums) {
+    min-width: 0;
+    max-width: 100%;
+    overflow-wrap: anywhere;
+    white-space: normal !important;
+  }
+}
+
+@container accounting-content (max-width: 639px) {
+  .accounting-module-content :where(.grid) {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .accounting-module-content :where(.grid > [class*="col-span-"]) {
+    grid-column: auto / span 1;
+  }
+
+  .accounting-module-content :where([class~="sm:flex-row"], [class~="md:flex-row"], [class~="lg:flex-row"], [class~="xl:flex-row"]) {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .accounting-module-content [data-accounting-layout="cards"] .grid {
+    grid-template-columns: minmax(0, 1fr);
   }
 }
 

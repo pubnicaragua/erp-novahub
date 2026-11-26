@@ -250,7 +250,7 @@ export function BalanceGeneralView() {
         {title}
         <span className="ml-2 text-[10px] opacity-70">({visibleAccounts.length} cuentas)</span>
       </div>
-      <div className="hidden md:block">
+      <div data-accounting-layout="table" className="hidden md:block">
       <Table>
         <TableHeader className="bg-muted/30">
           <TableRow className="hover:bg-transparent border-border/50">
@@ -325,7 +325,7 @@ export function BalanceGeneralView() {
         </TableBody>
       </Table>
       </div>
-      <div className="space-y-2 p-3 md:hidden">
+      <div data-accounting-layout="cards" className="space-y-2 p-3 md:hidden">
         {visibleAccounts.length === 0 ? (
           <p className="py-4 text-center text-xs text-muted-foreground/60 italic">Sin resultados para la búsqueda</p>
         ) : (

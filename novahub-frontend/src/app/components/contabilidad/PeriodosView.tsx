@@ -167,7 +167,7 @@ export function PeriodosView() {
 
       <Card className="rounded-2xl border-border/50">
         <CardContent className="p-0">
-          <div className="hidden overflow-x-auto md:block">
+          <div data-accounting-layout="table" className="hidden overflow-x-auto md:block">
           <Table>
             <TableHeader>
               <TableRow>
@@ -249,7 +249,7 @@ export function PeriodosView() {
             </TableBody>
           </Table>
           </div>
-          <div className="space-y-2 p-3 md:hidden">
+          <div data-accounting-layout="cards" className="space-y-2 p-3 md:hidden">
             {loading ? <p className="py-8 text-center text-xs text-muted-foreground">Cargando...</p> : periods.length === 0 ? <p className="py-8 text-center text-xs text-muted-foreground">No hay períodos registrados</p> : periods.map((p) => (
               <div key={p.id} className={cn('min-w-0 rounded-xl border border-border/30 bg-muted/20 p-3', isCurrentPeriod(p) && 'border-primary/30 bg-primary/[0.03]')}>
                 <div className="flex min-w-0 items-start justify-between gap-3"><div className="min-w-0"><p className="break-words text-xs font-black">{p.name}</p><p className="mt-1 text-[10px] text-muted-foreground">{months.find((m) => m.value === String(p.month))?.label || p.month} {p.year}</p></div><Badge variant="outline" className={cn('shrink-0 text-[9px] font-black uppercase tracking-widest', statusStyles[p.status || 'OPEN'])}>{statusLabels[p.status || 'OPEN']}</Badge></div>

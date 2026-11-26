@@ -581,7 +581,7 @@ export function ConciliacionView({ onGoToConfig }: { onGoToConfig?: () => void }
 
       <Card className="rounded-2xl border-border/50">
         <CardContent className="p-0">
-          <div className="hidden overflow-x-auto md:block">
+          <div data-accounting-layout="table" className="hidden overflow-x-auto md:block">
           <Table>
             <TableHeader>
               <TableRow>
@@ -626,7 +626,7 @@ export function ConciliacionView({ onGoToConfig }: { onGoToConfig?: () => void }
             </TableBody>
           </Table>
           </div>
-          <div className="space-y-2 p-3 md:hidden">
+          <div data-accounting-layout="cards" className="space-y-2 p-3 md:hidden">
             {loading ? <p className="py-8 text-center text-xs text-muted-foreground">Cargando...</p> : filtered.length === 0 ? <p className="py-8 text-center text-xs text-muted-foreground">No hay conciliaciones registradas</p> : filtered.map((r) => (
               <button key={r.id} type="button" className="block w-full min-w-0 rounded-xl border border-border/30 bg-muted/20 p-3 text-left hover:bg-muted/40" onClick={() => fetchDetail(r.id)}>
                 <div className="flex min-w-0 items-start justify-between gap-3"><div className="min-w-0"><p className="text-xs font-black">{r.account?.code}</p><p className="break-words text-[10px] text-muted-foreground">{r.account?.name}</p>{r.bank && <p className="text-[9px] text-muted-foreground/60">{r.bank.bankName} · {r.bank.accountNumber}</p>}</div><Badge variant="outline" className={cn('shrink-0 text-[9px] font-black uppercase tracking-widest', statusStyles[r.status || 'PENDING'])}>{statusLabels[r.status || 'PENDING']}</Badge></div>

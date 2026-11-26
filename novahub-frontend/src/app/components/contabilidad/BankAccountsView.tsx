@@ -176,7 +176,7 @@ export function BankAccountsView() {
       </CardHeader>
       <CardContent className="px-5 pb-4">
         <div className="space-y-2">
-        <div className="hidden overflow-x-auto rounded-xl border border-border/30 md:block">
+        <div data-accounting-layout="table" className="hidden overflow-x-auto rounded-xl border border-border/30 md:block">
           <Table>
             <TableHeader className="bg-muted/30">
               <TableRow>
@@ -226,7 +226,7 @@ export function BankAccountsView() {
             </TableBody>
           </Table>
         </div>
-        <div className="space-y-2 md:hidden">
+        <div data-accounting-layout="cards" className="space-y-2 md:hidden">
           {accounts.map(a => (
             <div key={a.id} className="min-w-0 rounded-xl border border-border/30 bg-muted/20 p-3">
               <div className="flex min-w-0 items-start justify-between gap-3">

@@ -480,7 +480,7 @@ export function LibroMayorView() {
             </div>
           ) : (
             <>
-            <div className="hidden overflow-x-auto md:block">
+            <div data-accounting-layout="table" className="hidden overflow-x-auto md:block">
               <Table>
                 <TableHeader className="bg-muted/50">
                   <TableRow className="hover:bg-transparent border-border/50">
@@ -520,7 +520,7 @@ export function LibroMayorView() {
                 </TableBody>
               </Table>
             </div>
-            <div className="space-y-3 p-3 md:hidden">
+            <div data-accounting-layout="cards" className="space-y-3 p-3 md:hidden">
               {visibleEntries.map((entry) => (
                 <div key={entry.id} className="cursor-pointer rounded-xl border border-border/60 bg-card/60 p-3 shadow-sm transition-colors hover:border-primary/40 hover:bg-primary/5" onClick={() => { void handleEntryClick(entry); }} title="Ver detalle del asiento contable">
                   <div className="flex min-w-0 items-start justify-between gap-3">

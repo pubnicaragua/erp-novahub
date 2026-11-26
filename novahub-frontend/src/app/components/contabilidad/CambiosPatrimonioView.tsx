@@ -247,7 +247,7 @@ export function CambiosPatrimonioView() {
             </div>
           ) : (
             <>
-            <div className="hidden overflow-x-auto md:block">
+            <div data-accounting-layout="table" className="hidden overflow-x-auto md:block">
               <Table>
                 <TableHeader className="bg-muted/50">
                   <TableRow className="hover:bg-transparent border-border/50">
@@ -331,7 +331,7 @@ export function CambiosPatrimonioView() {
                 </TableBody>
               </Table>
             </div>
-            <div className="space-y-2 p-3 md:hidden">
+            <div data-accounting-layout="cards" className="space-y-2 p-3 md:hidden">
               {filteredRows.map((row, i) => (
                 <div key={row.accountId || i} className="rounded-xl border border-border/60 bg-card/60 p-3 shadow-sm">
                   <div className="flex min-w-0 items-start justify-between gap-3">
