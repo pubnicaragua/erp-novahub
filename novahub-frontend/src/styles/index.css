@@ -2803,13 +2803,13 @@ main.module-notificaciones:has([data-message-scroll-layout="contained"]) {
    same view remains a real table on wide screens and a scannable card list on
    laptops, tablets and phones without duplicating every renderer. */
 @media (max-width: 1279px) {
-  [data-responsive-cards-container="true"]:not([data-keep-scroll="true"]) {
+  [data-responsive-cards-container="true"]:not([data-keep-scroll="true"]):not(.accounting-module-content *) {
     overflow: visible !important;
     min-height: 0 !important;
     max-height: none !important;
   }
 
-  table[data-responsive-cards="true"] {
+  table[data-responsive-cards="true"]:not(.accounting-module-content *) {
     display: block !important;
     width: 100% !important;
     min-width: 0 !important;
@@ -2819,18 +2819,18 @@ main.module-notificaciones:has([data-message-scroll-layout="contained"]) {
     border-spacing: 0 !important;
   }
 
-  table[data-responsive-cards="true"] > thead {
+  table[data-responsive-cards="true"]:not(.accounting-module-content *) > thead {
     display: none !important;
   }
 
-  table[data-responsive-cards="true"] > tbody {
+  table[data-responsive-cards="true"]:not(.accounting-module-content *) > tbody {
     display: grid !important;
     width: 100% !important;
     gap: 0.75rem;
     padding: 0.75rem;
   }
 
-  table[data-responsive-cards="true"] > tbody > tr {
+  table[data-responsive-cards="true"]:not(.accounting-module-content *) > tbody > tr {
     display: grid !important;
     grid-template-columns: repeat(2, minmax(0, 1fr));
     width: 100% !important;
@@ -2843,11 +2843,11 @@ main.module-notificaciones:has([data-message-scroll-layout="contained"]) {
     box-shadow: 0 4px 16px hsl(var(--foreground) / 0.04);
   }
 
-  table[data-responsive-cards="true"] > tbody > tr:hover {
+  table[data-responsive-cards="true"]:not(.accounting-module-content *) > tbody > tr:hover {
     background: color-mix(in srgb, var(--primary) 4%, var(--card));
   }
 
-  table[data-responsive-cards="true"] > tbody > tr > td {
+  table[data-responsive-cards="true"]:not(.accounting-module-content *) > tbody > tr > td {
     display: grid !important;
     grid-template-columns: minmax(6rem, 36%) minmax(0, 1fr);
     align-items: start;
@@ -2862,7 +2862,7 @@ main.module-notificaciones:has([data-message-scroll-layout="contained"]) {
     border-bottom: 1px solid hsl(var(--border) / 0.35) !important;
   }
 
-  table[data-responsive-cards="true"] > tbody > tr > td::before {
+  table[data-responsive-cards="true"]:not(.accounting-module-content *) > tbody > tr > td::before {
     content: attr(data-label);
     min-width: 0;
     text-align: left !important;
@@ -2875,54 +2875,54 @@ main.module-notificaciones:has([data-message-scroll-layout="contained"]) {
     overflow-wrap: break-word;
   }
 
-  table[data-responsive-cards="true"] > tbody > tr > td[data-label=""] {
+  table[data-responsive-cards="true"]:not(.accounting-module-content *) > tbody > tr > td[data-label=""] {
     grid-template-columns: minmax(0, 1fr);
   }
 
-  table[data-responsive-cards="true"] > tbody > tr > td[data-label=""]::before {
+  table[data-responsive-cards="true"]:not(.accounting-module-content *) > tbody > tr > td[data-label=""]::before {
     display: none;
   }
 
-  table[data-responsive-cards="true"] > tbody > tr > td:last-child {
+  table[data-responsive-cards="true"]:not(.accounting-module-content *) > tbody > tr > td:last-child {
     border-bottom: 0 !important;
   }
 
-  table[data-responsive-cards="true"] > tbody > tr > td[colspan],
-  table[data-responsive-cards="true"] > tbody > tr > td[data-actions-column="true"] {
+  table[data-responsive-cards="true"]:not(.accounting-module-content *) > tbody > tr > td[colspan],
+  table[data-responsive-cards="true"]:not(.accounting-module-content *) > tbody > tr > td[data-actions-column="true"] {
     grid-column: 1 / -1;
   }
 
-  table[data-responsive-cards="true"] > tbody > tr > td[colspan] {
+  table[data-responsive-cards="true"]:not(.accounting-module-content *) > tbody > tr > td[colspan] {
     display: block !important;
     text-align: center;
   }
 
-  table[data-responsive-cards="true"] > tbody > tr > td[colspan]::before {
+  table[data-responsive-cards="true"]:not(.accounting-module-content *) > tbody > tr > td[colspan]::before {
     display: none;
   }
 
-  table[data-responsive-cards="true"] [data-action-group="true"] {
+  table[data-responsive-cards="true"]:not(.accounting-module-content *) [data-action-group="true"] {
     min-width: 0;
     max-width: 100%;
     flex-wrap: wrap;
     justify-content: flex-start;
   }
 
-  table[data-responsive-cards="true"] td > * {
+  table[data-responsive-cards="true"]:not(.accounting-module-content *) td > * {
     grid-column: 2;
     min-width: 0;
     max-width: 100%;
     overflow-wrap: break-word;
   }
 
-  table[data-responsive-cards="true"] > tbody > tr > td[data-label=""] > *,
-  table[data-responsive-cards="true"] > tbody > tr > td[colspan] > * {
+  table[data-responsive-cards="true"]:not(.accounting-module-content *) > tbody > tr > td[data-label=""] > *,
+  table[data-responsive-cards="true"]:not(.accounting-module-content *) > tbody > tr > td[colspan] > * {
     grid-column: 1 / -1;
   }
 
-  table[data-responsive-cards="true"] > tfoot,
-  table[data-responsive-cards="true"] > tfoot > tr,
-  table[data-responsive-cards="true"] > tfoot > tr > td {
+  table[data-responsive-cards="true"]:not(.accounting-module-content *) > tfoot,
+  table[data-responsive-cards="true"]:not(.accounting-module-content *) > tfoot > tr,
+  table[data-responsive-cards="true"]:not(.accounting-module-content *) > tfoot > tr > td {
     display: block !important;
     width: 100% !important;
     min-width: 0 !important;
@@ -2930,16 +2930,16 @@ main.module-notificaciones:has([data-message-scroll-layout="contained"]) {
 }
 
 @media (max-width: 639px) {
-  table[data-responsive-cards="true"] > tbody {
+  table[data-responsive-cards="true"]:not(.accounting-module-content *) > tbody {
     padding: 0.5rem;
   }
 
-  table[data-responsive-cards="true"] > tbody > tr {
+  table[data-responsive-cards="true"]:not(.accounting-module-content *) > tbody > tr {
     grid-template-columns: minmax(0, 1fr);
     border-radius: 0.875rem;
   }
 
-  table[data-responsive-cards="true"] > tbody > tr > td {
+  table[data-responsive-cards="true"]:not(.accounting-module-content *) > tbody > tr > td {
     grid-template-columns: minmax(5.5rem, 34%) minmax(0, 1fr);
     padding: 0.65rem 0.75rem !important;
   }
@@ -2976,21 +2976,6 @@ main.module-notificaciones:has([data-message-scroll-layout="contained"]) {
 }
 
 @container accounting-content (max-width: 1279px) {
-  .accounting-module-content [data-responsive-cards-container="true"]:not([data-keep-scroll="true"]) {
-    max-height: none !important;
-    min-height: 0 !important;
-    overflow: visible !important;
-    scrollbar-gutter: auto;
-  }
-
-  .accounting-module-content [data-accounting-layout="table"] {
-    display: none !important;
-  }
-
-  .accounting-module-content [data-accounting-layout="cards"] {
-    display: block !important;
-  }
-
   .accounting-module-content :where(.font-mono, .tabular-nums):not(input):not(textarea) {
     min-width: 0;
     max-width: 100%;
@@ -3007,6 +2992,23 @@ main.module-notificaciones:has([data-message-scroll-layout="contained"]) {
     overflow-wrap: anywhere;
     text-overflow: clip;
     white-space: normal !important;
+  }
+}
+
+@container accounting-content (max-width: 959px) {
+  .accounting-module-content [data-responsive-cards-container="true"]:not([data-keep-scroll="true"]) {
+    max-height: none !important;
+    min-height: 0 !important;
+    overflow: visible !important;
+    scrollbar-gutter: auto;
+  }
+
+  .accounting-module-content [data-accounting-layout="table"] {
+    display: none !important;
+  }
+
+  .accounting-module-content [data-accounting-layout="cards"] {
+    display: block !important;
   }
 }
 
@@ -3039,7 +3041,7 @@ main.module-notificaciones:has([data-message-scroll-layout="contained"]) {
 
 /* La tabla se adapta al ancho que realmente recibe dentro del módulo, que
    puede ser menor que el viewport cuando hay sidebar o paneles laterales. */
-@container accounting-table (max-width: 1279px) {
+@container accounting-table (max-width: 959px) {
   .accounting-module-content table[data-responsive-cards="true"] {
     display: block !important;
     width: 100% !important;
@@ -3175,7 +3177,11 @@ main.module-notificaciones:has([data-message-scroll-layout="contained"]) {
   container: accounting-chart / inline-size;
 }
 
-@container accounting-chart (max-width: 1279px) {
+@container accounting-chart (max-width: 959px) {
+  .accounting-chart-tree [data-table-viewport="true"] > div:first-child {
+    display: none;
+  }
+
   .accounting-chart-tree [data-account-tree-header],
   .accounting-chart-tree [data-account-tree-layout="desktop"] {
     display: none !important;
@@ -3192,7 +3198,7 @@ main.module-notificaciones:has([data-message-scroll-layout="contained"]) {
     min-width: 0 !important;
   }
 
-  .accounting-chart-tree [data-account-tree-scroll] {
+  .accounting-chart-tree [data-table-viewport-scroll] {
     min-width: 0;
     overflow-x: hidden;
     overflow-y: auto;
@@ -3217,7 +3223,7 @@ main.module-notificaciones:has([data-message-scroll-layout="contained"]) {
   container: accounting-journal / inline-size;
 }
 
-@container accounting-journal (max-width: 1279px) {
+@container accounting-journal (max-width: 959px) {
   .accounting-journal-list [data-accounting-journal-layout="table"] {
     display: none !important;
   }

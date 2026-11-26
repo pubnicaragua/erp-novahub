@@ -12,6 +12,7 @@ import * as XLSX from 'xlsx';
 import { Card, CardContent, CardHeader, CardTitle } from '../ui/card';
 import { Button } from '../ui/button';
 import { Input } from '../ui/input';
+import { HorizontalTableScroller } from '../ui/HorizontalTableScroller';
 import { Badge } from '../ui/badge';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../ui/select';
 import {
@@ -1113,13 +1114,18 @@ export function PlanCuentasView({ isSidebarCollapsed = true, helpTrigger }: Plan
                   )}
                 </div>
               ) : (
-                <div data-account-tree-scroll="true" className="max-h-[600px] overflow-auto">
-                  <div data-account-tree-list="true" className="min-w-0 sm:min-w-[720px] divide-y divide-border">
+                <HorizontalTableScroller
+                  label="Desplazamiento horizontal · columna por columna"
+                  className="accounting-chart-scroller max-h-[600px] min-w-0 rounded-none border-0 bg-transparent shadow-none"
+                  tableClassName="max-h-[600px] overflow-x-auto overflow-y-auto"
+                  verticalScroll={false}
+                >
+                  <div data-account-tree-list="true" className="w-max min-w-full divide-y divide-border">
                     {/* Header row */}
                     <div data-account-tree-header="true" className="sticky top-0 z-20 hidden min-w-0 items-center gap-0 border-b border-border/60 bg-card/95 px-3 py-2 text-[10px] font-black uppercase tracking-widest text-muted-foreground backdrop-blur sm:grid" style={{ gridTemplateColumns: accountGridColumns }}>
-                      <span className="px-2" aria-hidden="true" />
+                      <span data-scroll-column="true" className="px-2" aria-hidden="true" />
                       {ACCOUNT_COLUMN_DEFS.filter((column) => effectiveColumnKeys.includes(column.key)).map((column) => (
-                        <span key={column.key} className={cn('min-w-0 truncate px-2', (column.key === 'balance' || PERIOD_COLUMN_KEYS.includes(column.key)) && 'text-right', (column.key === 'manual' || column.key === 'currency' || column.key === 'status') && 'text-center')}>
+                        <span data-scroll-column="true" key={column.key} className={cn('min-w-0 truncate px-2', (column.key === 'balance' || PERIOD_COLUMN_KEYS.includes(column.key)) && 'text-right', (column.key === 'manual' || column.key === 'currency' || column.key === 'status') && 'text-center')}>
                           <span className="inline-flex items-center gap-1">
                             {column.label}
                             {column.key === 'type' && <ColumnFilterMenu label="Tipo" hideLabel options={typeOptionsForFilter} selected={colFilters.state.type?.values || []} onSelect={(values) => colFilters.setValues('type', values)} sort={colFilters.state.type?.sort || null} onSort={(sort) => colFilters.setSort('type', sort)} />}
@@ -1128,14 +1134,14 @@ export function PlanCuentasView({ isSidebarCollapsed = true, helpTrigger }: Plan
                           </span>
                         </span>
                       ))}
-                      <span className="px-2 text-right">Acciones</span>
+                      <span data-scroll-column="true" className="px-2 text-right">Acciones</span>
                     </div>
                     <div className="border-b border-border bg-muted/30 px-3 py-2 text-[10px] font-black uppercase tracking-widest text-muted-foreground/60 sm:hidden">
                       Cuentas contables
                     </div>
                     {filteredTree.map(acc => renderTreeRow(acc))}
                   </div>
-                </div>
+                </HorizontalTableScroller>
               )}
             </CardContent>
           </Card>

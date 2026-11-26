@@ -123,7 +123,7 @@ export function DataTableViewport({
     if (!element) return;
     const maxScroll = Math.max(0, element.scrollWidth - element.clientWidth);
     const viewportLeft = element.getBoundingClientRect().left;
-    const boundaries = [0, ...Array.from(element.querySelectorAll<HTMLElement>('[data-slot="table"] tr:first-child > *'))
+    const boundaries = [0, ...Array.from(element.querySelectorAll<HTMLElement>('[data-slot="table"] tr:first-child > *, [data-scroll-column="true"]'))
       .map((cell) => Math.min(maxScroll, Math.max(0, cell.getBoundingClientRect().right - viewportLeft + element.scrollLeft))), maxScroll]
       .sort((a, b) => a - b);
     const currentPosition = element.scrollLeft;
