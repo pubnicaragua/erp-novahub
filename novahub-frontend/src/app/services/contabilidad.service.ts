@@ -66,10 +66,11 @@ export interface AccountingBalanceListResponse {
   data: AccountingBalanceDocument[];
   meta: { total: number; page: number; pageSize: number; totalPages: number };
   metrics: { total: number; pending: number; paid: number; balance: number; branchCount?: number };
+  summary?: { total: number; pending: number; paid: number; pendingBalanceByCurrency: { currency: string; amount: number }[] };
 }
 
 export const contabilidadService = {
-  getReceivablesPayables: (params: { side: AccountingBalanceSide; search?: string; status?: string; dateFrom?: string; dateTo?: string; page?: number; pageSize?: number }, signal?: AbortSignal) =>
+  getReceivablesPayables: (params: { side: AccountingBalanceSide; search?: string; status?: string; dateFrom?: string; dateTo?: string; page?: number; pageSize?: number; includeSummary?: boolean }, signal?: AbortSignal) =>
     api.get<AccountingBalanceListResponse>('/accounting/receivables-payables', { params, signal }),
   getReceivablePayableDetails: (side: AccountingBalanceSide, documentType: string, documentId: string, signal?: AbortSignal) =>
     api.get<AccountingBalanceDetails>(`/accounting/receivables-payables/${side}/${documentType}/${encodeURIComponent(documentId)}`, { signal }),

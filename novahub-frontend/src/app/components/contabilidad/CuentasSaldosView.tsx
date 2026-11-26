@@ -1,5 +1,5 @@
 import { useEffect, useState, type ReactNode } from 'react';
-import { CalendarDays, ChevronLeft, ChevronRight, CircleDollarSign, FileText, RefreshCw, Search, UserRound } from 'lucide-react';
+import { BadgeCheck, CalendarDays, ChevronLeft, ChevronRight, CircleDollarSign, Clock3, FileText, RefreshCw, Search, UserRound } from 'lucide-react';
 import { useAuth } from '../../contexts/AuthContext';
 import { useTenantQuery } from '../../hooks/useTenantQuery';
 import { contabilidadService, type AccountingBalanceDetails, type AccountingBalanceDocument, type AccountingBalanceSide } from '../../services/contabilidad.service';
@@ -10,6 +10,7 @@ import { Input } from '../ui/input';
 import { Sheet, SheetContent, SheetDescription, SheetHeader, SheetTitle } from '../ui/sheet';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '../ui/table';
 import { cn } from '../ui/utils';
+import { SalesKpiCard } from '../ventas/SalesKpiCard';
 
 const PAGE_SIZE = 25;
 const money = (amount: unknown, currency = 'NIO') => {
@@ -46,13 +47,15 @@ export function CuentasSaldosView({ side }: { side: AccountingBalanceSide }) {
 
   const query = useTenantQuery(
     ['accounting-balances', side, debouncedSearch, status, dateFrom, dateTo, page],
-    (signal) => contabilidadService.getReceivablesPayables({ side, search: debouncedSearch || undefined, status: status || undefined, dateFrom: dateFrom || undefined, dateTo: dateTo || undefined, page, pageSize: PAGE_SIZE }, signal),
+    (signal) => contabilidadService.getReceivablesPayables({ side, search: debouncedSearch || undefined, status: status || undefined, dateFrom: dateFrom || undefined, dateTo: dateTo || undefined, page, pageSize: PAGE_SIZE, includeSummary: true }, signal),
     { enabled: canPerform(permission, 'view') },
   );
   const response = query.data;
   const rows = response?.data || [];
   const totalRows = response?.meta.total || 0;
   const totalPages = response?.meta.totalPages || 1;
+  const summary = response?.summary;
+  const pendingBalanceByCurrency = summary?.pendingBalanceByCurrency || [];
   const details = useTenantQuery<AccountingBalanceDetails>(
     ['accounting-balance-detail', selected?.side, selected?.documentType, selected?.sourceId],
     (signal) => contabilidadService.getReceivablePayableDetails(selected!.side, selected!.documentType, selected!.sourceId, signal),
@@ -71,6 +74,20 @@ export function CuentasSaldosView({ side }: { side: AccountingBalanceSide }) {
         </div>
         <Badge variant="outline" className="w-fit shrink-0">{totalRows.toLocaleString('es-NI')} documento(s) {status === 'PENDING' ? 'pendientes' : status === 'PAID' ? 'pagados' : 'en total'}</Badge>
       </div>
+
+      <section className="min-w-0 space-y-2" aria-label={`Indicadores de ${title.toLowerCase()}`} aria-busy={query.isLoading}>
+        <p className="text-xs text-muted-foreground">Resumen del período y búsqueda seleccionados; el estado solo filtra la lista.</p>
+        <div className="grid min-w-0 grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-4">
+          <SalesKpiCard title="Documentos" value={summary ? summary.total.toLocaleString('es-NI') : '—'} icon={FileText} />
+          <SalesKpiCard title={side === 'RECEIVABLES' ? 'Por cobrar' : 'Por pagar'} value={summary ? summary.pending.toLocaleString('es-NI') : '—'} icon={Clock3} />
+          <SalesKpiCard title="Pagados" value={summary ? summary.paid.toLocaleString('es-NI') : '—'} icon={BadgeCheck} />
+          <SalesKpiCard
+            title="Saldo pendiente"
+            value={pendingBalanceByCurrency.length ? <span className="block text-base leading-tight">{pendingBalanceByCurrency.map((entry) => <span key={entry.currency} className="block">{money(entry.amount, entry.currency)}</span>)}</span> : summary ? 'Sin saldo' : '—'}
+            icon={CircleDollarSign}
+          />
+        </div>
+      </section>
 
       <Card className="min-w-0 rounded-2xl border-border/60 shadow-sm">
         <CardContent className="grid min-w-0 grid-cols-1 gap-3 p-4 sm:grid-cols-2 xl:grid-cols-[minmax(220px,1.5fr)_minmax(150px,.8fr)_minmax(150px,.8fr)_minmax(150px,.8fr)_auto] xl:items-end">
