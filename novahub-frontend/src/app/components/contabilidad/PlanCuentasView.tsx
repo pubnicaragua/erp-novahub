@@ -750,6 +750,7 @@ export function PlanCuentasView({ isSidebarCollapsed = true, helpTrigger }: Plan
             isSelected && 'bg-muted ring-1 ring-border',
             !account.isActive && 'opacity-60'
           )}
+          data-account-tree-layout="card"
           style={{ paddingLeft: `${Math.min(account.level * 12 + 8, 32)}px` }}
           onClick={() => selectAccount(account)}
         >
@@ -774,13 +775,13 @@ export function PlanCuentasView({ isSidebarCollapsed = true, helpTrigger }: Plan
             <p className={cn('mt-0.5 whitespace-normal break-words text-sm font-medium', !account.isActive && 'line-through')} title={account.name}>
               {account.name}
             </p>
-            <p className="mt-1 truncate text-[10px] text-muted-foreground">
+            <p className="mt-1 whitespace-normal break-words text-[10px] leading-relaxed text-muted-foreground">
               {getSubtypeLabel(account.subtype)} · {getDetailTypeLabel(account.detailType)} · {account.currency}
             </p>
           </div>
 
           <div className="flex shrink-0 flex-col items-end gap-1">
-            <span className="max-w-[96px] truncate text-right text-xs font-semibold tabular-nums">
+            <span className="max-w-[min(100%,14rem)] break-words text-right text-xs font-semibold tabular-nums">
               {formatConvertedAmount(account.balance, baseCurrency)}
             </span>
             <Badge variant={account.isActive ? 'default' : 'secondary'} className="px-1.5 py-0 text-[9px]">
@@ -816,6 +817,7 @@ export function PlanCuentasView({ isSidebarCollapsed = true, helpTrigger }: Plan
             isSelected && 'bg-muted ring-1 ring-border',
             !account.isActive && 'opacity-60'
           )}
+          data-account-tree-layout="desktop"
           style={{ gridTemplateColumns: accountGridColumns }}
           onClick={() => selectAccount(account)}
         >
@@ -1065,7 +1067,7 @@ export function PlanCuentasView({ isSidebarCollapsed = true, helpTrigger }: Plan
       <div className="grid min-w-0 grid-cols-1 gap-6">
         {/* Tree Table */}
         <div className="min-w-0">
-          <Card>
+          <Card className="accounting-chart-tree">
             <CardHeader className="py-3 px-4">
               <div className="flex flex-wrap items-center justify-between gap-2">
                 <div className="flex items-center gap-2">
@@ -1111,10 +1113,10 @@ export function PlanCuentasView({ isSidebarCollapsed = true, helpTrigger }: Plan
                   )}
                 </div>
               ) : (
-                <div className="max-h-[600px] overflow-auto">
-                  <div className="min-w-0 sm:min-w-[720px] divide-y divide-border">
+                <div data-account-tree-scroll="true" className="max-h-[600px] overflow-auto">
+                  <div data-account-tree-list="true" className="min-w-0 sm:min-w-[720px] divide-y divide-border">
                     {/* Header row */}
-                    <div className="sticky top-0 z-20 hidden min-w-0 items-center gap-0 border-b border-border/60 bg-card/95 px-3 py-2 text-[10px] font-black uppercase tracking-widest text-muted-foreground backdrop-blur sm:grid" style={{ gridTemplateColumns: accountGridColumns }}>
+                    <div data-account-tree-header="true" className="sticky top-0 z-20 hidden min-w-0 items-center gap-0 border-b border-border/60 bg-card/95 px-3 py-2 text-[10px] font-black uppercase tracking-widest text-muted-foreground backdrop-blur sm:grid" style={{ gridTemplateColumns: accountGridColumns }}>
                       <span className="px-2" aria-hidden="true" />
                       {ACCOUNT_COLUMN_DEFS.filter((column) => effectiveColumnKeys.includes(column.key)).map((column) => (
                         <span key={column.key} className={cn('min-w-0 truncate px-2', (column.key === 'balance' || PERIOD_COLUMN_KEYS.includes(column.key)) && 'text-right', (column.key === 'manual' || column.key === 'currency' || column.key === 'status') && 'text-center')}>

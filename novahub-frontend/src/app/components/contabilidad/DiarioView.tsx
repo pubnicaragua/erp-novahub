@@ -859,7 +859,7 @@ export function DiarioView() {
       <div className="min-w-0">
 
       {/* Journal List */}
-      <Card>
+      <Card className="accounting-journal-list">
         <CardContent className="p-0">
           {loading ? (
             <div className="flex items-center justify-center py-16">
@@ -873,7 +873,7 @@ export function DiarioView() {
             </div>
           ) : (
             <>
-              <div className="hidden max-h-[600px] overflow-y-auto xl:block">
+              <div data-accounting-journal-layout="table" className="hidden max-h-[600px] overflow-y-auto xl:block">
                 <div className="min-w-0 divide-y divide-border/60">
                 <div className="hidden min-w-0 items-center gap-0 bg-muted/30 px-3 py-2 text-[10px] font-black uppercase tracking-widest text-muted-foreground/60 sm:grid" style={{ gridTemplateColumns: journalGridCols }}>
                   <span className="px-1">#</span>
@@ -910,7 +910,7 @@ export function DiarioView() {
                 })}
                 </div>
               </div>
-              <div className="max-h-[600px] space-y-3 overflow-y-auto p-3 xl:hidden">
+              <div data-accounting-journal-layout="cards" className="max-h-[600px] space-y-3 overflow-y-auto p-3 xl:hidden">
                 {journals.map((j) => {
                   const totalDeb = j.lines?.reduce((s, l) => s + Number(l.debit), 0) || 0;
                   const totalCred = j.lines?.reduce((s, l) => s + Number(l.credit), 0) || 0;
@@ -929,7 +929,7 @@ export function DiarioView() {
                               {journalStatusLabel(j.status)}
                             </Badge>
                           </div>
-                          <p className="mt-1.5 truncate text-sm font-bold" title={accountingDescriptionLabel(j.description)}>{accountingDescriptionLabel(j.description)}</p>
+                          <p className="mt-1.5 whitespace-normal break-words text-sm font-bold" title={accountingDescriptionLabel(j.description)}>{accountingDescriptionLabel(j.description)}</p>
                           <p className="mt-1 text-[10px] font-medium uppercase tracking-wider text-muted-foreground">
                             {formatAccountingDate(j.date)}
                           </p>
@@ -949,8 +949,8 @@ export function DiarioView() {
                       </div>
 
                       <div className="mt-3 flex min-w-0 flex-wrap gap-x-3 gap-y-1 border-t border-border/50 pt-2 text-[10px] text-muted-foreground">
-                        {referenceType && <span className="truncate"><strong className="text-foreground/80">Ref.:</strong> {referenceTypeLabel(referenceType)}</span>}
-                        {j.referenceId && <span className="truncate font-mono"><strong className="font-sans text-foreground/80">Referencia:</strong> {referenceDisplay(j)}</span>}
+                        {referenceType && <span className="max-w-full break-words"><strong className="text-foreground/80">Ref.:</strong> {referenceTypeLabel(referenceType)}</span>}
+                        {j.referenceId && <span className="min-w-0 max-w-full break-words font-mono"><strong className="font-sans text-foreground/80">Referencia:</strong> {referenceDisplay(j)}</span>}
                         {!referenceType && !j.referenceId && <span>Sin referencia asociada</span>}
                       </div>
                     </div>
@@ -1024,7 +1024,7 @@ export function DiarioView() {
                     </div>
                     <div className="min-w-0 space-y-1">
                       <p className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground">Referencia</p>
-                      <p className="truncate font-mono text-xs font-bold" title={viewJournal.referenceNumber || 'Sin número de documento'}>{referenceDisplay(viewJournal)}</p>
+                      <p className="break-words font-mono text-xs font-bold" title={viewJournal.referenceNumber || 'Sin número de documento'}>{referenceDisplay(viewJournal)}</p>
                     </div>
                     <div className="min-w-0 space-y-1">
                       <p className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground">Asientos</p>

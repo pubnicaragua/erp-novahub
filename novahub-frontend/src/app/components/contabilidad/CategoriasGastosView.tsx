@@ -171,7 +171,7 @@ export function CategoriasGastosView() {
 
       <Card className="overflow-hidden rounded-2xl border-border/50 shadow-sm">
         <CardContent className="p-0">
-          <div className="hidden overflow-x-auto md:block">
+          <div data-accounting-layout="table" className="hidden overflow-x-auto md:block">
           <table className="w-full text-sm">
             <thead>
               <tr className="border-b border-border/40 bg-muted/20">
@@ -223,7 +223,7 @@ export function CategoriasGastosView() {
             </tbody>
           </table>
           </div>
-          <div className="space-y-2 p-3 md:hidden">
+          <div data-accounting-layout="cards" className="space-y-2 p-3 md:hidden">
             {filtered.length === 0 ? <p className="py-8 text-center text-sm text-muted-foreground">Sin categorías</p> : filtered.map(cat => (
               <div key={cat.id} className="min-w-0 rounded-xl border border-border/30 bg-muted/20 p-3">
                 <div className="flex min-w-0 items-start justify-between gap-3"><div className="min-w-0"><p className="text-[10px] font-mono font-bold text-muted-foreground">{cat.code}</p><p className="break-words text-xs font-semibold">{cat.name}</p><p className="mt-1 break-words text-[10px] font-mono text-muted-foreground">{cat.account?.code} - {cat.account?.name}</p></div><Badge className="shrink-0 text-[9px]">{cat.isActive ? 'Activo' : 'Inactivo'}</Badge></div>

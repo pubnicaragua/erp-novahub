@@ -2304,7 +2304,7 @@ const [mappingsSearch, setMappingsSearch] = useState('')
                   <X className="size-3.5" />
                 </button>
               </div>
-              <div className="relative hidden max-h-60 overflow-auto sm:block">
+              <div data-accounting-layout="table" className="relative hidden max-h-60 overflow-auto sm:block">
                 <table className="w-full min-w-[560px] text-[11px]">
                   <thead className="sticky top-0 z-10 bg-card/95 backdrop-blur">
                     <tr className="border-b border-border/20">
@@ -2328,7 +2328,7 @@ const [mappingsSearch, setMappingsSearch] = useState('')
                   </tbody>
                 </table>
               </div>
-              <div className="space-y-2 p-2 sm:hidden">
+              <div data-accounting-layout="cards" className="space-y-2 p-2 sm:hidden">
                 {previewAccounts.map((acc, i) => (
                   <div key={i} className="rounded-lg border border-border/50 bg-card/60 p-2.5">
                     <div className="flex min-w-0 items-start justify-between gap-2">
@@ -2375,7 +2375,7 @@ const [mappingsSearch, setMappingsSearch] = useState('')
             </Badge>
           </div>
           <div className="rounded-xl border border-border/30">
-            <div className="relative hidden max-h-[28rem] overflow-auto sm:block">
+            <div data-accounting-layout="table" className="relative hidden max-h-[28rem] overflow-auto sm:block">
             <table className="w-full min-w-[680px] text-[11px]">
               <thead className="sticky top-0 z-10 bg-card/95 backdrop-blur">
                 <tr className="border-b border-border/20">
@@ -2411,7 +2411,7 @@ const [mappingsSearch, setMappingsSearch] = useState('')
               </tbody>
             </table>
             </div>
-            <div className="space-y-2 p-2 sm:hidden">
+            <div data-accounting-layout="cards" className="space-y-2 p-2 sm:hidden">
               {allAccounts.length === 0 ? (
                 <p className="py-8 text-center text-xs text-muted-foreground">No hay cuentas contables</p>
               ) : paginatedAccounts.map(acc => (

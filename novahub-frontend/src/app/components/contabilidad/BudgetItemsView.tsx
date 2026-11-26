@@ -179,7 +179,7 @@ export function BudgetItemsView() {
 
       <Card className="overflow-hidden rounded-2xl border-border/50 shadow-sm">
         <CardContent className="p-0">
-          <div className="hidden overflow-x-auto md:block">
+          <div data-accounting-layout="table" className="hidden overflow-x-auto md:block">
           <table className="w-full text-sm">
             <thead>
               <tr className="border-b border-border/40 bg-muted/20">
@@ -246,7 +246,7 @@ export function BudgetItemsView() {
             </tbody>
           </table>
           </div>
-          <div className="space-y-2 p-3 md:hidden">
+          <div data-accounting-layout="cards" className="space-y-2 p-3 md:hidden">
             {filtered.length === 0 ? <p className="py-8 text-center text-sm text-muted-foreground">Sin partidas presupuestarias</p> : filtered.map(item => {
               const assigned = Number(item.assignedAmount); const executed = Number(item.executedAmount); const available = Number(item.availableAmount ?? assigned - executed);
               const pct = assigned > 0 ? Math.min(100, (executed / assigned) * 100) : 0;

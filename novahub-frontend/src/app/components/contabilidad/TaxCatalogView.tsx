@@ -216,7 +216,7 @@ export function TaxCatalogView() {
           <div className="flex items-center justify-center py-8"><Loader2 className="size-5 animate-spin text-muted-foreground" /></div>
         ) : (
           <div className="space-y-2">
-          <div className="hidden overflow-x-auto md:block">
+          <div data-accounting-layout="table" className="hidden overflow-x-auto md:block">
             <table className="w-full text-xs">
               <thead>
                 <tr className="border-b text-muted-foreground">
@@ -301,7 +301,7 @@ export function TaxCatalogView() {
               </tbody>
             </table>
           </div>
-          <div className="space-y-2 md:hidden">
+          <div data-accounting-layout="cards" className="space-y-2 md:hidden">
             {entries.length === 0 ? <p className="py-8 text-center text-xs text-muted-foreground">Sin entradas.</p> : entries.map(entry => (
               <div key={entry.id} className="min-w-0 rounded-xl border border-border/30 bg-muted/20 p-3">
                 <div className="flex min-w-0 items-start justify-between gap-3"><div className="min-w-0"><p className="break-words text-xs font-bold">{entry.name}</p><p className="mt-1 break-all text-[10px] font-mono text-muted-foreground">{entry.code}</p></div><Badge variant={entry.type === 'TAX' ? 'default' : 'secondary'} className="shrink-0 text-[9px]">{entry.type === 'TAX' ? 'Impuesto' : 'Retención'}</Badge></div>
