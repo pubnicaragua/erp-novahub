@@ -22,6 +22,8 @@ import { ExportMenu } from '../ui/ExportMenu';
 import type { PdfDownloadFormat } from '../../utils/pdfDownloadFormats';
 import { formatDateOnly, todayIso } from '../../utils/dateFormat';
 import { normalizeSearchText } from '../../utils/searchText';
+import { AccountOrderControls } from './AccountOrderControls';
+import { accountOrderDropProps, useAccountingAccountOrder } from './useAccountingAccountOrder';
 
 const BALANCE_SHEET_SECTIONS: ReportSection[] = [
   { id: 'activos-corrientes', label: 'Activos corrientes', sign: 'ASSET', accountIds: [] },
@@ -76,6 +78,7 @@ interface BSData {
 
 export function BalanceGeneralView() {
   const { canPerform, user } = useAuth();
+  const accountOrder = useAccountingAccountOrder('balance-sheet');
   const today = todayIso(user?.clientTenant?.timeZone);
   const canExportBalanceSheet = canPerform('ACCOUNTING_BALANCE_SHEET', 'export') || canPerform('ACCOUNTING_BALANCE_SHEET', 'view');
   const { baseCurrency, displayCurrency, displayMode, convertCurrentAmount, formatCurrentAmount } = useCurrency();
@@ -242,8 +245,23 @@ export function BalanceGeneralView() {
     toast.success(format === 'novahub-format' ? `PDF exportado con NovaHubFormat (${rows.length} cuentas)` : `PDF exportado con ${rows.length} cuenta(s)`);
   };
 
-  const renderSection = (title: string, accounts: BSAccount[], total: number, openingTotal: number | undefined, headerClass: string) => {
-    const visibleAccounts = filterAccounts(accounts);
+  const renderSection = (sectionId: string, title: string, accounts: BSAccount[], total: number, openingTotal: number | undefined, headerClass: string) => {
+    const sectionKey = `section:${sectionId}`;
+    const orderedAccounts = accountOrder.sort(sectionKey, accounts, (account) => account.accountId);
+    const visibleAccounts = filterAccounts(orderedAccounts);
+    const accountIds = orderedAccounts.map((account) => account.accountId);
+    const canReorder = !searchTerm.trim();
+    const orderControls = (account: BSAccount) => canReorder ? (
+      <AccountOrderControls
+        accountId={account.accountId}
+        accountName={account.cuenta}
+        accountIds={accountIds}
+        onMoveIndex={(from, to) => accountOrder.moveToIndex(sectionKey, accountIds, from, to)}
+      />
+    ) : null;
+    const dropProps = (accountId: string) => canReorder
+      ? accountOrderDropProps(accountId, (sourceId, targetId) => accountOrder.moveBefore(sectionKey, accountIds, sourceId, targetId))
+      : {};
     return (
     <div className="mb-6">
       <div className={cn("px-4 py-2 rounded-t-lg font-black text-sm uppercase tracking-widest text-white", headerClass)}>
@@ -270,9 +288,11 @@ export function BalanceGeneralView() {
             const canExpand = Boolean(acc.accountId);
             const isExpanded = expandedAccountId === acc.accountId;
             return [
-            <TableRow key={acc.accountId || i} className="hover:bg-muted/30 border-border/30">
+            <TableRow key={acc.accountId || i} {...dropProps(acc.accountId)} className="hover:bg-muted/30 border-border/30">
               <TableCell className="font-mono text-xs">{acc.codigo}</TableCell>
               <TableCell className="font-medium">
+                <div className="flex min-w-0 items-center gap-1">
+                {orderControls(acc)}
                 {canExpand ? (
                   <button
                     type="button"
@@ -286,6 +306,7 @@ export function BalanceGeneralView() {
                 ) : (
                   <span className="break-words">{acc.cuenta}</span>
                 )}
+                </div>
               </TableCell>
               {showOpening && (
                 <TableCell className="text-right font-mono text-sm text-muted-foreground">
@@ -333,8 +354,10 @@ export function BalanceGeneralView() {
           const canExpand = Boolean(acc.accountId);
           const isExpanded = expandedAccountId === acc.accountId;
           return (
-          <div key={acc.accountId || i} className="rounded-xl border border-border/60 bg-card/60 p-3 shadow-sm">
+          <div key={acc.accountId || i} {...dropProps(acc.accountId)} className="rounded-xl border border-border/60 bg-card/60 p-3 shadow-sm">
             <div className="flex min-w-0 items-start justify-between gap-3">
+              <div className="flex min-w-0 items-start gap-1">
+              {orderControls(acc)}
               {canExpand ? (
                 <button
                   type="button"
@@ -345,15 +368,16 @@ export function BalanceGeneralView() {
                   {isExpanded ? <ChevronUp className="mt-0.5 size-3.5 shrink-0 text-primary" /> : <ChevronDown className="mt-0.5 size-3.5 shrink-0 text-muted-foreground" />}
                   <div className="min-w-0">
                     <p className="font-mono text-[10px] text-muted-foreground">{acc.codigo}</p>
-                    <p className="mt-0.5 truncate text-sm font-bold" title={acc.cuenta}>{acc.cuenta}</p>
+                    <p className="mt-0.5 whitespace-normal break-words text-sm font-bold" title={acc.cuenta}>{acc.cuenta}</p>
                   </div>
                 </button>
               ) : (
                 <div className="min-w-0">
                   <p className="font-mono text-[10px] text-muted-foreground">{acc.codigo}</p>
-                  <p className="mt-0.5 truncate text-sm font-bold" title={acc.cuenta}>{acc.cuenta}</p>
+                  <p className="mt-0.5 whitespace-normal break-words text-sm font-bold" title={acc.cuenta}>{acc.cuenta}</p>
                 </div>
               )}
+              </div>
               <div className="shrink-0 text-right">
                 {showOpening && acc.openingAmount != null && (
                   <p className="text-[10px] text-muted-foreground">Inicial: {fmt(acc.openingAmount)}</p>
@@ -495,17 +519,17 @@ export function BalanceGeneralView() {
                 <>
                   {data.sections.map((section) => (
                     <div key={section.id} className="mb-6">
-                      {renderSection(section.label, section.accounts, section.total, section.openingTotal, SIGN_HEADER_CLASSES[section.sign] || 'bg-slate-600')}
+                      {renderSection(section.id, section.label, section.accounts, section.total, section.openingTotal, SIGN_HEADER_CLASSES[section.sign] || 'bg-slate-600')}
                     </div>
                   ))}
                 </>
               ) : (
                 <>
-                  {renderSection('ACTIVOS', data.assets, data.totalAssets, openingActivos, 'bg-blue-600')}
+                  {renderSection('assets', 'ACTIVOS', data.assets, data.totalAssets, openingActivos, 'bg-blue-600')}
                   <Separator className="my-4" />
-                  {renderSection('PASIVOS', data.liabilities, data.totalLiabilities, openingPasivos, 'bg-amber-600')}
+                  {renderSection('liabilities', 'PASIVOS', data.liabilities, data.totalLiabilities, openingPasivos, 'bg-amber-600')}
                   <Separator className="my-4" />
-                  {renderSection('PATRIMONIO', data.equity, data.totalEquity, openingPatrimonio, 'bg-purple-600')}
+                  {renderSection('equity', 'PATRIMONIO', data.equity, data.totalEquity, openingPatrimonio, 'bg-purple-600')}
                   <Separator className="my-4" />
                 </>
               )}

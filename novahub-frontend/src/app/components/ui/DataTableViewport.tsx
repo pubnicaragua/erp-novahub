@@ -3,6 +3,7 @@ import {
   cloneElement,
   isValidElement,
   useCallback,
+  useContext,
   useEffect,
   useMemo,
   useRef,
@@ -15,7 +16,7 @@ import {
 } from 'react';
 import { ChevronLeft, ChevronRight } from 'lucide-react';
 import { Button } from './button';
-import { Table, TableHeader, TableHead, TableRow, TableViewportContext } from './table';
+import { Table, TableHeader, TableHead, TableRow, TableNavigationContext, TableViewportContext } from './table';
 import { cn } from './utils';
 
 export interface DataTableViewportProps {
@@ -59,6 +60,7 @@ export function DataTableViewport({
   allowPageScrollAtEdges = true,
 }: DataTableViewportProps) {
   const internalScrollRef = useRef<HTMLDivElement>(null);
+  const navigationOverride = useContext(TableNavigationContext);
   const scrollRef = externalScrollRef || internalScrollRef;
   const pointerInside = useRef(false);
   const scrollStateFrameRef = useRef<number | null>(null);
@@ -208,7 +210,7 @@ export function DataTableViewport({
       onMouseEnter={() => { pointerInside.current = true; }}
       onMouseLeave={() => { pointerInside.current = false; }}
     >
-      {showHorizontalControls && (
+      {showHorizontalControls && navigationOverride !== false && (
         <div className={cn('flex items-center justify-between gap-3 border-b border-border/40 bg-muted/10 px-3', compact ? 'py-1' : 'py-2')}>
           <span className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground/60">{label}</span>
           <div className="flex items-center gap-1">

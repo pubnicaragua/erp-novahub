@@ -5,7 +5,7 @@ import { Input } from '../ui/input';
 import { Button } from '../ui/button';
 import { Separator } from '../ui/separator';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '../ui/table';
-import { Search, Filter, X, TrendingUp, TrendingDown, ChevronDown, ChevronUp, BarChart3, Settings2, Download } from 'lucide-react';
+import { Search, Filter, X, TrendingUp, TrendingDown, ChevronDown, ChevronUp, BarChart3, Settings2 } from 'lucide-react';
 import { cn } from '../ui/utils';
 import { contabilidadService } from '../../services/contabilidad.service';
 import { toast } from '@/app/services/toast';
@@ -21,6 +21,8 @@ import { ExportMenu } from '../ui/ExportMenu';
 import type { PdfDownloadFormat } from '../../utils/pdfDownloadFormats';
 import { addCivilDays, formatDateOnly, todayIso } from '../../utils/dateFormat';
 import { normalizeSearchText } from '../../utils/searchText';
+import { AccountOrderControls } from './AccountOrderControls';
+import { accountOrderDropProps, useAccountingAccountOrder } from './useAccountingAccountOrder';
 
 interface PnLAccount {
   accountId: string;
@@ -49,6 +51,7 @@ interface PnLData {
 
 export function EstadoResultadosView() {
   const { canPerform, user } = useAuth();
+  const accountOrder = useAccountingAccountOrder('profit-loss');
   const timeZone = user?.clientTenant?.timeZone;
   const canExportProfitLoss = canPerform('ACCOUNTING_PROFIT_LOSS', 'export');
   const { baseCurrency, displayCurrency, displayMode, convertCurrentAmount, formatCurrentAmount } = useCurrency();
@@ -190,7 +193,17 @@ export function EstadoResultadosView() {
   };
 
   const renderSection = (title: string, accounts: PnLAccount[], total: number, color: string, tipo: 'INCOME' | 'EXPENSE') => {
-    const visibleAccounts = filterAccounts(accounts);
+    const sectionKey = `type:${tipo}`;
+    const orderedAccounts = accountOrder.sort(sectionKey, accounts, (account) => account.accountId);
+    const visibleAccounts = filterAccounts(orderedAccounts);
+    const accountIds = orderedAccounts.map((account) => account.accountId);
+    const canReorder = !searchTerm.trim();
+    const orderControls = (account: PnLAccount) => canReorder ? (
+      <AccountOrderControls accountId={account.accountId} accountName={account.cuenta} accountIds={accountIds} onMoveIndex={(from, to) => accountOrder.moveToIndex(sectionKey, accountIds, from, to)} />
+    ) : null;
+    const dropProps = (accountId: string) => canReorder
+      ? accountOrderDropProps(accountId, (sourceId, targetId) => accountOrder.moveBefore(sectionKey, accountIds, sourceId, targetId))
+      : {};
     return (    <div className="mb-6">
       <div className={cn("px-4 py-2 rounded-t-lg font-black text-sm uppercase tracking-widest text-white", color)}>
         {title}
@@ -213,9 +226,11 @@ export function EstadoResultadosView() {
             const isExpanded = expandedAccountId === acc.accountId;
             const indent = Math.min(4, (acc.level || 1) - 1);
             return [
-              <TableRow key={acc.accountId || i} className={cn("border-border/30 hover:bg-muted/30", acc.isGroup && "bg-muted/20 font-semibold")}>
+              <TableRow key={acc.accountId || i} {...dropProps(acc.accountId)} className={cn("border-border/30 hover:bg-muted/30", acc.isGroup && "bg-muted/20 font-semibold")}>
                 <TableCell className="font-mono text-xs">{acc.codigo}</TableCell>
                 <TableCell className="font-medium text-xs">
+                  <div className="flex min-w-0 items-center gap-1">
+                  {orderControls(acc)}
                   <button
                     type="button"
                     onClick={() => toggleAccount(acc)}
@@ -228,6 +243,7 @@ export function EstadoResultadosView() {
                     ) : isExpanded ? <ChevronUp className="size-3.5 shrink-0 text-primary" /> : <ChevronDown className="size-3.5 shrink-0 text-muted-foreground" />}
                     <span className={cn("break-words", acc.isGroup && "text-sm font-bold")}>{acc.cuenta}</span>
                   </button>
+                  </div>
                 </TableCell>
                 <TableCell className={cn("text-right font-mono text-sm font-bold", acc.currentAmount >= 0 ? "text-emerald-600" : "text-red-600", acc.isGroup && "text-base")}>
                   {fmt(acc.currentAmount)}
@@ -266,24 +282,29 @@ export function EstadoResultadosView() {
           const isExpanded = expandedAccountId === acc.accountId;
           const indent = Math.min(4, (acc.level || 1) - 1);
           return (
-            <div key={acc.accountId || i} className={cn("rounded-xl border border-border/60 bg-card/60 shadow-sm", acc.isGroup && "bg-muted/30 border-primary/20")}>
-              <button
-                type="button"
-                onClick={() => toggleAccount(acc)}
-                aria-expanded={isExpanded}
-                className="flex w-full min-w-0 items-start justify-between gap-3 p-3 text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40"
-              >
+            <div key={acc.accountId || i} {...dropProps(acc.accountId)} className={cn("rounded-xl border border-border/60 bg-card/60 shadow-sm", acc.isGroup && "bg-muted/30 border-primary/20")}>
+              <div className="flex w-full min-w-0 items-start justify-between gap-3 p-3 text-left">
+                <div className="flex min-w-0 items-start gap-1">
+                  {orderControls(acc)}
+                  <button
+                    type="button"
+                    onClick={() => toggleAccount(acc)}
+                    aria-expanded={isExpanded}
+                    className="flex min-w-0 items-start gap-2 text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40"
+                  >
                 <div className="flex min-w-0 items-start gap-2" style={{ paddingLeft: `${acc.isGroup ? 0 : indent * 10}px` }}>
                   {acc.isGroup ? <ChevronDown className="mt-0.5 size-3.5 shrink-0 text-primary" /> : isExpanded ? <ChevronUp className="mt-0.5 size-3.5 shrink-0 text-primary" /> : <ChevronDown className="mt-0.5 size-3.5 shrink-0 text-muted-foreground" />}
                   <div className="min-w-0">
                   <p className="font-mono text-[10px] text-muted-foreground">{acc.codigo}</p>
-                  <p className={cn("mt-0.5 truncate text-sm", acc.isGroup ? "font-black" : "font-bold")} title={acc.cuenta}>{acc.cuenta}</p>
+                  <p className={cn("mt-0.5 whitespace-normal break-words text-sm", acc.isGroup ? "font-black" : "font-bold")} title={acc.cuenta}>{acc.cuenta}</p>
                   </div>
+                </div>
+                  </button>
                 </div>
                 <span className={cn("shrink-0 text-right font-mono text-sm font-black", acc.currentAmount >= 0 ? "text-emerald-600" : "text-red-600")}>
                   {fmt(acc.currentAmount)}
                 </span>
-              </button>
+              </div>
               {!acc.isGroup && isExpanded && (
                 <AccountMovementsDetail
                   accountId={acc.accountId}

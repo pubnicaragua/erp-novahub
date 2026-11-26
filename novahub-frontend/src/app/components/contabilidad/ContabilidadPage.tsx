@@ -395,7 +395,7 @@ export function ContabilidadPage({ activeSubModule, onSubModuleChange, isSidebar
 
           <div className="flex min-w-0 flex-col gap-6 lg:flex-row">
             <div className="flex-1 min-w-0">
-              <TableNavigationProvider>
+              <TableNavigationProvider showControls={['plan-cuentas', 'diario', 'libro-mayor'].includes(activeSection)}>
                 <AnimatePresence mode="wait">
                   <motion.div
                     key={activeSection}

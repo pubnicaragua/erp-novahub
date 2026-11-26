@@ -2990,7 +2990,11 @@ main.module-notificaciones:has([data-message-scroll-layout="contained"]) {
 
 @container accounting-content (max-width: 959px) {
   .accounting-module-content :where(.grid) {
-    grid-template-columns: repeat(2, minmax(0, 1fr));
+    grid-template-columns: repeat(auto-fit, minmax(min(100%, 20rem), 1fr));
+  }
+
+  .accounting-module-content :where(.grid > :only-child) {
+    grid-column: 1 / -1;
   }
 
   .accounting-module-content :where(.grid > [class*="col-span-"]) {
@@ -3068,6 +3072,13 @@ main.module-notificaciones:has([data-message-scroll-layout="contained"]) {
 .accounting-module-content [data-accounting-metrics="true"] > * {
   min-width: 0;
   text-align: left !important;
+}
+
+.accounting-module-content :where([data-accounting-date="true"], [data-slot="table-cell"][data-label*="Fecha" i]) {
+  white-space: nowrap !important;
+  word-break: normal !important;
+  overflow-wrap: normal !important;
+  font-variant-numeric: tabular-nums;
 }
 
 .accounting-module-content :where(.accounting-keep-inline) {
@@ -3169,7 +3180,7 @@ main.module-notificaciones:has([data-message-scroll-layout="contained"]) {
 
   .accounting-module-content table[data-responsive-cards="true"] > tbody > tr {
     display: grid !important;
-    grid-template-columns: repeat(2, minmax(0, 1fr));
+    grid-template-columns: minmax(0, 1fr);
     width: 100% !important;
     min-width: 0 !important;
     margin: 0 !important;

@@ -8,7 +8,6 @@ import { Separator } from '../ui/separator';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '../ui/table';
 import {
   Search,
-  Download,
   Filter,
   X,
   ChevronDown,
@@ -36,6 +35,8 @@ import type { PdfDownloadFormat } from '../../utils/pdfDownloadFormats';
 import { todayIso } from '../../utils/dateFormat';
 import { useCurrency } from '../../contexts/CurrencyContext';
 import { getCurrencyDecimalPlaces } from '../../utils/currency';
+import { AccountOrderControls } from './AccountOrderControls';
+import { accountOrderDropProps, useAccountingAccountOrder } from './useAccountingAccountOrder';
 
 const ACCOUNT_TYPE_LABELS: Record<string, string> = {
   ASSET: 'ACTIVOS',
@@ -326,6 +327,7 @@ function buildTrialBalanceTree(
 
 export function BalanceComprobacionView() {
   const { user, canPerform } = useAuth();
+  const accountOrder = useAccountingAccountOrder('trial-balance');
   const { baseCurrency, displayCurrency, displayMode, convertCurrentAmount } = useCurrency();
   const reportCurrency = displayMode === 'ORIGINAL' ? baseCurrency : displayCurrency;
   const toReportAmount = (amount: number) => displayMode === 'ORIGINAL' ? Number(amount || 0) : convertCurrentAmount(Number(amount || 0), baseCurrency);
@@ -383,6 +385,31 @@ export function BalanceComprobacionView() {
   const treeData = useMemo(() => query.data || { tree: [], leafAccounts: [] }, [query.data]);
   const loading = query.isLoading || query.isFetching;
 
+  const orderedTree = useMemo(() => {
+    const sortChildren = (nodes: TrialBalanceTreeNode[], parentKey: string): TrialBalanceTreeNode[] =>
+      accountOrder.sort(parentKey, nodes, (node) => node.id).map((node) => ({
+        ...node,
+        children: sortChildren(node.children, `parent:${node.id}`),
+      }));
+    return sortChildren(treeData.tree, 'unscoped-roots');
+  }, [accountOrder, treeData.tree]);
+
+  const siblingOrderById = useMemo(() => {
+    const orders = new Map<string, { sectionKey: string; ids: string[] }>();
+    const visit = (nodes: TrialBalanceTreeNode[], sectionKey: string) => {
+      const ids = nodes.map((node) => node.id);
+      for (const node of nodes) {
+        orders.set(node.id, { sectionKey, ids });
+        visit(node.children, `parent:${node.id}`);
+      }
+    };
+    for (const type of ACCOUNT_TYPE_ORDER) {
+      const roots = accountOrder.sort(`root:${type}`, orderedTree.filter((node) => node.tipo === type), (node) => node.id);
+      visit(roots, `root:${type}`);
+    }
+    return orders;
+  }, [accountOrder, orderedTree]);
+
   useEffect(() => {
     if (query.error) toast.error(query.error.message || 'Error al cargar balance de comprobación');
   }, [query.error]);
@@ -390,7 +417,7 @@ export function BalanceComprobacionView() {
   // Filtro de búsqueda que mantiene las cuentas y sus subárboles coincidentes
   const filteredTree = useMemo(() => {
     if (!searchTerm.trim()) {
-      return treeData.tree;
+      return orderedTree;
     }
     const q = normalizeSearchText(searchTerm);
 
@@ -410,8 +437,8 @@ export function BalanceComprobacionView() {
       return res;
     };
 
-    return filterNodes(treeData.tree);
-  }, [treeData.tree, searchTerm]);
+    return filterNodes(orderedTree);
+  }, [orderedTree, searchTerm]);
 
   const toggleNodeExpansion = (id: string) => {
     setExpandedNodeIds((prev) => {
@@ -468,7 +495,7 @@ export function BalanceComprobacionView() {
 
   const grouped = useMemo(() => {
     return ACCOUNT_TYPE_ORDER.map((type) => {
-      const typeRoots = filteredTree.filter((r) => r.tipo === type);
+      const typeRoots = accountOrder.sort(`root:${type}`, filteredTree.filter((r) => r.tipo === type), (node) => node.id);
       const visibleRows = getVisibleRowsForType(typeRoots, expandedNodeIds);
 
       let leafCount = 0;
@@ -488,7 +515,7 @@ export function BalanceComprobacionView() {
         leafCount,
       };
     }).filter((g) => g.roots.length > 0);
-  }, [filteredTree, expandedNodeIds]);
+  }, [accountOrder, filteredTree, expandedNodeIds]);
 
   // Totales globales: calculados estrictamente sobre las cuentas hoja para evitar doble conteo
   const totalDebitos = useMemo(() => {
@@ -787,10 +814,23 @@ export function BalanceComprobacionView() {
                     const isMovementExpanded = expandedAccountId === row.id;
                     const isNodeExpanded = expandedNodeIds.has(row.id);
                     const isParent = !row.isLeaf;
+                    const siblingOrder = siblingOrderById.get(row.id);
+                    const orderControls = siblingOrder && !searchTerm.trim() ? (
+                      <AccountOrderControls
+                        accountId={row.id}
+                        accountName={row.cuenta}
+                        accountIds={siblingOrder.ids}
+                        onMoveIndex={(from, to) => accountOrder.moveToIndex(siblingOrder.sectionKey, siblingOrder.ids, from, to)}
+                      />
+                    ) : null;
+                    const dropProps = siblingOrder && !searchTerm.trim()
+                      ? accountOrderDropProps(row.id, (sourceId, targetId) => accountOrder.moveBefore(siblingOrder.sectionKey, siblingOrder.ids, sourceId, targetId))
+                      : {};
 
                     return [
                       <TableRow
                         key={`row-${row.id}`}
+                        {...dropProps}
                         className={cn(
                           "border-border/30 hover:bg-muted/30 transition-colors",
                           isParent && "bg-muted/15 font-semibold text-foreground"
@@ -801,9 +841,10 @@ export function BalanceComprobacionView() {
                         </TableCell>
                         <TableCell className="text-xs">
                           <div
-                            className="flex items-center gap-1.5"
+                            className="flex min-w-0 items-center gap-1.5"
                             style={{ paddingLeft: `${row.level * 1.5}rem` }}
                           >
+                            {orderControls}
                             {isParent ? (
                               <button
                                 type="button"
@@ -830,7 +871,7 @@ export function BalanceComprobacionView() {
                                 onClick={() => toggleNodeExpansion(row.id)}
                                 className="text-left font-bold hover:text-primary focus-visible:outline-none transition-colors"
                               >
-                                <span className="break-words">{row.cuenta}</span>
+                                <span className="whitespace-normal break-words">{row.cuenta}</span>
                                 <span className="ml-2 text-[10px] font-normal text-muted-foreground">
                                   ({row.children.length} {row.children.length === 1 ? 'subcuenta' : 'subcuentas'})
                                 </span>
@@ -848,7 +889,7 @@ export function BalanceComprobacionView() {
                                 ) : (
                                   <ChevronDown className="size-3 shrink-0 text-muted-foreground/60" />
                                 )}
-                                <span className="break-words">{row.cuenta}</span>
+                                <span className="whitespace-normal break-words">{row.cuenta}</span>
                               </button>
                             )}
                           </div>
@@ -907,10 +948,23 @@ export function BalanceComprobacionView() {
                   const isMovementExpanded = expandedAccountId === row.id;
                   const isNodeExpanded = expandedNodeIds.has(row.id);
                   const isParent = !row.isLeaf;
+                  const siblingOrder = siblingOrderById.get(row.id);
+                  const orderControls = siblingOrder && !searchTerm.trim() ? (
+                    <AccountOrderControls
+                      accountId={row.id}
+                      accountName={row.cuenta}
+                      accountIds={siblingOrder.ids}
+                      onMoveIndex={(from, to) => accountOrder.moveToIndex(siblingOrder.sectionKey, siblingOrder.ids, from, to)}
+                    />
+                  ) : null;
+                  const dropProps = siblingOrder && !searchTerm.trim()
+                    ? accountOrderDropProps(row.id, (sourceId, targetId) => accountOrder.moveBefore(siblingOrder.sectionKey, siblingOrder.ids, sourceId, targetId))
+                    : {};
 
                   return (
                     <div
                       key={`m-${row.id}`}
+                      {...dropProps}
                       style={{ marginLeft: `${Math.min(row.level * 12, 36)}px` }}
                       className={cn(
                         "rounded-xl border border-border/60 bg-card/60 shadow-sm transition-all",
@@ -918,11 +972,13 @@ export function BalanceComprobacionView() {
                       )}
                     >
                       <div className="flex w-full min-w-0 items-start justify-between gap-2 p-3 text-left">
-                        <button
-                          type="button"
-                          onClick={() => isParent ? toggleNodeExpansion(row.id) : toggleAccountMovements(row.id)}
-                          className="flex min-w-0 flex-1 items-start gap-2 text-left focus-visible:outline-none"
-                        >
+                        <div className="flex min-w-0 flex-1 items-start gap-1">
+                          {orderControls}
+                          <button
+                            type="button"
+                            onClick={() => isParent ? toggleNodeExpansion(row.id) : toggleAccountMovements(row.id)}
+                            className="flex min-w-0 flex-1 items-start gap-2 text-left focus-visible:outline-none"
+                          >
                           {isParent ? (
                             isNodeExpanded ? <ChevronDown className="mt-0.5 size-4 shrink-0 text-primary" /> : <ChevronRight className="mt-0.5 size-4 shrink-0 text-muted-foreground" />
                           ) : (
@@ -941,7 +997,8 @@ export function BalanceComprobacionView() {
                               {row.cuenta}
                             </p>
                           </div>
-                        </button>
+                          </button>
+                        </div>
                         <Badge variant={isParent ? "secondary" : "outline"} className="shrink-0 text-[9px] font-bold uppercase tracking-wider">
                           {accountTypeLabel(row.tipo)}
                         </Badge>

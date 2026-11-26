@@ -1065,10 +1065,10 @@ export function PlanCuentasView({ isSidebarCollapsed = true, helpTrigger }: Plan
       </div>
 
       {/* Main Content */}
-      <div className="grid min-w-0 grid-cols-1 gap-6">
+      <div className="grid min-w-0 w-full grid-cols-1 gap-6">
         {/* Tree Table */}
-        <div className="min-w-0">
-          <Card className="accounting-chart-tree">
+        <div className="min-w-0 w-full">
+          <Card className="accounting-chart-tree w-full">
             <CardHeader className="py-3 px-4">
               <div className="flex flex-wrap items-center justify-between gap-2">
                 <div className="flex items-center gap-2">

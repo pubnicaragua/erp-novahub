@@ -12,10 +12,10 @@ import { getCopyTextFromNode, normalizeCopyText } from "../../utils/table-copy";
 /** Lo provee DataTableViewport: dentro de él las flechas de desplazamiento ya existen y no se duplican. */
 export const TableViewportContext = React.createContext(false);
 /** Permite que un módulo muestre navegación de columnas de forma consistente en todas sus tablas. */
-export const TableNavigationContext = React.createContext(false);
+export const TableNavigationContext = React.createContext<boolean | null>(null);
 
-export function TableNavigationProvider({ children }: { children: React.ReactNode }) {
-  return <TableNavigationContext.Provider value>{children}</TableNavigationContext.Provider>;
+export function TableNavigationProvider({ children, showControls = true }: { children: React.ReactNode; showControls?: boolean }) {
+  return <TableNavigationContext.Provider value={showControls}>{children}</TableNavigationContext.Provider>;
 }
 
 /**
@@ -156,10 +156,10 @@ type TableProps = React.ComponentProps<"table"> & {
 
 function Table({ className, containerClassName, containerStyle, responsiveCards = true, viewport = false, copyableCells = true, ...props }: TableProps) {
   const insideViewport = React.useContext(TableViewportContext);
-  const alwaysShowNavigation = React.useContext(TableNavigationContext);
+  const navigationOverride = React.useContext(TableNavigationContext);
   const containerRef = React.useRef<HTMLDivElement>(null);
   const scrollState = useHorizontalOverflow(containerRef);
-  const showControls = !insideViewport && (alwaysShowNavigation || scrollState.overflow);
+  const showControls = !insideViewport && navigationOverride !== false && (navigationOverride === true || scrollState.overflow);
   const scrollBy = (direction: "left" | "right") => {
     const element = containerRef.current;
     if (!element) return;

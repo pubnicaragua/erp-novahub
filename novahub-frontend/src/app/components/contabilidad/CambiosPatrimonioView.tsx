@@ -13,6 +13,8 @@ import { addCivilDays, formatDateOnly, todayIso } from '../../utils/dateFormat';
 import { useAuth } from '../../contexts/AuthContext';
 import { getCurrencyDecimalPlaces } from '../../utils/currency';
 import { normalizeSearchText } from '../../utils/searchText';
+import { AccountOrderControls } from './AccountOrderControls';
+import { accountOrderDropProps, useAccountingAccountOrder } from './useAccountingAccountOrder';
 
 interface EquityRow {
   accountId: string;
@@ -47,6 +49,7 @@ function formatCurrency(n: number): string {
 
 export function CambiosPatrimonioView() {
   const { user } = useAuth();
+  const accountOrder = useAccountingAccountOrder('equity-changes');
   const timeZone = user?.clientTenant?.timeZone;
   // Por defecto se muestran los últimos 30 días: sin seleccionar fechas la
   // vista ya trae información.
@@ -104,14 +107,33 @@ export function CambiosPatrimonioView() {
   const filteredRows = useMemo(() => {
     if (!data) return [];
     const term = normalizeSearchText(searchTerm);
-    if (!term) return data.rows;
-    return data.rows.filter(r =>
+    const filtered = !term ? data.rows : data.rows.filter(r =>
       normalizeSearchText(r.accountName).includes(term) || normalizeSearchText(r.accountCode).includes(term),
     );
-  }, [data, searchTerm]);
+    if (!data.components?.length) return accountOrder.sort('component:all', filtered, (row) => row.accountId);
+    const ordered = data.components.flatMap((component) => {
+      const sectionRows = filtered.filter((row) => (row.component || 'OTROS') === component.key);
+      return accountOrder.sort(`component:${component.key}`, sectionRows, (row) => row.accountId);
+    });
+    const assigned = new Set(data.components.flatMap((component) => filtered.filter((row) => (row.component || 'OTROS') === component.key).map((row) => row.accountId)));
+    return [...ordered, ...accountOrder.sort('component:unassigned', filtered.filter((row) => !assigned.has(row.accountId)), (row) => row.accountId)];
+  }, [accountOrder, data, searchTerm]);
 
   const filteredTotalOpening = filteredRows.reduce((s, r) => s + r.openingBalance, 0);
   const filteredTotalClosing = filteredRows.reduce((s, r) => s + r.closingBalance, 0);
+  const orderSectionFor = (row: EquityRow) => data?.components?.length ? `component:${row.component || 'OTROS'}` : 'component:all';
+  const orderControlsFor = (row: EquityRow) => {
+    if (searchTerm.trim()) return null;
+    const sectionKey = orderSectionFor(row);
+    const ids = (data?.rows || []).filter((candidate) => orderSectionFor(candidate) === orderSectionFor(row)).map((candidate) => candidate.accountId);
+    return <AccountOrderControls accountId={row.accountId} accountName={row.accountName} accountIds={ids} onMoveIndex={(from, to) => accountOrder.moveToIndex(sectionKey, ids, from, to)} />;
+  };
+  const dropPropsFor = (row: EquityRow) => {
+    if (searchTerm.trim()) return {};
+    const sectionKey = orderSectionFor(row);
+    const ids = (data?.rows || []).filter((candidate) => orderSectionFor(candidate) === orderSectionFor(row)).map((candidate) => candidate.accountId);
+    return accountOrderDropProps(row.accountId, (sourceId, targetId) => accountOrder.moveBefore(sectionKey, ids, sourceId, targetId));
+  };
 
   return (
     <div className="min-w-0 space-y-6">
@@ -280,9 +302,9 @@ export function CambiosPatrimonioView() {
                             </TableCell>
                           </TableRow>
                           {compRows.map((row, i) => (
-                            <TableRow key={row.accountId || `${component.key}-${i}`} className="hover:bg-muted/30 border-border/30">
+                            <TableRow key={row.accountId || `${component.key}-${i}`} {...dropPropsFor(row)} className="hover:bg-muted/30 border-border/30">
                               <TableCell className="font-mono text-xs pl-6 text-muted-foreground">{row.accountCode || '—'}</TableCell>
-                              <TableCell className="font-medium text-xs pl-6">{row.accountName}</TableCell>
+                              <TableCell className="font-medium text-xs pl-6"><div className="flex min-w-0 items-center gap-1">{orderControlsFor(row)}<span className="whitespace-normal break-words">{row.accountName}</span></div></TableCell>
                               <TableCell className={cn("text-right font-mono text-xs", row.openingBalance >= 0 ? "text-muted-foreground" : "text-red-600")}>
                                 {formatCurrency(row.openingBalance)}
                               </TableCell>
@@ -299,9 +321,9 @@ export function CambiosPatrimonioView() {
                     })
                   ) : (
                     filteredRows.map((row, i) => (
-                      <TableRow key={row.accountId || i} className="hover:bg-muted/30 border-border/30">
+                      <TableRow key={row.accountId || i} {...dropPropsFor(row)} className="hover:bg-muted/30 border-border/30">
                         <TableCell className="font-mono text-xs">{row.accountCode || '—'}</TableCell>
-                        <TableCell className="font-medium text-xs">{row.accountName}</TableCell>
+                        <TableCell className="font-medium text-xs"><div className="flex min-w-0 items-center gap-1">{orderControlsFor(row)}<span className="whitespace-normal break-words">{row.accountName}</span></div></TableCell>
                         <TableCell className={cn("text-right font-mono text-xs", row.openingBalance >= 0 ? "text-muted-foreground" : "text-red-600")}>
                           {formatCurrency(row.openingBalance)}
                         </TableCell>
@@ -333,11 +355,14 @@ export function CambiosPatrimonioView() {
             </div>
             <div data-accounting-layout="cards" className="space-y-2 p-3 md:hidden">
               {filteredRows.map((row, i) => (
-                <div key={row.accountId || i} className="rounded-xl border border-border/60 bg-card/60 p-3 shadow-sm">
+                <div key={row.accountId || i} {...dropPropsFor(row)} className="rounded-xl border border-border/60 bg-card/60 p-3 shadow-sm">
                   <div className="flex min-w-0 items-start justify-between gap-3">
-                    <div className="min-w-0">
+                    <div className="flex min-w-0 items-start gap-1">
+                      {orderControlsFor(row)}
+                      <div className="min-w-0">
                       <p className="font-mono text-[10px] text-muted-foreground">{row.accountCode}</p>
-                      <p className="mt-0.5 truncate text-sm font-bold" title={row.accountName}>{row.accountName}</p>
+                      <p className="mt-0.5 whitespace-normal break-words text-sm font-bold" title={row.accountName}>{row.accountName}</p>
+                      </div>
                     </div>
                     <span className={cn("shrink-0 text-right font-mono text-sm font-black", row.closingBalance >= 0 ? "text-emerald-600" : "text-red-600")}>
                       {formatCurrency(row.closingBalance)}
