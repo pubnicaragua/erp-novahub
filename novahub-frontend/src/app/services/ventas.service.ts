@@ -284,6 +284,10 @@ export const estimatesService = {
   cancel: (id: string, reason: string) => api.idempotentPatch<Estimate>(`/sales/estimates/${id}/cancel`, { reason }),
   delete: (id: string) => api.delete<void>(`/sales/estimates/${id}`),
   convertToOrder: (id: string, data?: { sellerEmployeeId?: string | null }) => api.post<SalesOrder>(`/sales/estimates/${id}/convert-to-order`, data || {}),
+  convertToInvoice: (id: string, data?: { accountId?: string; sellerEmployeeId?: string | null }, idempotencyKey?: string) =>
+    api.idempotentPost<any>(`/sales/estimates/${id}/convert-to-invoice`, data || {}, idempotencyKey),
+  convertToCash: (id: string, data?: { accountId?: string; sellerEmployeeId?: string | null }, idempotencyKey?: string) =>
+    api.idempotentPost<any>(`/sales/estimates/${id}/convert-to-cash`, data || {}, idempotencyKey),
 };
 
 // ---- Sales Orders ----
@@ -298,6 +302,8 @@ export const salesOrdersService = {
   confirm: (id: string) => api.patch<SalesOrder>(`/sales/orders/${id}/confirm`, {}),
   convertToInvoice: (id: string, data?: Pick<SalesOrder, 'accountId' | 'sellerEmployeeId'>, idempotencyKey?: string) =>
     api.idempotentPost<Invoice>(`/sales/orders/${id}/convert-to-invoice`, data || {}, idempotencyKey),
+  convertToCash: (id: string, data?: Pick<SalesOrder, 'accountId' | 'sellerEmployeeId'>, idempotencyKey?: string) =>
+    api.idempotentPost<any>(`/sales/orders/${id}/convert-to-cash`, data || {}, idempotencyKey),
 };
 
 // ---- Invoices ----
@@ -417,6 +423,7 @@ export const creditNotesService = {
   getById: (id: string, signal?: AbortSignal) => api.get<CreditNote>(`/sales/credit-notes/${id}`, signal ? { signal } : undefined),
   create: (data: Partial<CreditNote>, idempotencyKey?: string) => api.idempotentPost<CreditNote>('/sales/credit-notes', data, idempotencyKey),
   update: (id: string, data: Partial<CreditNote>) => api.patch<CreditNote>(`/sales/credit-notes/${id}`, data),
+  approve: (id: string, idempotencyKey?: string) => api.idempotentPatch<CreditNote>(`/sales/credit-notes/${id}/approve`, {}, idempotencyKey),
   issue: (id: string, idempotencyKey?: string) => api.idempotentPatch<CreditNote>(`/sales/credit-notes/${id}/issue`, {}, idempotencyKey),
   sendToCash: (id: string, data?: { notes?: string }) => api.post<any>(`/sales/credit-notes/${id}/send-to-cash`, data || {}),
   apply: (id: string, data: any, idempotencyKey?: string) => api.idempotentPatch<CreditNote>(`/sales/credit-notes/${id}/apply`, data, idempotencyKey),
@@ -432,6 +439,9 @@ export const customerLoansService = {
   getConfig: (signal?: AbortSignal) => api.get<{ enabled: boolean }>('/sales/customer-loans/config', signal ? { signal } : undefined),
   getAll: (filters?: ApiFilters, signal?: AbortSignal) => api.get<PaginatedResponse<any> & { summary?: { totalContracts: number; activeContracts: number; outstandingByCurrency: Array<{ currency: string; amount: number }>; overdueByCurrency: Array<{ currency: string; amount: number }> } }>('/sales/customer-loans', { params: filters as any, signal }),
   getById: (id: string, signal?: AbortSignal) => api.get<any>(`/sales/customer-loans/${id}`, signal ? { signal } : undefined),
+  approve: (id: string) => api.patch<any>(`/sales/customer-loans/${id}/approve`, {}),
+  disburse: (id: string) => api.patch<any>(`/sales/customer-loans/${id}/disburse`, {}),
+  cancel: (id: string) => api.patch<any>(`/sales/customer-loans/${id}/cancel`, {}),
   applyPayment: (id: string, data: Record<string, unknown>, idempotencyKey?: string) =>
     api.idempotentPost<any>(`/sales/customer-loans/${id}/payments`, data, idempotencyKey),
 };

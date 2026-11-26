@@ -216,7 +216,9 @@ async function printPosTicket(invoice: PosInvoice, cart: CartItem[], payments: P
     const paidDisplay = payments.reduce((sum, payment) => sum + Number(payment.amount || 0), 0);
     const paidLocal = paidDisplay * safeRate;
     const changeLocal = Math.max(0, paidLocal - Number(invoice.total));
-    const paymentSummary = payments.map(payment => `${paymentLabel(payment.method)} ${payment.currency === 'USD' ? '$' : 'C$'} ${formatSalesAmount(Number(payment.amount || 0))}`).join(' · ');
+    const paymentSummary = payments.length
+      ? payments.map(payment => `${paymentLabel(payment.method)} ${payment.currency === 'USD' ? '$' : 'C$'} ${formatSalesAmount(Number(payment.amount || 0))}`).join(' · ')
+      : 'Saldo a crédito';
     const itemRows = cart.map(item => {
       return {
         description: item.description,
@@ -540,6 +542,8 @@ export function FacturacionCajaView({ onNavigateToControlCaja, branchId, employe
   const [showAvailabilityAction, setShowAvailabilityAction] = useState<boolean>(getInitialShowAvailability);
   const [showPayment, setShowPayment] = useState(false);
   const [mixedPaymentEnabled, setMixedPaymentEnabled] = useState(false);
+  const [posCreditEnabled, setPosCreditEnabled] = useState(false);
+  const [posCreditDueDate, setPosCreditDueDate] = useState('');
   const [paymentCurrency, setPaymentCurrency] = useState<PaymentCurrency>(displayCurrency);
   const [activeSession, setActiveSession] = useState<CashRegisterSession | null>(null);
   const [payments, setPayments] = useState<PosPaymentLine[]>([{ method: 'CASH', amount: 0, currency: displayCurrency, exchangeRate: displayCurrency === baseCurrency ? 1 : globalRate }]);
@@ -918,7 +922,7 @@ export function FacturacionCajaView({ onNavigateToControlCaja, branchId, employe
         discountAmount: Number(document.discountAmount || 0),
         total: Number(document.total || 0),
         balance: Math.max(0, Number(document.balance || 0) - Number(convertBetweenCurrencies(Math.min(paidBase, totalBase), baseCurrency, document.currency, 1, Number(document.exchangeRate || 1)))),
-        status: paidBase + 0.005 >= totalBase ? 'PAID' : 'PARTIAL',
+        status: paidBase + 0.005 >= totalBase ? 'PAID' : 'CREDIT',
         register: queueReceipt.register ? { ...queueReceipt.register } as CashRegister : undefined,
       } as PosInvoice;
       const receiptCart: CartItem[] = (document.items || []).map((item) => ({
@@ -1957,6 +1961,8 @@ export function FacturacionCajaView({ onNavigateToControlCaja, branchId, employe
     }
     setPayments([paymentLine('CASH')]);
     setMixedPaymentEnabled(false);
+    setPosCreditEnabled(false);
+    setPosCreditDueDate(new Date(Date.now() + 30 * 86400000).toISOString().slice(0, 10));
     setPaymentCurrency(displayCurrency);
     setCreatedInvoice(null);
     setCreatedTicketCart([...cart]);
@@ -1990,6 +1996,21 @@ export function FacturacionCajaView({ onNavigateToControlCaja, branchId, employe
       convertBetweenCurrencies,
       getCurrentPaymentBase,
     );
+    const sendBalanceToCredit = Boolean(posCreditEnabled && !holdCreateDto);
+    const customerForCredit = selectedCustomerId ? customers.find((customer) => customer.id === selectedCustomerId) : null;
+    const remainingCreditBase = roundPaymentAmount(Math.max(0, totalBase - receivedBase));
+    if (sendBalanceToCredit && !selectedCustomerId) {
+      toast.error('Selecciona un cliente antes de enviar el saldo a crédito.');
+      return;
+    }
+    if (sendBalanceToCredit && remainingCreditBase > Number(customerForCredit?.availableCredit || 0) + 0.01) {
+      toast.error(`El saldo a crédito supera el límite disponible del cliente (${formatCurrency(Number(customerForCredit?.availableCredit || 0), baseCurrency)}).`);
+      return;
+    }
+    if (sendBalanceToCredit && remainingCreditBase > 0.01 && (!posCreditDueDate || Number.isNaN(new Date(`${posCreditDueDate}T12:00:00`).getTime()))) {
+      toast.error('Selecciona una fecha válida para el vencimiento del saldo a crédito.');
+      return;
+    }
     const changeBase = Math.max(0, receivedBase - totalBase);
     if (changeBase > 0.005 && !cashCoversPaymentChange(payments, totalBase, (payment) => getPaymentLineBase(payment, paymentCurrency), 0.005)) {
       toast.error('No se puede dar vuelto de una tarjeta, transferencia o banco. El excedente debe cubrirse con efectivo.');
@@ -2007,7 +2028,7 @@ export function FacturacionCajaView({ onNavigateToControlCaja, branchId, employe
       toast.error('Selecciona un cliente para aplicar su saldo a favor.');
       return;
     }
-    if (receivedBase < totalBase) {
+    if (receivedBase < totalBase && !sendBalanceToCredit) {
       toast.error('El monto recibido debe ser igual o mayor al total');
       return;
     }
@@ -2048,7 +2069,9 @@ export function FacturacionCajaView({ onNavigateToControlCaja, branchId, employe
         includeTax,
         currency: paymentCurrency,
         exchangeRate: documentRate,
-        payments: payments.map((payment) => ({ ...payment, bankAccountId: (salesAccountingRequired || salesFinanceEnabled) ? payment.bankAccountId : undefined, cardCommissionPercent: !salesAccountingRequired && isCardPaymentMethod(payment.method) ? payment.cardCommissionPercent : undefined })),
+        payments: payments.filter((payment) => Number(payment.amount || 0) > 0).map((payment) => ({ ...payment, bankAccountId: (salesAccountingRequired || salesFinanceEnabled) ? payment.bankAccountId : undefined, cardCommissionPercent: !salesAccountingRequired && isCardPaymentMethod(payment.method) ? payment.cardCommissionPercent : undefined })),
+        allowPartialPayment: sendBalanceToCredit,
+        dueDate: sendBalanceToCredit && remainingCreditBase > 0.01 ? new Date(`${posCreditDueDate}T12:00:00`).toISOString() : undefined,
         ...(confirmedDuplicate && duplicateMatches.length > 0
           ? { duplicateConfirmation: { candidateIds: duplicateMatches.map((match) => match.id) } }
           : {}),
@@ -2079,14 +2102,18 @@ export function FacturacionCajaView({ onNavigateToControlCaja, branchId, employe
         queryClient.invalidateQueries({ queryKey: ['accounting'] }),
       ]);
 
-      toast.success('Factura emitida exitosamente', { id: submitToastId });
+      const createdBalance = Number(created.balance || 0);
+      toast.success(createdBalance > 0.01
+        ? `Factura emitida a crédito. Saldo: ${formatCurrency(createdBalance, created.currency, created.exchangeRate)}`
+        : 'Factura emitida exitosamente', { id: submitToastId });
       setCreatedInvoice(created);
-      setCreatedPaymentLines([...payments]);
+      setCreatedPaymentLines(payments.filter((payment) => Number(payment.amount || 0) > 0));
       setCreatedExchangeRate(Number(activeSession.exchangeRateUSD));
       setCreatedPaymentCurrency(paymentCurrency);
       setCreatedOperationLabel('Factura emitida correctamente');
       setShowPayment(false);
       setMixedPaymentEnabled(false);
+      setPosCreditEnabled(false);
       setDuplicateMatches([]);
       checkoutIdempotencyKey.current = null;
 
@@ -3311,6 +3338,7 @@ export function FacturacionCajaView({ onNavigateToControlCaja, branchId, employe
                       <span className="font-mono font-bold">{(payment.currency || paymentCurrency) === 'USD' ? '$' : 'C$'} {formatSalesAmount(payment.amount)}</span>
                     </div>
                   ))}
+                  {createdPaymentLines.length === 0 && <p className="text-sm font-bold text-amber-600 dark:text-amber-400">Sin abono inicial · Saldo a crédito</p>}
                 </div>
               </div>
               <div className="rounded-2xl border border-primary/20 bg-primary/10 p-4">
@@ -3319,6 +3347,7 @@ export function FacturacionCajaView({ onNavigateToControlCaja, branchId, employe
                 {Number(createdInvoice.discountAmount) > 0 && <p className="mt-1 text-[11px] text-rose-600">Descuento: - {formatCurrency(Number(createdInvoice.discountAmount))}</p>}
                 <p className="mt-1 text-[11px] text-muted-foreground">IVA: {formatCurrency(Number(createdInvoice.taxAmount))}</p>
                 <p className="mt-1 text-[11px] text-muted-foreground">Recibido (base): C$ {formatSalesAmount(createdPaymentLines.reduce((sum, payment) => sum + Number(payment.amount || 0) * ((payment.currency || createdPaymentCurrency) === 'USD' ? createdExchangeRate : 1), 0))}</p>
+                {Number(createdInvoice.balance || 0) > 0.01 && <p className="mt-1 text-[11px] font-bold text-amber-600 dark:text-amber-400">A crédito: {formatCurrency(Number(createdInvoice.balance), createdInvoice.currency, createdInvoice.exchangeRate)}</p>}
                 <p className="text-[11px] font-bold text-emerald-600">Cambio: C$ {formatSalesAmount(Math.max(0, createdPaymentLines.reduce((sum, payment) => sum + Number(payment.amount || 0) * ((payment.currency || createdPaymentCurrency) === 'USD' ? createdExchangeRate : 1), 0) - Number(createdInvoice.total) * (createdPaymentCurrency === 'USD' ? createdExchangeRate : 1)))}</p>
               </div>
             </div>
@@ -3438,6 +3467,41 @@ export function FacturacionCajaView({ onNavigateToControlCaja, branchId, employe
                     </div>
                   </div>
                   {changeUnsupported && <p className="mb-4 rounded-xl border border-rose-500/20 bg-rose-500/5 p-3 text-[10px] font-bold text-rose-600 dark:text-rose-400">No se puede dar vuelto de una tarjeta, transferencia o banco. Reduce esos montos o agrega suficiente efectivo para cubrir el excedente.</p>}
+
+                  {!holdCreateDto && canPayPos && (() => {
+                    const creditCustomer = selectedCustomerId ? customers.find((customer) => customer.id === selectedCustomerId) : null;
+                    const availableCredit = Number(creditCustomer?.availableCredit || 0);
+                    return (
+                      <div className="mb-3 space-y-3 rounded-xl border border-primary/20 bg-primary/[0.04] p-3">
+                        <div className="flex flex-wrap items-center justify-between gap-3">
+                          <div className="min-w-0">
+                            <p className="text-[10px] font-black uppercase tracking-widest text-foreground">Enviar saldo a crédito</p>
+                            <p className="mt-1 text-[10px] text-muted-foreground">El cliente debe tener límite disponible. Se puede dejar un abono inicial o financiar toda la factura.</p>
+                          </div>
+                          <label className="flex shrink-0 cursor-pointer items-center gap-2 text-xs font-bold">
+                            <Switch
+                              checked={posCreditEnabled}
+                              onCheckedChange={setPosCreditEnabled}
+                              disabled={submitting || !selectedCustomerId || pendingBase <= 0.01 || availableCredit <= 0}
+                              aria-label="Enviar saldo pendiente a crédito"
+                            />
+                            Crédito
+                          </label>
+                        </div>
+                        <div className="flex flex-wrap items-center justify-between gap-2 text-[11px]">
+                          <span className="text-muted-foreground">{creditCustomer ? `Límite disponible de ${creditCustomer.name}` : 'Selecciona un cliente en la venta para consultar su límite'}</span>
+                          {creditCustomer && <span className={cn('font-black', availableCredit > 0 ? 'text-emerald-600 dark:text-emerald-400' : 'text-rose-600')}>{formatCurrency(availableCredit, baseCurrency)}</span>}
+                        </div>
+                        {posCreditEnabled && <div className="grid min-w-0 gap-2 sm:grid-cols-2">
+                          <div className="space-y-1">
+                            <Label htmlFor="pos-credit-due-date" className="text-[10px] font-bold">Vencimiento del saldo</Label>
+                            <Input id="pos-credit-due-date" type="date" value={posCreditDueDate} min={emitDate} onChange={(event) => setPosCreditDueDate(event.target.value)} disabled={submitting} />
+                          </div>
+                          <p className="self-end text-[10px] font-semibold text-muted-foreground">Saldo por enviar a crédito: {formatExplicitAmount(pendingDocument, paymentCurrency)}. El servidor vuelve a validar el límite antes de emitir.</p>
+                        </div>}
+                      </div>
+                    );
+                  })()}
 
                    <div className="mb-3 flex items-center justify-between gap-3 rounded-xl border border-border/50 bg-muted/20 px-3 py-2">
                      <div>

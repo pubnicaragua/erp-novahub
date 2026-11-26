@@ -127,10 +127,10 @@ const getInvoiceStatusInfo = (status?: string) => {
   const normalized = String(status || '').toUpperCase();
   const labels: Record<string, string> = {
     DRAFT: 'Borrador',
-    PENDING: 'En proceso',
-    PARTIAL: 'Pago parcial',
+    PENDING: 'Pendiente de cobro',
+    PARTIAL: 'A crédito',
     PAID: 'Pagada',
-    OVERDUE: 'Vencida',
+    OVERDUE: 'A crédito · Atrasada',
     CANCELLED: 'Anulada',
   };
   return { label: labels[normalized] || 'Estado registrado', normalized };
@@ -140,14 +140,14 @@ const getTransactionStatus = (status?: string) => {
   const normalized = String(status || '').toUpperCase();
   const labels: Record<string, string> = {
     DRAFT: 'Borrador',
-    IN_PROCESS: 'En proceso',
+    IN_PROCESS: 'Borrador',
     SENT: 'Enviada',
     APPROVED: 'Aprobada',
     CONFIRMED: 'Confirmada',
     PENDING: 'Pendiente',
-    PARTIAL: 'Pago parcial',
+    PARTIAL: 'A crédito',
     PAID: 'Pagada',
-    OVERDUE: 'Vencida',
+    OVERDUE: 'A crédito · Atrasada',
     ACTIVE: 'Activa',
     PAUSED: 'Pausada',
     PROCESSED: 'Procesada',

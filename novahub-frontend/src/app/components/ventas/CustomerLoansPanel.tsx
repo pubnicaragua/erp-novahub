@@ -361,7 +361,7 @@ export function CustomerLoansPanel({ customerId, customerName, customerOptions =
         ...(form.disbursementSource === 'CASH' ? { cashRegisterSessionId: selectedCashSessionId } : { bankAccountId: form.bankAccountId }),
         notes: form.notes,
       }, key);
-      toast.success('Préstamo creado y desembolsado.');
+      toast.success('Préstamo guardado como borrador. Apruébalo y luego registra el desembolso.');
       setCreateOpen(false);
       resetLoanForm();
       await loadLoans();
@@ -576,7 +576,7 @@ export function CustomerLoansPanel({ customerId, customerName, customerOptions =
             <div className="flex min-w-0 items-center justify-between gap-3 text-sm"><span className="text-muted-foreground">Interés</span><span className="shrink-0 font-semibold tabular-nums">{money(formInterest, form.currency)}</span></div>
             <div className="flex min-w-0 items-center justify-between gap-3 border-t border-border/50 pt-3 text-base"><span className="font-bold">Total del contrato</span><span className="shrink-0 font-black tabular-nums text-primary">{money(roundCurrencyNumber(Number(form.principal || 0) + formInterest), form.currency)}</span></div>
             <div className="rounded-xl border border-border/50 bg-muted/20 p-3 text-xs"><p className="font-semibold text-foreground">{form.planEnabled ? 'Plan de abonos' : 'Pago único'}</p><p className="mt-1 text-muted-foreground">{form.planEnabled ? (form.planCalculationMode === 'MANUAL' ? `${form.manualInstallments.length} abono(s) definidos manualmente` : `${loanFrequencyLabels[form.frequency]} · ${installmentPlanEstimate?.schedule.length || 0} abonos`) : 'Una fecha de vencimiento'}</p></div>
-            <p className="text-[11px] leading-relaxed text-muted-foreground">El desembolso se registrará desde {form.disbursementSource === 'CASH' ? 'Caja' : 'Banco'} y se validará el límite de crédito disponible.</p>
+            <p className="text-[11px] leading-relaxed text-muted-foreground">El origen de desembolso queda preparado. El límite se valida al aprobar y el dinero sale de {form.disbursementSource === 'CASH' ? 'Caja' : 'Banco'} al activar el préstamo.</p>
           </div>
         </Card>
       </div>
@@ -664,11 +664,11 @@ export function CustomerLoansPanel({ customerId, customerName, customerOptions =
         <header className="sales-document-header flex min-w-0 flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
           <div className="flex min-w-0 items-start gap-3 sm:items-center sm:gap-4">
             <Button type="button" variant="ghost" size="icon" aria-label="Volver a préstamos" onClick={() => { setCreateOpen(false); onCreateCancel?.(); }} className="shrink-0 rounded-full"><ChevronLeft className="size-5" /></Button>
-            <div className="min-w-0"><h1 className="nh-module-title">Nuevo Préstamo</h1><p className="text-[10px] font-black uppercase tracking-widest text-muted-foreground/60">Detalle del préstamo y desembolso</p></div>
+            <div className="min-w-0"><h1 className="nh-module-title">Nuevo Préstamo</h1><p className="text-[10px] font-black uppercase tracking-widest text-muted-foreground/60">Guarda el borrador; la aprobación y el desembolso son pasos separados</p></div>
           </div>
           <div className="sales-document-actions flex w-full min-w-0 flex-col gap-2 sm:w-auto sm:flex-row sm:justify-end">
             <Button type="button" variant="outline" className="w-full rounded-xl px-6 sm:w-auto" onClick={() => { setCreateOpen(false); onCreateCancel?.(); }}>Cancelar</Button>
-            <Button type="submit" form="customer-loan-page-form" disabled={loanSubmitDisabled} className="w-full rounded-xl px-6 sm:w-auto">{saving && <Loader2 className="mr-2 size-4 animate-spin" />} Emitir y desembolsar</Button>
+            <Button type="submit" form="customer-loan-page-form" disabled={loanSubmitDisabled} className="w-full rounded-xl px-6 sm:w-auto">{saving && <Loader2 className="mr-2 size-4 animate-spin" />} Guardar borrador</Button>
           </div>
         </header>
         {loanCreatePageForm}
@@ -805,9 +805,9 @@ export function CustomerLoansPanel({ customerId, customerName, customerOptions =
 
       <Dialog open={createOpen && !fullPageCreate} onOpenChange={setCreateOpen}>
         <DialogContent className="max-h-[90dvh] w-[calc(100%-1rem)] max-w-6xl overflow-y-auto rounded-2xl p-4 sm:w-[calc(100%-2rem)] sm:p-6">
-          <DialogHeader><DialogTitle className="flex items-center gap-2"><Banknote className="size-5 text-primary" /> Crear préstamo</DialogTitle><DialogDescription>Se emitirá una factura de servicio por el principal y el interés fijo, y se registrará el desembolso. El sistema valida el límite de crédito disponible.</DialogDescription></DialogHeader>
+          <DialogHeader><DialogTitle className="flex items-center gap-2"><Banknote className="size-5 text-primary" /> Crear préstamo</DialogTitle><DialogDescription>Se guardará como borrador. Después podrás aprobarlo y registrar el desembolso por separado.</DialogDescription></DialogHeader>
           {loanCreateForm}
-          <DialogFooter className="gap-2 sm:justify-end"><Button type="button" variant="outline" onClick={() => setCreateOpen(false)}>Cancelar</Button><Button type="submit" form="customer-loan-form" disabled={loanSubmitDisabled}>{saving && <Loader2 className="mr-2 size-4 animate-spin" />} Emitir y desembolsar</Button></DialogFooter>
+          <DialogFooter className="gap-2 sm:justify-end"><Button type="button" variant="outline" onClick={() => setCreateOpen(false)}>Cancelar</Button><Button type="submit" form="customer-loan-form" disabled={loanSubmitDisabled}>{saving && <Loader2 className="mr-2 size-4 animate-spin" />} Guardar borrador</Button></DialogFooter>
         </DialogContent>
       </Dialog>
 

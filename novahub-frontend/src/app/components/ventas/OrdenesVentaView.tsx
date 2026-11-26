@@ -2,7 +2,7 @@ import { useState, useEffect, useRef, useCallback } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { useLocalStorageState } from '../../hooks/useLocalStorageState';
 import { 
-  Plus, Search, TrendingUp, Clock, ArrowRightCircle, Eye, Ban, ChevronLeft, Trash2, Settings2, Check
+  Plus, Search, TrendingUp, Clock, ArrowRightCircle, Eye, Ban, ChevronLeft, Trash2, Settings2, Check, Inbox
 } from 'lucide-react';
 import { Card, CardContent } from '../ui/card';
 import { Button } from '../ui/button';
@@ -60,6 +60,7 @@ import { TripCostBlock } from '../flota/TripCostBlock';
 import { flotaService, type TripCostInput } from '../../services/flota.service';
 import { initialDocumentExchangeRate } from '../../utils/currency';
 import { roundDecimal } from '../../utils/currency';
+import { cajaService } from '../../services/caja.service';
 
 const paymentMethodOptions = [
   { label: 'Efectivo', value: 'CASH' },
@@ -99,18 +100,17 @@ interface OrdenesVentaViewProps {
 
 const statusOptions = [
   { label: 'Borrador',       value: 'DRAFT',       color: SALES_WORKFLOW_STATUS_COLORS.DRAFT },
-  { label: 'En proceso',     value: 'IN_PROCESS',  color: SALES_WORKFLOW_STATUS_COLORS.IN_PROCESS },
   { label: 'Aprobada',       value: 'APPROVED',    color: SALES_WORKFLOW_STATUS_COLORS.APPROVED },
   { label: 'Cancelada',      value: 'CANCELLED',   color: SALES_WORKFLOW_STATUS_COLORS.CANCELLED },
 ];
 
-export type OrderStatusFilter = 'ALL' | 'DRAFT' | 'IN_PROCESS' | 'APPROVED' | 'CANCELLED';
-type OrderWorkflowStatus = 'DRAFT' | 'IN_PROCESS' | 'APPROVED';
+export type OrderStatusFilter = 'ALL' | 'DRAFT' | 'APPROVED' | 'CANCELLED';
+type OrderWorkflowStatus = 'DRAFT' | 'APPROVED';
 
 const normalizeOrderStatus = (status: unknown) => {
   const normalized = String(status || '').toUpperCase();
   if (normalized === 'CONFIRMED') return 'APPROVED';
-  if (normalized === 'IN_PROGRESS') return 'IN_PROCESS';
+  if (['IN_PROCESS', 'IN_PROGRESS', 'PENDING_REVIEW'].includes(normalized)) return 'DRAFT';
   if (normalized === 'SHIPPED' || normalized === 'DELIVERED') return 'APPROVED';
   return normalized;
 };
@@ -199,6 +199,17 @@ export function OrdenesVentaView({ data, summaryData, summaryLoading, summaryErr
     ? showPriceTypeColumn ? 'sales-quote-line-product-layout--variant-and-price' : 'sales-quote-line-product-layout--variant-only'
     : showPriceTypeColumn ? 'sales-quote-line-product-layout--price-only' : 'sales-quote-line-product-layout--product-only';
   const [invoicingOrderId, setInvoicingOrderId] = useState<string | null>(null);
+  const cashAvailabilityQuery = useQuery({
+    queryKey: ['sales', 'open-cash-availability', user?.clientTenantId || user?.tenantId],
+    queryFn: async () => {
+      const response: any = await cajaService.getRegisters();
+      const registers = Array.isArray(response) ? response : response?.data || [];
+      return registers.some((register: any) => register.hasActiveSession);
+    },
+    enabled: Boolean(user?.clientTenantId || user?.tenantId),
+    staleTime: 30_000,
+  });
+  const hasOpenCash = cashAvailabilityQuery.data === true;
   const savingOrderRef = useRef(false);
   // Remisión de una orden nueva: se captura en el mismo formulario y se guarda junto con la orden (un solo paso).
   const pendingTripRef = useRef<TripCostInput | null>(null);
@@ -255,9 +266,13 @@ export function OrdenesVentaView({ data, summaryData, summaryLoading, summaryErr
     return () => window.clearTimeout(timeout);
   }, [highlightedAlertId]);
 
-  const handleInvoiceOrder = async (order: SalesOrder) => {
+  const handleInvoiceOrder = async (order: SalesOrder, toCash = false) => {
     if (!canPerform('SALES_ORDERS', 'convert')) {
       toast.error('No tienes permiso para convertir órdenes en facturas');
+      return;
+    }
+    if (toCash && !hasOpenCash) {
+      toast.error('Abre una caja en esta sucursal antes de enviar la orden a Caja.');
       return;
     }
     if (invoicingOrderId) return;
@@ -306,15 +321,22 @@ export function OrdenesVentaView({ data, summaryData, summaryLoading, summaryErr
       return;
     }
     setInvoicingOrderId(order.id);
-    const invoiceToastId = toast.loading('Generando factura desde la orden de venta...');
+    const invoiceToastId = toast.loading(toCash ? 'Aprobando la orden y enviándola a Caja...' : 'Generando factura desde la orden de venta...');
     try {
       const currentStatus = normalizeOrderStatus(orderForConversion.status);
-      if (!['IN_PROCESS', 'APPROVED'].includes(currentStatus)) {
-        toast.error('La orden debe estar en proceso o aprobada antes de enviarse a factura', { id: invoiceToastId });
+      if (!['DRAFT', 'APPROVED'].includes(currentStatus)) {
+        toast.error('La orden debe estar en borrador o aprobada antes de enviarse a factura', { id: invoiceToastId });
         return;
       }
-      await onGenerateInvoice({ ...orderForConversion, status: 'APPROVED' as any });
-      toast.success('Factura generada desde la orden de venta', { id: invoiceToastId });
+      if (toCash) {
+        await salesOrdersService.convertToCash(orderForConversion.id, {
+          sellerEmployeeId: orderForConversion.sellerEmployeeId || getLoggedInSellerEmployeeId(user) || null,
+        }, globalThis.crypto?.randomUUID?.());
+        toast.success('Orden aprobada, facturada y enviada a Caja', { id: invoiceToastId });
+      } else {
+        await onGenerateInvoice({ ...orderForConversion, status: 'APPROVED' as any });
+        toast.success('Factura generada desde la orden de venta', { id: invoiceToastId });
+      }
       await onRefresh();
     } catch (error: any) {
       toast.error(error?.response?.data?.message || error?.message || 'No se pudo abrir la factura', { id: invoiceToastId });
@@ -507,11 +529,11 @@ export function OrdenesVentaView({ data, summaryData, summaryLoading, summaryErr
   const isKpiSummaryError = hasColumnValueFilters ? columnFilterSummaryQuery.isError : summaryError;
   const summaryAvailable = hasColumnValueFilters ? fallbackSummaryRows !== undefined : summaryData !== undefined;
   const summaryGroups = summaryData?.groups || [];
+  const summaryTotal = hasColumnValueFilters
+    ? summaryRowsWithoutStatusFilter.length
+    : summaryGroups.reduce((total, group) => total + group.count, 0);
   const selectedSummaryGroups = hasColumnValueFilters ? [] : summaryGroups.filter((group) => statusFilter === 'ALL' || group.status === statusFilter);
   const approvedSummaryGroups = selectedSummaryGroups.filter((group) => group.status === 'APPROVED');
-  const inProcessOrderCount = hasColumnValueFilters
-    ? summaryRowsWithoutStatusFilter.filter((order) => normalizeOrderStatus(order.status) === 'IN_PROCESS').length
-    : summaryGroups.filter((group) => group.status === 'IN_PROCESS').reduce((total, group) => total + group.count, 0);
   const approvedOrderCount = hasColumnValueFilters
     ? summaryRowsWithoutStatusFilter.filter((order) => normalizeOrderStatus(order.status) === 'APPROVED').length
     : summaryGroups.filter((group) => group.status === 'APPROVED').reduce((total, group) => total + group.count, 0);
@@ -571,10 +593,6 @@ export function OrdenesVentaView({ data, summaryData, summaryLoading, summaryErr
     if (!localDoc) return false;
     const currentStatus = normalizeOrderStatus(localDoc.status);
     const isStatusTransition = String(localDoc.id).startsWith('local-') || currentStatus !== normalizeOrderStatus(status);
-    if (status === 'IN_PROCESS' && isStatusTransition && !canPerform('SALES_ORDERS', 'submit')) {
-      toast.error('No tienes permiso para enviar órdenes a proceso');
-      return false;
-    }
     if (status === 'APPROVED' && isStatusTransition && !canPerform('SALES_ORDERS', 'approve')) {
       toast.error('No tienes permiso para aprobar órdenes');
       return false;
@@ -583,7 +601,7 @@ export function OrdenesVentaView({ data, summaryData, summaryLoading, summaryErr
     if (status !== 'DRAFT') {
       const workflowIssues = getOrderWorkflowIssues(localDoc);
       if (workflowIssues.length) {
-        toast.error(`No se puede ${status === 'APPROVED' ? 'aprobar' : 'marcar en proceso'} la orden. Faltan o están incompletos: ${workflowIssues.join('; ')}.`);
+        toast.error(`No se puede aprobar la orden. Faltan o están incompletos: ${workflowIssues.join('; ')}.`);
         return false;
       }
       const priceMessage = getMissingSalesPriceMessage(localDoc.items || []);
@@ -601,7 +619,7 @@ export function OrdenesVentaView({ data, summaryData, summaryLoading, summaryErr
       }
     }
     const saveToastId = toast.loading(
-      status === 'APPROVED' ? 'Aprobando orden de venta...' : status === 'IN_PROCESS' ? 'Marcando orden en proceso...' : 'Guardando orden de venta...',
+      status === 'APPROVED' ? 'Aprobando orden de venta...' : 'Guardando orden de venta...',
     );
     savingOrderRef.current = true;
     try {
@@ -622,7 +640,7 @@ export function OrdenesVentaView({ data, summaryData, summaryLoading, summaryErr
       localDocRef.current = null;
       setEditingId(null);
       toast.success(
-        status === 'APPROVED' ? 'Orden aprobada' : status === 'IN_PROCESS' ? 'Orden marcada en proceso' : 'Orden guardada como borrador',
+        status === 'APPROVED' ? 'Orden aprobada' : 'Orden guardada como borrador',
         { id: saveToastId },
       );
       return true;
@@ -636,7 +654,7 @@ export function OrdenesVentaView({ data, summaryData, summaryLoading, summaryErr
 
   const handleSaveCurrentOrder = () => {
     const currentStatus = normalizeOrderStatus(localDoc?.status);
-    return handleSaveOrder(currentStatus === 'DRAFT' ? 'DRAFT' : 'IN_PROCESS');
+    return handleSaveOrder(currentStatus === 'DRAFT' ? 'DRAFT' : 'APPROVED');
   };
 
   const calculateRates = (doc: any) => {
@@ -865,7 +883,7 @@ export function OrdenesVentaView({ data, summaryData, summaryLoading, summaryErr
       header: 'Estado pago',
       render: (val, row) => {
         const status = String(val || '').toUpperCase();
-        const labels: Record<string, string> = { PAID: 'Pagada', PARTIAL: 'Parcial', PENDING: 'Pendiente', OVERDUE: 'Vencida' };
+        const labels: Record<string, string> = { PAID: 'Pagada', PARTIAL: 'A crédito', CREDIT: 'A crédito', PENDING: 'Pendiente de cobro', OVERDUE: 'A crédito · Atrasada' };
         return row.invoiceId ? (
           <Badge variant="outline" className={cn(
             'whitespace-nowrap border-none px-2 py-0.5 text-[9px] font-black uppercase tracking-wider shadow-none',
@@ -933,15 +951,11 @@ export function OrdenesVentaView({ data, summaryData, summaryLoading, summaryErr
                     onClick={() => void handleSaveOrder('DRAFT')}>
                     Guardar Borrador
                   </Button>
-                  {canPerform('SALES_ORDERS', 'submit') && <Button data-testid="sales-order-save-in-process" className="w-full rounded-xl bg-primary px-6 font-black uppercase text-[10px] tracking-widest text-primary-foreground shadow-xl shadow-primary/20 hover:bg-primary/90 hover:text-primary-foreground sm:w-auto"
-                    onClick={() => void handleSaveOrder('IN_PROCESS')}>
-                    Guardar
+                  {canPerform('SALES_ORDERS', 'approve') && <Button data-testid="sales-order-approve" className="w-full rounded-xl bg-primary px-6 font-black uppercase text-[10px] tracking-widest text-primary-foreground shadow-xl shadow-primary/20 hover:bg-primary/90 hover:text-primary-foreground sm:w-auto"
+                    onClick={() => void handleSaveOrder('APPROVED')}>
+                    Aprobar
                   </Button>}
                 </>}
-                {normalizeOrderStatus(localDoc?.status) === 'IN_PROCESS' && <Button variant="default" className="w-full rounded-xl bg-primary px-6 font-black uppercase text-[10px] tracking-widest text-primary-foreground shadow-xl shadow-primary/20 hover:bg-primary/90 hover:text-primary-foreground sm:w-auto"
-                  onClick={() => void handleSaveCurrentOrder()}>
-                  Guardar
-                </Button>}
               </>
             )}
           </div>
@@ -983,7 +997,7 @@ export function OrdenesVentaView({ data, summaryData, summaryLoading, summaryErr
                     setLocalDoc({ ...localDoc, warehouseId } as any);
                     void handleUpdate(localDoc!.id, { warehouseId } as any);
                   }}
-                  required={['IN_PROCESS', 'APPROVED'].includes(normalizeOrderStatus(localDoc?.status))}
+                  required={normalizeOrderStatus(localDoc?.status) === 'APPROVED'}
                   helpText="La orden y la factura usarán esta bodega de salida."
                 />
                 <div>
@@ -1529,7 +1543,7 @@ export function OrdenesVentaView({ data, summaryData, summaryLoading, summaryErr
       <div className="space-y-2" data-tour="sales-list-kpis" aria-busy={Boolean(isKpiSummaryLoading)}>
         <KpiSummaryNotice loading={isKpiSummaryLoading} error={isKpiSummaryError} />
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-        <SalesKpiCard title="Órdenes en Proceso" value={summaryAvailable ? inProcessOrderCount : '—'} icon={Clock} color="text-primary" bg="bg-primary/10" active={statusFilter === 'IN_PROCESS'} onClick={() => setStatusFilter(statusFilter === 'IN_PROCESS' ? 'ALL' : 'IN_PROCESS')} />
+        <SalesKpiCard title="Órdenes registradas" value={summaryAvailable ? summaryTotal : '—'} icon={Clock} color="text-primary" bg="bg-primary/10" />
         {!summaryAvailable
           ? <SalesKpiCard title="Monto Aprobado" value="—" icon={TrendingUp} color="text-primary" bg="bg-primary/10" />
           : displayMode === 'ORIGINAL'
@@ -1548,7 +1562,6 @@ export function OrdenesVentaView({ data, summaryData, summaryLoading, summaryErr
               <SelectContent>
                 <SelectItem value="ALL">Todos los estados</SelectItem>
                 <SelectItem value="DRAFT">Borradores</SelectItem>
-                <SelectItem value="IN_PROCESS">En proceso</SelectItem>
                 <SelectItem value="APPROVED">Aprobadas</SelectItem>
                 <SelectItem value="CANCELLED">Canceladas</SelectItem>
               </SelectContent>
@@ -1599,11 +1612,11 @@ export function OrdenesVentaView({ data, summaryData, summaryLoading, summaryErr
                   documentLabel="orden de venta"
                   onSend={() => handleWhatsApp(row)}
                 />
-                {canPerform('SALES_ORDERS', 'convert') && ['IN_PROCESS', 'APPROVED'].includes(normalizeOrderStatus(row.status)) && !row.invoiceId && !row.invoiceNumber && (
+                {canPerform('SALES_ORDERS', 'convert') && ['DRAFT', 'APPROVED'].includes(normalizeOrderStatus(row.status)) && !row.invoiceId && !row.invoiceNumber && (
                   <Button 
                     type="button"
-                    title={normalizeOrderStatus(row.status) === 'IN_PROCESS' ? 'Aprobar y enviar a Factura' : 'Enviar a Factura'}
-                    aria-label={normalizeOrderStatus(row.status) === 'IN_PROCESS' ? 'Aprobar y enviar a Factura' : 'Enviar a Factura'}
+                    title={normalizeOrderStatus(row.status) === 'DRAFT' ? 'Aprobar y enviar a Factura' : 'Enviar a Factura'}
+                    aria-label={normalizeOrderStatus(row.status) === 'DRAFT' ? 'Aprobar y enviar a Factura' : 'Enviar a Factura'}
                     onClick={() => void handleInvoiceOrder(row)}
                     disabled={invoicingOrderId === row.id}
                     variant="ghost" 
@@ -1614,9 +1627,24 @@ export function OrdenesVentaView({ data, summaryData, summaryLoading, summaryErr
                     <ArrowRightCircle className={cn('size-4', invoicingOrderId === row.id && 'animate-pulse')} />
                   </Button>
                 )}
+                {canPerform('SALES_ORDERS', 'convert') && ['DRAFT', 'APPROVED'].includes(normalizeOrderStatus(row.status)) && !row.invoiceId && !row.invoiceNumber && (
+                  <Button
+                    type="button"
+                    title={hasOpenCash ? 'Aprobar, facturar y enviar a Caja' : 'No hay una caja abierta en esta sucursal'}
+                    aria-label="Aprobar, facturar y enviar a Caja"
+                    onClick={() => void handleInvoiceOrder(row, true)}
+                    disabled={invoicingOrderId === row.id || !hasOpenCash}
+                    variant="ghost"
+                    size="icon"
+                    className={cn('size-8 shrink-0 rounded-lg text-primary hover:bg-primary/10 hover:text-primary transition-colors', !hasOpenCash && 'cursor-not-allowed opacity-40')}
+                    style={{ color: hasOpenCash ? themeConfig?.colors?.primary || undefined : undefined }}
+                  >
+                    <Inbox className={cn('size-4', invoicingOrderId === row.id && 'animate-pulse')} />
+                  </Button>
+                )}
                 <Button type="button" title="Ver orden completa" aria-label="Ver orden completa" variant="ghost" size="icon" className="size-8 shrink-0 rounded-lg text-muted-foreground hover:bg-muted/40 hover:text-muted-foreground transition-colors" onClick={() => { setDetailOrder(null); setEditingId(row.id); }}><Eye className="size-4 text-muted-foreground" /></Button>
                 {canPerform('SALES_ORDERS', 'cancel') &&
-                  ['DRAFT', 'IN_PROCESS'].includes(normalizeOrderStatus(row.status)) &&
+                  normalizeOrderStatus(row.status) === 'DRAFT' &&
                   !row.invoiceId && !row.invoiceNumber && (
                   <Button
                     type="button"
@@ -1658,8 +1686,9 @@ export function OrdenesVentaView({ data, summaryData, summaryLoading, summaryErr
             documentLabel="orden de venta"
             onSend={() => handleWhatsApp(detailOrder)}
           />
-          {canPerform('SALES_ORDERS', 'convert') && ['IN_PROCESS', 'APPROVED'].includes(normalizeOrderStatus(detailOrder.status)) && !detailOrder.invoiceId && !detailOrder.invoiceNumber && <Button type="button" className="rounded-xl bg-primary text-primary-foreground" disabled={invoicingOrderId === detailOrder.id} onClick={() => { const order = detailOrder; setDetailOrder(null); void handleInvoiceOrder(order); }}><ArrowRightCircle className="mr-2 size-4" />Enviar a factura</Button>}
-          {canPerform('SALES_ORDERS', 'cancel') && ['DRAFT', 'IN_PROCESS'].includes(normalizeOrderStatus(detailOrder.status)) && !detailOrder.invoiceId && !detailOrder.invoiceNumber && <Button type="button" variant="outline" className="rounded-xl border-rose-500/30 text-rose-600 hover:bg-rose-500/10 dark:text-rose-400" onClick={() => { setDetailOrder(null); setPendingCancelId(detailOrder.id); }}><Ban className="mr-2 size-4" />Cancelar</Button>}
+          {canPerform('SALES_ORDERS', 'convert') && ['DRAFT', 'APPROVED'].includes(normalizeOrderStatus(detailOrder.status)) && !detailOrder.invoiceId && !detailOrder.invoiceNumber && <Button type="button" className="rounded-xl bg-primary text-primary-foreground" disabled={invoicingOrderId === detailOrder.id} onClick={() => { const order = detailOrder; setDetailOrder(null); void handleInvoiceOrder(order); }}><ArrowRightCircle className="mr-2 size-4" />Enviar a factura</Button>}
+          {canPerform('SALES_ORDERS', 'convert') && ['DRAFT', 'APPROVED'].includes(normalizeOrderStatus(detailOrder.status)) && !detailOrder.invoiceId && !detailOrder.invoiceNumber && <Button type="button" variant="outline" title={hasOpenCash ? 'Aprobar, facturar y enviar a Caja' : 'No hay una caja abierta en esta sucursal'} className={cn('rounded-xl', !hasOpenCash && 'cursor-not-allowed opacity-50')} disabled={invoicingOrderId === detailOrder.id || !hasOpenCash} onClick={() => { const order = detailOrder; setDetailOrder(null); void handleInvoiceOrder(order, true); }}><Inbox className="mr-2 size-4" />Enviar a Caja</Button>}
+          {canPerform('SALES_ORDERS', 'cancel') && normalizeOrderStatus(detailOrder.status) === 'DRAFT' && !detailOrder.invoiceId && !detailOrder.invoiceNumber && <Button type="button" variant="outline" className="rounded-xl border-rose-500/30 text-rose-600 hover:bg-rose-500/10 dark:text-rose-400" onClick={() => { setDetailOrder(null); setPendingCancelId(detailOrder.id); }}><Ban className="mr-2 size-4" />Cancelar</Button>}
         </> : undefined}
         onDownloadPdf={canPerform('SALES_ORDERS', 'export') ? (format) => { if (detailOrder) void handleExportPDF(detailOrder, format); } : undefined}
       />

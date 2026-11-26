@@ -43,6 +43,7 @@ export interface SalesDocumentPanelData {
   customerName: string;
   hideCustomer?: boolean;
   status: string;
+  overdueBalance?: number | string;
   sourceLabel?: string;
   totalLabel: string;
   sourceCurrency?: string;
@@ -84,10 +85,10 @@ interface SalesDocumentDetailSheetProps {
 
 const statusLabels: Record<string, string> = {
   DRAFT: 'Borrador',
-  IN_PROCESS: 'En proceso',
-  SENT: 'Enviada',
+  IN_PROCESS: 'Borrador',
+  SENT: 'Borrador',
   PENDING: 'Pendiente',
-  PENDING_REVIEW: 'Pendiente de revisión',
+  PENDING_REVIEW: 'Borrador',
   PENDING_APPROVAL: 'Pendiente de aprobación',
   SUBMITTED: 'Enviada',
   IN_REVIEW: 'En revisión',
@@ -96,20 +97,20 @@ const statusLabels: Record<string, string> = {
   CONVERTED_TO_ORDER: 'Convertida a orden',
   CLOSED: 'Cerrada',
   CONFIRMED: 'Aprobada',
-  IN_PROGRESS: 'En proceso',
-  SHIPPED: 'Enviada',
-  DELIVERED: 'Entregada',
-  ACTIVE: 'Activa',
+  IN_PROGRESS: 'Borrador',
+  SHIPPED: 'Aprobada',
+  DELIVERED: 'Aprobada',
+  ACTIVE: 'Activo',
   PAUSED: 'Pausada',
   EXPIRED: 'Vencida',
   APPROVED: 'Aprobada',
   PROCESSED: 'Aplicada',
   REJECTED: 'Rechazada',
   WITH_INCIDENTS: 'Con incidencias',
-  ISSUED: 'Emitida',
+  ISSUED: 'Activo',
   CREDIT: 'A crédito',
-  OVERDUE: 'Vencida',
-  PARTIAL: 'Pago parcial',
+  OVERDUE: 'A crédito · Atrasada',
+  PARTIAL: 'A crédito',
   APPLIED: 'Aplicada',
   PAID: 'Pagada',
   REFUNDED: 'Reembolsada',
@@ -140,10 +141,12 @@ export function SalesDocumentDetailSheet({
   if (!document) return null;
 
   const status = String(document.status || '').toUpperCase();
-  const statusLabel = status === 'PAID' && entity === 'CREDIT_NOTE'
-    ? 'Cancelado'
-    : statusLabels[status] || managerStatusLabel(document.status);
-  const statusColor = status === 'PAID' && entity === 'CREDIT_NOTE' ? 'CANCELLED' : status;
+  const statusLabel = status === 'ACTIVE' && Number((document as any).overdueBalance || 0) > 0.01
+    ? 'Activo (Atrasado)'
+    : status === 'PAID' && entity === 'CREDIT_NOTE'
+      ? 'Pagado'
+      : statusLabels[status] || managerStatusLabel(document.status);
+  const statusColor = status;
 
   return (
     <Sheet open={open} onOpenChange={(nextOpen) => { if (!nextOpen) onClose(); }}>

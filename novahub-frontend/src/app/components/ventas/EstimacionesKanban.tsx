@@ -21,10 +21,8 @@ export interface KanbanColumn {
 
 const DEFAULT_COLUMNS: KanbanColumn[] = [
   { id: 'draft', label: 'Borrador', value: 'DRAFT', color: '#f59e0b' },
-  { id: 'sent', label: 'Enviada', value: 'SENT', color: '#3b82f6' },
-  { id: 'in_progress', label: 'En proceso', value: 'IN_PROGRESS', color: '#3b82f6' },
   { id: 'approved', label: 'Aprobada', value: 'APPROVED', color: '#10b981' },
-  { id: 'rejected', label: 'Rechazada', value: 'REJECTED', color: '#ef4444' },
+  { id: 'cancelled', label: 'Cancelada', value: 'CANCELLED', color: '#ef4444' },
 ];
 
 const COLUMN_STORAGE_KEY = 'erp-kanban-columns-v2';
@@ -35,7 +33,10 @@ function loadColumns(): KanbanColumn[] {
     const stored = localStorage.getItem(COLUMN_STORAGE_KEY);
     if (stored) {
       const parsed = JSON.parse(stored);
-      if (Array.isArray(parsed) && parsed.length > 0) return parsed;
+      if (Array.isArray(parsed) && parsed.length > 0) {
+        const validColumns = parsed.filter((column: KanbanColumn) => !['IN_PROCESS', 'IN_PROGRESS', 'SENT', 'REJECTED'].includes(String(column.value || '').toUpperCase()));
+        if (validColumns.length) return validColumns;
+      }
     }
   } catch { /* ignore */ }
   return DEFAULT_COLUMNS;
@@ -64,7 +65,7 @@ function saveKanbanPositions(storageKey: string, positions: Record<string, strin
 
 function getInitialColumnId(status: unknown, columns: KanbanColumn[]): string {
   const normalizedStatus = String(status || '').toUpperCase();
-  const visualValue = normalizedStatus === 'IN_PROCESS' ? 'IN_PROGRESS' : normalizedStatus;
+  const visualValue = ['IN_PROCESS', 'IN_PROGRESS', 'SENT'].includes(normalizedStatus) ? 'DRAFT' : normalizedStatus === 'REJECTED' ? 'CANCELLED' : normalizedStatus;
   return columns.find((column) => column.value === visualValue)?.id || columns[0]?.id || '';
 }
 

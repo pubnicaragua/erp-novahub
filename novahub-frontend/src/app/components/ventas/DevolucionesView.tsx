@@ -177,9 +177,9 @@ interface DevolucionesViewProps {
 }
 
 const statusOptions = [
-  { label: 'Pendiente',  value: 'PENDING',   color: SALES_STATUS_COLORS.PENDING },
+  { label: 'Borrador',   value: 'DRAFT',     color: SALES_WORKFLOW_STATUS_COLORS.DRAFT },
   { label: 'Aprobada',   value: 'APPROVED',  color: SALES_WORKFLOW_STATUS_COLORS.APPROVED },
-  { label: 'Aplicada',   value: 'PROCESSED', color: SALES_STATUS_COLORS.PROCESSED },
+  { label: 'Aplicada',   value: 'APPLIED',   color: SALES_STATUS_COLORS.PROCESSED },
   { label: 'Rechazada',  value: 'REJECTED',  color: SALES_STATUS_COLORS.REJECTED },
 ];
 
@@ -190,7 +190,7 @@ export function DevolucionesView({ data, summaryData, summaryLoading, summaryErr
   const salesDraftStorageKey = getSalesEditorDraftKey('sales-return', user?.tenantId, user?.id);
   const [searchTerm, setSearchTerm] = useState('');
   const [layoutMode, setLayoutMode] = useLocalStorageState<'table' | 'cards'>('sales-returns-layout', 'table', 24 * 365);
-  const [statusFilter, setStatusFilter] = useState<'ALL' | 'PENDING' | 'APPROVED' | 'PROCESSED' | 'REJECTED'>('ALL');
+  const [statusFilter, setStatusFilter] = useState<'ALL' | 'DRAFT' | 'APPROVED' | 'APPLIED' | 'REJECTED'>('ALL');
   const [pendingDeleteId, setPendingDeleteId] = useState<string | null>(null);
   const [deleteLoading, setDeleteLoading] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
@@ -395,7 +395,7 @@ export function DevolucionesView({ data, summaryData, summaryLoading, summaryErr
         }),
         ...returnTotals,
         selectedCharges,
-        status: localDoc.status || 'PENDING',
+        status: localDoc.status || 'DRAFT',
         currency: localDoc.currency || displayCurrency,
         exchangeRate: localDoc.exchangeRate || globalRate,
         warehouseId: localDoc.warehouseId || selectedInvoice?.warehouseId || null,
@@ -540,7 +540,7 @@ export function DevolucionesView({ data, summaryData, summaryLoading, summaryErr
   // ─── INLINE FORM ────────────────────────────────────────────────────
   if ((editingId || isCreating) && localDoc) {
     const statusOpt = statusOptions.find(o => o.value === (localDoc?.status || '').toUpperCase());
-    const canApprove = !isCreating && (localDoc?.status || '').toUpperCase() === 'PENDING' && canPerform('SALES_RETURNS', 'approve');
+    const canApprove = !isCreating && (localDoc?.status || '').toUpperCase() === 'DRAFT' && canPerform('SALES_RETURNS', 'approve');
     const selectedCharges: SelectedSalesReturnCharge[] = Array.isArray(localDoc.selectedCharges) ? localDoc.selectedCharges : [];
     const invoiceReturnCharges = invoiceReturnChargesFor(selectedInvoice);
     const editorTotals = returnTotalsFor(localDoc.items || [], selectedInvoice, selectedCharges);
@@ -566,7 +566,7 @@ export function DevolucionesView({ data, summaryData, summaryLoading, summaryErr
             <SalesViewTutorial view="returns" context="form" />
             {canPerform('SALES_RETURNS', 'edit') && (
               <>
-                {!isCreating && (localDoc?.status || '').toUpperCase() === 'PENDING' && canPerform('SALES_RETURNS', 'reject') && <Button variant="outline" className="rounded-xl border-rose-500/50 text-rose-500 hover:bg-rose-700 hover:text-white font-black uppercase text-[10px] tracking-widest px-4"
+                {!isCreating && (localDoc?.status || '').toUpperCase() === 'DRAFT' && canPerform('SALES_RETURNS', 'reject') && <Button variant="outline" className="rounded-xl border-rose-500/50 text-rose-500 hover:bg-rose-700 hover:text-white font-black uppercase text-[10px] tracking-widest px-4"
                   onClick={async () => { if (!window.confirm('¿Rechazar esta nota de crédito? El registro se conservará y no se podrá revertir.')) return; try { await salesReturnsService.reject(localDoc.id); setEditingId(null); setLocalDoc(null); onRefresh(); } catch (e: any) { toast.error(e?.response?.data?.message || e?.message || 'No se pudo rechazar la nota'); } }}><XCircle className="size-3 mr-2" /> Rechazar Nota</Button>}
                 {canApprove && <Button variant="outline" className="rounded-xl border-emerald-500/50 text-emerald-500 hover:bg-emerald-700 hover:text-white font-black uppercase text-[10px] tracking-widest px-4"
                   onClick={() => { handleApprove(localDoc.id); setEditingId(null); setLocalDoc(null); }}><ShieldCheck className="size-3 mr-2" /> Aprobar Nota</Button>}
@@ -713,7 +713,7 @@ export function DevolucionesView({ data, summaryData, summaryLoading, summaryErr
           : displayMode === 'ORIGINAL'
           ? originalReturnedAmounts.map((summary) => <SalesKpiCard key={`returned-${summary.currency}`} title={`Saldo a favor generado (${summary.currency})`} value={formatExplicitAmount(summary.amount, summary.currency)} icon={FileOutput} color="text-primary" bg="bg-primary/10" />)
           : <SalesKpiCard title={`Saldo a favor generado (${displayCurrency})`} value={formatConvertedAmount(totalReturnedInDisplayCurrency, baseCurrency)} icon={FileOutput} color="text-primary" bg="bg-primary/10" />}
-        <SalesKpiCard title="Pendientes" value={summaryAvailable ? hasColumnValueFilters ? summaryRowsWithoutStatusFilter.filter(r => (r.status||'').toUpperCase() === 'PENDING').length : summaryGroups.filter((group) => group.status === 'PENDING').reduce((sum, group) => sum + group.count, 0) : '—'} icon={Clock} color="text-primary" bg="bg-primary/10" active={statusFilter === 'PENDING'} onClick={() => setStatusFilter(statusFilter === 'PENDING' ? 'ALL' : 'PENDING')} />
+        <SalesKpiCard title="Borradores" value={summaryAvailable ? hasColumnValueFilters ? summaryRowsWithoutStatusFilter.filter(r => (r.status||'').toUpperCase() === 'DRAFT').length : summaryGroups.filter((group) => group.status === 'DRAFT').reduce((sum, group) => sum + group.count, 0) : '—'} icon={Clock} color="text-primary" bg="bg-primary/10" active={statusFilter === 'DRAFT'} onClick={() => setStatusFilter(statusFilter === 'DRAFT' ? 'ALL' : 'DRAFT')} />
         <SalesKpiCard title="Aprobadas" value={summaryAvailable ? hasColumnValueFilters ? summaryRowsWithoutStatusFilter.filter(r => (r.status||'').toUpperCase() === 'APPROVED').length : summaryGroups.filter((group) => group.status === 'APPROVED').reduce((sum, group) => sum + group.count, 0) : '—'} icon={CheckCircle2} color="text-primary" bg="bg-primary/10" active={statusFilter === 'APPROVED'} onClick={() => setStatusFilter(statusFilter === 'APPROVED' ? 'ALL' : 'APPROVED')} />
         <SalesKpiCard title="Rechazadas" value={summaryAvailable ? hasColumnValueFilters ? summaryRowsWithoutStatusFilter.filter(r => (r.status||'').toUpperCase() === 'REJECTED').length : summaryGroups.filter((group) => group.status === 'REJECTED').reduce((sum, group) => sum + group.count, 0) : '—'} icon={XCircle} color="text-primary" bg="bg-primary/10" active={statusFilter === 'REJECTED'} onClick={() => setStatusFilter(statusFilter === 'REJECTED' ? 'ALL' : 'REJECTED')} />
         </div>
@@ -736,7 +736,7 @@ export function DevolucionesView({ data, summaryData, summaryLoading, summaryErr
           pagination={pagination}
           bulkAction="reject"
           showSelection={canPerform('SALES_RETURNS', 'reject')}
-          isRowSelectable={(row) => canPerform('SALES_RETURNS', 'reject') && String(row.status || '').toUpperCase() === 'PENDING'}
+          isRowSelectable={(row) => canPerform('SALES_RETURNS', 'reject') && String(row.status || '').toUpperCase() === 'DRAFT'}
           onBulkDelete={canPerform('SALES_RETURNS', 'reject') ? async (ids) => { if (!canPerform('SALES_RETURNS', 'reject')) return; const rejectToastId = toast.loading(`Rechazando ${ids.length} nota${ids.length === 1 ? '' : 's'} de crédito...`); try { for (const id of ids) { if (String(id).startsWith('new-')) continue; await salesReturnsService.reject(id as string); } toast.success('Notas de crédito rechazadas', { id: rejectToastId }); onRefresh(); } catch (e: any) { toast.error(e?.response?.data?.message || e?.message || 'No se pudieron rechazar', { id: rejectToastId }); } } : undefined}
           columns={columns} onRowUpdate={async () => {}} onRowClick={(row) => setDetailReturn(row)} isLoading={loading} actionsWidth="w-28" fitContent showHorizontalControls
           layoutMode={layoutMode}
@@ -744,14 +744,14 @@ export function DevolucionesView({ data, summaryData, summaryLoading, summaryErr
           highlightedRowId={highlightedAlertId}
           actions={(row) => (
             <div className="flex items-center gap-1" onPointerDown={(event) => event.stopPropagation()} onClick={(event) => event.stopPropagation()}>
-               {canPerform('SALES_RETURNS', 'approve') && (row.status||'').toUpperCase() === 'PENDING' && (
+               {canPerform('SALES_RETURNS', 'approve') && (row.status||'').toUpperCase() === 'DRAFT' && (
                  <Button title="Aprobar Nota de Crédito" variant="ghost" size="icon" className="size-8 rounded-lg text-emerald-500 hover:bg-emerald-500/10 transition-colors" onClick={() => handleApprove(row.id)}><ShieldCheck className="size-4" /></Button>
                )}
                {canPerform('SALES_RETURNS', 'process') && (row.status||'').toUpperCase() === 'APPROVED' && (
                  <Button title="Aplicar saldo y actualizar inventario" variant="ghost" size="icon" className="size-8 rounded-lg text-blue-500 hover:bg-blue-500/10 transition-colors" onClick={() => handleProcess(row.id)}><CheckCircle2 className="size-4" /></Button>
                )}
                 <Button title="Ver nota de crédito completa" aria-label="Ver nota de crédito completa" variant="ghost" size="icon" className="size-8 rounded-lg text-muted-foreground hover:bg-primary/10 hover:text-primary transition-colors" onClick={() => { setDetailReturn(null); startEdit(row.id); }}><Eye className="size-4" /></Button>
-               {canPerform('SALES_RETURNS', 'reject') && (row.status||'').toUpperCase() === 'PENDING' && (
+               {canPerform('SALES_RETURNS', 'reject') && (row.status||'').toUpperCase() === 'DRAFT' && (
                  <Button title="Rechazar nota de crédito" aria-label="Rechazar nota de crédito" variant="ghost" size="icon" className="size-8 rounded-lg text-muted-foreground hover:bg-rose-500/10 hover:text-rose-500 transition-colors" onClick={() => setPendingDeleteId(row.id)}><XCircle className="size-4" /></Button>
                )}
             </div>
@@ -771,9 +771,9 @@ export function DevolucionesView({ data, summaryData, summaryLoading, summaryErr
           startEdit(detailReturn.id);
         }}
         extraActions={detailReturn ? <>
-          {canPerform('SALES_RETURNS', 'approve') && String(detailReturn.status || '').toUpperCase() === 'PENDING' && <Button type="button" className="rounded-xl bg-emerald-600 text-white hover:bg-emerald-700" onClick={() => handleApprove(detailReturn.id)}><ShieldCheck className="mr-2 size-4" />Aprobar</Button>}
+          {canPerform('SALES_RETURNS', 'approve') && String(detailReturn.status || '').toUpperCase() === 'DRAFT' && <Button type="button" className="rounded-xl bg-emerald-600 text-white hover:bg-emerald-700" onClick={() => handleApprove(detailReturn.id)}><ShieldCheck className="mr-2 size-4" />Aprobar</Button>}
           {canPerform('SALES_RETURNS', 'process') && String(detailReturn.status || '').toUpperCase() === 'APPROVED' && <Button type="button" className="rounded-xl bg-blue-600 text-white hover:bg-blue-700" onClick={() => handleProcess(detailReturn.id)}><CheckCircle2 className="mr-2 size-4" />Aplicar saldo</Button>}
-          {canPerform('SALES_RETURNS', 'reject') && String(detailReturn.status || '').toUpperCase() === 'PENDING' && <Button type="button" variant="outline" className="rounded-xl border-rose-500/30 text-rose-600 hover:bg-rose-500/10 dark:text-rose-400" onClick={() => { setDetailReturn(null); setPendingDeleteId(detailReturn.id); }}><XCircle className="mr-2 size-4" />Rechazar</Button>}
+          {canPerform('SALES_RETURNS', 'reject') && String(detailReturn.status || '').toUpperCase() === 'DRAFT' && <Button type="button" variant="outline" className="rounded-xl border-rose-500/30 text-rose-600 hover:bg-rose-500/10 dark:text-rose-400" onClick={() => { setDetailReturn(null); setPendingDeleteId(detailReturn.id); }}><XCircle className="mr-2 size-4" />Rechazar</Button>}
         </> : undefined}
         onDownloadPdf={canPerform('SALES_RETURNS', 'export') ? (format) => { if (detailReturn) void handleExportPDF(detailReturn, format); } : undefined}
       />
@@ -782,7 +782,7 @@ export function DevolucionesView({ data, summaryData, summaryLoading, summaryErr
         open={pendingDeleteId !== null}
         onOpenChange={(open) => { if (!open) setPendingDeleteId(null); }}
         title={"¿Rechazar nota de crédito?"}
-        description="La nota quedará rechazada y se conservará el registro. Solo se pueden rechazar notas pendientes; las aprobadas o procesadas no se modifican."
+        description="La devolución quedará rechazada y se conservará el registro. Solo pueden rechazarse devoluciones en borrador; las aprobadas o aplicadas no se revierten."
         confirmLabel="Rechazar nota"
         variant="destructive"
         loading={deleteLoading}

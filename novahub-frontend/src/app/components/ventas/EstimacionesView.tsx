@@ -2,7 +2,7 @@ import { useState, useEffect, useRef } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import WhatsAppIcon from '@mui/icons-material/WhatsApp';
 import { 
-  FileSpreadsheet, Plus, Search, TrendingUp, Clock, CheckCircle2, ArrowRightCircle, Eye, Trash2, Ban, ChevronLeft, Upload, Image as ImageIcon, Loader2, X
+  FileSpreadsheet, Plus, Search, TrendingUp, Clock, CheckCircle2, ArrowRightCircle, Eye, Trash2, Ban, ChevronLeft, Upload, Image as ImageIcon, Loader2, X, FileText, Inbox
 } from 'lucide-react';
 import { Card, CardContent } from '../ui/card';
 import { Button } from '../ui/button';
@@ -58,6 +58,7 @@ import { getLoggedInSellerEmployeeId } from '../../utils/salesSeller';
 import { TripCostBlock } from '../flota/TripCostBlock';
 import { initialDocumentExchangeRate } from '../../utils/currency';
 import { roundDecimal } from '../../utils/currency';
+import { cajaService } from '../../services/caja.service';
 
 interface EstimacionesViewProps {
   data: Estimate[];
@@ -83,12 +84,11 @@ interface EstimacionesViewProps {
 
 const statusOptions = [
   { label: 'Borrador',  value: 'DRAFT',     color: SALES_WORKFLOW_STATUS_COLORS.DRAFT },
-  { label: 'En proceso', value: 'IN_PROCESS', color: SALES_WORKFLOW_STATUS_COLORS.IN_PROCESS },
   { label: 'Aprobada', value: 'APPROVED',  color: SALES_WORKFLOW_STATUS_COLORS.APPROVED },
   { label: 'Cancelada',value: 'CANCELLED', color: SALES_WORKFLOW_STATUS_COLORS.CANCELLED },
 ];
-type EstimateWorkflowStatus = 'DRAFT' | 'IN_PROCESS' | 'APPROVED' | 'CANCELLED';
-const normalizeEstimateStatus = (status: unknown) => String(status || '').toUpperCase() === 'SENT' ? 'IN_PROCESS' : String(status || '').toUpperCase();
+type EstimateWorkflowStatus = 'DRAFT' | 'APPROVED' | 'CANCELLED';
+const normalizeEstimateStatus = (status: unknown) => ['IN_PROCESS', 'SENT'].includes(String(status || '').toUpperCase()) ? 'DRAFT' : String(status || '').toUpperCase();
 const getEstimateWorkflowIssues = (estimate: Estimate | null | undefined): string[] => {
   if (!estimate) return ['Información general'];
   const issues: string[] = [];
@@ -138,6 +138,17 @@ export function EstimacionesView({ data, summaryData, summaryLoading, summaryErr
   const [draftHydrated, setDraftHydrated] = useState(false);
   const [uploadingImage, setUploadingImage] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const cashAvailabilityQuery = useQuery({
+    queryKey: ['sales', 'open-cash-availability', user?.clientTenantId || user?.tenantId],
+    queryFn: async () => {
+      const response: any = await cajaService.getRegisters();
+      const registers = Array.isArray(response) ? response : response?.data || [];
+      return registers.some((register: any) => register.hasActiveSession);
+    },
+    enabled: Boolean(user?.clientTenantId || user?.tenantId),
+    staleTime: 30_000,
+  });
+  const hasOpenCash = cashAvailabilityQuery.data === true;
 
   const handleUploadImages = async (files: FileList | File[]) => {
     if (!localDoc || !files || files.length === 0) return;
@@ -327,24 +338,36 @@ export function EstimacionesView({ data, summaryData, summaryLoading, summaryErr
       return;
     }
     if (convertingId) return;
-    const currentStatus = String(estimate.status || '').toUpperCase();
-    if (!['IN_PROCESS', 'SENT'].includes(currentStatus)) {
-      toast.info('La cotización debe estar en proceso antes de aprobarla');
+    const editedEstimate = (editingId === estimate.id || isLocalEstimate(estimate.id)) ? localDocRef.current || localDoc : estimate;
+    if (!editedEstimate || !['DRAFT'].includes(normalizeEstimateStatus(editedEstimate.status))) {
+      toast.info('Solo se puede aprobar una cotización en borrador');
       return;
     }
-    if (!estimate.items?.length) {
+    if (!editedEstimate.items?.length) {
       toast.error('La cotización debe contener al menos un producto o servicio');
       return;
     }
-    const priceMessage = getMissingSalesPriceMessage(estimate.items);
+    const priceMessage = getMissingSalesPriceMessage(editedEstimate.items);
     if (priceMessage) {
       toast.error(priceMessage);
       return;
     }
+    const workflowIssues = getEstimateWorkflowIssues(editedEstimate);
+    if (workflowIssues.length) {
+      toast.error(`No se puede aprobar la cotización. Faltan o están incompletos: ${workflowIssues.join('; ')}.`);
+      return;
+    }
     setConvertingId(estimate.id);
-    const conversionToastId = toast.loading('Generando orden de venta desde la cotización...');
+    const conversionToastId = toast.loading('Aprobando cotización y generando orden de venta...');
     try {
-      const order = await estimatesService.convertToOrder(estimate.id, {
+      let sourceEstimateId = String(estimate.id);
+      if (isLocalEstimate(sourceEstimateId)) {
+        const created = await estimatesService.create({ ...buildEstimateStatusPayload('DRAFT'), number: undefined } as any, globalThis.crypto?.randomUUID?.());
+        sourceEstimateId = String(created.id);
+      } else if (editingId === estimate.id) {
+        await estimatesService.update(sourceEstimateId, buildEstimateStatusPayload('DRAFT'));
+      }
+      const order = await estimatesService.convertToOrder(sourceEstimateId, {
         sellerEmployeeId: getLoggedInSellerEmployeeId(user) || null,
       });
       toast.success('Cotización aprobada y enviada a Orden de Venta', { id: conversionToastId });
@@ -356,6 +379,45 @@ export function EstimacionesView({ data, summaryData, summaryLoading, summaryErr
       setEditingId(null);
     } catch (e: any) {
       toast.error(e?.response?.data?.message || e?.message || 'No se pudo enviar la cotización', { id: conversionToastId });
+    } finally {
+      setConvertingId(null);
+    }
+  };
+
+  const handleConvertEstimateDirect = async (estimate: Estimate, toCash = false) => {
+    if (!canPerform('SALES_QUOTES', 'convert')) return void toast.error('No tienes permiso para convertir cotizaciones.');
+    if (toCash && !hasOpenCash) return void toast.error('Abre una caja en esta sucursal antes de enviar la cotización a Caja.');
+    if (convertingId) return;
+    const source = (editingId === estimate.id || isLocalEstimate(estimate.id)) ? localDocRef.current || localDoc : estimate;
+    if (!source || !['DRAFT', 'APPROVED'].includes(normalizeEstimateStatus(source.status))) return void toast.info('Solo se pueden enviar cotizaciones en borrador o aprobadas.');
+    if (!source.items?.length) return void toast.error('La cotización debe contener al menos un producto o servicio.');
+    const priceMessage = getMissingSalesPriceMessage(source.items);
+    if (priceMessage) return void toast.error(priceMessage);
+    const workflowIssues = getEstimateWorkflowIssues(source);
+    if (workflowIssues.length) return void toast.error(`No se puede enviar la cotización. Faltan o están incompletos: ${workflowIssues.join('; ')}.`);
+
+    setConvertingId(String(estimate.id));
+    const toastId = toast.loading(toCash ? 'Aprobando cotización y enviándola a Caja...' : 'Aprobando cotización y generando factura...');
+    try {
+      let sourceEstimateId = String(estimate.id);
+      if (isLocalEstimate(sourceEstimateId)) {
+        const created = await estimatesService.create({ ...buildEstimateStatusPayload('DRAFT'), number: undefined } as any, globalThis.crypto?.randomUUID?.());
+        sourceEstimateId = String(created.id);
+      } else if (editingId === estimate.id) {
+        await estimatesService.update(sourceEstimateId, buildEstimateStatusPayload('DRAFT'));
+      }
+      const payload = { sellerEmployeeId: getLoggedInSellerEmployeeId(user) || null };
+      if (toCash) await estimatesService.convertToCash(sourceEstimateId, payload, globalThis.crypto?.randomUUID?.());
+      else await estimatesService.convertToInvoice(sourceEstimateId, payload, globalThis.crypto?.randomUUID?.());
+      toast.success(toCash ? 'Cotización enviada directamente a Caja' : 'Cotización enviada directamente a Facturas', { id: toastId });
+      await onRefresh();
+      clearSalesEditorDraft(salesDraftStorageKey);
+      localDraftRef.current = null;
+      localDocRef.current = null;
+      setEditingId(null);
+      setDetailEstimate(null);
+    } catch (error: any) {
+      toast.error(error?.response?.data?.message || error?.message || 'No se pudo convertir la cotización', { id: toastId });
     } finally {
       setConvertingId(null);
     }
@@ -426,7 +488,7 @@ export function EstimacionesView({ data, summaryData, summaryLoading, summaryErr
     }
   };
 
-  const buildEstimateStatusPayload = (status: 'DRAFT' | 'IN_PROCESS') => {
+  const buildEstimateStatusPayload = (_status: 'DRAFT' = 'DRAFT') => {
     const docToUse = localDocRef.current || localDoc;
     return {
       number: docToUse?.number,
@@ -461,43 +523,25 @@ export function EstimacionesView({ data, summaryData, summaryLoading, summaryErr
     } as Partial<Estimate>;
   };
 
-  const handleSaveEstimate = async (status: 'DRAFT' | 'IN_PROCESS') => {
+  const handleSaveEstimate = async (_status: 'DRAFT' = 'DRAFT') => {
     if (!localDoc) return;
-    const currentStatus = normalizeEstimateStatus(localDoc.status);
-    const isStatusTransition = isLocalEstimate(localDoc.id) || currentStatus !== normalizeEstimateStatus(status);
-    if (status === 'IN_PROCESS' && isStatusTransition && !canPerform('SALES_QUOTES', 'submit')) {
-      toast.error('No tienes permiso para enviar cotizaciones a proceso');
-      return;
-    }
     if (savingEstimateRef.current) return;
-    if (status === 'IN_PROCESS') {
-      const workflowIssues = getEstimateWorkflowIssues(localDoc);
-      if (workflowIssues.length) {
-        toast.error(`No se puede marcar la cotización en proceso. Faltan o están incompletos: ${workflowIssues.join('; ')}.`);
-        return;
-      }
-      const priceMessage = getMissingSalesPriceMessage((localDoc.items || []).filter((item: any) => item.productId || String(item.description || '').trim()));
-      if (priceMessage) {
-        toast.error(priceMessage);
-        return;
-      }
-    }
-    const saveToastId = toast.loading(status === 'IN_PROCESS' ? 'Marcando cotización en proceso...' : 'Guardando cotización...');
+    const saveToastId = toast.loading('Guardando cotización como borrador...');
     savingEstimateRef.current = true;
     try {
       if (isLocalEstimate(localDoc.id)) {
-        const created = await estimatesService.create({ ...buildEstimateStatusPayload(status), number: undefined } as any);
+        const created = await estimatesService.create({ ...buildEstimateStatusPayload('DRAFT'), number: undefined } as any);
         localDraftRef.current = created;
         commitLocalDoc(created);
         await onRefresh();
       } else {
-        await handleUpdate(localDoc.id, buildEstimateStatusPayload(status));
+        await handleUpdate(localDoc.id, buildEstimateStatusPayload('DRAFT'));
       }
       clearSalesEditorDraft(salesDraftStorageKey);
       localDraftRef.current = null;
       localDocRef.current = null;
       setEditingId(null);
-      toast.success(status === 'IN_PROCESS' ? 'Cotización marcada en proceso' : 'Cotización guardada como borrador', { id: saveToastId });
+      toast.success('Cotización guardada como borrador', { id: saveToastId });
     } catch (e: any) {
       toast.error(e?.response?.data?.message || e?.message || 'No se pudo guardar la cotización', { id: saveToastId });
     } finally {
@@ -896,9 +940,9 @@ export function EstimacionesView({ data, summaryData, summaryLoading, summaryErr
   const approvedCount = hasColumnValueFilters
     ? summaryRowsWithoutStatusFilter.filter((estimate) => String(estimate.status || '').toUpperCase() === 'APPROVED').length
     : summaryGroups.filter((group) => group.status === 'APPROVED').reduce((total, group) => total + group.count, 0);
-  const inProcessCount = hasColumnValueFilters
-    ? summaryRowsWithoutStatusFilter.filter((estimate) => normalizeEstimateStatus(estimate.status) === 'IN_PROCESS').length
-    : summaryGroups.filter((group) => group.status === 'IN_PROCESS').reduce((total, group) => total + group.count, 0);
+  const draftCount = hasColumnValueFilters
+    ? summaryRowsWithoutStatusFilter.filter((estimate) => normalizeEstimateStatus(estimate.status) === 'DRAFT').length
+    : summaryGroups.filter((group) => normalizeEstimateStatus(group.status) === 'DRAFT').reduce((total, group) => total + group.count, 0);
 
   if (editingId && localDoc) {
     return (
@@ -927,15 +971,21 @@ export function EstimacionesView({ data, summaryData, summaryLoading, summaryErr
                     onClick={() => void handleSaveEstimate('DRAFT')}>
                     Guardar Borrador
                   </Button>
-                  {canPerform('SALES_QUOTES', 'submit') && <Button className="w-full rounded-xl bg-primary px-6 text-[10px] font-black uppercase tracking-widest text-primary-foreground shadow-xl shadow-primary/20 hover:bg-primary/90 hover:text-primary-foreground sm:w-auto"
-                    onClick={() => void handleSaveEstimate('IN_PROCESS')}>
-                    Guardar
+                  {canPerform('SALES_QUOTES', 'convert') && <Button className="w-full rounded-xl bg-primary px-6 text-[10px] font-black uppercase tracking-widest text-primary-foreground shadow-xl shadow-primary/20 hover:bg-primary/90 hover:text-primary-foreground sm:w-auto"
+                    onClick={() => void handleConvertToOrder(localDoc)}>
+                    Aprobar y enviar a Orden
                   </Button>}
                 </>}
-                {normalizeEstimateStatus(localDoc?.status) === 'IN_PROCESS' && canPerform('SALES_QUOTES', 'convert') && <Button className="w-full rounded-xl bg-primary px-6 text-[10px] font-black uppercase tracking-widest text-primary-foreground shadow-xl shadow-primary/20 hover:bg-primary/90 hover:text-primary-foreground sm:w-auto"
-                  onClick={() => void handleConvertToOrder(localDoc)}>
-                  Aprobar y enviar a Orden
-                </Button>}
+              </>
+            )}
+            {canPerform('SALES_QUOTES', 'convert') && ['DRAFT', 'APPROVED'].includes(normalizeEstimateStatus(localDoc?.status)) && (
+              <>
+                <Button type="button" variant="outline" className="w-full rounded-xl sm:w-auto" disabled={convertingId === localDoc.id} onClick={() => void handleConvertEstimateDirect(localDoc, false)}>
+                  <FileText className="mr-2 size-4" />Enviar a Facturas
+                </Button>
+                <Button type="button" variant="outline" title={hasOpenCash ? 'Aprobar y enviar directamente a Caja' : 'No hay una caja abierta en esta sucursal'} className={cn('w-full rounded-xl sm:w-auto', !hasOpenCash && 'cursor-not-allowed opacity-50')} disabled={convertingId === localDoc.id || !hasOpenCash} onClick={() => void handleConvertEstimateDirect(localDoc, true)}>
+                  <Inbox className="mr-2 size-4" />Enviar a Caja
+                </Button>
               </>
             )}
           </div>
@@ -975,7 +1025,7 @@ export function EstimacionesView({ data, summaryData, summaryLoading, summaryErr
                     setLocalDoc({ ...localDoc, warehouseId } as any);
                     void handleUpdate(localDoc!.id, { warehouseId } as any);
                   }}
-                  required={normalizeEstimateStatus(localDoc?.status) === 'IN_PROCESS'}
+                  required={false}
                   helpText="La cotización conservará esta bodega al convertirse en orden."
                 />
                 <div>
@@ -1541,7 +1591,7 @@ export function EstimacionesView({ data, summaryData, summaryLoading, summaryErr
           ? originalQuotedTotals.map((summary) => <SalesKpiCard key={`quoted-${summary.currency}`} title={`Total Cotizado (${summary.currency})`} value={formatExplicitAmount(summary.amount, summary.currency)} icon={FileSpreadsheet} color="text-primary" bg="bg-primary/10" />)
           : <SalesKpiCard title={`Total Cotizado (${displayCurrency})`} value={formatConvertedAmount(quotedTotalInDisplayCurrency, baseCurrency)} icon={FileSpreadsheet} color="text-primary" bg="bg-primary/10" />}
         <SalesKpiCard title="Tasa Conversión" value={summaryAvailable ? `${((approvedCount / (summaryTotal || 1)) * 100).toFixed(0)}%` : '—'} icon={TrendingUp} color="text-primary" bg="bg-primary/10" />
-        <SalesKpiCard title="En proceso" value={summaryAvailable ? inProcessCount : '—'} icon={Clock} color="text-primary" bg="bg-primary/10" active={statusFilter === 'IN_PROCESS'} onClick={() => setStatusFilter(statusFilter === 'IN_PROCESS' ? 'ALL' : 'IN_PROCESS')} />
+        <SalesKpiCard title="Borradores" value={summaryAvailable ? draftCount : '—'} icon={Clock} color="text-primary" bg="bg-primary/10" active={statusFilter === 'DRAFT'} onClick={() => setStatusFilter(statusFilter === 'DRAFT' ? 'ALL' : 'DRAFT')} />
         <SalesKpiCard title="Aprobadas" value={summaryAvailable ? approvedCount : '—'} icon={CheckCircle2} color="text-primary" bg="bg-primary/10" active={statusFilter === 'APPROVED'} onClick={() => setStatusFilter(statusFilter === 'APPROVED' ? 'ALL' : 'APPROVED')} />
         </div>
       </div>
@@ -1583,7 +1633,7 @@ export function EstimacionesView({ data, summaryData, summaryLoading, summaryErr
           onRowUpdate={handleUpdate}
           onRowClick={(row) => setDetailEstimate(row)}
           highlightedRowId={highlightedAlertId}
-          actionsWidth="w-40"
+          actionsWidth="w-48"
           fitContent
           layoutMode={layoutMode}
           showHorizontalControls
@@ -1596,7 +1646,7 @@ export function EstimacionesView({ data, summaryData, summaryLoading, summaryErr
                 onSend={() => handleWhatsApp(row)}
               />
               {canPerform('SALES_QUOTES', 'convert') &&
-                normalizeEstimateStatus(row.status) === 'IN_PROCESS' && (
+                ['DRAFT', 'APPROVED'].includes(normalizeEstimateStatus(row.status)) && (
                 <Button
                   variant="ghost"
                   title="Aprobar y enviar a Orden de Venta"
@@ -1609,10 +1659,18 @@ export function EstimacionesView({ data, summaryData, summaryLoading, summaryErr
                   <ArrowRightCircle className={cn(actionIconClass, convertingId === row.id && 'animate-pulse')} />
                 </Button>
               )}
+              {canPerform('SALES_QUOTES', 'convert') && ['DRAFT', 'APPROVED'].includes(normalizeEstimateStatus(row.status)) && <>
+                <Button type="button" variant="ghost" title="Enviar directamente a Facturas" aria-label="Enviar directamente a Facturas" size="icon" disabled={convertingId === row.id} onClick={(event) => { event.stopPropagation(); void handleConvertEstimateDirect(row, false); }} className={actionButtonClass}>
+                  <FileText className={cn(actionIconClass, convertingId === row.id && 'animate-pulse')} />
+                </Button>
+                <Button type="button" variant="ghost" title={hasOpenCash ? 'Enviar directamente a Caja' : 'No hay una caja abierta en esta sucursal'} aria-label="Enviar directamente a Caja" size="icon" disabled={convertingId === row.id || !hasOpenCash} onClick={(event) => { event.stopPropagation(); void handleConvertEstimateDirect(row, true); }} className={cn(actionButtonClass, !hasOpenCash && 'cursor-not-allowed opacity-40')}>
+                  <Inbox className={actionIconClass} />
+                </Button>
+              </>}
               <Button variant="ghost" title="Ver cotización completa" aria-label="Ver cotización completa" size="icon" className={actionButtonClass} onClick={() => { setDetailEstimate(null); setEditingId(row.id); }}>
                 <Eye className={actionIconClass} />
               </Button>
-              {canPerform('SALES_QUOTES', 'cancel') && ['DRAFT', 'IN_PROCESS'].includes(normalizeEstimateStatus(row.status)) && (
+              {canPerform('SALES_QUOTES', 'cancel') && normalizeEstimateStatus(row.status) === 'DRAFT' && (
                 <Button type="button" title="Cancelar cotización" variant="ghost" size="icon" className={actionButtonClass} onClick={() => setPendingCancelId(row.id)}>
                   <Ban className={actionIconClass} />
                 </Button>
@@ -1640,8 +1698,12 @@ export function EstimacionesView({ data, summaryData, summaryLoading, summaryErr
             documentLabel="cotización"
             onSend={() => handleWhatsApp(detailEstimate)}
           />
-          {canPerform('SALES_QUOTES', 'convert') && normalizeEstimateStatus(detailEstimate.status) === 'IN_PROCESS' && <Button type="button" className="rounded-xl bg-primary text-primary-foreground" disabled={convertingId === detailEstimate.id} onClick={() => { const estimate = detailEstimate; setDetailEstimate(null); void handleConvertToOrder(estimate); }}><ArrowRightCircle className="mr-2 size-4" />Enviar a orden</Button>}
-          {canPerform('SALES_QUOTES', 'cancel') && ['DRAFT', 'IN_PROCESS'].includes(normalizeEstimateStatus(detailEstimate.status)) && <Button type="button" variant="outline" className="rounded-xl border-rose-500/30 text-rose-600 hover:bg-rose-500/10 dark:text-rose-400" onClick={() => { setDetailEstimate(null); setPendingCancelId(detailEstimate.id); }}><Ban className="mr-2 size-4" />Cancelar</Button>}
+          {canPerform('SALES_QUOTES', 'convert') && normalizeEstimateStatus(detailEstimate.status) === 'DRAFT' && <Button type="button" className="rounded-xl bg-primary text-primary-foreground" disabled={convertingId === detailEstimate.id} onClick={() => { const estimate = detailEstimate; setDetailEstimate(null); void handleConvertToOrder(estimate); }}><ArrowRightCircle className="mr-2 size-4" />Aprobar y enviar a orden</Button>}
+          {canPerform('SALES_QUOTES', 'convert') && ['DRAFT', 'APPROVED'].includes(normalizeEstimateStatus(detailEstimate.status)) && <>
+            <Button type="button" variant="outline" className="rounded-xl" disabled={convertingId === detailEstimate.id} onClick={() => { const estimate = detailEstimate; setDetailEstimate(null); void handleConvertEstimateDirect(estimate, false); }}><FileText className="mr-2 size-4" />Enviar a Facturas</Button>
+            <Button type="button" variant="outline" title={hasOpenCash ? 'Enviar directamente a Caja' : 'No hay una caja abierta en esta sucursal'} className={cn('rounded-xl', !hasOpenCash && 'cursor-not-allowed opacity-50')} disabled={convertingId === detailEstimate.id || !hasOpenCash} onClick={() => { const estimate = detailEstimate; setDetailEstimate(null); void handleConvertEstimateDirect(estimate, true); }}><Inbox className="mr-2 size-4" />Enviar a Caja</Button>
+          </>}
+          {canPerform('SALES_QUOTES', 'cancel') && normalizeEstimateStatus(detailEstimate.status) === 'DRAFT' && <Button type="button" variant="outline" className="rounded-xl border-rose-500/30 text-rose-600 hover:bg-rose-500/10 dark:text-rose-400" onClick={() => { setDetailEstimate(null); setPendingCancelId(detailEstimate.id); }}><Ban className="mr-2 size-4" />Cancelar</Button>}
         </> : undefined}
         onDownloadPdf={canPerform('SALES_QUOTES', 'export') ? (format, _scope, _filter, options) => { if (detailEstimate) void handleExportPDF(detailEstimate, format, options); } : undefined}
       />

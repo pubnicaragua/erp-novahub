@@ -228,6 +228,11 @@ export interface PosInvoice {
   deliveryDescription?: string | null;
   deliveryAmount?: number;
   total: number;
+  amountPaid?: number;
+  balance?: number;
+  wasFinanced?: boolean;
+  currency?: 'NIO' | 'USD';
+  exchangeRate?: number;
   status: string;
   register?: CashRegister;
   customer?: PosCustomer;
@@ -665,6 +670,8 @@ export const cajaService = {
     currency: 'NIO' | 'USD';
     exchangeRate: number;
     payments: PosPaymentLine[];
+    allowPartialPayment?: boolean;
+    dueDate?: string;
     duplicateConfirmation?: { candidateIds: string[] };
   }, idempotencyKey?: string) =>
     api.idempotentPost<PosInvoice>('/caja/invoices', dto, idempotencyKey),

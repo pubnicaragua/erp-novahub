@@ -92,12 +92,10 @@ interface NotasCreditoViewProps {
 
 const statusOptions = [
   { label: 'Borrador', value: 'DRAFT', color: SALES_WORKFLOW_STATUS_COLORS.DRAFT },
-  { label: 'Aprobado', value: 'ISSUED', color: SALES_STATUS_COLORS.ISSUED },
-  { label: 'Pago parcial', value: 'PARTIAL', color: SALES_STATUS_COLORS.PARTIAL },
-  { label: 'Aplicado', value: 'APPLIED', color: SALES_STATUS_COLORS.APPLIED },
-  { label: 'Vencido', value: 'OVERDUE', color: SALES_STATUS_COLORS.OVERDUE || SALES_STATUS_COLORS.PARTIAL },
+  { label: 'Aprobado', value: 'APPROVED', color: SALES_STATUS_COLORS.ISSUED },
+  { label: 'Activo', value: 'ACTIVE', color: SALES_STATUS_COLORS.APPLIED },
   { label: 'Pagado', value: 'PAID', color: SALES_STATUS_COLORS.PAID },
-  { label: 'Cancelado', value: 'VOIDED', color: SALES_WORKFLOW_STATUS_COLORS.CANCELLED },
+  { label: 'Cancelado', value: 'CANCELLED', color: SALES_WORKFLOW_STATUS_COLORS.CANCELLED },
 ];
 
 function CustomerCreditReminderDialog({
@@ -297,7 +295,7 @@ export function NotasCreditoView({ data, summaryData, summaryLoading, summaryErr
   const salesDraftStorageKey = getSalesEditorDraftKey('credit-note', user?.tenantId, user?.id);
   const [searchTerm, setSearchTerm] = useState('');
   const [layoutMode, setLayoutMode] = useLocalStorageState<'table' | 'cards'>('sales-credits-layout', 'table', 24 * 365);
-  const [statusFilter, setStatusFilter] = useState<'ALL' | 'DRAFT' | 'ISSUED' | 'PARTIAL' | 'APPLIED' | 'PAID'>('ALL');
+  const [statusFilter, setStatusFilter] = useState<'ALL' | 'DRAFT' | 'APPROVED' | 'ACTIVE' | 'PAID' | 'CANCELLED'>('ALL');
   const [pendingDeleteIds, setPendingDeleteIds] = useState<string[] | null>(null);
   const [deleteLoading, setDeleteLoading] = useState(false);
   const [cancelReason, setCancelReason] = useState('');
@@ -325,7 +323,6 @@ export function NotasCreditoView({ data, summaryData, summaryLoading, summaryErr
   const [mixedPaymentEnabled, setMixedPaymentEnabled] = useState(false);
   const [partialPaymentEnabled, setPartialPaymentEnabled] = useState(false);
   const [paymentLoading, setPaymentLoading] = useState(false);
-  const [referenceNow] = useState(() => Date.now());
   const localDocRef = useRef<any>(null);
   const hydratedDraftKeyRef = useRef<string | null>(null);
   const [draftHydrated, setDraftHydrated] = useState(false);
@@ -549,9 +546,14 @@ export function NotasCreditoView({ data, summaryData, summaryLoading, summaryErr
   const sourceCurrency = (row: CreditNote) => row.invoice?.currency || row.currency;
   const sourceExchangeRate = (row: CreditNote) => row.invoice?.exchangeRate || row.exchangeRate;
   const creditDebt = (row: CreditNote) => Number(row.balance ?? row.total ?? 0);
-  const normalizeStatus = (status?: string) => String(status || '').toUpperCase();
+  const normalizeStatus = (status?: string) => {
+    const normalized = String(status || '').toUpperCase();
+    if (['ISSUED', 'PARTIAL', 'APPLIED', 'OVERDUE'].includes(normalized)) return 'ACTIVE';
+    if (normalized === 'VOIDED') return 'CANCELLED';
+    return normalized;
+  };
   const statusFor = (status?: string) => statusOptions.find((option) => option.value === normalizeStatus(status));
-  const isPayableStatus = (status?: string) => ['ISSUED', 'PARTIAL', 'APPLIED', 'OVERDUE'].includes(normalizeStatus(status));
+  const isPayableStatus = (status?: string) => normalizeStatus(status) === 'ACTIVE';
   const getCreditAdditionalChargesAmount = (doc: any = localDoc) => (
     getSalesExtraChargesAmount(doc) + Math.max(0, Number(doc?.deliveryAmount || 0))
   );
@@ -810,16 +812,33 @@ export function NotasCreditoView({ data, summaryData, summaryLoading, summaryErr
     }
   };
 
+  const handleApprove = async (id: string) => {
+    if (!canPerform('SALES_CREDIT_NOTES', 'issue')) return;
+    if (id === localDoc?.id) {
+      const saved = await handleSave(false);
+      if (!saved) return;
+    }
+    const approveToastId = toast.loading('Aprobando crédito...');
+    try {
+      await creditNotesService.approve(id, createIdempotencyKey('credit-note-approve'));
+      toast.success('Crédito aprobado. El saldo se activa al desembolsarlo o activarlo.', { id: approveToastId });
+      closeEditor();
+      onRefresh();
+    } catch (error: any) {
+      toast.error(error?.response?.data?.message || error?.message || 'No se pudo aprobar el crédito', { id: approveToastId });
+    }
+  };
+
   const handleIssue = async (id: string) => {
     if (!canPerform('SALES_CREDIT_NOTES', 'issue')) return;
     if (id === localDoc?.id && localDoc?.planEnabled && localDoc?.planCalculationMode === 'MANUAL') {
       const saved = await handleSave(false);
       if (!saved) return;
     }
-    const issueToastId = toast.loading('Aprobando crédito y validando el límite disponible...');
+    const issueToastId = toast.loading('Activando crédito y validando el límite disponible...');
     try {
       await creditNotesService.issue(id);
-      toast.success('Crédito aprobado y agregado al saldo del cliente', { id: issueToastId });
+      toast.success('Crédito activo y agregado al saldo del cliente', { id: issueToastId });
       closeEditor();
       onRefresh();
     } catch (error: any) {
@@ -1117,7 +1136,7 @@ export function NotasCreditoView({ data, summaryData, summaryLoading, summaryErr
     if (!canPerform('SALES_CREDIT_NOTES', 'send')) return;
     const status = normalizeStatus(credit.status);
     const balance = Number(credit.balance ?? Number(credit.total || 0) - Number(credit.amountPaid || 0));
-    if (!['ISSUED', 'PARTIAL', 'APPLIED'].includes(status) || balance <= 0.01) {
+    if (!['ACTIVE', 'ISSUED', 'PARTIAL', 'APPLIED'].includes(status) || balance <= 0.01) {
       toast.error('Solo se puede enviar a caja un crédito aprobado con saldo pendiente.');
       return;
     }
@@ -1139,6 +1158,7 @@ export function NotasCreditoView({ data, summaryData, summaryLoading, summaryErr
     title: row.kind === 'CUSTOMER_LOAN' ? 'Préstamo' : 'Crédito',
     customerName: customerName(row),
     status: String(row.status || ''),
+    overdueBalance: Number(row.overdueBalance || 0),
     sourceLabel: row.invoice?.number ? `${row.kind === 'CUSTOMER_LOAN' ? 'Factura del préstamo' : 'Factura origen'}: ${row.invoice.number}` : undefined,
     totalLabel: formatConvertedAmount(Number(row.total || 0), row.currency, row.exchangeRate),
     sourceCurrency: row.currency,
@@ -1257,24 +1277,24 @@ export function NotasCreditoView({ data, summaryData, summaryLoading, summaryErr
     { key: 'total', header: 'Monto total', width: '135px', headerExtra: <ColumnFilterMenu label="Monto total" sort={colFilters.state.total?.sort || null} onSort={(sort) => colFilters.setSort('total', sort)} />, render: (_, row) => <span className="text-[13px] font-black tabular-nums text-primary">{formatConvertedAmount(sourceInvoiceTotal(row), sourceCurrency(row), sourceExchangeRate(row))}</span> },
     { key: 'amountPaid', header: 'Abonado', width: '125px', headerExtra: <ColumnFilterMenu label="Abonado" sort={colFilters.state.amountPaid?.sort || null} onSort={(sort) => colFilters.setSort('amountPaid', sort)} />, render: (_, row) => <span className="text-[13px] font-black tabular-nums text-foreground">{formatConvertedAmount(sourceInvoicePaid(row), sourceCurrency(row), sourceExchangeRate(row))}</span> },
     { key: 'balance', header: 'En deuda', width: '125px', headerExtra: <ColumnFilterMenu label="En deuda" sort={colFilters.state.balance?.sort || null} onSort={(sort) => colFilters.setSort('balance', sort)} />, render: (_, row) => <span className={cn('text-[13px] font-black tabular-nums', creditDebt(row) > 0 ? 'text-amber-500' : 'text-emerald-500')}>{formatConvertedAmount(creditDebt(row), sourceCurrency(row), sourceExchangeRate(row))}</span> },
-    { key: 'status', header: 'Estado', width: '115px', render: (value) => { const option = statusFor(value as string); return <Badge variant="outline" className={cn('text-[9px] font-black uppercase tracking-widest px-2 py-0.5 border-none shadow-none', option?.color || 'bg-muted/20 text-muted-foreground')}>{option?.label || value}</Badge>; } },
+    { key: 'status', header: 'Estado', width: '135px', render: (value, row) => { const option = statusFor(value as string); const overdue = normalizeStatus(value as string) === 'ACTIVE' && Number((row as any).overdueBalance || 0) > 0.01; return <Badge variant="outline" className={cn('text-[9px] font-black uppercase tracking-widest px-2 py-0.5 border-none shadow-none', overdue ? 'bg-rose-500/10 text-rose-700 dark:text-rose-300' : option?.color || 'bg-muted/20 text-muted-foreground')}>{overdue ? 'Activo (Atrasado)' : option?.label || value}</Badge>; } },
   ];
 
-  const totalIssued = summaryFilteredData.filter((credit) => ['ISSUED', 'PARTIAL', 'OVERDUE', 'PAID'].includes(normalizeStatus(credit.status))).reduce((sum, credit) => sum + toBaseAmount(Number(credit.total || 0), credit.currency, credit.exchangeRate), 0);
-  const totalOpen = summaryFilteredData.filter((credit) => ['ISSUED', 'PARTIAL', 'APPLIED', 'OVERDUE'].includes(normalizeStatus(credit.status))).reduce((sum, credit) => sum + toBaseAmount(Number(credit.balance ?? credit.total ?? 0), credit.currency, credit.exchangeRate), 0);
+  const totalIssued = summaryFilteredData.filter((credit) => ['ACTIVE', 'ISSUED', 'PARTIAL', 'APPLIED', 'PAID'].includes(normalizeStatus(credit.status))).reduce((sum, credit) => sum + toBaseAmount(Number(credit.total || 0), credit.currency, credit.exchangeRate), 0);
+  const totalOpen = summaryFilteredData.filter((credit) => ['ACTIVE', 'ISSUED', 'PARTIAL', 'APPLIED', 'OVERDUE'].includes(normalizeStatus(credit.status))).reduce((sum, credit) => sum + toBaseAmount(Number(credit.balance ?? credit.total ?? 0), credit.currency, credit.exchangeRate), 0);
   const originalIssuedAmounts = summarizeAmountsByCurrency(
-    summaryFilteredData.filter((credit) => ['ISSUED', 'PARTIAL', 'OVERDUE', 'PAID'].includes(normalizeStatus(credit.status))),
+    summaryFilteredData.filter((credit) => ['ACTIVE', 'ISSUED', 'PARTIAL', 'APPLIED', 'PAID'].includes(normalizeStatus(credit.status))),
     (credit) => Number(credit.total || 0),
     (credit) => credit.currency,
     baseCurrency,
   );
   const originalOpenAmounts = summarizeAmountsByCurrency(
-    summaryFilteredData.filter((credit) => ['ISSUED', 'PARTIAL', 'APPLIED', 'OVERDUE'].includes(normalizeStatus(credit.status))),
+    summaryFilteredData.filter((credit) => ['ACTIVE', 'ISSUED', 'PARTIAL', 'APPLIED', 'OVERDUE'].includes(normalizeStatus(credit.status))),
     (credit) => Number(credit.balance ?? credit.total ?? 0),
     (credit) => credit.currency,
     baseCurrency,
   );
-  const overdueCount = summaryFilteredData.filter((credit) => Number(credit.balance ?? 0) > 0 && credit.dueDate && new Date(credit.dueDate).getTime() < referenceNow).length;
+  const overdueCount = summaryFilteredData.filter((credit) => Number(credit.overdueBalance || 0) > 0.01).length;
 
   const installmentPlanEstimate = useMemo(() => {
     if (!localDoc?.planEnabled) return null;
@@ -1312,7 +1332,7 @@ export function NotasCreditoView({ data, summaryData, summaryLoading, summaryErr
 
   if ((editingId || isCreating) && localDoc) {
     const statusOption = statusFor(localDoc.status);
-    const canIssue = !isCreating && normalizeStatus(localDoc.status) === 'DRAFT';
+    const canApprove = !isCreating && normalizeStatus(localDoc.status) === 'DRAFT';
     const canEditDocument = isCreating || normalizeStatus(localDoc.status) === 'DRAFT';
     const selectedCustomer = customerFor(localDoc.customerId);
     const availableCredit = availableCreditFor(selectedCustomer);
@@ -1367,7 +1387,7 @@ export function NotasCreditoView({ data, summaryData, summaryLoading, summaryErr
       <div className="space-y-6 animate-in slide-in-from-right duration-300" data-tour="sales-form-title">
         <div className="flex flex-wrap items-center justify-between gap-4">
           <div className="flex items-center gap-4"><Button variant="ghost" size="icon" onClick={closeEditor} className="rounded-full"><ChevronLeft className="size-5" /></Button><div><h2 className="nh-module-title">{isCreating ? 'Nuevo Crédito' : `Crédito ${localDoc.number}`}</h2><p className="text-[10px] font-black uppercase tracking-widest text-muted-foreground/40">Productos y servicios entregados a crédito</p></div></div>
-          <div className="flex flex-wrap items-center gap-3">{canEditDocument && canPerform('SALES_CREDIT_NOTES', 'edit') && <><Button variant="outline" className="rounded-xl border-border/50 hover:bg-muted/70 hover:text-foreground font-black uppercase text-[10px] tracking-widest" onClick={handleSave}>Guardar Borrador</Button>{canIssue && canPerform('SALES_CREDIT_NOTES', 'issue') && <Button variant="outline" className="rounded-xl border-emerald-500/50 text-emerald-500 hover:bg-emerald-500/10 hover:text-emerald-700 dark:hover:text-emerald-300 font-black uppercase text-[10px] tracking-widest" onClick={() => handleIssue(localDoc.id)}><CheckCircle2 className="mr-2 size-3" /> Aprobar crédito</Button>}</>}</div>
+          <div className="flex flex-wrap items-center gap-3">{canEditDocument && canPerform('SALES_CREDIT_NOTES', 'edit') && <><Button variant="outline" className="rounded-xl border-border/50 hover:bg-muted/70 hover:text-foreground font-black uppercase text-[10px] tracking-widest" onClick={handleSave}>Guardar Borrador</Button>{canApprove && canPerform('SALES_CREDIT_NOTES', 'issue') && <Button variant="outline" className="rounded-xl border-emerald-500/50 text-emerald-500 hover:bg-emerald-500/10 hover:text-emerald-700 dark:hover:text-emerald-300 font-black uppercase text-[10px] tracking-widest" onClick={() => handleApprove(localDoc.id)}><CheckCircle2 className="mr-2 size-3" /> Aprobar crédito</Button>}</>}</div>
         </div>
         {!canEditDocument && <div className="rounded-xl border border-amber-500/30 bg-amber-500/10 px-4 py-3 text-xs text-amber-700 dark:text-amber-300">Este crédito ya fue emitido o aplicado. Se muestra en modo consulta para proteger el saldo y la trazabilidad.</div>}
         {customersError && <div role="alert" className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-rose-500/30 bg-rose-500/10 px-4 py-3 text-xs text-rose-700 dark:text-rose-300"><span>No se pudieron cargar los clientes ni sus límites de crédito.</span><Button type="button" variant="outline" size="sm" onClick={onRefresh}>Reintentar</Button></div>}
@@ -1744,7 +1764,7 @@ export function NotasCreditoView({ data, summaryData, summaryLoading, summaryErr
         {!resolvedSummaryRows ? <SalesKpiCard title="Saldo abierto" value="—" icon={TrendingUp} color="text-primary" bg="bg-primary/10" /> : displayMode === 'ORIGINAL'
           ? originalOpenAmounts.map((summary) => <SalesKpiCard key={`open-${summary.currency}`} title={`Saldo abierto (${summary.currency})`} value={formatExplicitAmount(summary.amount, summary.currency)} icon={TrendingUp} color="text-primary" bg="bg-primary/10" />)
           : <SalesKpiCard title={`Saldo abierto (${displayCurrency})`} value={formatConvertedAmount(totalOpen, baseCurrency)} icon={TrendingUp} color="text-primary" bg="bg-primary/10" />}
-        <SalesKpiCard title="Activos" value={resolvedSummaryRows ? summaryFilteredData.filter((credit) => ['ISSUED', 'PARTIAL', 'OVERDUE'].includes(normalizeStatus(credit.status))).length : '—'} icon={CheckCircle2} color="text-primary" bg="bg-primary/10" />
+        <SalesKpiCard title="Activos" value={resolvedSummaryRows ? summaryFilteredData.filter((credit) => ['ACTIVE', 'ISSUED', 'PARTIAL', 'APPLIED', 'OVERDUE'].includes(normalizeStatus(credit.status))).length : '—'} icon={CheckCircle2} color="text-primary" bg="bg-primary/10" />
         <SalesKpiCard title="Por vencer / vencidos" value={resolvedSummaryRows ? overdueCount : '—'} icon={Clock} color="text-primary" bg="bg-primary/10" />
         </div>
       </div>
@@ -1760,7 +1780,7 @@ export function NotasCreditoView({ data, summaryData, summaryLoading, summaryErr
                 </SelectTrigger>
                 <SelectContent align="end">
                   <SelectItem value="ALL">Todos los estados</SelectItem>
-                  {statusOptions.filter((option) => option.value !== 'VOIDED').map((option) => <SelectItem key={option.value} value={option.value}>{option.label}</SelectItem>)}
+                  {statusOptions.map((option) => <SelectItem key={option.value} value={option.value}>{option.label}</SelectItem>)}
                 </SelectContent>
               </Select>
             </div>
@@ -1797,13 +1817,14 @@ export function NotasCreditoView({ data, summaryData, summaryLoading, summaryErr
             const status = normalizeStatus(row.status);
             const activeQueue = ['PENDING', 'CLAIMED'].includes(normalizeStatus(row.cashQueue?.status));
             return <div className="flex items-center gap-1" onPointerDown={(event) => event.stopPropagation()} onClick={(event) => event.stopPropagation()}>
-              {row.kind === 'CREDIT_NOTE' && canPerform('SALES_CREDIT_NOTES', 'issue') && status === 'DRAFT' && <Button title="Aprobar crédito" aria-label="Aprobar crédito" variant="ghost" size="icon" className="size-8 rounded-lg text-emerald-500" onClick={() => handleIssue(row.id)}><CheckCircle2 className="size-4" /></Button>}
-              {row.kind === 'CREDIT_NOTE' && canPerform('SALES_CREDIT_NOTES', 'send') && ['ISSUED', 'PARTIAL', 'APPLIED'].includes(status) && Number(row.balance ?? row.total) > 0.01 && <Button title={activeQueue ? 'Crédito ya enviado a Caja' : 'Enviar crédito a Caja'} aria-label={activeQueue ? 'Crédito ya enviado a Caja' : 'Enviar crédito a Caja'} variant="ghost" size="icon" className={cn('size-8 rounded-lg', activeQueue ? 'text-amber-500' : 'text-emerald-500')} onClick={() => void handleSendToCash(row)} disabled={activeQueue}><Send className="size-4" /></Button>}
+              {row.kind === 'CREDIT_NOTE' && canPerform('SALES_CREDIT_NOTES', 'issue') && status === 'DRAFT' && <Button title="Aprobar crédito" aria-label="Aprobar crédito" variant="ghost" size="icon" className="size-8 rounded-lg text-emerald-500" onClick={() => handleApprove(row.id)}><CheckCircle2 className="size-4" /></Button>}
+              {row.kind === 'CREDIT_NOTE' && canPerform('SALES_CREDIT_NOTES', 'issue') && status === 'APPROVED' && <Button title="Activar crédito" aria-label="Activar crédito" variant="ghost" size="icon" className="size-8 rounded-lg text-primary" onClick={() => handleIssue(row.id)}><CheckCircle2 className="size-4" /></Button>}
+              {row.kind === 'CREDIT_NOTE' && canPerform('SALES_CREDIT_NOTES', 'send') && ['ACTIVE', 'ISSUED', 'PARTIAL', 'APPLIED'].includes(status) && Number(row.balance ?? row.total) > 0.01 && <Button title={activeQueue ? 'Crédito ya enviado a Caja' : 'Enviar crédito a Caja'} aria-label={activeQueue ? 'Crédito ya enviado a Caja' : 'Enviar crédito a Caja'} variant="ghost" size="icon" className={cn('size-8 rounded-lg', activeQueue ? 'text-amber-500' : 'text-emerald-500')} onClick={() => void handleSendToCash(row)} disabled={activeQueue}><Send className="size-4" /></Button>}
               {canPerform('SALES_CREDIT_NOTES', 'pay') && isPayableStatus(status) && Number(row.balance ?? row.total) > 0.01 && <Button title={row.kind === 'CUSTOMER_LOAN' ? 'Registrar abono' : 'Registrar pago'} aria-label={row.kind === 'CUSTOMER_LOAN' ? 'Registrar abono del préstamo' : 'Registrar pago del crédito'} variant="ghost" size="icon" className="size-8 rounded-lg text-primary" onClick={() => openPayment(row)}><CreditCard className="size-4" /></Button>}
               {row.kind === 'CUSTOMER_LOAN'
                 ? <Button title="Ver préstamo" aria-label="Ver préstamo" variant="ghost" size="icon" className="size-8 rounded-lg text-muted-foreground hover:text-primary" onClick={() => setDetailCredit(row)}><Eye className="size-4" /></Button>
                 : <Button title="Ver crédito completo" aria-label="Ver crédito completo" variant="ghost" size="icon" className="size-8 rounded-lg text-muted-foreground hover:text-primary" onClick={() => { setDetailCredit(null); startEdit(row.id); }}><Eye className="size-4" /></Button>}
-              {row.kind === 'CREDIT_NOTE' && canPerform('SALES_CREDIT_NOTES', 'cancel') && status === 'DRAFT' && <Button title="Cancelar crédito" aria-label="Cancelar crédito" variant="ghost" size="icon" className="size-8 rounded-lg text-muted-foreground hover:text-rose-500" onClick={() => { setCancelReason(''); setCancelReasonAttempted(false); setPendingDeleteIds([row.id]); }}><Ban className="size-4" /></Button>}
+              {row.kind === 'CREDIT_NOTE' && canPerform('SALES_CREDIT_NOTES', 'cancel') && ['DRAFT', 'APPROVED'].includes(status) && <Button title="Cancelar crédito" aria-label="Cancelar crédito" variant="ghost" size="icon" className="size-8 rounded-lg text-muted-foreground hover:text-rose-500" onClick={() => { setCancelReason(''); setCancelReasonAttempted(false); setPendingDeleteIds([row.id]); }}><Ban className="size-4" /></Button>}
             </div>;
           }}
         />
@@ -1823,10 +1844,11 @@ export function NotasCreditoView({ data, summaryData, summaryLoading, summaryErr
         extraActions={detailCredit ? <>
           {(detailCredit.planEnabled || Boolean(detailCredit.installments?.length)) && canPerform('SALES_CREDIT_NOTES', 'export') && <Button type="button" variant="outline" className="rounded-xl" onClick={() => void handleExportInstallmentPlan(detailCredit)}><Download className="mr-2 size-4" />Descargar plan de abonos</Button>}
           {canPerform('SALES_CREDIT_NOTES', 'export') && <Button type="button" variant="outline" className="rounded-xl" onClick={() => void handleExportDebtStatement(detailCredit)}><FileText className="mr-2 size-4" />Estado de cuenta</Button>}
-          {detailCredit.kind === 'CREDIT_NOTE' && canPerform('SALES_CREDIT_NOTES', 'issue') && normalizeStatus(detailCredit.status) === 'DRAFT' && <Button type="button" className="rounded-xl bg-emerald-600 text-white hover:bg-emerald-700" onClick={() => handleIssue(detailCredit.id)}><CheckCircle2 className="mr-2 size-4" />Aprobar crédito</Button>}
-          {detailCredit.kind === 'CREDIT_NOTE' && canPerform('SALES_CREDIT_NOTES', 'send') && ['ISSUED', 'PARTIAL', 'APPLIED'].includes(normalizeStatus(detailCredit.status)) && Number(detailCredit.balance ?? detailCredit.total) > 0.01 && <Button type="button" className="rounded-xl bg-emerald-600 text-white hover:bg-emerald-700" disabled={['PENDING', 'CLAIMED'].includes(normalizeStatus(detailCredit.cashQueue?.status))} onClick={() => void handleSendToCash(detailCredit)}><Send className="mr-2 size-4" />Enviar a Caja</Button>}
+          {detailCredit.kind === 'CREDIT_NOTE' && canPerform('SALES_CREDIT_NOTES', 'issue') && normalizeStatus(detailCredit.status) === 'DRAFT' && <Button type="button" className="rounded-xl bg-emerald-600 text-white hover:bg-emerald-700" onClick={() => handleApprove(detailCredit.id)}><CheckCircle2 className="mr-2 size-4" />Aprobar crédito</Button>}
+          {detailCredit.kind === 'CREDIT_NOTE' && canPerform('SALES_CREDIT_NOTES', 'issue') && normalizeStatus(detailCredit.status) === 'APPROVED' && <Button type="button" className="rounded-xl bg-primary text-primary-foreground" onClick={() => handleIssue(detailCredit.id)}><CheckCircle2 className="mr-2 size-4" />Activar crédito</Button>}
+          {detailCredit.kind === 'CREDIT_NOTE' && canPerform('SALES_CREDIT_NOTES', 'send') && ['ACTIVE', 'ISSUED', 'PARTIAL', 'APPLIED'].includes(normalizeStatus(detailCredit.status)) && Number(detailCredit.balance ?? detailCredit.total) > 0.01 && <Button type="button" className="rounded-xl bg-emerald-600 text-white hover:bg-emerald-700" disabled={['PENDING', 'CLAIMED'].includes(normalizeStatus(detailCredit.cashQueue?.status))} onClick={() => void handleSendToCash(detailCredit)}><Send className="mr-2 size-4" />Enviar a Caja</Button>}
           {canPerform('SALES_CREDIT_NOTES', 'pay') && isPayableStatus(detailCredit.status) && Number(detailCredit.balance ?? detailCredit.total) > 0.01 && <Button type="button" variant="outline" className="rounded-xl border-primary/30 text-primary hover:bg-primary/10" onClick={() => openPayment(detailCredit)}><CreditCard className="mr-2 size-4" />{detailCredit.kind === 'CUSTOMER_LOAN' ? 'Registrar abono' : 'Registrar pago'}</Button>}
-          {detailCredit.kind === 'CREDIT_NOTE' && canPerform('SALES_CREDIT_NOTES', 'cancel') && normalizeStatus(detailCredit.status) === 'DRAFT' && <Button type="button" variant="outline" className="rounded-xl border-rose-500/30 text-rose-600 hover:bg-rose-500/10 dark:text-rose-400" onClick={() => { setDetailCredit(null); setCancelReason(''); setCancelReasonAttempted(false); setPendingDeleteIds([detailCredit.id]); }}><Ban className="mr-2 size-4" />Cancelar</Button>}
+          {detailCredit.kind === 'CREDIT_NOTE' && canPerform('SALES_CREDIT_NOTES', 'cancel') && ['DRAFT', 'APPROVED'].includes(normalizeStatus(detailCredit.status)) && <Button type="button" variant="outline" className="rounded-xl border-rose-500/30 text-rose-600 hover:bg-rose-500/10 dark:text-rose-400" onClick={() => { setDetailCredit(null); setCancelReason(''); setCancelReasonAttempted(false); setPendingDeleteIds([detailCredit.id]); }}><Ban className="mr-2 size-4" />Cancelar</Button>}
         </> : undefined}
         onDownloadPdf={detailCredit && canPerform('SALES_CREDIT_NOTES', 'export') ? (format) => { if (detailCredit) void handleExportPDF(detailCredit, format); } : undefined}
       />
@@ -1835,7 +1857,7 @@ export function NotasCreditoView({ data, summaryData, summaryLoading, summaryErr
         open={pendingDeleteIds !== null}
         onOpenChange={(open) => { if (!open && !deleteLoading) { setPendingDeleteIds(null); setCancelReason(''); setCancelReasonAttempted(false); } }}
         title={pendingDeleteIds?.length === 1 ? '¿Cancelar crédito?' : `¿Cancelar ${pendingDeleteIds?.length ?? ''} créditos?`}
-        description="El crédito quedará cancelado y se conservará el registro. Solo pueden cancelarse créditos pendientes de aprobación; los emitidos, aplicados o pagados no se modifican."
+        description="El crédito quedará cancelado y se conservará el registro. Solo pueden cancelarse créditos en borrador o aprobados; los activos o pagados no se modifican."
         confirmLabel={pendingDeleteIds?.length === 1 ? 'Cancelar crédito' : 'Cancelar créditos'}
         variant="destructive"
         loading={deleteLoading}

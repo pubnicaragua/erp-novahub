@@ -510,6 +510,8 @@ export interface Invoice {
   amountPaid: number;
   balance: number;
   paymentMethod?: string | null;
+  /** Indica que la factura fue financiada, incluso después de quedar pagada. */
+  wasFinanced?: boolean;
   /** Disponibilidad en moneda base, excluyendo esta factura y considerando la deuda restante del cliente. */
   creditAvailableBase?: number;
   currency: Currency;
@@ -752,7 +754,7 @@ export interface SalesReturn {
   isPartial?: boolean;
   reason: string;
   accountId?: string;
-  status: 'pending' | 'approved' | 'processed' | 'rejected' | 'PENDING' | 'APPROVED' | 'PROCESSED' | 'REJECTED';
+  status: 'draft' | 'pending' | 'approved' | 'processed' | 'applied' | 'rejected' | 'DRAFT' | 'PENDING' | 'APPROVED' | 'PROCESSED' | 'APPLIED' | 'REJECTED';
   items: SalesReturnItem[];
   createdAt: string;
   updatedAt: string;
@@ -829,7 +831,7 @@ export interface CreditNote {
   } | null;
   currency?: Currency;
   exchangeRate?: number;
-  status: 'draft' | 'issued' | 'partial' | 'applied' | 'paid' | 'overdue' | 'voided' | 'DRAFT' | 'ISSUED' | 'PARTIAL' | 'APPLIED' | 'PAID' | 'OVERDUE' | 'VOIDED';
+  status: 'draft' | 'approved' | 'active' | 'paid' | 'cancelled' | 'issued' | 'partial' | 'applied' | 'overdue' | 'voided' | 'DRAFT' | 'APPROVED' | 'ACTIVE' | 'PAID' | 'CANCELLED' | 'ISSUED' | 'PARTIAL' | 'APPLIED' | 'OVERDUE' | 'VOIDED';
   reason: string;
   accountId?: string;
   sellerEmployeeId?: string | null;

@@ -112,12 +112,12 @@ interface FacturasViewProps {
 // Todos los estados posibles (para visualización en badges)
 const statusOptions = [
   { label: 'Borrador', value: 'DRAFT', color: SALES_WORKFLOW_STATUS_COLORS.DRAFT },
-  { label: 'En proceso', value: 'PENDING', color: SALES_WORKFLOW_STATUS_COLORS.IN_PROCESS },
+  { label: 'Pendiente de cobro', value: 'PENDING', color: SALES_WORKFLOW_STATUS_COLORS.IN_PROCESS },
+  { label: 'Enviada a caja', value: 'CASH_QUEUE', color: SALES_STATUS_COLORS.CREDIT },
   { label: 'A crédito', value: 'CREDIT', color: SALES_STATUS_COLORS.CREDIT },
   { label: 'Pagada', value: 'PAID', color: SALES_STATUS_COLORS.PAID },
-  { label: 'Anulada', value: 'CANCELLED', color: SALES_WORKFLOW_STATUS_COLORS.CANCELLED },
-  { label: 'Vencida', value: 'OVERDUE', color: SALES_STATUS_COLORS.OVERDUE },
-  { label: 'Parcial', value: 'PARTIAL', color: SALES_STATUS_COLORS.PARTIAL },
+  { label: 'Pagada · A crédito', value: 'PAID_CREDIT', color: SALES_STATUS_COLORS.PAID },
+  { label: 'Cancelada', value: 'CANCELLED', color: SALES_WORKFLOW_STATUS_COLORS.CANCELLED },
 ];
 
 const paymentMethodOptions = [
@@ -131,6 +131,30 @@ const paymentMethodOptions = [
 const isInvoiceInCashQueue = (invoice?: Partial<Invoice> | null) =>
   ['PENDING', 'CLAIMED'].includes(String(invoice?.cashQueue?.status || '').toUpperCase());
 
+const invoiceStatusFilterKey = (invoice: Partial<Invoice>) => {
+  if (isInvoiceInCashQueue(invoice)) return 'CASH_QUEUE';
+  const status = String(invoice.status || '').toUpperCase();
+  if (status === 'PAID' && invoice.wasFinanced) return 'PAID_CREDIT';
+  if (['PARTIAL', 'OVERDUE'].includes(status)) return 'CREDIT';
+  return status;
+};
+
+const invoiceIsOverdue = (invoice: Partial<Invoice>) => {
+  const status = String(invoice.status || '').toUpperCase();
+  if (['DRAFT', 'PAID', 'CANCELLED', 'REFUNDED'].includes(status) || Number(invoice.balance || 0) <= 0.01 || !invoice.dueDate) return false;
+  const due = new Date(invoice.dueDate);
+  due.setHours(0, 0, 0, 0);
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
+  return due < today;
+};
+
+const invoiceStatusLabel = (invoice: Partial<Invoice>) => {
+  const key = invoiceStatusFilterKey(invoice);
+  if (key === 'CREDIT' && invoiceIsOverdue(invoice)) return 'A crédito · Atrasada';
+  return statusOptions.find((option) => option.value === key)?.label || String(invoice.status || '—');
+};
+
 type InvoicePaymentLine = {
   method: string;
   amount: number;
@@ -143,7 +167,7 @@ type InvoicePaymentLine = {
   cardCommissionAccountId?: string;
 };
 
-type InvoiceSaveAction = 'SAVE' | 'DRAFT' | 'PENDING' | 'PAYMENT' | 'CREDIT';
+type InvoiceSaveAction = 'SAVE' | 'DRAFT' | 'PENDING' | 'PAYMENT' | 'CREDIT' | 'CASH_QUEUE';
 
 export function FacturasView({ data, summaryData, summaryLoading, summaryError, loading, onRefresh, customers = [], products = [], productsLoading = false, productsError = false, series = [], warehouses = [], employees = [], invoiceDraft, onClearInvoiceDraft, targetInvoiceId, onClearTargetInvoiceId, pagination, onSearchChange, dateFrom = '', dateTo = '', onDateRangeChange, selectedBranchId = '', salesAlert, isSidebarCollapsed = false }: FacturasViewProps) {
   const invoiceListStartedAt = useRef<number | null>(typeof performance === 'undefined' ? null : performance.now());
@@ -184,6 +208,17 @@ export function FacturasView({ data, summaryData, summaryLoading, summaryError, 
     toBaseAmount,
   } = useCurrency();
   const { user, canPerform } = useAuth();
+  const cashAvailabilityQuery = useQuery({
+    queryKey: ['sales', 'open-cash-availability', user?.clientTenantId || user?.tenantId],
+    queryFn: async () => {
+      const response: any = await cajaService.getRegisters();
+      const registers = Array.isArray(response) ? response : response?.data || [];
+      return registers.some((register: any) => register.hasActiveSession);
+    },
+    enabled: Boolean(user?.clientTenantId || user?.tenantId),
+    staleTime: 30_000,
+  });
+  const hasOpenCash = cashAvailabilityQuery.data === true;
   const lineIncome = useSalesLineIncome();
   const salesIntegrationQuery = useSalesIntegrationPolicy();
   const salesAccountingRequired = salesIntegrationQuery.data?.accountingRequired ?? true;
@@ -201,7 +236,7 @@ export function FacturasView({ data, summaryData, summaryLoading, summaryError, 
     }
   });
   const [layoutMode, setLayoutMode] = useLocalStorageState<'table' | 'cards'>('sales-invoices-layout', 'table', 24 * 365);
-  const [statusFilter, setStatusFilter] = useState<'ALL' | 'RECEIVABLE' | 'OVERDUE' | 'PAID'>('ALL');
+  const [statusFilter, setStatusFilter] = useState<'ALL' | 'RECEIVABLE' | 'OVERDUE' | 'DRAFT' | 'PENDING' | 'CASH_QUEUE' | 'CREDIT' | 'PAID' | 'PAID_CREDIT' | 'CANCELLED'>('ALL');
   useEffect(() => { try { sessionStorage.removeItem('global-search-term') } catch {} }, [])
   const [pendingCancelIds, setPendingCancelIds] = useState<string[] | null>(null);
   const [cancelReason, setCancelReason] = useState('');
@@ -609,8 +644,17 @@ export function FacturasView({ data, summaryData, summaryLoading, summaryError, 
     }
   }, [targetInvoiceId, data, onClearTargetInvoiceId]);
 
+  const matchesInvoiceStatus = (invoice: Invoice) => {
+    const key = invoiceStatusFilterKey(invoice);
+    if (statusFilter === 'ALL') return true;
+    if (statusFilter === 'RECEIVABLE') return ['PENDING', 'CASH_QUEUE', 'CREDIT'].includes(key);
+    if (statusFilter === 'OVERDUE') return invoiceIsOverdue(invoice);
+    if (statusFilter === 'PAID') return ['PAID', 'PAID_CREDIT'].includes(key);
+    return key === statusFilter;
+  };
+
   const filtered = data.filter(f =>
-    (statusFilter === 'ALL' || (statusFilter === 'RECEIVABLE' && ['PENDING', 'OVERDUE', 'PARTIAL', 'CREDIT'].includes(String(f.status || '').toUpperCase())) || String(f.status || '').toUpperCase() === statusFilter) &&
+    matchesInvoiceStatus(f) &&
     (f.number.toLowerCase().includes(searchTerm.toLowerCase()) ||
     (f.customer?.name || '').toLowerCase().includes(searchTerm.toLowerCase()))
   );
@@ -642,21 +686,23 @@ export function FacturasView({ data, summaryData, summaryLoading, summaryError, 
     const search = searchTerm.toLowerCase();
     return String(invoice.number || '').toLowerCase().includes(search) || String(invoice.customer?.name || '').toLowerCase().includes(search);
   });
+  const summaryGroups = summaryData?.groups || [];
   const summaryRowsWithoutStatusFilter = colFilters.applyTo(summarySearchRows, filterGetters);
-  const summaryFilteredData = colFilters.applyTo(summarySearchRows.filter((invoice) =>
-    statusFilter === 'ALL' || (statusFilter === 'RECEIVABLE' && ['PENDING', 'OVERDUE', 'PARTIAL', 'CREDIT'].includes(String(invoice.status || '').toUpperCase())) || String(invoice.status || '').toUpperCase() === statusFilter,
-  ), filterGetters);
-  const summaryReceivableRows = summaryRowsWithoutStatusFilter.filter((invoice) => ['PENDING', 'OVERDUE', 'PARTIAL', 'CREDIT'].includes(String(invoice.status || '').toUpperCase()));
-  const summaryPaidRows = summaryRowsWithoutStatusFilter.filter((invoice) => String(invoice.status || '').toUpperCase() === 'PAID');
+  const summaryFilteredData = colFilters.applyTo(summarySearchRows.filter(matchesInvoiceStatus), filterGetters);
+  const summaryReceivableRows = summaryRowsWithoutStatusFilter.filter((invoice) => ['PENDING', 'CASH_QUEUE', 'CREDIT'].includes(invoiceStatusFilterKey(invoice)));
+  const summaryPaidRows = summaryRowsWithoutStatusFilter.filter((invoice) => ['PAID', 'PAID_CREDIT'].includes(invoiceStatusFilterKey(invoice)));
+  const summaryCreditCount = hasColumnValueFilters
+    ? summaryRowsWithoutStatusFilter.filter((invoice) => invoiceStatusFilterKey(invoice) === 'CREDIT').length
+    : summaryGroups.filter((group) => ['CREDIT', 'PARTIAL', 'OVERDUE'].includes(group.status)).reduce((total, group) => total + group.count, 0);
   const isKpiSummaryLoading = hasColumnValueFilters
     ? columnFilterSummaryQuery.isPending || columnFilterSummaryQuery.isFetching
     : summaryLoading;
   const isKpiSummaryError = hasColumnValueFilters ? columnFilterSummaryQuery.isError : summaryError;
   const summaryAvailable = hasColumnValueFilters ? fallbackSummaryRows !== undefined : summaryData !== undefined;
-  const summaryGroups = summaryData?.groups || [];
   const selectedSummaryGroups = hasColumnValueFilters ? [] : summaryGroups.filter((group) =>
     statusFilter === 'ALL'
       || (statusFilter === 'RECEIVABLE' && ['PENDING', 'OVERDUE', 'PARTIAL', 'CREDIT'].includes(group.status))
+      || (statusFilter === 'PAID' && group.status === 'PAID')
       || group.status === statusFilter,
   );
   const receivableSummaryGroups = hasColumnValueFilters ? [] : summaryGroups.filter((group) => ['PENDING', 'OVERDUE', 'PARTIAL', 'CREDIT'].includes(group.status));
@@ -806,7 +852,7 @@ export function FacturasView({ data, summaryData, summaryLoading, summaryError, 
   const canSendInvoiceToCash = (invoice?: Partial<Invoice> | null) => Boolean(
     invoice?.id
       && canPerform('SALES_INVOICES', 'sendToCash')
-      && !['PAID', 'CANCELLED', 'CREDIT'].includes(String(invoice.status || '').toUpperCase())
+      && !['DRAFT', 'PAID', 'CANCELLED', 'CREDIT'].includes(String(invoice.status || '').toUpperCase())
       && getInvoiceBalance(invoice as Invoice) > 0.01
       && !isInvoiceInCashQueue(invoice),
   );
@@ -864,7 +910,7 @@ export function FacturasView({ data, summaryData, summaryLoading, summaryError, 
     const actionInvoice = !invoice.id && status === 'DRAFT'
       ? ({ ...invoice, status: 'PENDING' } as Invoice)
       : invoice;
-    if (!['PENDING', 'PARTIAL', 'OVERDUE'].includes(String(actionInvoice.status || '').toUpperCase()) || getInvoiceBalance(actionInvoice) <= 0.01) {
+    if (!['PENDING', 'CREDIT', 'PARTIAL', 'OVERDUE'].includes(String(actionInvoice.status || '').toUpperCase()) || getInvoiceBalance(actionInvoice) <= 0.01) {
       toast.error('Solo se puede enviar a crédito una factura con saldo pendiente');
       return;
     }
@@ -1098,7 +1144,7 @@ export function FacturasView({ data, summaryData, summaryLoading, summaryError, 
       return;
     }
     const hasActiveCredit = (paymentInvoice.creditNotes || [])
-      .some((credit) => ['ISSUED', 'PARTIAL', 'APPLIED'].includes(String(credit.status).toUpperCase()));
+      .some((credit) => ['ACTIVE', 'ISSUED', 'PARTIAL', 'APPLIED'].includes(String(credit.status).toUpperCase()));
     const remainingBase = toBaseAmount(
       remaining,
       invoiceCurrency,
@@ -1187,7 +1233,7 @@ export function FacturasView({ data, summaryData, summaryLoading, summaryError, 
         await invoicesService.submit(invoice.id);
         setPaymentInvoiceInitialStatus('PENDING');
       }
-      const activeCredit = (invoice.creditNotes || []).find((credit) => ['ISSUED', 'PARTIAL', 'APPLIED'].includes(String(credit.status).toUpperCase()));
+      const activeCredit = (invoice.creditNotes || []).find((credit) => ['ACTIVE', 'ISSUED', 'PARTIAL', 'APPLIED'].includes(String(credit.status).toUpperCase()));
       const registeredPayment = await invoicesService.createMixedPayment(invoice.id, {
         customerId: invoice.customerId,
         invoiceId: activeCredit ? undefined : invoice.id,
@@ -1230,7 +1276,7 @@ export function FacturasView({ data, summaryData, summaryLoading, summaryError, 
           invoiceId: invoice.id,
           amountPaid: Math.max(0, Number(activeCredit.total || 0) - remaining),
           balance: remaining,
-          status: remaining > 0.01 ? 'PARTIAL' : 'PAID',
+          status: remaining > 0.01 ? 'ACTIVE' : 'PAID',
         }
         : registeredPayment?.creditNote;
       const paymentForVoucher = registeredPayment
@@ -1300,6 +1346,14 @@ export function FacturasView({ data, summaryData, summaryLoading, summaryError, 
     }
     if (action === 'CREDIT' && !canPerform('SALES_INVOICES', 'sendToCredit')) {
       toast.error('No tienes permiso para enviar facturas a crédito');
+      return;
+    }
+    if (action === 'CASH_QUEUE' && !canPerform('SALES_INVOICES', 'sendToCash')) {
+      toast.error('No tienes permiso para enviar facturas a Caja');
+      return;
+    }
+    if (action === 'CASH_QUEUE' && !hasOpenCash) {
+      toast.error('Abre una caja en esta sucursal antes de emitir la factura a Caja.');
       return;
     }
     const isDraftAction = action === 'DRAFT';
@@ -1373,7 +1427,9 @@ export function FacturasView({ data, summaryData, summaryLoading, summaryError, 
         ? 'Creando y registrando pago...'
         : action === 'CREDIT'
           ? 'Creando y enviando a crédito...'
-          : 'Guardando factura en proceso...',
+          : action === 'CASH_QUEUE'
+            ? 'Creando y enviando a Caja...'
+          : 'Guardando factura...',
     );
     let createdInvoiceResult: any = null;
     try {
@@ -1414,7 +1470,7 @@ export function FacturasView({ data, summaryData, summaryLoading, summaryError, 
           total: Number(localDoc.total || 0),
           pricingMode,
           status: action === 'DRAFT' ? 'DRAFT' : 'PENDING',
-          initialAction: action === 'PAYMENT' || action === 'CREDIT' ? action : undefined,
+          initialAction: action === 'PAYMENT' || action === 'CREDIT' || action === 'CASH_QUEUE' ? action : undefined,
           initialPayment: action === 'PAYMENT' ? {
             payments: settlement?.payments || [],
             currency: settlement?.currency,
@@ -1451,7 +1507,8 @@ export function FacturasView({ data, summaryData, summaryLoading, summaryError, 
           action === 'DRAFT' ? 'Factura guardada como borrador'
             : action === 'PAYMENT' ? 'Factura creada y pago registrado'
             : action === 'CREDIT' ? 'Factura creada y enviada a Créditos'
-              : 'Factura guardada en proceso',
+              : action === 'CASH_QUEUE' ? 'Factura creada y enviada a Caja'
+              : 'Factura guardada como pendiente de cobro',
           { id: saveToastId },
         );
       } else {
@@ -1470,7 +1527,7 @@ export function FacturasView({ data, summaryData, summaryLoading, summaryError, 
         if (action === 'PENDING') updates.status = 'PENDING';
         await handleUpdate(localDoc.id, updates);
         toast.success(
-          action === 'DRAFT' ? 'Factura guardada como borrador' : action === 'PENDING' ? 'Factura guardada en proceso' : 'Cambios guardados',
+          action === 'DRAFT' ? 'Factura guardada como borrador' : action === 'PENDING' ? 'Factura guardada como pendiente de cobro' : 'Cambios guardados',
           { id: saveToastId },
         );
       }
@@ -1567,7 +1624,7 @@ export function FacturasView({ data, summaryData, summaryLoading, summaryError, 
   const paymentInvoiceTotal = paymentInvoice ? Math.max(0, Number(paymentInvoice.total || 0)) : 0;
   const paymentInvoiceAlreadyPaid = paymentInvoice ? Math.max(0, Number(paymentInvoice.amountPaid || 0)) : 0;
   const paymentInvoiceCurrentBalance = paymentInvoice ? getInvoiceBalance(paymentInvoice) : 0;
-  const paymentHasActiveCredit = Boolean(paymentInvoice?.creditNotes?.some((credit) => ['ISSUED', 'PARTIAL', 'APPLIED'].includes(String(credit.status).toUpperCase())));
+  const paymentHasActiveCredit = Boolean(paymentInvoice?.creditNotes?.some((credit) => ['ACTIVE', 'ISSUED', 'PARTIAL', 'APPLIED'].includes(String(credit.status).toUpperCase())));
   const paymentCreditAvailableBase = paymentInvoice ? getInvoiceCreditAvailable(paymentInvoice) : 0;
   const paymentRemainingBase = paymentInvoice
     ? toBaseAmount(paymentRemainingInInvoiceCurrency, paymentInvoice.currency, Number(paymentInvoice.exchangeRate || 1))
@@ -1908,7 +1965,7 @@ export function FacturasView({ data, summaryData, summaryLoading, summaryError, 
         invoiceId: invoice.id,
         amountPaid: Math.max(0, Number(creditSource.total || 0) - remaining),
         balance: remaining,
-        status: remaining > 0.01 ? 'PARTIAL' : 'PAID',
+        status: remaining > 0.01 ? 'ACTIVE' : 'PAID',
       }
       : payment.creditNote;
     const voucher = {
@@ -1957,7 +2014,7 @@ export function FacturasView({ data, summaryData, summaryLoading, summaryError, 
     const voucher = {
       ...payment,
       invoice,
-      creditNote: creditSource ? { ...creditSource, invoiceId: invoice.id, balance: remaining, status: remaining > 0.01 ? 'PARTIAL' : 'PAID' } : payment.creditNote,
+      creditNote: creditSource ? { ...creditSource, invoiceId: invoice.id, balance: remaining, status: remaining > 0.01 ? 'ACTIVE' : 'PAID' } : payment.creditNote,
       customer: payment.customer || invoice.customer,
       remaining,
       balance: remaining,
@@ -2102,14 +2159,15 @@ export function FacturasView({ data, summaryData, summaryLoading, summaryError, 
       key: 'status',
       header: 'Estado',
       width: '110px',
-      render: (val) => {
-        const opt = statusOptions.find(o => o.value === (val || '').toUpperCase());
+      render: (val, row) => {
+        const key = invoiceStatusFilterKey(row);
+        const opt = statusOptions.find(o => o.value === key);
         return (
           <Badge variant="outline" className={cn(
             "text-[9px] font-black uppercase tracking-widest px-2 py-0.5 border-none shadow-none",
             opt?.color || 'bg-muted/20 text-muted-foreground'
           )}>
-            {opt?.label || val}
+            {invoiceStatusLabel(row)}
           </Badge>
         );
       }
@@ -2217,6 +2275,24 @@ export function FacturasView({ data, summaryData, summaryLoading, summaryError, 
                   onClick={() => void handleSaveInvoice(isDraftInvoice ? 'PENDING' : 'SAVE')}
                 >
                   Emitir factura
+                </Button>}
+                {isDraftInvoice && isCreating && canPerform('SALES_INVOICES', 'create') && canPerform('SALES_INVOICES', 'submit') && canPerform('SALES_INVOICES', 'pay') && <Button
+                  type="button"
+                  variant="outline"
+                  className="w-full rounded-xl border-emerald-500/30 px-4 text-[10px] font-black uppercase tracking-widest text-emerald-700 hover:bg-emerald-500/10 dark:text-emerald-400 sm:w-auto"
+                  onClick={() => openInvoicePayment({ ...localDoc, status: 'DRAFT' } as Invoice)}
+                >
+                  <CreditCard className="mr-2 size-4" />Registrar pago
+                </Button>}
+                {isDraftInvoice && isCreating && canPerform('SALES_INVOICES', 'create') && canPerform('SALES_INVOICES', 'submit') && canPerform('SALES_INVOICES', 'sendToCash') && <Button
+                  type="button"
+                  variant="outline"
+                  title={hasOpenCash ? 'Emitir factura y enviarla a Caja' : 'No hay una caja abierta en esta sucursal'}
+                  disabled={!hasOpenCash || cashAvailabilityQuery.isLoading}
+                  className={cn('w-full rounded-xl border-emerald-500/30 px-4 text-[10px] font-black uppercase tracking-widest text-emerald-700 hover:bg-emerald-500/10 dark:text-emerald-400 sm:w-auto', (!hasOpenCash || cashAvailabilityQuery.isLoading) && 'cursor-not-allowed opacity-50')}
+                  onClick={() => void handleSaveInvoice('CASH_QUEUE')}
+                >
+                  <Inbox className="mr-2 size-4" />Enviar a Caja
                 </Button>}
                 {isCreating && isDraftInvoice && canPerform('SALES_INVOICES', 'create') && canPerform('SALES_INVOICES', 'submit') && canPerform('SALES_INVOICES', 'sendToCredit') && <Button
                   type="button"
@@ -2857,7 +2933,7 @@ export function FacturasView({ data, summaryData, summaryLoading, summaryError, 
         {!summaryAvailable ? <SalesKpiCard title="Por Cobrar" value="—" icon={TrendingUp} color="text-primary" bg="bg-primary/10" /> : displayMode === 'ORIGINAL'
            ? originalReceivable.map((summary) => <SalesKpiCard key={`receivable-${summary.currency}`} title={`Por Cobrar (${summary.currency})`} value={formatExplicitAmount(summary.amount, summary.currency)} icon={TrendingUp} color="text-primary" bg="bg-primary/10" active={statusFilter === 'RECEIVABLE'} onClick={() => setStatusFilter(statusFilter === 'RECEIVABLE' ? 'ALL' : 'RECEIVABLE')} />)
            : <SalesKpiCard title={`Por Cobrar (${displayCurrency}${valuationModeSuffix})`} value={formatExplicitAmount(accountsReceivableInDisplayCurrency, displayCurrency)} icon={TrendingUp} color="text-primary" bg="bg-primary/10" active={statusFilter === 'RECEIVABLE'} onClick={() => setStatusFilter(statusFilter === 'RECEIVABLE' ? 'ALL' : 'RECEIVABLE')} />}
-         <SalesKpiCard title="Vencidas" value={summaryAvailable ? (hasColumnValueFilters ? summaryRowsWithoutStatusFilter.filter(f => (f.status || '').toUpperCase() === 'OVERDUE').length : summaryGroups.filter((group) => group.status === 'OVERDUE').reduce((total, group) => total + group.count, 0)) : '—'} icon={AlertCircle} color="text-primary" bg="bg-primary/10" active={statusFilter === 'OVERDUE'} onClick={() => setStatusFilter(statusFilter === 'OVERDUE' ? 'ALL' : 'OVERDUE')} />
+         <SalesKpiCard title="A crédito" value={summaryAvailable ? summaryCreditCount.toLocaleString('es-NI') : '—'} icon={AlertCircle} color="text-primary" bg="bg-primary/10" active={statusFilter === 'CREDIT'} onClick={() => setStatusFilter(statusFilter === 'CREDIT' ? 'ALL' : 'CREDIT')} />
         {!summaryAvailable ? <SalesKpiCard title="Cobrado" value="—" icon={CheckCircle2} color="text-primary" bg="bg-primary/10" /> : displayMode === 'ORIGINAL'
            ? originalPaid.map((summary) => <SalesKpiCard key={`paid-${summary.currency}`} title={`Cobrado (${summary.currency})`} value={formatExplicitAmount(summary.amount, summary.currency)} icon={CheckCircle2} color="text-primary" bg="bg-primary/10" active={statusFilter === 'PAID'} onClick={() => setStatusFilter(statusFilter === 'PAID' ? 'ALL' : 'PAID')} />)
            : <SalesKpiCard title={`Cobrado (${displayCurrency}${valuationModeSuffix})`} value={formatExplicitAmount(paidInDisplayCurrency, displayCurrency)} icon={CheckCircle2} color="text-primary" bg="bg-primary/10" active={statusFilter === 'PAID'} onClick={() => setStatusFilter(statusFilter === 'PAID' ? 'ALL' : 'PAID')} />}
@@ -2868,6 +2944,20 @@ export function FacturasView({ data, summaryData, summaryLoading, summaryError, 
           <div className="erp-list-toolbar flex flex-wrap items-center justify-end gap-3" data-tour="sales-list-actions">
             <ViewLayoutSelect value={layoutMode} onChange={(value) => setLayoutMode(value === 'kanban' ? 'table' : value)} ariaLabel="Elegir distribución de facturas" />
             <SalesDateRangeFilter dateFrom={dateFrom} dateTo={dateTo} onChange={onDateRangeChange || (() => undefined)} />
+            <Select value={statusFilter} onValueChange={(value) => setStatusFilter(value as typeof statusFilter)}>
+              <SelectTrigger aria-label="Filtrar facturas por estado" className="h-10 w-full rounded-xl border-border/50 bg-background/50 text-xs sm:w-52"><SelectValue placeholder="Todos los estados" /></SelectTrigger>
+              <SelectContent align="end">
+                <SelectItem value="ALL">Todos los estados</SelectItem>
+                <SelectItem value="DRAFT">Borrador</SelectItem>
+                <SelectItem value="PENDING">Pendiente de cobro</SelectItem>
+                <SelectItem value="CASH_QUEUE">Enviada a caja</SelectItem>
+                <SelectItem value="CREDIT">A crédito</SelectItem>
+                <SelectItem value="OVERDUE">A crédito · Atrasada</SelectItem>
+                <SelectItem value="PAID">Pagada</SelectItem>
+                <SelectItem value="PAID_CREDIT">Pagada · A crédito</SelectItem>
+                <SelectItem value="CANCELLED">Cancelada</SelectItem>
+              </SelectContent>
+            </Select>
             <div className="relative">
               <Search className="absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground/40" />
               <Input
@@ -2930,13 +3020,13 @@ export function FacturasView({ data, summaryData, summaryLoading, summaryError, 
                 onSend={() => handleWhatsApp(row)}
               />
               {canSendInvoiceToCash(row) && (
-                <Button type="button" title="Enviar factura a Caja" aria-label={`Enviar factura ${row.number} a Caja`} variant="ghost" size="icon" disabled={sendToCashLoadingId === row.id} className="size-8 shrink-0 rounded-lg text-emerald-600 transition-colors hover:bg-emerald-500/10 dark:text-emerald-400" onClick={(event) => { event.preventDefault(); event.stopPropagation(); void handleSendInvoiceToCash(row); }}>
+                <Button type="button" title={hasOpenCash ? 'Enviar factura a Caja' : 'No hay una caja abierta en esta sucursal'} aria-label={`Enviar factura ${row.number} a Caja`} variant="ghost" size="icon" disabled={sendToCashLoadingId === row.id || !hasOpenCash || cashAvailabilityQuery.isLoading} className={cn('size-8 shrink-0 rounded-lg text-emerald-600 transition-colors hover:bg-emerald-500/10 dark:text-emerald-400', (!hasOpenCash || cashAvailabilityQuery.isLoading) && 'cursor-not-allowed opacity-40')} onClick={(event) => { event.preventDefault(); event.stopPropagation(); void handleSendInvoiceToCash(row); }}>
                   <Inbox className={cn('size-4', sendToCashLoadingId === row.id && 'animate-pulse')} />
                 </Button>
               )}
               {canPerform('SALES_INVOICES', 'sendToCredit') &&
                 !['PAID', 'CANCELLED', 'CREDIT'].includes(String(row.status).toUpperCase()) &&
-                !row.creditNotes?.some((credit) => ['ISSUED', 'PARTIAL', 'APPLIED'].includes(String(credit.status).toUpperCase())) &&
+                !row.creditNotes?.some((credit) => ['ACTIVE', 'ISSUED', 'PARTIAL', 'APPLIED'].includes(String(credit.status).toUpperCase())) &&
                 getInvoiceBalance(row) > 0.01 && (() => {
                   const creditFits = invoiceFitsAvailableCredit(row);
                   const creditTitle = creditFits
@@ -2975,7 +3065,7 @@ export function FacturasView({ data, summaryData, summaryLoading, summaryError, 
                   );
                 })()}
               {canShowInvoiceSubmitAction(row.status, canPerform('SALES_INVOICES', 'submit')) && (
-                <Button type="button" title="Enviar factura a pendientes" aria-label={`Enviar factura ${row.number} a pendientes`} variant="ghost" size="icon" disabled={submitLoadingId === row.id} className="size-8 shrink-0 rounded-lg text-primary transition-colors hover:bg-primary/10" onClick={(event) => { event.preventDefault(); event.stopPropagation(); void handleSubmitInvoice(row); }}>
+                <Button type="button" title="Emitir factura" aria-label={`Emitir factura ${row.number}`} variant="ghost" size="icon" disabled={submitLoadingId === row.id} className="size-8 shrink-0 rounded-lg text-primary transition-colors hover:bg-primary/10" onClick={(event) => { event.preventDefault(); event.stopPropagation(); void handleSubmitInvoice(row); }}>
                   <Send className={cn('size-4', submitLoadingId === row.id && 'animate-pulse')} />
                 </Button>
               )}
@@ -3033,9 +3123,9 @@ export function FacturasView({ data, summaryData, summaryLoading, summaryError, 
             documentLabel="factura"
             onSend={() => handleWhatsApp(detailInvoice)}
           />
-          {canSendInvoiceToCash(detailInvoice) && <Button type="button" variant="outline" className="rounded-xl border-emerald-500/30 text-emerald-700 hover:bg-emerald-500/10 dark:text-emerald-400" disabled={sendToCashLoadingId === detailInvoice.id} onClick={() => void handleSendInvoiceToCash(detailInvoice)}><Inbox className="mr-2 size-4" />Enviar a Caja</Button>}
-          {canShowInvoiceSubmitAction(detailInvoice.status, canPerform('SALES_INVOICES', 'submit')) && <Button type="button" variant="outline" className="rounded-xl border-primary/30 text-primary hover:bg-primary/10" disabled={submitLoadingId === detailInvoice.id} onClick={() => void handleSubmitInvoice(detailInvoice)}><Send className="mr-2 size-4" />Enviar a pendientes</Button>}
-          {canPerform('SALES_INVOICES', 'sendToCredit') && !['PAID', 'CANCELLED', 'CREDIT'].includes(String(detailInvoice.status).toUpperCase()) && !detailInvoice.creditNotes?.some((credit) => ['ISSUED', 'PARTIAL', 'APPLIED'].includes(String(credit.status).toUpperCase())) && getInvoiceBalance(detailInvoice) > 0.01 && <Button type="button" variant="outline" className={cn('rounded-xl border-primary/30 text-primary hover:bg-primary/10', !invoiceFitsAvailableCredit(detailInvoice) && 'cursor-not-allowed text-muted-foreground opacity-60')} disabled={!invoiceFitsAvailableCredit(detailInvoice)} onClick={() => openInvoiceCredit(detailInvoice)}><Send className="mr-2 size-4" />Enviar a crédito</Button>}
+          {canSendInvoiceToCash(detailInvoice) && <Button type="button" variant="outline" title={hasOpenCash ? 'Enviar factura a Caja' : 'No hay una caja abierta en esta sucursal'} className={cn('rounded-xl border-emerald-500/30 text-emerald-700 hover:bg-emerald-500/10 dark:text-emerald-400', (!hasOpenCash || cashAvailabilityQuery.isLoading) && 'cursor-not-allowed opacity-50')} disabled={sendToCashLoadingId === detailInvoice.id || !hasOpenCash || cashAvailabilityQuery.isLoading} onClick={() => void handleSendInvoiceToCash(detailInvoice)}><Inbox className="mr-2 size-4" />Enviar a Caja</Button>}
+          {canShowInvoiceSubmitAction(detailInvoice.status, canPerform('SALES_INVOICES', 'submit')) && <Button type="button" variant="outline" className="rounded-xl border-primary/30 text-primary hover:bg-primary/10" disabled={submitLoadingId === detailInvoice.id} onClick={() => void handleSubmitInvoice(detailInvoice)}><Send className="mr-2 size-4" />Emitir factura</Button>}
+          {canPerform('SALES_INVOICES', 'sendToCredit') && !['PAID', 'CANCELLED', 'CREDIT'].includes(String(detailInvoice.status).toUpperCase()) && !detailInvoice.creditNotes?.some((credit) => ['ACTIVE', 'ISSUED', 'PARTIAL', 'APPLIED'].includes(String(credit.status).toUpperCase())) && getInvoiceBalance(detailInvoice) > 0.01 && <Button type="button" variant="outline" className={cn('rounded-xl border-primary/30 text-primary hover:bg-primary/10', !invoiceFitsAvailableCredit(detailInvoice) && 'cursor-not-allowed text-muted-foreground opacity-60')} disabled={!invoiceFitsAvailableCredit(detailInvoice)} onClick={() => openInvoiceCredit(detailInvoice)}><Send className="mr-2 size-4" />Enviar a crédito</Button>}
           {canPerform('SALES_INVOICES', 'pay') && (String(detailInvoice.status).toUpperCase() !== 'DRAFT' || canPerform('SALES_INVOICES', 'submit')) && !['PAID', 'CANCELLED'].includes(String(detailInvoice.status).toUpperCase()) && getInvoicePaymentBalance(detailInvoice, getInvoiceBalance(detailInvoice)) > 0 && <Button type="button" variant="outline" className="rounded-xl border-primary/30 text-primary hover:bg-primary/10" disabled={paymentLoading && paymentInvoice?.id === detailInvoice.id} onClick={() => openInvoicePayment(detailInvoice)}><CreditCard className="mr-2 size-4" />Registrar pago</Button>}
           {(canPerform('SALES_INVOICES', 'createPaymentLink') || canPerform('SALES_INVOICES', 'reconcilePaymentLink') || canPerform('SALES_INVOICES', 'cancelPaymentLink')) && !['PAID', 'CANCELLED'].includes(String(detailInvoice.status).toUpperCase()) && getInvoiceBalance(detailInvoice) > 0.01 && <Button type="button" variant="outline" className="rounded-xl border-primary/30 text-primary hover:bg-primary/10" onClick={() => setPaylinkInvoice(detailInvoice)}><Link2 className="mr-2 size-4" />{canPerform('SALES_INVOICES', 'createPaymentLink') ? 'Links de pago' : 'Ver links de pago'}</Button>}
           {(canPerform('SALES_INVOICES', 'createAppToAppPayment') || canPerform('SALES_INVOICES', 'reconcileAppToAppPayment')) && !['PAID', 'CANCELLED'].includes(String(detailInvoice.status).toUpperCase()) && getInvoiceBalance(detailInvoice) > 0.01 && <Button type="button" variant="outline" className="rounded-xl border-primary/30 text-primary hover:bg-primary/10" onClick={() => setPoketAppInvoice(detailInvoice)}><Smartphone className="mr-2 size-4" />{canPerform('SALES_INVOICES', 'createAppToAppPayment') ? 'Cobrar con Poket' : 'Ver cobros Poket'}</Button>}

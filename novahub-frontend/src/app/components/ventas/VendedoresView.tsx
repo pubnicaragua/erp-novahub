@@ -45,10 +45,10 @@ const goalAwardStatusLabels: Record<string, string> = {
   PAID_IN_PAYROLL: 'Pagada en nómina', PAID: 'Pagada directamente', REJECTED: 'Rechazada', CANCELLED: 'Anulada',
 };
 const documentStatusLabels: Record<string, string> = {
-  DRAFT: 'Borrador', PENDING: 'En proceso', PARTIAL: 'Pago parcial', CREDIT: 'A crédito', PAID: 'Pagada',
-  OVERDUE: 'Vencida', CANCELLED: 'Anulada', REFUNDED: 'Reembolsada', ISSUED: 'Emitida', APPLIED: 'Aplicada',
-  VOIDED: 'Anulada', APPROVED: 'Aprobada', CONFIRMED: 'Confirmada', IN_PROCESS: 'En proceso',
-  IN_PROGRESS: 'En proceso', SENT: 'Enviada', ACTIVE: 'Activa', INACTIVE: 'Inactiva', REJECTED: 'Rechazada',
+  DRAFT: 'Borrador', PENDING: 'Pendiente de cobro', PARTIAL: 'A crédito', CREDIT: 'A crédito', PAID: 'Pagada',
+  OVERDUE: 'A crédito · Atrasada', CANCELLED: 'Anulada', REFUNDED: 'Reembolsada', ISSUED: 'Activo', APPLIED: 'Aplicada',
+  VOIDED: 'Anulada', APPROVED: 'Aprobada', CONFIRMED: 'Aprobada', IN_PROCESS: 'Borrador',
+  IN_PROGRESS: 'Borrador', SENT: 'Borrador', ACTIVE: 'Activo', INACTIVE: 'Inactiva', REJECTED: 'Rechazada',
 };
 const documentStatus = (status: string) => documentStatusLabels[String(status || '').toUpperCase()] || 'Estado registrado';
 const paymentMethodLabels: Record<string, string> = {

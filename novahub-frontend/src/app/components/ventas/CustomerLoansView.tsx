@@ -1,5 +1,5 @@
 import { useMemo, useState } from 'react';
-import { Banknote, CalendarClock, Search, Wallet, AlertTriangle, ChevronLeft, ChevronRight, Plus, Eye } from 'lucide-react';
+import { Banknote, CalendarClock, Search, Wallet, AlertTriangle, ChevronLeft, ChevronRight, Plus, Eye, CheckCircle2, CircleDollarSign, Ban } from 'lucide-react';
 import { useQueryClient } from '@tanstack/react-query';
 import { Badge } from '../ui/badge';
 import { Button } from '../ui/button';
@@ -23,12 +23,13 @@ import type { Customer, CustomerLoan } from '../../types';
 import { toast } from '@/app/services/toast';
 
 const readList = (response: any) => Array.isArray(response?.data) ? response.data : Array.isArray(response) ? response : [];
-const statusLabel: Record<string, string> = { ISSUED: 'Activo', PARTIAL: 'Pago parcial', OVERDUE: 'Vencido', PAID: 'Liquidado' };
+const statusLabel: Record<string, string> = { DRAFT: 'Borrador', APPROVED: 'Aprobado', ACTIVE: 'Activo', PAID: 'Pagado', CANCELLED: 'Cancelado' };
 const statusClass: Record<string, string> = {
-  ISSUED: 'border-blue-500/25 bg-blue-500/10 text-blue-700 dark:text-blue-300',
-  PARTIAL: 'border-amber-500/25 bg-amber-500/10 text-amber-700 dark:text-amber-300',
-  OVERDUE: 'border-rose-500/25 bg-rose-500/10 text-rose-700 dark:text-rose-300',
+  DRAFT: 'border-border/60 bg-muted/20 text-muted-foreground',
+  APPROVED: 'border-blue-500/25 bg-blue-500/10 text-blue-700 dark:text-blue-300',
+  ACTIVE: 'border-amber-500/25 bg-amber-500/10 text-amber-700 dark:text-amber-300',
   PAID: 'border-emerald-500/25 bg-emerald-500/10 text-emerald-700 dark:text-emerald-300',
+  CANCELLED: 'border-rose-500/25 bg-rose-500/10 text-rose-700 dark:text-rose-300',
 };
 const localDate = (value?: string | null) => {
   if (!value) return '—';
@@ -62,7 +63,10 @@ export function CustomerLoansView({ enabled, selectedBranchId, onRefresh }: { en
   const normalizedSearch = String(debouncedSearch ?? '').trim();
   const canRead = canPerform('SALES_CUSTOMER_LOANS', 'view');
   const canPay = canPerform('SALES_CREDIT_NOTES', 'pay');
-  const canCreateLoan = canPerform('SALES_INVOICES', 'create') && canPerform('SALES_INVOICES', 'submit');
+  const canCreateLoan = canPerform('SALES_CUSTOMER_LOANS', 'create');
+  const canApproveLoan = canPerform('SALES_CUSTOMER_LOANS', 'approve');
+  const canDisburseLoan = canPerform('SALES_CUSTOMER_LOANS', 'disburse');
+  const canCancelLoan = canPerform('SALES_CUSTOMER_LOANS', 'cancel');
   const canCreateMora = canPerform('SALES_CLIENTS', 'create');
   const canEditMora = canPerform('SALES_CLIENTS', 'edit');
   const canEditConfiguration = canPerform('SALES_CREDIT_NOTES', 'edit');
@@ -136,6 +140,22 @@ export function CustomerLoansView({ enabled, selectedBranchId, onRefresh }: { en
     });
   };
 
+  const runLoanAction = async (action: 'approve' | 'disburse' | 'cancel') => {
+    if (!detail?.id) return;
+    try {
+      if (action === 'cancel' && !window.confirm('¿Cancelar este préstamo antes del desembolso?')) return;
+      if (action === 'approve') await customerLoansService.approve(detail.id);
+      if (action === 'disburse') await customerLoansService.disburse(detail.id);
+      if (action === 'cancel') await customerLoansService.cancel(detail.id);
+      toast.success(action === 'approve' ? 'Préstamo aprobado' : action === 'disburse' ? 'Préstamo desembolsado y activado' : 'Préstamo cancelado');
+      await invalidate();
+      const updated = await customerLoansService.getById(detail.id);
+      setSelectedLoanRow(updated);
+    } catch (error: any) {
+      toast.error(error?.response?.data?.message || error?.message || 'No se pudo actualizar el estado del préstamo');
+    }
+  };
+
   const selectCustomerForLoan = (customerId: string) => {
     if (!customerId) {
       setCreateCustomer(null);
@@ -198,7 +218,7 @@ export function CustomerLoansView({ enabled, selectedBranchId, onRefresh }: { en
     <Card className="rounded-2xl border-border/60 bg-card p-4 shadow-sm sm:p-5">
       <div className="flex min-w-0 flex-col gap-3 lg:flex-row lg:items-end lg:justify-between">
         <div className="relative min-w-0 flex-1"><Search className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" /><Input value={search} onChange={(event) => { setSearch(event.target.value); setPage(1); }} placeholder="Buscar por cliente o número de préstamo…" className="h-10 max-w-full pl-10" /></div>
-        <div className="grid min-w-0 grid-cols-1 gap-2 sm:grid-cols-2 lg:min-w-[360px]"><Label className="sr-only" htmlFor="customer-loan-status">Estado</Label><Select value={status} onValueChange={(value) => { setStatus(value); setPage(1); }}><SelectTrigger id="customer-loan-status" className="max-w-full"><SelectValue placeholder="Todos los estados" /></SelectTrigger><SelectContent><SelectItem value="ALL">Todos los estados</SelectItem><SelectItem value="ISSUED">Activos</SelectItem><SelectItem value="PARTIAL">Pago parcial</SelectItem><SelectItem value="OVERDUE">Vencidos</SelectItem><SelectItem value="PAID">Liquidados</SelectItem></SelectContent></Select><p className="flex items-center text-xs text-muted-foreground">{Number(pagination.total || 0).toLocaleString('es-NI')} contratos</p></div>
+        <div className="grid min-w-0 grid-cols-1 gap-2 sm:grid-cols-2 lg:min-w-[360px]"><Label className="sr-only" htmlFor="customer-loan-status">Estado</Label><Select value={status} onValueChange={(value) => { setStatus(value); setPage(1); }}><SelectTrigger id="customer-loan-status" className="max-w-full"><SelectValue placeholder="Todos los estados" /></SelectTrigger><SelectContent><SelectItem value="ALL">Todos los estados</SelectItem><SelectItem value="DRAFT">Borradores</SelectItem><SelectItem value="APPROVED">Aprobados</SelectItem><SelectItem value="ACTIVE">Activos</SelectItem><SelectItem value="OVERDUE">Activos (atrasados)</SelectItem><SelectItem value="PAID">Pagados</SelectItem><SelectItem value="CANCELLED">Cancelados</SelectItem></SelectContent></Select><p className="flex items-center text-xs text-muted-foreground">{Number(pagination.total || 0).toLocaleString('es-NI')} contratos</p></div>
       </div>
     </Card>
 
@@ -208,8 +228,8 @@ export function CustomerLoansView({ enabled, selectedBranchId, onRefresh }: { en
           <TableHeader><TableRow><TableHead>Préstamo</TableHead><TableHead>Cliente</TableHead><TableHead>Fecha</TableHead><TableHead>Próxima cuota</TableHead><TableHead>Vencido</TableHead><TableHead>Saldo</TableHead><TableHead>Estado</TableHead><TableHead><span className="sr-only">Acciones</span></TableHead></TableRow></TableHeader>
           <TableBody>{loans.map((loan: any) => {
             const balance = Number(loan.invoice?.balance ?? loan.balance ?? 0);
-            const rawStatus = String(loan.status || loan.invoice?.status || (balance <= 0.01 ? 'PAID' : 'ISSUED')).toUpperCase();
-            const loanStatus = ['PENDING', 'CREDIT'].includes(rawStatus) ? 'ISSUED' : rawStatus;
+            const rawStatus = String(loan.status || (balance <= 0.01 ? 'PAID' : 'ACTIVE')).toUpperCase();
+            const loanStatus = ['PENDING', 'CREDIT', 'ISSUED', 'PARTIAL', 'OVERDUE'].includes(rawStatus) ? (balance <= 0.01 ? 'PAID' : 'ACTIVE') : rawStatus;
             return <TableRow key={loan.id} className="cursor-pointer" onClick={() => openDetail(loan)} tabIndex={0} onKeyDown={(event) => { if (event.key === 'Enter' || event.key === ' ') { event.preventDefault(); openDetail(loan); } }}>
               <TableCell className="font-semibold text-primary">{loan.invoice?.number || loan.number || '—'}</TableCell>
               <TableCell className="max-w-[240px] whitespace-normal break-words">{loan.customer?.name || 'Cliente'}</TableCell>
@@ -217,7 +237,7 @@ export function CustomerLoansView({ enabled, selectedBranchId, onRefresh }: { en
               <TableCell>{loan.nextInstallment ? `${localDate(loan.nextInstallment.dueDate)} · ${formatCurrencyAmount(loan.nextInstallment.remainingAmount, loan.currency || baseCurrency)}` : '—'}</TableCell>
               <TableCell className="font-semibold text-rose-600 dark:text-rose-400">{formatCurrencyAmount(loan.overdueBalance || 0, loan.currency || baseCurrency)}</TableCell>
               <TableCell className="font-black tabular-nums">{formatCurrencyAmount(balance, loan.currency || baseCurrency)}</TableCell>
-              <TableCell><Badge variant="outline" className={statusClass[loanStatus] || statusClass.ISSUED}>{statusLabel[loanStatus] || loanStatus}</Badge></TableCell>
+              <TableCell><Badge variant="outline" className={statusClass[loanStatus] || statusClass.ACTIVE}>{loanStatus === 'ACTIVE' && Number(loan.overdueBalance || 0) > 0.01 ? 'Activo (Atrasado)' : statusLabel[loanStatus] || loanStatus}</Badge></TableCell>
               <TableCell><Button type="button" size="icon" variant="ghost" className="size-8" aria-label={`Ver préstamo ${loan.invoice?.number || loan.number || ''}`} onClick={(event) => { event.stopPropagation(); openDetail(loan); }}><Eye className="size-4" /></Button></TableCell>
             </TableRow>;
           })}</TableBody>
@@ -235,7 +255,12 @@ export function CustomerLoansView({ enabled, selectedBranchId, onRefresh }: { en
               <p className="text-[10px] font-black uppercase tracking-widest text-muted-foreground">Cliente</p>
               <div className="mt-2 flex min-w-0 flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
                 <div className="min-w-0"><h3 className="break-words text-base font-bold text-foreground">{customer?.name || 'Cliente'}</h3><p className="mt-1 break-words text-xs text-muted-foreground">{customer?.phone || customer?.contactPhone || customer?.email || 'Sin datos de contacto'}</p></div>
-                <Badge variant="outline" className="w-fit shrink-0">Código: {customer?.code || '—'}</Badge>
+                <div className="flex shrink-0 flex-wrap gap-2"><Badge variant="outline" className={statusClass[String(detail.status || 'ACTIVE').toUpperCase()] || statusClass.ACTIVE}>{String(detail.status || 'ACTIVE').toUpperCase() === 'ACTIVE' && Number(detail.overdueBalance || 0) > 0.01 ? 'Activo (Atrasado)' : statusLabel[String(detail.status || 'ACTIVE').toUpperCase()] || detail.status}</Badge><Badge variant="outline">Código: {customer?.code || '—'}</Badge></div>
+              </div>
+              <div className="mt-4 flex flex-wrap gap-2">
+                {detail.status === 'DRAFT' && canApproveLoan && <Button type="button" size="sm" className="rounded-lg" onClick={() => void runLoanAction('approve')}><CheckCircle2 className="mr-2 size-4" />Aprobar</Button>}
+                {detail.status === 'APPROVED' && canDisburseLoan && <Button type="button" size="sm" className="rounded-lg" onClick={() => void runLoanAction('disburse')}><CircleDollarSign className="mr-2 size-4" />Desembolsar y activar</Button>}
+                {['DRAFT', 'APPROVED'].includes(String(detail.status || '').toUpperCase()) && canCancelLoan && <Button type="button" size="sm" variant="outline" className="rounded-lg text-destructive" onClick={() => void runLoanAction('cancel')}><Ban className="mr-2 size-4" />Cancelar</Button>}
               </div>
             </Card>
             <CustomerLoansPanel customerId={detail.customerId} customerName={customer?.name || 'Cliente'} moraTypeId={customer?.moraTypeId} moraType={customer?.moraType} enabled={enabled && Boolean(detail.customerId)} canCreateLoan={false} canCreateMora={canCreateMora} canEditMora={canEditMora} canRegisterPayment={canPay} onRegisterPayment={(loan) => openPayment(loan)} detailMode onUpdated={() => void invalidate()} focusLoanId={detail.id} />

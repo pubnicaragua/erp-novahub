@@ -37,13 +37,15 @@ interface InvoiceDetailSheetProps {
 
 const statusLabels: Record<string, string> = {
   DRAFT: 'Borrador',
-  PENDING: 'En proceso',
+  PENDING: 'Pendiente de cobro',
+  CASH_QUEUE: 'Enviada a caja',
   CREDIT: 'A crédito',
   PAID: 'Pagada',
-  CANCELLED: 'Anulada',
-  OVERDUE: 'Vencida',
-  PARTIAL: 'Pago parcial',
+  PAID_CREDIT: 'Pagada · A crédito',
+  CANCELLED: 'Cancelada',
+  APPROVED: 'Aprobada',
   ISSUED: 'Emitida',
+  ACTIVE: 'Activo',
   APPLIED: 'Aplicada',
   VOIDED: 'Anulada',
 };
@@ -86,7 +88,19 @@ export function InvoiceDetailSheet({
 
   if (!invoice) return null;
 
-  const status = String(invoice.status || '').toUpperCase();
+  const rawStatus = String(invoice.status || '').toUpperCase();
+  const inCashQueue = ['PENDING', 'CLAIMED'].includes(String(invoice.cashQueue?.status || '').toUpperCase());
+  const status = inCashQueue
+    ? 'CASH_QUEUE'
+    : rawStatus === 'PAID' && invoice.wasFinanced
+      ? 'PAID_CREDIT'
+      : ['PARTIAL', 'OVERDUE'].includes(rawStatus) ? 'CREDIT' : rawStatus;
+  const statusColor = status === 'CASH_QUEUE' ? 'PENDING' : status === 'PAID_CREDIT' ? 'PAID' : status;
+  const dueDate = invoice.dueDate ? new Date(invoice.dueDate) : null;
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
+  dueDate?.setHours(0, 0, 0, 0);
+  const isLateCredit = status === 'CREDIT' && dueDate && dueDate < today && getBalance(invoice) > 0.01;
   const balance = getBalance(invoice);
   const paymentPresentation = getInvoicePaymentPresentation(invoice);
   const additionalCharges = getSalesAdditionalCharges(invoice);
@@ -105,8 +119,8 @@ export function InvoiceDetailSheet({
             </div>
           </div>
           <div className="flex flex-wrap items-center gap-2">
-            <Badge className={`border-none px-2 py-0.5 text-[10px] font-black uppercase tracking-wider ${getSalesInvoiceStatusColor(status)}`}>
-              {statusLabels[status] || 'Sin estado'}
+            <Badge className={`border-none px-2 py-0.5 text-[10px] font-black uppercase tracking-wider ${getSalesInvoiceStatusColor(statusColor)}`}>
+              {isLateCredit ? 'A crédito · Atrasada' : statusLabels[status] || 'Sin estado'}
             </Badge>
             {sourceBadge && <Badge className={`border-none px-2 py-0.5 text-[10px] font-black ${sourceBadge.className}`}>{sourceBadge.label}</Badge>}
           </div>
