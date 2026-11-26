@@ -38,6 +38,7 @@ import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, D
 import { Label } from '../ui/label';
 import { getMonthlyRecurrenceFactor, RecurrenceScheduleFields, recurrenceFrequencyOptions } from '../ui/RecurrenceScheduleFields';
 import { beginNotificationAction, completeNotificationAction, failNotificationAction } from '../../services/notification-action-coordinator';
+import { ExpenseVatFields, calculateIncludedVat, type ExpenseTaxMode } from './ExpenseVatFields';
 
 interface ExpenseCategoryOption { id: string; name: string; isActive?: boolean; }
 interface Props { data: RecurringExpense[]; summaryData?: RecurringExpenseSummary; summaryLoading?: boolean; summaryError?: boolean; loading: boolean; onRefresh: () => void; supplierCatalog?: Supplier[]; expenseCategoryCatalog?: ExpenseCategoryOption[]; accountCatalog?: any[]; accountCatalogLoading?: boolean; canCreateCategoryInline?: boolean; pagination?: SalesPaginationControls; onSearchChange?: (value: string) => void; }
@@ -102,6 +103,8 @@ export function GastosRecurrentesView({ data, summaryData, summaryLoading, summa
         frequency: 'MONTHLY',
         startDate: new Date().toISOString(),
         amount: 0,
+        taxAmount: 0,
+        taxMode: 'NONE',
         currency: displayCurrency,
         // Misma regla que el selector de moneda: en la moneda base la tasa es 1.
         exchangeRate: displayCurrency === baseCurrency ? 1 : globalRate,
@@ -287,6 +290,17 @@ export function GastosRecurrentesView({ data, summaryData, summaryLoading, summa
     if (!localDoc?.amount || localDoc.amount <= 0) return toast.error('El monto debe ser mayor a 0');
     if (!String(localDoc.category || '').trim()) return toast.error('Selecciona una categoría');
 
+    const amount = Number(localDoc.amount);
+    const taxMode = (localDoc.taxMode || 'NONE') as ExpenseTaxMode;
+    const taxAmount = taxMode === 'NONE'
+      ? 0
+      : taxMode === 'INCLUDED_15'
+        ? calculateIncludedVat(amount)
+        : Number(localDoc.taxAmount || 0);
+    if (!Number.isFinite(taxAmount) || taxAmount < 0 || taxAmount > amount) {
+      return toast.error('El IVA no puede ser mayor que el monto total del gasto recurrente.');
+    }
+
     const linkedCategory = expenseCategoryCatalog.find((category) => category.id === localDoc.expenseCategoryId);
     const categoryCode = String(localDoc.category || '').trim().toLocaleUpperCase();
     const isStandardCategory = standardExpenseCategories.some((category) => category.value === categoryCode);
@@ -300,7 +314,9 @@ export function GastosRecurrentesView({ data, summaryData, summaryLoading, summa
       ...localDoc,
       category: selectedCategory?.name || localDoc.category,
       expenseCategoryId: selectedCategory?.id || localDoc.expenseCategoryId || null,
-      amount: Number(localDoc.amount),
+      amount,
+      taxAmount,
+      taxMode,
       exchangeRate: Number(localDoc.exchangeRate),
       baseAmount: Number(localDoc.baseAmount),
     };
@@ -420,7 +436,7 @@ export function GastosRecurrentesView({ data, summaryData, summaryLoading, summa
 
 
         <div className="grid min-w-0 gap-4 md:grid-cols-2">
-          <Card className="rounded-2xl border-border/50 col-span-2" data-tour="purchases-form-data">
+          <Card className="col-span-1 min-w-0 rounded-2xl border-border/50 md:col-span-2" data-tour="purchases-form-data">
             <CardContent className="p-6 space-y-3">
               <p className="text-xs font-black uppercase tracking-widest text-muted-foreground">Detalles del Servicio/Concepto</p>
               <div className="grid grid-cols-1 gap-3 text-sm sm:grid-cols-2 lg:grid-cols-4">
@@ -541,11 +557,11 @@ export function GastosRecurrentesView({ data, summaryData, summaryLoading, summa
             </CardContent>
           </Card>
 
-          <Card className="rounded-2xl border-border/50 col-span-2 md:col-span-1" data-tour="purchases-form-summary">
+          <Card className="col-span-1 min-w-0 rounded-2xl border-border/50" data-tour="purchases-form-summary">
              <CardContent className="p-6">
                 <p className="text-xs font-black uppercase tracking-widest text-muted-foreground mb-4">Monto Automático Promedio</p>
                 <div className="space-y-4">
-                  <div className="grid min-w-0 grid-cols-1 gap-3 border-b border-border/50 pb-4 sm:grid-cols-2">
+                  <div className="grid min-w-0 grid-cols-[minmax(6.5rem,20%)_minmax(0,1fr)] items-end gap-3 border-b border-border/50 pb-4">
                      <div className="min-w-0">
                         <p className="mb-1 text-[10px] font-black uppercase tracking-widest text-muted-foreground">Moneda</p>
                         <CurrencySelector
@@ -553,26 +569,52 @@ export function GastosRecurrentesView({ data, summaryData, summaryLoading, summa
                           baseCurrency={baseCurrency}
                           exchangeRate={globalRate}
                           hideLabel
+                          hideExchangeRate
+                          ariaLabel="Moneda del gasto recurrente"
                           rateDecimals={2}
                           disabled={isNew ? !canPerform('PURCHASES_EXPENSES_REC', 'create') : !canPerform('PURCHASES_EXPENSES_REC', 'edit')}
                           onChange={(nextCurrency) => setLocalDoc({ ...localDoc, currency: nextCurrency, exchangeRate: nextCurrency === baseCurrency ? 1 : globalRate } as any)}
                         />
                      </div>
                      <div className="min-w-0">
-                        <p className="mb-1 text-[10px] font-black uppercase tracking-widest text-muted-foreground">Monto Fijo Estimado</p>
+                        <p className="mb-1 text-[10px] font-black uppercase tracking-widest text-muted-foreground">Monto Total (incluye IVA)</p>
                         <Input 
                           disabled={isNew ? !canPerform('PURCHASES_EXPENSES_REC', 'create') : !canPerform('PURCHASES_EXPENSES_REC', 'edit')}
                           type="text"
                           inputMode="decimal"
                           min="0" 
                           value={Number(localDoc.amount || 0) === 0 ? '' : formatDecimalInput(localDoc.amount)}
-                          onChange={(e) => setLocalDoc({ ...localDoc, amount: normalizeDecimalInput(e.target.value) as any })}
+                          onChange={(e) => {
+                            const amount = Number(normalizeDecimalInput(e.target.value) || 0);
+                            setLocalDoc({
+                              ...localDoc,
+                              amount: normalizeDecimalInput(e.target.value) as any,
+                              ...(String(localDoc.taxMode || 'NONE') === 'INCLUDED_15' ? { taxAmount: calculateIncludedVat(amount) } : {}),
+                            });
+                          }}
                           className="h-9 w-full text-right text-lg font-black text-rose-500"
                           placeholder="0.00" currencyPrecision />
                      </div>
                   </div>
+                  <ExpenseVatFields
+                    idPrefix="recurring-expense"
+                    amount={Number(localDoc.amount || 0)}
+                    taxAmount={Number(localDoc.taxAmount || 0)}
+                    mode={(localDoc.taxMode || 'NONE') as ExpenseTaxMode}
+                    disabled={isNew ? !canPerform('PURCHASES_EXPENSES_REC', 'create') : !canPerform('PURCHASES_EXPENSES_REC', 'edit')}
+                    onChange={(mode, taxAmount) => setLocalDoc({ ...localDoc, taxMode: mode, taxAmount })}
+                    onTaxAmountChange={(taxAmount) => setLocalDoc({ ...localDoc, taxAmount })}
+                  />
+                  <div className="grid grid-cols-2 gap-2 text-xs">
+                    <span className="text-muted-foreground">Base antes de IVA</span>
+                    <span className="text-right font-bold tabular-nums">{formatCurrencyAmount(Math.max(0, Number(localDoc.amount || 0) - (localDoc.taxMode === 'INCLUDED_15' ? calculateIncludedVat(Number(localDoc.amount || 0)) : Number(localDoc.taxAmount || 0))), localDoc.currency || baseCurrency)}</span>
+                    <span className="text-muted-foreground">IVA incluido</span>
+                    <span className="text-right font-bold tabular-nums">{formatCurrencyAmount(localDoc.taxMode === 'INCLUDED_15' ? calculateIncludedVat(Number(localDoc.amount || 0)) : Number(localDoc.taxAmount || 0), localDoc.currency || baseCurrency)}</span>
+                    <span className="font-black">Total del gasto recurrente</span>
+                    <span className="text-right font-black tabular-nums text-rose-500">{formatCurrencyAmount(Number(localDoc.amount || 0), localDoc.currency || baseCurrency)}</span>
+                  </div>
                   <div className="flex justify-between items-center text-base pt-2">
-                    <span className="font-black uppercase text-[10px] tracking-widest">Base Estimada</span>
+                    <span className="font-black uppercase text-[10px] tracking-widest">Equivalente Estimado</span>
                     <span className="font-black text-muted-foreground tabular-nums text-xs text-right">
                        {(() => {
                          const equivalent = equivalentInOtherCurrency(localDoc.amount, localDoc.currency, localDoc.exchangeRate, globalRate);

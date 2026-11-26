@@ -176,7 +176,7 @@ export function AccountSelectionDialogHost() {
               </div>
             </div>
             {currentChoice && (
-              <label key={currentChoice.key} className="block min-w-0 rounded-xl border border-border/50 bg-card p-4">
+              <div key={currentChoice.key} className="block min-w-0 rounded-xl border border-border/50 bg-card p-4">
                 <span className="block text-sm font-bold text-foreground">{currentChoice.label}</span>
                 <span className="mt-1.5 block text-xs leading-5 text-muted-foreground">
                   <span className="font-semibold text-foreground">Motivo: </span>{getChoiceDescription(currentChoice)}
@@ -192,7 +192,7 @@ export function AccountSelectionDialogHost() {
                     <option key={account.code} value={account.code}>{account.code} · {account.name}</option>
                   ))}
                 </select>
-              </label>
+              </div>
             )}
           </div>
           <DialogFooter>

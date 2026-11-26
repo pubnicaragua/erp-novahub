@@ -10,9 +10,11 @@ interface CurrencySelectorProps {
   baseCurrency?: string;
   exchangeRate?: number;
   label?: string;
+  ariaLabel?: string;
   disabled?: boolean;
   className?: string;
   hideLabel?: boolean;
+  hideExchangeRate?: boolean;
   rateDecimals?: number;
 }
 
@@ -23,9 +25,11 @@ export function CurrencySelector({
   baseCurrency = 'NIO',
   exchangeRate = DEFAULT_EXCHANGE_RATE,
   label = 'Moneda',
+  ariaLabel = label,
   disabled = false,
   className = '',
   hideLabel = false,
+  hideExchangeRate = false,
   rateDecimals = 2,
 }: CurrencySelectorProps) {
   const selected = String(value || baseCurrency).toUpperCase() === 'USD' ? 'USD' : 'NIO';
@@ -44,7 +48,7 @@ export function CurrencySelector({
         value={selected}
         onValueChange={(nextValue) => onChange(nextValue === 'USD' ? 'USD' : 'NIO')}
       >
-        <SelectTrigger size="sm" disabled={disabled} className="h-9 w-full max-w-full rounded-lg border-border bg-background px-2 text-xs font-bold uppercase">
+        <SelectTrigger size="sm" disabled={disabled} aria-label={ariaLabel} className="h-9 w-full max-w-full rounded-lg border-border bg-background px-2 text-xs font-bold uppercase">
           <SelectValue />
         </SelectTrigger>
         <SelectContent>
@@ -52,7 +56,7 @@ export function CurrencySelector({
           <SelectItem value="USD">Dólar (USD)</SelectItem>
         </SelectContent>
       </Select>
-      {!hideLabel && <p className="mt-1 text-[10px] text-muted-foreground">Tasa global aplicada: <span className="font-bold text-foreground">{rateText}</span></p>}
+      {!hideLabel && !hideExchangeRate && <p className="mt-1 text-[10px] text-muted-foreground">Tasa global aplicada: <span className="font-bold text-foreground">{rateText}</span></p>}
     </div>
   );
 }

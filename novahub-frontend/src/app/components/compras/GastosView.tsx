@@ -1,4 +1,5 @@
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect, useRef, useMemo } from 'react';
+import { useQueryClient } from '@tanstack/react-query';
 import { 
   Wallet, Plus, Search, Eye, TrendingDown, Clock, Tag, ChevronLeft, CalendarRange, FileText, Upload, FileDown, Ban, Lock, CircleDollarSign, Send, Pencil, Trash2, X
 } from 'lucide-react';
@@ -13,6 +14,7 @@ import { Combobox } from '../ui/Combobox';
 import { Popover, PopoverContent, PopoverTrigger } from '../ui/popover';
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '../ui/dialog';
 import { expensesService } from '../../services/compras.service';
+import { contabilidadService } from '../../services/contabilidad.service';
 import type { ExpenseSummary } from '../../services/compras.service';
 import type { Expense, Supplier } from '../../types';
 import type { SalesPaginationControls } from '../../types';
@@ -53,8 +55,10 @@ import { fetchAllPaginatedRows } from '../../utils/export-utils';
 import { createReportWorkbook } from '../../utils/reportWorkbook';
 import { VoiceExpenseComposer } from './VoiceExpenseComposer';
 import type { VoiceExpenseDraft } from '../../utils/voice-expense-parser';
+import { ExpenseVatFields, calculateIncludedVat, type ExpenseTaxMode } from './ExpenseVatFields';
+import { beginNotificationAction, completeNotificationAction, failNotificationAction } from '../../services/notification-action-coordinator';
 
-interface Props { data: Expense[]; summaryData?: ExpenseSummary; summaryLoading?: boolean; summaryError?: boolean; loading: boolean; onRefresh: () => void; supplierCatalog?: Supplier[]; expenseCategoryCatalog?: any[]; pagination?: SalesPaginationControls; onSearchChange?: (value: string) => void; onDateChange?: (from?: string, to?: string) => void; purchaseAlert?: PurchaseAlertDetail; targetId?: string | null; onClearTargetId?: () => void; isSidebarCollapsed?: boolean; }
+interface Props { data: Expense[]; summaryData?: ExpenseSummary; summaryLoading?: boolean; summaryError?: boolean; loading: boolean; onRefresh: () => void; supplierCatalog?: Supplier[]; expenseCategoryCatalog?: any[]; accountCatalog?: any[]; accountCatalogLoading?: boolean; canCreateCategoryInline?: boolean; pagination?: SalesPaginationControls; onSearchChange?: (value: string) => void; onDateChange?: (from?: string, to?: string) => void; purchaseAlert?: PurchaseAlertDetail; targetId?: string | null; onClearTargetId?: () => void; isSidebarCollapsed?: boolean; }
 type KpiFilter = { type: 'none' } | { type: 'draft' } | { type: 'pending' } | { type: 'category'; category: string };
 type DateFilterPreset = 'all' | 'month' | 'year' | 'range';
 type ExpensePermissionAction = Extract<PermissionAction, 'edit' | 'delete' | 'cancel' | 'export' | 'submit' | 'pay'>;
@@ -78,10 +82,6 @@ const paymentMethodOptions = [
 ] as const;
 const MAX_EVIDENCE_IMAGE_BYTES = 10 * 1024 * 1024;
 const MAX_EVIDENCE_FILE_BYTES = 10 * 1024 * 1024;
-type ExpenseTaxMode = 'NONE' | 'INCLUDED_15' | 'MANUAL_INCLUDED';
-
-const calculateIncludedVat = (total: number) => Math.round((Math.max(0, total) * 15 / 115 + Number.EPSILON) * 100) / 100;
-
 const inferExpenseTaxMode = (total: number, taxAmount: number, storedMode?: ExpenseTaxMode): ExpenseTaxMode => {
   if (storedMode && ['NONE', 'INCLUDED_15', 'MANUAL_INCLUDED'].includes(storedMode)) return storedMode;
   if (taxAmount <= 0) return 'NONE';
@@ -94,8 +94,21 @@ const statusOpts = [
   { label: 'Pagado',    value: 'PAID',     color: 'bg-primary/10 text-primary' },
 ];
 
-export function GastosView({ data, summaryData, summaryLoading, summaryError, loading, onRefresh, supplierCatalog = [], expenseCategoryCatalog = [], pagination, onSearchChange, onDateChange, purchaseAlert, targetId, onClearTargetId, isSidebarCollapsed = true }: Props) {
+export function GastosView({ data, summaryData, summaryLoading, summaryError, loading, onRefresh, supplierCatalog = [], expenseCategoryCatalog = [], accountCatalog = [], accountCatalogLoading = false, canCreateCategoryInline = false, pagination, onSearchChange, onDateChange, purchaseAlert, targetId, onClearTargetId, isSidebarCollapsed = true }: Props) {
   const { canPerform, user } = useAuth();
+  const queryClient = useQueryClient();
+  const canCreateExpenseCategory = canPerform('ACCOUNTING_EXPENSE_CATEGORIES', 'create');
+  const expenseCategoryAccounts = useMemo(() => {
+    const flat: any[] = [];
+    const visit = (accounts: any[]) => accounts.forEach((account) => {
+      if (!account || typeof account !== 'object') return;
+      const { children, ...row } = account;
+      flat.push(row);
+      if (Array.isArray(children)) visit(children);
+    });
+    visit(accountCatalog);
+    return flat.filter((account) => account.isActive !== false && account.acceptsPostings !== false);
+  }, [accountCatalog]);
   const canExpensePerform = (expense: Partial<Expense> | null | undefined, action: ExpensePermissionAction) =>
     Boolean(expense && canPerform(expensePermissionModule(expense), action));
   const canDeleteExpense = (expense: Partial<Expense> | null | undefined) => Boolean(
@@ -163,6 +176,9 @@ export function GastosView({ data, summaryData, summaryLoading, summaryError, lo
   const [editingId, setEditingId] = useState<string | null>(null);
   const [localDoc, setLocalDoc] = useState<Partial<Expense> | null>(null);
   const [expenseTaxMode, setExpenseTaxMode] = useState<ExpenseTaxMode>('NONE');
+  const [categoryDialogOpen, setCategoryDialogOpen] = useState(false);
+  const [categorySaving, setCategorySaving] = useState(false);
+  const [categoryForm, setCategoryForm] = useState({ code: '', name: '', accountId: '', description: '' });
   const [expenseValidationAttempted, setExpenseValidationAttempted] = useState(false);
   const [highlightedAlertId, setHighlightedAlertId] = useState<string | null>(null);
   const [paymentExpense, setPaymentExpense] = useState<Expense | null>(null);
@@ -180,6 +196,7 @@ export function GastosView({ data, summaryData, summaryLoading, summaryError, lo
 
   const closeExpenseEditor = () => {
     setExpenseValidationAttempted(false);
+    setCategoryDialogOpen(false);
     setEditingId(null);
   };
 
@@ -212,13 +229,12 @@ export function GastosView({ data, summaryData, summaryLoading, summaryError, lo
         if (editingId === 'NEW') {
            setLocalDoc({
              date: new Date().toISOString(),
-             time: new Date().toTimeString().slice(0, 5),
               amount: 0,
               taxAmount: 0,
               taxMode: 'NONE',
                currency: displayCurrency,
               exchangeRate: displayCurrency === baseCurrency ? 1 : globalRate,
-              category: 'OPERACIONAL',
+              category: 'OPERATIVO',
               categoryCustom: '',
               expenseCategoryId: '',
               description: '',
@@ -974,6 +990,50 @@ export function GastosView({ data, summaryData, summaryLoading, summaryError, lo
     }
   };
 
+  const handleCreateCategory = async () => {
+    if (!canCreateExpenseCategory || !canCreateCategoryInline) return;
+    const payload = {
+      code: categoryForm.code.trim(),
+      name: categoryForm.name.trim(),
+      accountId: categoryForm.accountId,
+      description: categoryForm.description.trim() || undefined,
+      isActive: true,
+    };
+    if (!payload.code || !payload.name || !payload.accountId) {
+      toast.error('Completa el código, el nombre y la cuenta contable');
+      return;
+    }
+
+    const actionToken = beginNotificationAction();
+    setCategorySaving(true);
+    try {
+      const response: any = await contabilidadService.createExpenseCategory(payload);
+      const created = response?.data?.data ?? response?.data ?? response;
+      if (!created?.id) throw new Error('La categoría se creó sin devolver su identificador');
+      const categoryName = String(created.name || payload.name);
+      setExpenseCategories((current) => [
+        ...current.filter((category) => category.id !== created.id),
+        { ...created, name: categoryName, isActive: true },
+      ]);
+      setLocalDoc((current) => current ? {
+        ...current,
+        category: categoryName.toUpperCase(),
+        expenseCategoryId: String(created.id),
+      } : current);
+      setCategoryDialogOpen(false);
+      setCategoryForm({ code: '', name: '', accountId: '', description: '' });
+      void queryClient.invalidateQueries({ queryKey: ['purchases', 'expense-categories-catalog'] });
+      toast.success('Categoría creada y seleccionada');
+      completeNotificationAction(actionToken);
+    } catch (error: any) {
+      failNotificationAction(actionToken);
+      const message = error?.response?.data?.message || error?.message || 'No se pudo crear la categoría';
+      toast.error(String(Array.isArray(message) ? message[0] : message));
+    } finally {
+      setCategorySaving(false);
+    }
+  };
+
   const applyVoiceExpense = (draft: VoiceExpenseDraft) => {
     setLocalDoc((current) => current ? {
       ...current,
@@ -1035,10 +1095,8 @@ export function GastosView({ data, summaryData, summaryLoading, summaryError, lo
     const canSaveExpense = isNew ? canPerform('PURCHASES_EXPENSES', 'create') : canExpensePerform(localDoc, 'edit');
     const canSavePending = canSaveExpense && (isNew || currentStatus === 'PENDING' || canExpensePerform(localDoc, 'submit'));
     const canMutate = canSaveExpense && !isPaidLocked;
-    const resolvedHour = localDoc.time || (localDoc.date ? new Date(localDoc.date).toTimeString().slice(0, 5) : '');
-
     return (
-      <div className="space-y-6 animate-in slide-in-from-right duration-300" data-tour="purchases-form-title">
+      <div className="min-w-0 max-w-full space-y-6 overflow-x-hidden animate-in slide-in-from-right duration-300" data-tour="purchases-form-title">
         <div className="flex items-center justify-between flex-wrap gap-4">
           <div className="flex items-center gap-4">
             <Button variant="ghost" size="icon" onClick={closeExpenseEditor} className="rounded-full">
@@ -1083,13 +1141,13 @@ export function GastosView({ data, summaryData, summaryLoading, summaryError, lo
 
         {canMutate && <div className="mb-4"><VoiceExpenseComposer disabled={isPaidLocked} onApply={applyVoiceExpense} /></div>}
 
-        <div className="grid md:grid-cols-2 gap-4">
-          <Card className="rounded-2xl border-border/50 col-span-2 md:col-span-1" data-tour="purchases-form-data">
+        <div className="grid min-w-0 grid-cols-1 gap-4 md:grid-cols-2">
+          <Card className="min-w-0 rounded-2xl border-border/50" data-tour="purchases-form-data">
             <CardContent className="p-6 space-y-3">
               <p className="text-xs font-black uppercase tracking-widest text-muted-foreground">Información del Gasto</p>
               <div className="space-y-3">
                 <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
-                  <div className="col-span-2">
+                  <div className="sm:col-span-2">
                     <Label htmlFor="expense-description" required className="text-[10px] text-muted-foreground mb-1">Descripción / Concepto</Label>
                     <Input 
                       id="expense-description"
@@ -1104,28 +1162,43 @@ export function GastosView({ data, summaryData, summaryLoading, summaryError, lo
                     />
                     {expenseValidationAttempted && !String(localDoc.description || '').trim() && <p id="expense-description-error" role="alert" className="mt-1 text-[10px] text-destructive">Escribe la descripción del gasto.</p>}
                   </div>
-                  <div>
+                  <div className="min-w-0">
                     <p className="text-[10px] text-muted-foreground mb-1">Categoría</p>
-                    <Select
-                      disabled={!canMutate}
-                      value={localDoc.category || 'OPERATIVO'}
-                      onValueChange={(cat) => {
-                        const matched = expenseCategories.find(c => c.name.toUpperCase() === cat);
-                        setLocalDoc({ ...localDoc, category: cat, expenseCategoryId: matched ? matched.id : '' });
-                      }}
-                    >
-                      <SelectTrigger className="h-8 text-xs uppercase"><SelectValue /></SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="OPERATIVO">Operativo</SelectItem>
-                        <SelectItem value="ADMINISTRATIVO">Administrativo</SelectItem>
-                        <SelectItem value="VENTAS">Ventas / Marketing</SelectItem>
-                        <SelectItem value="FINANCIERO">Financiero</SelectItem>
-                        <SelectItem value="OTRO">Otro</SelectItem>
-                        {expenseCategories
-                          .filter((category) => !['OPERATIVO', 'ADMINISTRATIVO', 'VENTAS', 'FINANCIERO', 'OTRO'].includes(String(category.name || '').toUpperCase()))
-                          .map((category) => <SelectItem key={category.id} value={String(category.name).toUpperCase()}>{category.name}</SelectItem>)}
-                      </SelectContent>
-                    </Select>
+                    <div className="flex min-w-0 items-center gap-1">
+                      <Select
+                        disabled={!canMutate}
+                        value={String(localDoc.category || 'OPERATIVO').toUpperCase()}
+                        onValueChange={(cat) => {
+                          const matched = expenseCategories.find((category) => String(category.name || '').toUpperCase() === cat);
+                          setLocalDoc({ ...localDoc, category: matched?.name?.toUpperCase() || cat, expenseCategoryId: matched?.id || '' });
+                        }}
+                      >
+                        <SelectTrigger className="h-8 min-w-0 flex-1 text-xs uppercase"><SelectValue /></SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="OPERATIVO">Operativo</SelectItem>
+                          <SelectItem value="ADMINISTRATIVO">Administrativo</SelectItem>
+                          <SelectItem value="VENTAS">Ventas / Marketing</SelectItem>
+                          <SelectItem value="FINANCIERO">Financiero</SelectItem>
+                          <SelectItem value="OTRO">Otro</SelectItem>
+                          {expenseCategories
+                            .filter((category) => !['OPERATIVO', 'ADMINISTRATIVO', 'VENTAS', 'FINANCIERO', 'OTRO'].includes(String(category.name || '').toUpperCase()))
+                            .map((category) => <SelectItem key={category.id} value={String(category.name).toUpperCase()}>{category.name}</SelectItem>)}
+                        </SelectContent>
+                      </Select>
+                      {canCreateCategoryInline && <Button
+                        type="button"
+                        variant="ghost"
+                        size="icon"
+                        className="size-7 shrink-0 rounded-lg p-1.5 text-muted-foreground hover:bg-primary/10 hover:text-primary"
+                        title={accountCatalogLoading ? 'Cargando cuentas contables…' : expenseCategoryAccounts.length ? 'Agregar categoría de gasto' : 'No hay cuentas contables disponibles'}
+                        aria-label="Agregar categoría de gasto"
+                        disabled={!canMutate || accountCatalogLoading || expenseCategoryAccounts.length === 0}
+                        onClick={() => {
+                          setCategoryForm({ code: '', name: '', accountId: '', description: '' });
+                          setCategoryDialogOpen(true);
+                        }}
+                      ><Plus className="size-4" /></Button>}
+                    </div>
                   </div>
                   <div>
                     <p className="text-[10px] text-muted-foreground mb-1">Fecha del Gasto</p>
@@ -1138,14 +1211,6 @@ export function GastosView({ data, summaryData, summaryLoading, summaryError, lo
                     />
                   </div>
                   <div>
-                    <p className="text-[10px] text-muted-foreground mb-1">Hora</p>
-                    <Input
-                      disabled
-                      value={resolvedHour}
-                      className="h-8 text-xs"
-                    />
-                  </div>
-                  <div className="col-span-2">
                     <p className="text-[10px] text-muted-foreground mb-1">Proveedor (Opcional)</p>
                     <Combobox
                       disabled={!canMutate}
@@ -1153,7 +1218,10 @@ export function GastosView({ data, summaryData, summaryLoading, summaryError, lo
                         .filter(s => (s.status || '').toUpperCase() === 'ACTIVE' || s.id === localDoc.supplierId)
                         .map(s => ({ label: s.name, value: s.id, description: (s.code ? `[${s.code}] ` : '') + (s.phone || 'Sin teléfono') }))}
                       value={localDoc.supplierId || ''}
-                      onChange={(val) => setLocalDoc({ ...localDoc, supplierId: val })}
+                      onChange={(val) => {
+                        const supplier = suppliers.find((item) => item.id === val);
+                        setLocalDoc({ ...localDoc, supplierId: val, paidTo: supplier?.name || '' });
+                      }}
                       placeholder="Asignar a un proveedor (opcional)"
                     />
                   </div>
@@ -1161,14 +1229,15 @@ export function GastosView({ data, summaryData, summaryLoading, summaryError, lo
                     <p className="text-[10px] text-muted-foreground mb-1">Pagado a</p>
                     <Input
                       disabled={!canMutate}
-                      value={localDoc.paidTo || ''}
+                      readOnly={Boolean(localDoc.supplierId)}
+                      value={suppliers.find((supplier) => supplier.id === localDoc.supplierId)?.name || localDoc.paidTo || ''}
                       onChange={(e) => setLocalDoc({ ...localDoc, paidTo: e.target.value })}
                       className="h-8 text-xs"
-                      placeholder="Nombre de persona o proveedor"
+                      placeholder={localDoc.supplierId ? 'Nombre del proveedor seleccionado' : 'Nombre de persona o proveedor'}
                     />
                   </div>
                   {String(localDoc.category || '').toUpperCase() === 'OTRO' && (
-                    <div className="col-span-2">
+                    <div>
                       <Label htmlFor="expense-category-custom" required className="text-[10px] text-muted-foreground mb-1">Categoría personalizada</Label>
                       <Input
                         id="expense-category-custom"
@@ -1194,7 +1263,7 @@ export function GastosView({ data, summaryData, summaryLoading, summaryError, lo
                       placeholder="N° Comprobante" 
                     />
                   </div>
-                  <div className="col-span-2">
+                  <div className="min-w-0">
                     <p className="text-[10px] text-muted-foreground mb-1">Adjuntar evidencia (PDF, imagen, XLSX)</p>
                     <Input
                       disabled={!canMutate}
@@ -1220,19 +1289,21 @@ export function GastosView({ data, summaryData, summaryLoading, summaryError, lo
             <CardContent className="p-6 flex flex-col justify-center h-full space-y-4">
               <p className="text-xs font-black uppercase tracking-widest text-muted-foreground">Valor del Gasto</p>
               <div className="space-y-4">
-                <div className="flex justify-between items-center text-sm border-b border-border/50 pb-4">
-                   <div className="w-1/2 min-w-0">
+                <div className="grid min-w-0 grid-cols-[minmax(6.5rem,20%)_minmax(0,1fr)] items-end gap-3 border-b border-border/50 pb-4">
+                   <div className="min-w-0">
                       <CurrencySelector
                         value={localDoc.currency || baseCurrency}
                         baseCurrency={baseCurrency}
                         exchangeRate={globalRate}
                         label="Moneda"
+                        ariaLabel="Moneda del gasto"
+                        hideExchangeRate
                         rateDecimals={2}
                         disabled={!canMutate}
                         onChange={(nextCurrency) => setLocalDoc({ ...localDoc, currency: nextCurrency, exchangeRate: nextCurrency === baseCurrency ? 1 : globalRate } as any)}
                       />
                    </div>
-                   <div className="w-1/2 flex flex-col items-end">
+                   <div className="min-w-0">
                       <Label htmlFor="expense-amount" required className="text-[10px] text-muted-foreground mb-1">Monto Total (incluye IVA)</Label>
                       <Input 
                         id="expense-amount"
@@ -1249,63 +1320,28 @@ export function GastosView({ data, summaryData, summaryLoading, summaryError, lo
                           setLocalDoc({
                             ...localDoc,
                             amount: normalizeDecimalInput(e.target.value) as any,
-                            ...(expenseTaxMode === 'INCLUDED_15' ? { taxAmount: calculateIncludedVat(amount) } : {}),
+                            ...(expenseTaxMode === 'INCLUDED_15' ? { taxAmount: calculateIncludedVat(amount), taxMode: expenseTaxMode } : {}),
                           });
                         }}
-                        className="h-10 text-xl font-black text-rose-500 text-right w-full max-w-[150px]" 
+                        className="h-9 w-full text-right text-lg font-black text-rose-500"
                         placeholder="0.00" currencyPrecision />
                       {expenseValidationAttempted && !(Number(localDoc.amount) > 0) && <p id="expense-amount-error" role="alert" className="mt-1 self-end text-[10px] text-destructive">Ingresa un monto mayor que cero.</p>}
                    </div>
                 </div>
 
-                <div className="space-y-3 border-b border-border/50 pb-4">
-                  <Label htmlFor="expense-tax-mode" className="text-[10px] text-muted-foreground">Tratamiento del IVA</Label>
-                  <Select
-                    value={expenseTaxMode}
-                    disabled={!canMutate}
-                    onValueChange={(value) => {
-                      const nextMode = value as ExpenseTaxMode;
-                      setExpenseTaxMode(nextMode);
-                      setLocalDoc({
-                        ...localDoc,
-                        taxAmount: nextMode === 'NONE'
-                          ? 0
-                          : nextMode === 'INCLUDED_15'
-                            ? calculateIncludedVat(Number(localDoc.amount || 0))
-                            : Number(localDoc.taxAmount || 0),
-                      });
-                    }}
-                  >
-                    <SelectTrigger id="expense-tax-mode" className="h-9 w-full text-xs">
-                      <SelectValue placeholder="Selecciona cómo calcular el IVA" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="NONE">Sin IVA</SelectItem>
-                      <SelectItem value="INCLUDED_15">Calcular 15% incluido en el total</SelectItem>
-                      <SelectItem value="MANUAL_INCLUDED">Ingresar IVA incluido en el total</SelectItem>
-                    </SelectContent>
-                  </Select>
-                  {expenseTaxMode === 'MANUAL_INCLUDED' && (
-                    <div className="space-y-1">
-                      <Label htmlFor="expense-tax-amount" className="text-[10px] text-muted-foreground">Monto del IVA</Label>
-                      <Input
-                        id="expense-tax-amount"
-                        disabled={!canMutate}
-                        type="text"
-                        inputMode="decimal"
-                        value={Number(localDoc.taxAmount || 0) === 0 ? '' : formatDecimalInput(Number(localDoc.taxAmount || 0))}
-                        onChange={(e) => setLocalDoc({ ...localDoc, taxAmount: normalizeDecimalInput(e.target.value) as any })}
-                        aria-invalid={expenseValidationAttempted && Number(localDoc.taxAmount || 0) > Number(localDoc.amount || 0)}
-                        className="h-9 text-right text-sm"
-                        placeholder="0.00"
-                        currencyPrecision
-                      />
-                      {expenseValidationAttempted && Number(localDoc.taxAmount || 0) > Number(localDoc.amount || 0) && (
-                        <p role="alert" className="text-[10px] text-destructive">El IVA no puede superar el total.</p>
-                      )}
-                    </div>
-                  )}
-                </div>
+                <ExpenseVatFields
+                  idPrefix="expense"
+                  amount={Number(localDoc.amount || 0)}
+                  taxAmount={Number(localDoc.taxAmount || 0)}
+                  mode={expenseTaxMode}
+                  disabled={!canMutate}
+                  attempted={expenseValidationAttempted}
+                  onChange={(mode, taxAmount) => {
+                    setExpenseTaxMode(mode);
+                    setLocalDoc({ ...localDoc, taxMode: mode, taxAmount });
+                  }}
+                  onTaxAmountChange={(taxAmount) => setLocalDoc({ ...localDoc, taxAmount })}
+                />
 
                 <div className="grid grid-cols-2 gap-2 text-sm">
                   <span className="text-muted-foreground">Base antes de IVA</span>
@@ -1329,6 +1365,45 @@ export function GastosView({ data, summaryData, summaryLoading, summaryError, lo
             </CardContent>
           </Card>
         </div>
+        <Dialog open={categoryDialogOpen} onOpenChange={(open) => { if (!categorySaving) setCategoryDialogOpen(open); }}>
+          <DialogContent className="w-[calc(100%-1.5rem)] sm:w-[calc(100%-2rem)] !max-w-lg rounded-2xl">
+            <DialogHeader>
+              <DialogTitle>Nueva categoría de gasto</DialogTitle>
+              <DialogDescription>Vincula la categoría con una cuenta contable para reutilizarla en tus gastos y en Contabilidad.</DialogDescription>
+            </DialogHeader>
+            <form className="space-y-4" onSubmit={(event) => { event.preventDefault(); void handleCreateCategory(); }}>
+              <div className="grid min-w-0 gap-3 sm:grid-cols-2">
+                <div className="min-w-0 space-y-1.5">
+                  <Label htmlFor="expense-category-code">Código *</Label>
+                  <Input id="expense-category-code" value={categoryForm.code} onChange={(event) => setCategoryForm((current) => ({ ...current, code: event.target.value }))} placeholder="Ej. CAT-001" maxLength={40} />
+                </div>
+                <div className="min-w-0 space-y-1.5">
+                  <Label htmlFor="expense-category-name">Nombre *</Label>
+                  <Input id="expense-category-name" value={categoryForm.name} onChange={(event) => setCategoryForm((current) => ({ ...current, name: event.target.value }))} placeholder="Ej. Servicios básicos" maxLength={120} />
+                </div>
+              </div>
+              <div className="min-w-0 space-y-1.5">
+                <Label htmlFor="expense-category-account">Cuenta contable *</Label>
+                <Select value={categoryForm.accountId} onValueChange={(accountId) => setCategoryForm((current) => ({ ...current, accountId }))}>
+                  <SelectTrigger id="expense-category-account" className="w-full"><SelectValue placeholder="Seleccionar cuenta" /></SelectTrigger>
+                  <SelectContent className="max-h-64 overflow-y-auto">
+                    {expenseCategoryAccounts.map((account) => <SelectItem key={account.id} value={account.id}>{account.code} · {account.name}</SelectItem>)}
+                  </SelectContent>
+                </Select>
+              </div>
+              <div className="min-w-0 space-y-1.5">
+                <Label htmlFor="expense-category-description">Descripción (opcional)</Label>
+                <Input id="expense-category-description" value={categoryForm.description} onChange={(event) => setCategoryForm((current) => ({ ...current, description: event.target.value }))} placeholder="Descripción de la categoría" maxLength={240} />
+              </div>
+              <DialogFooter>
+                <Button type="button" variant="outline" disabled={categorySaving} onClick={() => setCategoryDialogOpen(false)}>Cancelar</Button>
+                <Button type="submit" disabled={categorySaving || !categoryForm.code.trim() || !categoryForm.name.trim() || !categoryForm.accountId}>
+                  {categorySaving ? 'Creando…' : 'Crear y seleccionar'}
+                </Button>
+              </DialogFooter>
+            </form>
+          </DialogContent>
+        </Dialog>
       </div>
     );
   }

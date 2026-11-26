@@ -1437,6 +1437,8 @@ export interface RecurringExpense {
   endDate?: string;
   nextDate: string;
   amount: number;
+  taxAmount?: number;
+  taxMode?: 'NONE' | 'INCLUDED_15' | 'MANUAL_INCLUDED';
   currency: Currency;
   exchangeRate?: number;
   baseAmount?: number;
