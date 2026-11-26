@@ -951,13 +951,13 @@ export function FacturasView({ data, summaryData, summaryLoading, summaryError, 
         initialCreditPlanEnabled: creditPlanEnabled,
         initialCreditPlanCalculationMode: creditPlanCalculationMode,
         initialCreditFirstInstallmentDate: creditPlanEnabled ? currentCreditPlanEstimate?.firstInstallmentDate : undefined,
-        initialCreditFrequency: creditPlanCalculationMode === 'MANUAL' ? undefined : creditFrequency,
-        initialCreditInstallmentAmount: creditPlanCalculationMode === 'MANUAL' ? undefined : currentCreditPlanEstimate?.installmentAmount || Number(creditInstallmentAmount || 0),
-        initialCreditManualInstallments: creditPlanCalculationMode === 'MANUAL'
+        initialCreditFrequency: creditPlanEnabled && creditPlanCalculationMode !== 'MANUAL' ? creditFrequency : undefined,
+        initialCreditInstallmentAmount: creditPlanEnabled && creditPlanCalculationMode !== 'MANUAL' ? currentCreditPlanEstimate?.installmentAmount : undefined,
+        initialCreditManualInstallments: creditPlanEnabled && creditPlanCalculationMode === 'MANUAL'
           ? creditManualInstallments.map((item) => ({ dueDate: item.dueDate, totalAmount: Number(item.totalAmount), interestAmount: Number(item.interestAmount) }))
           : undefined,
-        initialCreditExcludedWeekdays: creditPlanCalculationMode === 'MANUAL' ? [] : creditExcludedWeekdays,
-        initialCreditHolidayIds: creditPlanCalculationMode === 'MANUAL' ? [] : creditHolidayIds,
+        initialCreditExcludedWeekdays: creditPlanEnabled && creditPlanCalculationMode !== 'MANUAL' ? creditExcludedWeekdays : undefined,
+        initialCreditHolidayIds: creditPlanEnabled && creditPlanCalculationMode !== 'MANUAL' ? creditHolidayIds : undefined,
       });
       return;
     }
@@ -972,12 +972,12 @@ export function FacturasView({ data, summaryData, summaryLoading, summaryError, 
         interestValue: Number(creditInterestValue || 0),
         planEnabled: creditPlanEnabled,
         planCalculationMode: creditPlanCalculationMode,
-        ...(creditPlanCalculationMode !== 'MANUAL' ? { frequency: creditFrequency, installmentAmount: currentCreditPlanEstimate?.installmentAmount || Number(creditInstallmentAmount || 0) } : {}),
-        manualInstallments: creditPlanCalculationMode === 'MANUAL'
+        ...(creditPlanEnabled && creditPlanCalculationMode !== 'MANUAL' ? { frequency: creditFrequency, installmentAmount: currentCreditPlanEstimate?.installmentAmount } : {}),
+        manualInstallments: creditPlanEnabled && creditPlanCalculationMode === 'MANUAL'
           ? creditManualInstallments.map((item) => ({ dueDate: item.dueDate, totalAmount: Number(item.totalAmount), interestAmount: Number(item.interestAmount) }))
           : undefined,
-        excludedWeekdays: creditPlanCalculationMode === 'MANUAL' ? [] : creditExcludedWeekdays,
-        holidayIds: creditPlanCalculationMode === 'MANUAL' ? [] : creditHolidayIds,
+        excludedWeekdays: creditPlanEnabled && creditPlanCalculationMode !== 'MANUAL' ? creditExcludedWeekdays : undefined,
+        holidayIds: creditPlanEnabled && creditPlanCalculationMode !== 'MANUAL' ? creditHolidayIds : undefined,
       });
       toast.success(`Factura ${invoice.number} enviada a Créditos por su saldo pendiente`, { id: creditToastId });
       setCreditInvoice(null);
@@ -1442,12 +1442,12 @@ export function FacturasView({ data, summaryData, summaryLoading, summaryError, 
           initialCreditInterestValue: action === 'CREDIT' ? settlement?.initialCreditInterestValue || 0 : undefined,
           initialCreditPlanEnabled: action === 'CREDIT' ? Boolean(settlement?.initialCreditPlanEnabled) : undefined,
           initialCreditPlanCalculationMode: action === 'CREDIT' ? settlement?.initialCreditPlanCalculationMode || 'AMOUNT' : undefined,
-          initialCreditFirstInstallmentDate: action === 'CREDIT' ? settlement?.initialCreditFirstInstallmentDate : undefined,
-          initialCreditFrequency: action === 'CREDIT' && settlement?.initialCreditPlanCalculationMode !== 'MANUAL' ? settlement?.initialCreditFrequency || 'WEEKLY' : undefined,
-          initialCreditInstallmentAmount: action === 'CREDIT' && settlement?.initialCreditPlanCalculationMode !== 'MANUAL' ? settlement?.initialCreditInstallmentAmount || 0 : undefined,
-          initialCreditManualInstallments: action === 'CREDIT' ? settlement?.initialCreditManualInstallments : undefined,
-          initialCreditExcludedWeekdays: action === 'CREDIT' ? settlement?.initialCreditExcludedWeekdays : undefined,
-          initialCreditHolidayIds: action === 'CREDIT' ? settlement?.initialCreditHolidayIds : undefined,
+          initialCreditFirstInstallmentDate: action === 'CREDIT' && settlement?.initialCreditPlanEnabled ? settlement.initialCreditFirstInstallmentDate : undefined,
+          initialCreditFrequency: action === 'CREDIT' && settlement?.initialCreditPlanEnabled && settlement.initialCreditPlanCalculationMode !== 'MANUAL' ? settlement.initialCreditFrequency || 'WEEKLY' : undefined,
+          initialCreditInstallmentAmount: action === 'CREDIT' && settlement?.initialCreditPlanEnabled && settlement.initialCreditPlanCalculationMode !== 'MANUAL' && Number(settlement.initialCreditInstallmentAmount) >= 0.01 ? Number(settlement.initialCreditInstallmentAmount) : undefined,
+          initialCreditManualInstallments: action === 'CREDIT' && settlement?.initialCreditPlanEnabled && settlement.initialCreditPlanCalculationMode === 'MANUAL' ? settlement.initialCreditManualInstallments : undefined,
+          initialCreditExcludedWeekdays: action === 'CREDIT' && settlement?.initialCreditPlanEnabled && settlement.initialCreditPlanCalculationMode !== 'MANUAL' ? settlement.initialCreditExcludedWeekdays : undefined,
+          initialCreditHolidayIds: action === 'CREDIT' && settlement?.initialCreditPlanEnabled && settlement.initialCreditPlanCalculationMode !== 'MANUAL' ? settlement.initialCreditHolidayIds : undefined,
           creditTermOverrideConfirmed: settlement?.creditTermOverrideConfirmed ?? (localDoc as any).creditTermOverrideConfirmed,
           expectedDelivery: localDoc.expectedDelivery ? new Date(localDoc.expectedDelivery).toISOString() : undefined,
           notes: finalNotes,

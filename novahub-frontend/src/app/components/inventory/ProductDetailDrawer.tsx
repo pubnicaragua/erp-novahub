@@ -633,7 +633,7 @@ export function ProductDetailDrawer({
       >
         {/* ===== Tabs envuelve header + contenido para que Radix comparta contexto ===== */}
         <Tabs
-          value={activeTab}
+          value={isService && !['general', 'historial'].includes(String(activeTab)) ? 'general' : activeTab}
           onValueChange={(v) => setActiveTab(v as TabKey)}
           className="flex flex-col flex-1 min-h-0 gap-0 overflow-hidden"
         >
@@ -676,7 +676,7 @@ export function ProductDetailDrawer({
                       {statusInfo.label}
                     </Badge>
                   )}
-                  {product?.trackSerialNumbers && (
+                  {!isService && product?.trackSerialNumbers && (
                     <Badge variant="outline" className="text-[9px] font-black uppercase tracking-wider border-info/30 text-info bg-info/10">
                       IMEI
                     </Badge>
@@ -718,18 +718,22 @@ export function ProductDetailDrawer({
                 <Info className="size-3.5" />
                 General
               </TabsTrigger>
-              <TabsTrigger value="stock" className="gap-1.5">
-                <Warehouse className="size-3.5" />
-                Stock por bodega
-              </TabsTrigger>
-              <TabsTrigger value="kardex" className="gap-1.5">
-                <History className="size-3.5" />
-                Kardex
-              </TabsTrigger>
-              <TabsTrigger value="series" className="gap-1.5">
-                <Hash className="size-3.5" />
-                IMEI / Series
-              </TabsTrigger>
+              {!isService && (
+                <>
+                  <TabsTrigger value="stock" className="gap-1.5">
+                    <Warehouse className="size-3.5" />
+                    Stock por bodega
+                  </TabsTrigger>
+                  <TabsTrigger value="kardex" className="gap-1.5">
+                    <History className="size-3.5" />
+                    Kardex
+                  </TabsTrigger>
+                  <TabsTrigger value="series" className="gap-1.5">
+                    <Hash className="size-3.5" />
+                    IMEI / Series
+                  </TabsTrigger>
+                </>
+              )}
               <TabsTrigger value="historial" className="gap-1.5">
                 <Clock className="size-3.5" />
                 Historial
