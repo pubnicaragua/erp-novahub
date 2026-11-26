@@ -262,6 +262,18 @@ export function AddProductsModal({ open, onOpenChange, categories, warehouses, b
   const codeRequired = catalogItemType === 'PRODUCT';
   const canCreateServiceCategory = canPerform('INVENTORY_ATTRIBUTES', 'create');
   const isPagePresentation = presentation === 'page';
+  const hasServiceHoverEffect = catalogItemType === 'SERVICE' && presentation === 'dialog';
+  const [isPointerInsideServiceDialog, setIsPointerInsideServiceDialog] = useState(false);
+  const serviceDialogSurfaceClass = !hasServiceHoverEffect
+    ? ''
+    : isPointerInsideServiceDialog
+      ? 'transition-[background-color,backdrop-filter,opacity] duration-300 motion-reduce:transition-none !bg-background/95 !opacity-100 !backdrop-blur-xl'
+      : 'transition-[background-color,backdrop-filter,opacity] duration-300 motion-reduce:transition-none !bg-background/45 !opacity-85 !backdrop-blur-none';
+  const serviceDialogOverlayClass = !hasServiceHoverEffect
+    ? undefined
+    : isPointerInsideServiceDialog
+      ? 'transition-[background-color,backdrop-filter] duration-300 motion-reduce:transition-none !bg-black/45 !backdrop-blur-md'
+      : 'transition-[background-color,backdrop-filter] duration-300 motion-reduce:transition-none !bg-black/10 !backdrop-blur-none';
 
   const [productsList, setProductsList] = useState<any[]>([]);
   const [isSaving, setIsSaving] = useState(false);
@@ -1029,10 +1041,19 @@ export function AddProductsModal({ open, onOpenChange, categories, warehouses, b
 
   return (
     <>
-    <Dialog modal={false} open={open} onOpenChange={(v) => { if (!isSaving) onOpenChange(v); }}>
-      <DialogContent className={presentation === 'page'
-        ? '!fixed !inset-0 !top-0 !left-0 !z-[60] !h-dvh !max-h-none !w-screen !max-w-none !translate-x-0 !translate-y-0 !gap-0 !overflow-hidden !rounded-none !border-0 !bg-background !p-4 !shadow-none !backdrop-blur-none sm:!p-6 lg:!p-10'
-        : 'w-[calc(100vw-2rem)] !max-w-[min(95vw,1100px)] max-h-[min(88vh,calc(100dvh-3rem))] flex flex-col overflow-hidden'}>
+    <Dialog modal={false} open={open} onOpenChange={(v) => {
+      if (isSaving) return;
+      if (!v) setIsPointerInsideServiceDialog(false);
+      onOpenChange(v);
+    }}>
+      <DialogContent
+        overlayClassName={serviceDialogOverlayClass}
+        onPointerEnter={hasServiceHoverEffect ? () => setIsPointerInsideServiceDialog(true) : undefined}
+        onPointerLeave={hasServiceHoverEffect ? () => setIsPointerInsideServiceDialog(false) : undefined}
+        className={`${presentation === 'page'
+          ? '!fixed !inset-0 !top-0 !left-0 !z-[60] !h-dvh !max-h-none !w-screen !max-w-none !translate-x-0 !translate-y-0 !gap-0 !overflow-hidden !rounded-none !border-0 !bg-background !p-4 !shadow-none !backdrop-blur-none sm:!p-6 lg:!p-10'
+          : 'w-[calc(100vw-2rem)] !max-w-[min(95vw,1100px)] max-h-[min(88vh,calc(100dvh-3rem))] flex flex-col overflow-hidden'} ${serviceDialogSurfaceClass}`}
+      >
         <DialogHeader data-tour="inventory-product-add-title">
           {presentation === 'page' && (
             <Button
