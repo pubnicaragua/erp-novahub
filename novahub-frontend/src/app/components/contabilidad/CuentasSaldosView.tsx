@@ -115,8 +115,8 @@ export function CuentasSaldosView({ side }: { side: AccountingBalanceSide }) {
             : query.error ? <div className="p-8 text-center"><p className="font-bold">No se pudieron cargar los documentos</p><Button variant="outline" className="mt-3" onClick={() => void query.refetch()}>Reintentar</Button></div>
               : rows.length === 0 ? <div className="p-10 text-center"><CircleDollarSign className="mx-auto mb-3 size-8 text-muted-foreground/50" /><p className="font-bold">Sin documentos</p><p className="mt-1 text-sm text-muted-foreground">No hay registros para el estado y los filtros seleccionados.</p></div>
                 : <>
-                  <div className="hidden overflow-x-auto md:block">
-                    <Table className="min-w-[880px]">
+                  <div className="hidden overflow-x-auto xl:block">
+                    <Table responsiveCards={false} className="min-w-[880px]">
                       <TableHeader><TableRow><TableHead>{partyLabel}</TableHead><TableHead>Documento</TableHead><TableHead>Emisión</TableHead><TableHead>Vencimiento</TableHead><TableHead className="text-right">Total</TableHead><TableHead className="text-right">Abonado</TableHead><TableHead className="text-right">Saldo</TableHead><TableHead>Estado</TableHead><TableHead /></TableRow></TableHeader>
                       <TableBody>{rows.map((row) => <TableRow key={row.id} className="cursor-pointer" onClick={() => setSelected(row)}>
                         <TableCell><p className="max-w-48 truncate font-semibold">{row.partyName}</p>{row.partyCode && <p className="text-xs text-muted-foreground">{row.partyCode}</p>}</TableCell>
@@ -128,11 +128,26 @@ export function CuentasSaldosView({ side }: { side: AccountingBalanceSide }) {
                       </TableRow>)}</TableBody>
                     </Table>
                   </div>
-                  <div className="grid grid-cols-1 gap-3 p-3 md:hidden">
+                  <div className="grid grid-cols-1 gap-3 p-3 xl:hidden">
                     {rows.map((row) => <button key={row.id} type="button" onClick={() => setSelected(row)} className="min-w-0 rounded-2xl border border-border/60 bg-card p-4 text-left transition-colors hover:bg-muted/30 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring">
-                      <div className="flex min-w-0 items-start justify-between gap-3"><div className="min-w-0"><p className="truncate font-bold">{row.partyName}</p><p className="mt-1 break-all font-mono text-xs text-muted-foreground">{row.number}</p></div><StatusBadge status={row.status} side={side} /></div>
-                      <p className="mt-2 text-xs text-muted-foreground">{docLabel[row.documentType] || 'Documento'} · Emisión {dateLabel(row.date)}</p>
-                      <div className="mt-3 grid grid-cols-2 gap-3 border-t border-border/50 pt-3"><MoneyField label="Total" value={row.total} currency={row.currency} /><MoneyField label="Saldo" value={row.balance} currency={row.currency} emphasized /></div>
+                      <div className="flex min-w-0 flex-wrap items-start justify-between gap-2 border-b border-border/50 pb-3">
+                        <div className="min-w-0 flex-1">
+                          <p className="break-words font-bold">{row.partyName}</p>
+                          {row.partyCode && <p className="mt-0.5 break-all text-xs text-muted-foreground">{row.partyCode}</p>}
+                          <p className="mt-1 break-all font-mono text-xs text-primary">{row.number}</p>
+                        </div>
+                        <StatusBadge status={row.status} side={side} />
+                      </div>
+                      <div className="mt-3 flex min-w-0 flex-wrap gap-x-4 gap-y-1 text-xs text-muted-foreground">
+                        <span>{docLabel[row.documentType] || 'Documento'}</span>
+                        <span className="whitespace-nowrap">Emisión: {dateLabel(row.date)}</span>
+                        <span className="whitespace-nowrap">Vencimiento: {dateLabel(row.dueDate)}</span>
+                      </div>
+                      <div className="mt-3 grid min-w-0 grid-cols-2 gap-2 border-t border-border/50 pt-3 sm:grid-cols-3">
+                        <MoneyField label="Total" value={row.total} currency={row.currency} />
+                        <MoneyField label="Abonado" value={row.amountPaid} currency={row.currency} />
+                        <MoneyField label="Saldo pendiente" value={row.balance} currency={row.currency} emphasized />
+                      </div>
                     </button>)}
                   </div>
                   <div className="flex flex-col gap-3 border-t border-border/50 px-4 py-3 text-sm text-muted-foreground sm:flex-row sm:items-center sm:justify-between">
