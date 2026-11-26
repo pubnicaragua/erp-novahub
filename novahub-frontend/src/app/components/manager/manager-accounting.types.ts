@@ -2,6 +2,8 @@ export type ManagerAccountingView =
   | 'overview'
   | 'chart'
   | 'journal'
+  | 'receivables'
+  | 'payables'
   | 'ledger'
   | 'trialBalance'
   | 'profitLoss'
@@ -23,6 +25,8 @@ export const MANAGER_ACCOUNTING_VIEWS: Array<{ id: ManagerAccountingView; label:
   { id: 'overview', label: 'Resumen contable' },
   { id: 'chart', label: 'Plan de Cuentas' },
   { id: 'journal', label: 'Libro Diario' },
+  { id: 'receivables', label: 'Cuentas por Cobrar' },
+  { id: 'payables', label: 'Cuentas por Pagar' },
   { id: 'ledger', label: 'Libro Mayor' },
   { id: 'trialBalance', label: 'Balance de Comprobación' },
   { id: 'profitLoss', label: 'Estado de Resultados' },

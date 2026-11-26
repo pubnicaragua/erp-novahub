@@ -31,7 +31,48 @@ export interface CashDepositContext {
   banks: Array<{ id: string; label: string; bankName: string; accountNumber: string; currency: string; accountId: string | null; depositable: boolean }>;
 }
 
+export type AccountingBalanceSide = 'RECEIVABLES' | 'PAYABLES';
+export interface AccountingBalanceDocument {
+  id: string;
+  sourceId: string;
+  clientTenantId?: string;
+  branchId?: string;
+  branchName?: string;
+  businessUnitName?: string | null;
+  side: AccountingBalanceSide;
+  documentType: 'INVOICE' | 'CUSTOMER_LOAN' | 'CUSTOMER_CREDIT' | 'SUPPLIER_INVOICE' | 'PURCHASE_RECEIPT';
+  number: string;
+  date: string;
+  dueDate?: string | null;
+  partyId?: string | null;
+  partyName: string;
+  partyCode?: string | null;
+  total: number;
+  amountPaid: number;
+  balance: number;
+  currency: string;
+  exchangeRate: number;
+  status: 'PENDING' | 'PAID';
+}
+
+export interface AccountingBalanceDetails {
+  document: AccountingBalanceDocument;
+  payments: Array<{ id: string; number: string; date: string; amount: number; currency: string; method: string; reference?: string | null; notes?: string | null }>;
+  journalEntries: Array<{ id: string; number: string; date: string; description: string; status: string; referenceType?: string | null; lines: Array<{ id: string; debit: number; credit: number; description?: string | null; account?: { code: string; name: string } | null }> }>;
+}
+
+export interface AccountingBalanceListResponse {
+  view: AccountingBalanceSide | 'receivables' | 'payables';
+  data: AccountingBalanceDocument[];
+  meta: { total: number; page: number; pageSize: number; totalPages: number };
+  metrics: { total: number; pending: number; paid: number; balance: number; branchCount?: number };
+}
+
 export const contabilidadService = {
+  getReceivablesPayables: (params: { side: AccountingBalanceSide; search?: string; status?: string; dateFrom?: string; dateTo?: string; page?: number; pageSize?: number }, signal?: AbortSignal) =>
+    api.get<AccountingBalanceListResponse>('/accounting/receivables-payables', { params, signal }),
+  getReceivablePayableDetails: (side: AccountingBalanceSide, documentType: string, documentId: string, signal?: AbortSignal) =>
+    api.get<AccountingBalanceDetails>(`/accounting/receivables-payables/${side}/${documentType}/${encodeURIComponent(documentId)}`, { signal }),
   getCashDepositContext: (signal?: AbortSignal) => api.get<CashDepositContext>('/accounting/cash-deposits/context', { signal }),
   depositCashToBank: (data: { bankAccountId: string; amount: number; date?: string; reference?: string; sourceAccountId?: string; requestId?: string }) => api.post<any>('/accounting/cash-deposits', data),
   // Centros de costo (por área): dimensión aparte del plan de cuentas

@@ -5,7 +5,7 @@ import {
   BookOpenCheck, Building2, FileSpreadsheet, HelpCircle,
   Database, GitBranch, ChevronDown, X, Settings2,
   ArrowLeftRight, ClipboardCheck,
-  Inbox,
+  Inbox, CircleDollarSign,
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import { Button } from '../ui/button';
@@ -34,10 +34,13 @@ import { InvoiceAuditView } from './InvoiceAuditView';
 import { CurrencyValuationBanner } from '../ui/CurrencyValuation';
 import { useAuth } from '../../contexts/AuthContext';
 import { SolicitudesPagoRRHHView } from './SolicitudesPagoRRHHView';
+import { CuentasSaldosView } from './CuentasSaldosView';
 
 const SECTIONS = [
   { id: 'plan-cuentas', label: 'Plan de Cuentas', icon: BookOpen },
   { id: 'diario', label: 'Libro Diario', icon: FileText },
+  { id: 'cuentas-cobrar', label: 'Cuentas por Cobrar', icon: CircleDollarSign },
+  { id: 'cuentas-pagar', label: 'Cuentas por Pagar', icon: CircleDollarSign },
   { id: 'libro-mayor', label: 'Libro Mayor', icon: BookOpenCheck },
   { id: 'balance-comprobacion', label: 'Balance de Comprobación', icon: Scale },
   { id: 'estado-resultados', label: 'Estado de Resultados', icon: TrendingUp },
@@ -66,6 +69,8 @@ const SECTION_PERMISSIONS: Record<string, string> = {
   'plan-cuentas': 'ACCOUNTING_CHART',
   'solicitudes-pago': 'ACCOUNTING_HR_PAYMENT_REQUESTS',
   diario: 'ACCOUNTING_JOURNAL',
+  'cuentas-cobrar': 'ACCOUNTING_RECEIVABLES',
+  'cuentas-pagar': 'ACCOUNTING_PAYABLES',
   'libro-mayor': 'ACCOUNTING_LEDGER',
   'balance-comprobacion': 'ACCOUNTING_TRIAL_BALANCE',
   'estado-resultados': 'ACCOUNTING_PROFIT_LOSS',
@@ -411,6 +416,8 @@ export function ContabilidadPage({ activeSubModule, onSubModuleChange, isSidebar
                     {activeSection === 'plan-cuentas' && <PlanCuentasView isSidebarCollapsed={isSidebarCollapsed} helpTrigger={helpTrigger} />}
                     {activeSection === 'solicitudes-pago' && <SolicitudesPagoRRHHView />}
                     {activeSection === 'diario' && <DiarioView />}
+                    {activeSection === 'cuentas-cobrar' && <CuentasSaldosView side="RECEIVABLES" />}
+                    {activeSection === 'cuentas-pagar' && <CuentasSaldosView side="PAYABLES" />}
                     {activeSection === 'libro-mayor' && <LibroMayorView />}
                     {activeSection === 'balance-comprobacion' && <BalanceComprobacionView />}
                     {activeSection === 'estado-resultados' && <EstadoResultadosView />}

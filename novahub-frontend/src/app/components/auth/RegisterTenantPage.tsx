@@ -237,6 +237,8 @@ const SUBMODULE_NAMES_ES: Record<string, string> = {
   NOTIFICATIONS_PUSH: 'Notificaciones Push',
   ACCOUNTING_CHART: 'Plan de Cuentas',
   ACCOUNTING_JOURNAL: 'Libro Diario',
+  ACCOUNTING_RECEIVABLES: 'Cuentas por Cobrar',
+  ACCOUNTING_PAYABLES: 'Cuentas por Pagar',
   ACCOUNTING_HR_PAYMENT_REQUESTS: 'Solicitudes de pago RR. HH.',
   ACCOUNTING_LEDGER: 'Libro Mayor',
   ACCOUNTING_TRIAL_BALANCE: 'Balance de Comprobación',

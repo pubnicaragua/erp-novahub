@@ -932,6 +932,14 @@ export const enterpriseGroupsService = {
       `/enterprise-groups/manager/${groupId}/accounting/module`,
       { params, signal },
     ),
+  getAccountingDocumentDetails: (
+    groupId: string,
+    side: 'RECEIVABLES' | 'PAYABLES',
+    documentType: string,
+    documentId: string,
+    params: { branchId: string },
+    signal?: AbortSignal,
+  ) => api.get<any>(`/enterprise-groups/manager/${groupId}/accounting/document/${side}/${documentType}/${encodeURIComponent(documentId)}`, { params, signal }),
   getReportsModule: (
     groupId: string,
     params: {

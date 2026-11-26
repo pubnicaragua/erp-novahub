@@ -589,19 +589,29 @@ export function OrdenesVentaView({ data, summaryData, summaryLoading, summaryErr
     status,
   } as Partial<SalesOrder>);
 
-  const handleSaveOrder = async (status: OrderWorkflowStatus): Promise<boolean> => {
+  const handleSaveOrder = async (status: OrderWorkflowStatus, options?: { sendToCash?: boolean }): Promise<boolean> => {
     if (!localDoc) return false;
+    const sendToCash = options?.sendToCash === true;
+    const saveStatus: OrderWorkflowStatus = sendToCash ? 'DRAFT' : status;
+    if (sendToCash && !canPerform('SALES_ORDERS', 'convert')) {
+      toast.error('No tienes permiso para enviar órdenes a Caja');
+      return false;
+    }
+    if (sendToCash && !hasOpenCash) {
+      toast.error('Abre una caja en esta sucursal antes de enviar la orden a Caja.');
+      return false;
+    }
     const currentStatus = normalizeOrderStatus(localDoc.status);
-    const isStatusTransition = String(localDoc.id).startsWith('local-') || currentStatus !== normalizeOrderStatus(status);
-    if (status === 'APPROVED' && isStatusTransition && !canPerform('SALES_ORDERS', 'approve')) {
+    const isStatusTransition = String(localDoc.id).startsWith('local-') || currentStatus !== normalizeOrderStatus(saveStatus);
+    if (saveStatus === 'APPROVED' && isStatusTransition && !canPerform('SALES_ORDERS', 'approve')) {
       toast.error('No tienes permiso para aprobar órdenes');
       return false;
     }
     if (savingOrderRef.current) return false;
-    if (status !== 'DRAFT') {
+    if (saveStatus !== 'DRAFT' || sendToCash) {
       const workflowIssues = getOrderWorkflowIssues(localDoc);
       if (workflowIssues.length) {
-        toast.error(`No se puede aprobar la orden. Faltan o están incompletos: ${workflowIssues.join('; ')}.`);
+        toast.error(`No se puede enviar la orden. Faltan o están incompletos: ${workflowIssues.join('; ')}.`);
         return false;
       }
       const priceMessage = getMissingSalesPriceMessage(localDoc.items || []);
@@ -619,12 +629,14 @@ export function OrdenesVentaView({ data, summaryData, summaryLoading, summaryErr
       }
     }
     const saveToastId = toast.loading(
-      status === 'APPROVED' ? 'Aprobando orden de venta...' : 'Guardando orden de venta...',
+      sendToCash ? 'Guardando orden y enviándola a Caja...' : saveStatus === 'APPROVED' ? 'Aprobando orden de venta...' : 'Guardando orden de venta...',
     );
     savingOrderRef.current = true;
     try {
+      let savedOrderId = String(localDoc.id);
       if (String(localDoc.id).startsWith('local-')) {
-        const created = await salesOrdersService.create({ ...buildOrderStatusPayload(status), number: undefined } as any);
+        const created = await salesOrdersService.create({ ...buildOrderStatusPayload(saveStatus), number: undefined } as any);
+        savedOrderId = String(created?.id || '');
         const pendingTrip = pendingTripRef.current;
         pendingTripRef.current = null;
         if (pendingTrip && created?.id) {
@@ -632,15 +644,33 @@ export function OrdenesVentaView({ data, summaryData, summaryLoading, summaryErr
           catch (tripError: any) { toast.error(`La orden se guardó, pero no se pudo guardar la remisión: ${tripError?.message || 'inténtalo de nuevo desde la orden'}`); }
         }
         commitLocalDoc(created);
-        await onRefresh();
+        if (!sendToCash) await onRefresh();
       } else {
-        await handleUpdate(localDoc.id, buildOrderStatusPayload(status));
+        await handleUpdate(localDoc.id, buildOrderStatusPayload(saveStatus));
+      }
+      if (sendToCash) {
+        try {
+          if (!savedOrderId || savedOrderId.startsWith('local-')) throw new Error('No se pudo identificar la orden guardada.');
+          await salesOrdersService.convertToCash(savedOrderId, {
+            sellerEmployeeId: localDoc.sellerEmployeeId || getLoggedInSellerEmployeeId(user) || null,
+          }, globalThis.crypto?.randomUUID?.());
+        } catch (cashError: any) {
+          clearSalesEditorDraft(salesDraftStorageKey);
+          localDocRef.current = null;
+          setEditingId(null);
+          void onRefresh();
+          const rawMessage = cashError?.response?.data?.message || cashError?.message || 'No se pudo completar el envío a Caja.';
+          const message = Array.isArray(rawMessage) ? rawMessage.join('; ') : String(rawMessage);
+          toast.error(`${message} Si la factura quedó generada, envíala a Caja desde Facturas; si no, vuelve a intentarlo desde Órdenes.`, { id: saveToastId });
+          return false;
+        }
       }
       clearSalesEditorDraft(salesDraftStorageKey);
       localDocRef.current = null;
       setEditingId(null);
+      if (sendToCash) void onRefresh();
       toast.success(
-        status === 'APPROVED' ? 'Orden aprobada' : 'Orden guardada como borrador',
+        sendToCash ? 'Orden aprobada, facturada y enviada a Caja' : saveStatus === 'APPROVED' ? 'Orden aprobada' : 'Orden guardada como borrador',
         { id: saveToastId },
       );
       return true;
@@ -944,7 +974,7 @@ export function OrdenesVentaView({ data, summaryData, summaryLoading, summaryErr
           </div>
           <div className="sales-document-actions flex w-full min-w-0 flex-wrap items-center gap-2 sm:w-auto sm:justify-end" data-tour="sales-form-actions">
             <SalesViewTutorial view="orders" context="form" />
-            {canPerform('SALES_ORDERS', 'edit') && !['APPROVED', 'CANCELLED'].includes(normalizeOrderStatus(localDoc?.status)) && (
+            {(canPerform('SALES_ORDERS', 'edit') || (String(localDoc?.id || '').startsWith('local-') && canPerform('SALES_ORDERS', 'create'))) && !['APPROVED', 'CANCELLED'].includes(normalizeOrderStatus(localDoc?.status)) && (
               <>
                 {normalizeOrderStatus(localDoc?.status) === 'DRAFT' && <>
                   <Button variant="outline" className="w-full rounded-xl border-border/50 px-6 font-black uppercase text-[10px] tracking-widest hover:bg-muted/70 hover:text-foreground sm:w-auto"
@@ -954,6 +984,17 @@ export function OrdenesVentaView({ data, summaryData, summaryLoading, summaryErr
                   {canPerform('SALES_ORDERS', 'approve') && <Button data-testid="sales-order-approve" className="w-full rounded-xl bg-primary px-6 font-black uppercase text-[10px] tracking-widest text-primary-foreground shadow-xl shadow-primary/20 hover:bg-primary/90 hover:text-primary-foreground sm:w-auto"
                     onClick={() => void handleSaveOrder('APPROVED')}>
                     Aprobar
+                  </Button>}
+                  {canPerform('SALES_ORDERS', 'convert') && <Button
+                    type="button"
+                    data-testid="sales-order-send-cash"
+                    variant="outline"
+                    title={hasOpenCash ? 'Aprobar, facturar y enviar a Caja' : 'No hay una caja abierta en esta sucursal'}
+                    disabled={!hasOpenCash || cashAvailabilityQuery.isLoading}
+                    className={cn('w-full rounded-xl border-emerald-500/30 px-6 font-black uppercase text-[10px] tracking-widest text-emerald-700 hover:bg-emerald-500/10 dark:text-emerald-400 sm:w-auto', (!hasOpenCash || cashAvailabilityQuery.isLoading) && 'cursor-not-allowed opacity-50')}
+                    onClick={() => void handleSaveOrder('DRAFT', { sendToCash: true })}
+                  >
+                    <Inbox className="mr-2 size-4" />Enviar a Caja
                   </Button>}
                 </>}
               </>

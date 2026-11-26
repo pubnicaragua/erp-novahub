@@ -1388,6 +1388,9 @@ export interface Expense {
   date: string;
   time?: string;
   amount: number;
+  /** IVA reconocido dentro del importe total, si aplica. */
+  taxAmount?: number;
+  taxMode?: 'NONE' | 'INCLUDED_15' | 'MANUAL_INCLUDED';
   currency: Currency;
   exchangeRate?: number;
   baseAmount?: number;

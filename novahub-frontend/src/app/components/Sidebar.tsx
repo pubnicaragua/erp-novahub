@@ -326,6 +326,8 @@ const menuItems: MenuItem[] = [
     submenu: [
       { id: 'plan-cuentas', label: 'Plan de Cuentas', icon: <BookOpen className="size-4" /> },
       { id: 'diario', label: 'Libro Diario', icon: <FileText className="size-4" /> },
+      { id: 'cuentas-cobrar', label: 'Cuentas por Cobrar', icon: <BadgeDollarSign className="size-4" /> },
+      { id: 'cuentas-pagar', label: 'Cuentas por Pagar', icon: <BadgeDollarSign className="size-4" /> },
       { id: 'libro-mayor', label: 'Libro Mayor', icon: <BookOpenCheck className="size-4" /> },
       { id: 'balance-comprobacion', label: 'Balance de comprobación', icon: <Scale className="size-4" /> },
       { id: 'estado-resultados', label: 'Estado de Resultados', icon: <TrendingUp className="size-4" /> },

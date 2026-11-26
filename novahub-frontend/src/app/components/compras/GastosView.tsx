@@ -78,6 +78,15 @@ const paymentMethodOptions = [
 ] as const;
 const MAX_EVIDENCE_IMAGE_BYTES = 10 * 1024 * 1024;
 const MAX_EVIDENCE_FILE_BYTES = 10 * 1024 * 1024;
+type ExpenseTaxMode = 'NONE' | 'INCLUDED_15' | 'MANUAL_INCLUDED';
+
+const calculateIncludedVat = (total: number) => Math.round((Math.max(0, total) * 15 / 115 + Number.EPSILON) * 100) / 100;
+
+const inferExpenseTaxMode = (total: number, taxAmount: number, storedMode?: ExpenseTaxMode): ExpenseTaxMode => {
+  if (storedMode && ['NONE', 'INCLUDED_15', 'MANUAL_INCLUDED'].includes(storedMode)) return storedMode;
+  if (taxAmount <= 0) return 'NONE';
+  return Math.abs(taxAmount - calculateIncludedVat(total)) < 0.01 ? 'INCLUDED_15' : 'MANUAL_INCLUDED';
+};
 
 const statusOpts = [
   { label: 'Borrador',  value: 'DRAFT',    color: 'bg-primary/10 text-primary' },
@@ -153,6 +162,7 @@ export function GastosView({ data, summaryData, summaryLoading, summaryError, lo
   
   const [editingId, setEditingId] = useState<string | null>(null);
   const [localDoc, setLocalDoc] = useState<Partial<Expense> | null>(null);
+  const [expenseTaxMode, setExpenseTaxMode] = useState<ExpenseTaxMode>('NONE');
   const [expenseValidationAttempted, setExpenseValidationAttempted] = useState(false);
   const [highlightedAlertId, setHighlightedAlertId] = useState<string | null>(null);
   const [paymentExpense, setPaymentExpense] = useState<Expense | null>(null);
@@ -204,6 +214,8 @@ export function GastosView({ data, summaryData, summaryLoading, summaryError, lo
              date: new Date().toISOString(),
              time: new Date().toTimeString().slice(0, 5),
               amount: 0,
+              taxAmount: 0,
+              taxMode: 'NONE',
                currency: displayCurrency,
               exchangeRate: displayCurrency === baseCurrency ? 1 : globalRate,
               category: 'OPERACIONAL',
@@ -217,12 +229,15 @@ export function GastosView({ data, summaryData, summaryLoading, summaryError, lo
               evidenceFileSize: 0,
               evidenceFileUrl: '',
             });
+           setExpenseTaxMode('NONE');
         } else {
            const found = data.find(x => x.id === editingId);
            setLocalDoc(found ? JSON.parse(JSON.stringify(found)) : null);
+           setExpenseTaxMode(found ? inferExpenseTaxMode(Number(found.amount || 0), Number(found.taxAmount || 0), found.taxMode) : 'NONE');
         }
       } else {
         setLocalDoc(null);
+        setExpenseTaxMode('NONE');
       }
     }, 0);
     return () => clearTimeout(timer);
@@ -351,7 +366,7 @@ export function GastosView({ data, summaryData, summaryLoading, summaryError, lo
       }
       createReportWorkbook({
         fileName: 'gastos.xlsx',
-        sheets: [{ name: 'Gastos', rows: exportRows.map(row => ({ Fecha: row.date || '—', Categoria: row.category || '—', Descripcion: row.description || '—', Monto: convertDisplayAmount(Number(row.amount || 0), row.currency || baseCurrency, row.exchangeRate), Moneda: displayMode === 'ORIGINAL' ? (row.currency || baseCurrency) : displayCurrency, Estado: row.status || '—' })) }],
+        sheets: [{ name: 'Gastos', rows: exportRows.map(row => ({ Fecha: row.date || '—', Categoria: row.category || '—', Descripcion: row.description || '—', 'Base antes de IVA': convertDisplayAmount(Math.max(0, Number(row.amount || 0) - Number(row.taxAmount || 0)), row.currency || baseCurrency, row.exchangeRate), IVA: convertDisplayAmount(Number(row.taxAmount || 0), row.currency || baseCurrency, row.exchangeRate), Total: convertDisplayAmount(Number(row.amount || 0), row.currency || baseCurrency, row.exchangeRate), Moneda: displayMode === 'ORIGINAL' ? (row.currency || baseCurrency) : displayCurrency, Estado: row.status || '—' })) }],
         filters: { Búsqueda: searchTerm || 'Todas', Desde: appliedRange?.from || '—', Hasta: appliedRange?.to || '—', Filtro: activeKpiFilter.type === 'none' ? 'Todos' : activeKpiFilter.type === 'category' ? activeKpiFilter.category : activeKpiFilter.type, Moneda: displayMode === 'ORIGINAL' ? 'Original por operación' : displayCurrencyLabel },
       });
     } catch (error: any) {
@@ -895,10 +910,21 @@ export function GastosView({ data, summaryData, summaryLoading, summaryError, lo
     setExpenseValidationAttempted(true);
     if (!String(localDoc?.description || '').trim()) return toast.error('Escribe la descripción del gasto.');
     if (!localDoc?.amount || localDoc.amount <= 0) return toast.error('El monto debe ser mayor a 0');
+    const totalAmount = Number(localDoc.amount);
+    const taxAmount = expenseTaxMode === 'NONE'
+      ? 0
+      : expenseTaxMode === 'INCLUDED_15'
+        ? calculateIncludedVat(totalAmount)
+        : Number(localDoc.taxAmount || 0);
+    if (!Number.isFinite(taxAmount) || taxAmount < 0 || taxAmount > totalAmount) {
+      return toast.error('El IVA no puede ser mayor que el monto total del gasto.');
+    }
     // Clean data (ensure numbers and remove nested objects)
     const cleanedDoc = {
       ...localDoc,
-      amount: Number(localDoc.amount),
+      amount: totalAmount,
+      taxAmount,
+      taxMode: expenseTaxMode,
       exchangeRate: Number(localDoc.exchangeRate),
       baseAmount: Number(localDoc.baseAmount),
       status: statusToSave,
@@ -981,8 +1007,8 @@ export function GastosView({ data, summaryData, summaryLoading, summaryError, lo
             { label: 'Referencia', value: expense.reference || '—' },
           ],
           totals: [
-            { label: 'Subtotal', value: formatConvertedAmount(Number(expense.amount || 0), expense.currency, expense.exchangeRate) },
-            { label: 'Impuestos', value: formatConvertedAmount(0, expense.currency, expense.exchangeRate) },
+            { label: 'Base antes de IVA', value: formatConvertedAmount(Math.max(0, Number(expense.amount || 0) - Number(expense.taxAmount || 0)), expense.currency, expense.exchangeRate) },
+            { label: 'IVA', value: formatConvertedAmount(Number(expense.taxAmount || 0), expense.currency, expense.exchangeRate) },
             { label: 'Descuento', value: formatConvertedAmount(0, expense.currency, expense.exchangeRate) },
           ],
           total: formatConvertedAmount(Number(expense.amount || 0), expense.currency, expense.exchangeRate),
@@ -1207,7 +1233,7 @@ export function GastosView({ data, summaryData, summaryLoading, summaryError, lo
                       />
                    </div>
                    <div className="w-1/2 flex flex-col items-end">
-                      <Label htmlFor="expense-amount" required className="text-[10px] text-muted-foreground mb-1">Monto Total</Label>
+                      <Label htmlFor="expense-amount" required className="text-[10px] text-muted-foreground mb-1">Monto Total (incluye IVA)</Label>
                       <Input 
                         id="expense-amount"
                         disabled={!canMutate}
@@ -1218,11 +1244,76 @@ export function GastosView({ data, summaryData, summaryLoading, summaryError, lo
                         inputMode="decimal"
                         min="0" 
                         value={Number(localDoc.amount || 0) === 0 ? '' : formatDecimalInput(localDoc.amount)}
-                        onChange={(e) => setLocalDoc({ ...localDoc, amount: normalizeDecimalInput(e.target.value) as any })}
+                        onChange={(e) => {
+                          const amount = Number(normalizeDecimalInput(e.target.value) || 0);
+                          setLocalDoc({
+                            ...localDoc,
+                            amount: normalizeDecimalInput(e.target.value) as any,
+                            ...(expenseTaxMode === 'INCLUDED_15' ? { taxAmount: calculateIncludedVat(amount) } : {}),
+                          });
+                        }}
                         className="h-10 text-xl font-black text-rose-500 text-right w-full max-w-[150px]" 
                         placeholder="0.00" currencyPrecision />
                       {expenseValidationAttempted && !(Number(localDoc.amount) > 0) && <p id="expense-amount-error" role="alert" className="mt-1 self-end text-[10px] text-destructive">Ingresa un monto mayor que cero.</p>}
                    </div>
+                </div>
+
+                <div className="space-y-3 border-b border-border/50 pb-4">
+                  <Label htmlFor="expense-tax-mode" className="text-[10px] text-muted-foreground">Tratamiento del IVA</Label>
+                  <Select
+                    value={expenseTaxMode}
+                    disabled={!canMutate}
+                    onValueChange={(value) => {
+                      const nextMode = value as ExpenseTaxMode;
+                      setExpenseTaxMode(nextMode);
+                      setLocalDoc({
+                        ...localDoc,
+                        taxAmount: nextMode === 'NONE'
+                          ? 0
+                          : nextMode === 'INCLUDED_15'
+                            ? calculateIncludedVat(Number(localDoc.amount || 0))
+                            : Number(localDoc.taxAmount || 0),
+                      });
+                    }}
+                  >
+                    <SelectTrigger id="expense-tax-mode" className="h-9 w-full text-xs">
+                      <SelectValue placeholder="Selecciona cómo calcular el IVA" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="NONE">Sin IVA</SelectItem>
+                      <SelectItem value="INCLUDED_15">Calcular 15% incluido en el total</SelectItem>
+                      <SelectItem value="MANUAL_INCLUDED">Ingresar IVA incluido en el total</SelectItem>
+                    </SelectContent>
+                  </Select>
+                  {expenseTaxMode === 'MANUAL_INCLUDED' && (
+                    <div className="space-y-1">
+                      <Label htmlFor="expense-tax-amount" className="text-[10px] text-muted-foreground">Monto del IVA</Label>
+                      <Input
+                        id="expense-tax-amount"
+                        disabled={!canMutate}
+                        type="text"
+                        inputMode="decimal"
+                        value={Number(localDoc.taxAmount || 0) === 0 ? '' : formatDecimalInput(Number(localDoc.taxAmount || 0))}
+                        onChange={(e) => setLocalDoc({ ...localDoc, taxAmount: normalizeDecimalInput(e.target.value) as any })}
+                        aria-invalid={expenseValidationAttempted && Number(localDoc.taxAmount || 0) > Number(localDoc.amount || 0)}
+                        className="h-9 text-right text-sm"
+                        placeholder="0.00"
+                        currencyPrecision
+                      />
+                      {expenseValidationAttempted && Number(localDoc.taxAmount || 0) > Number(localDoc.amount || 0) && (
+                        <p role="alert" className="text-[10px] text-destructive">El IVA no puede superar el total.</p>
+                      )}
+                    </div>
+                  )}
+                </div>
+
+                <div className="grid grid-cols-2 gap-2 text-sm">
+                  <span className="text-muted-foreground">Base antes de IVA</span>
+                  <span className="text-right font-bold tabular-nums">{formatCurrencyAmount(Math.max(0, Number(localDoc.amount || 0) - (expenseTaxMode === 'INCLUDED_15' ? calculateIncludedVat(Number(localDoc.amount || 0)) : Number(localDoc.taxAmount || 0))), localDoc.currency || baseCurrency)}</span>
+                  <span className="text-muted-foreground">IVA incluido</span>
+                  <span className="text-right font-bold tabular-nums">{formatCurrencyAmount(expenseTaxMode === 'INCLUDED_15' ? calculateIncludedVat(Number(localDoc.amount || 0)) : Number(localDoc.taxAmount || 0), localDoc.currency || baseCurrency)}</span>
+                  <span className="font-black">Total del gasto</span>
+                  <span className="text-right font-black tabular-nums text-rose-500">{formatCurrencyAmount(Number(localDoc.amount || 0), localDoc.currency || baseCurrency)}</span>
                 </div>
 
                 {displayMode !== 'ORIGINAL' && <div className="flex justify-between items-center text-base pt-2">
@@ -1275,6 +1366,8 @@ export function GastosView({ data, summaryData, summaryLoading, summaryError, lo
     summaryDetails: [
       { label: 'Categoría', value: expenseCategoryLabel(expense.category, expense.categoryCustom) },
       { label: 'Método', value: paymentSourceLabel(expense.paymentSource) },
+      { label: 'Base antes de IVA', value: formatConvertedAmount(Math.max(0, Number(expense.amount || 0) - Number(expense.taxAmount || 0)), expense.currency, expense.exchangeRate) },
+      { label: 'IVA acreditable', value: formatConvertedAmount(Number(expense.taxAmount || 0), expense.currency, expense.exchangeRate) },
     ],
     metadata: [
       { label: 'Fecha', value: expense.date ? `${formatDateEs(expense.date)}${expense.time ? ` · ${expense.time}` : ''}` : 'No disponible' },

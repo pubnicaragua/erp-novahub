@@ -161,6 +161,7 @@ const BUILTIN_MODULES: { id: string; label: string; icon: typeof FileText; descr
     description: 'Solo al pagar el gasto → cuenta de gasto + medio de pago',
     fields: [
       { key: 'expense', label: 'Cuenta de Gasto', side: 'debit', description: 'Se debita el gasto', defaultCode: '5000', defaultName: 'Gastos Operativos', defaultType: 'EXPENSE' },
+      { key: 'ivaCreditable', label: 'IVA Acreditable de Gastos', side: 'debit', description: 'Se debita por separado el IVA incluido en el monto total del gasto', defaultCode: '1130', defaultName: 'IVA Acreditable', defaultType: 'ASSET' },
       { key: 'cash', label: 'Caja / Bancos', side: 'credit', description: 'Se acredita la salida de efectivo', defaultCode: '1000', defaultName: 'Caja y Bancos', defaultType: 'ASSET' },
     ],
   },
@@ -279,6 +280,7 @@ const BUILTIN_MODULES: { id: string; label: string; icon: typeof FileText; descr
     description: 'Gastos manuales y recurrentes → cuenta de gasto configurada',
     fields: [
       { key: 'expense', label: 'Cuenta de Gastos', side: 'debit', description: 'Cuenta contable donde se clasifica el gasto', defaultCode: '5000', defaultName: 'Gastos Financieros', defaultType: 'EXPENSE' },
+      { key: 'ivaCreditable', label: 'IVA Acreditable de Gastos', side: 'debit', description: 'Se debita por separado el IVA incluido en el monto total del gasto', defaultCode: '1130', defaultName: 'IVA Acreditable', defaultType: 'ASSET' },
     ],
   },
   {

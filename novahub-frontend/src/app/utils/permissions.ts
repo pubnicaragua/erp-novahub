@@ -492,6 +492,8 @@ const VIEW_PERMISSION_ACTIONS: Record<string, readonly PermissionMatrixAction[]>
   FINANCING_CALCULATOR: ['read'],
 
   ACCOUNTING_CHART: ['read', 'create', 'edit', 'delete', 'import', 'export'],
+  ACCOUNTING_RECEIVABLES: ['read', 'export'],
+  ACCOUNTING_PAYABLES: ['read', 'export'],
   ACCOUNTING_JOURNAL: ['read', 'create', 'edit', 'delete', 'post', 'void', 'export'],
   ACCOUNTING_HR_PAYMENT_REQUESTS: ['read', 'approve', 'reject', 'pay', 'export'],
   ACCOUNTING_LEDGER: ['read', 'export'],

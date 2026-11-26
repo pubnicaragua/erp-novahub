@@ -258,6 +258,8 @@ export const LEGACY_SUBMODULES_FOR_PERMS = [
   // Contabilidad
   { id: 'ACCOUNTING_CHART', label: 'Plan de Cuentas', parent: 'ACCOUNTING' },
   { id: 'ACCOUNTING_JOURNAL', label: 'Libro Diario', parent: 'ACCOUNTING' },
+  { id: 'ACCOUNTING_RECEIVABLES', label: 'Cuentas por Cobrar', parent: 'ACCOUNTING' },
+  { id: 'ACCOUNTING_PAYABLES', label: 'Cuentas por Pagar', parent: 'ACCOUNTING' },
   { id: 'ACCOUNTING_HR_PAYMENT_REQUESTS', label: 'Solicitudes de pago RR. HH.', parent: 'ACCOUNTING' },
   { id: 'ACCOUNTING_TRIAL_BALANCE', label: 'Balance de Comprobación', parent: 'ACCOUNTING' },
   { id: 'ACCOUNTING_PROFIT_LOSS', label: 'Estado de Resultados', parent: 'ACCOUNTING' },
