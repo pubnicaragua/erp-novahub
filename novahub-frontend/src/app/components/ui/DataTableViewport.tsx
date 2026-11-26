@@ -123,8 +123,13 @@ export function DataTableViewport({
     if (!element) return;
     const maxScroll = Math.max(0, element.scrollWidth - element.clientWidth);
     const viewportLeft = element.getBoundingClientRect().left;
-    const boundaries = [0, ...Array.from(element.querySelectorAll<HTMLElement>('[data-slot="table"] tr:first-child > *, [data-scroll-column="true"]'))
+    const table = element.querySelector<HTMLTableElement>('table[data-slot="table"], table');
+    const headerRow = table?.tHead?.rows[0] ?? table?.rows[0];
+    const headerCells = Array.from(headerRow?.cells ?? []);
+    const markedColumns = Array.from(element.querySelectorAll<HTMLElement>('[data-scroll-column="true"]'));
+    const boundaries = [0, ...[...headerCells, ...markedColumns]
       .map((cell) => Math.min(maxScroll, Math.max(0, cell.getBoundingClientRect().right - viewportLeft + element.scrollLeft))), maxScroll]
+      .filter((position, index, positions) => positions.findIndex((candidate) => Math.abs(candidate - position) < 2) === index)
       .sort((a, b) => a - b);
     const currentPosition = element.scrollLeft;
     const nextPosition = direction === 'right'

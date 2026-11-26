@@ -20,6 +20,7 @@ import { cn } from '../ui/utils';
 import { contabilidadService } from '../../services/contabilidad.service';
 import { ConfirmDialog } from '../ui/ConfirmDialog';
 import { accountingList, useAccountingQuery } from '../../hooks/useAccountingQuery';
+import { HorizontalTableScroller } from '../ui/HorizontalTableScroller';
 import { useCurrency } from '../../contexts/CurrencyContext';
 import { useAuth } from '../../contexts/AuthContext';
 import { beginNotificationAction, completeNotificationAction, failNotificationAction } from '../../services/notification-action-coordinator';
@@ -179,8 +180,9 @@ export function BudgetItemsView() {
 
       <Card className="overflow-hidden rounded-2xl border-border/50 shadow-sm">
         <CardContent className="p-0">
-          <div data-accounting-layout="table" className="hidden overflow-x-auto md:block">
-          <table className="w-full text-sm">
+          <div data-accounting-layout="table" className="hidden min-w-0 md:block">
+          <HorizontalTableScroller className="w-full min-w-0 rounded-none border-0 bg-transparent shadow-none" label="Desplazamiento horizontal · columna por columna">
+          <table className="w-full min-w-[900px] text-sm">
             <thead>
               <tr className="border-b border-border/40 bg-muted/20">
                 <th className="text-left px-4 py-3 text-[10px] font-black uppercase tracking-widest text-muted-foreground">Código</th>
@@ -245,6 +247,7 @@ export function BudgetItemsView() {
               })}
             </tbody>
           </table>
+          </HorizontalTableScroller>
           </div>
           <div data-accounting-layout="cards" className="space-y-2 p-3 md:hidden">
             {filtered.length === 0 ? <p className="py-8 text-center text-sm text-muted-foreground">Sin partidas presupuestarias</p> : filtered.map(item => {

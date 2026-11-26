@@ -19,6 +19,7 @@ import { Label } from '../ui/label';
 import {
   Table, TableBody, TableCell, TableHead, TableHeader, TableRow
 } from '../ui/table';
+import { HorizontalTableScroller } from '../ui/HorizontalTableScroller';
 import { contabilidadService } from '../../services/contabilidad.service';
 import { storageService } from '../../services/storage.service';
 import { toast } from '@/app/services/toast';
@@ -552,7 +553,8 @@ export function ReportesFiscalesView() {
             {showMeta?.metadata && (
               <div className="rounded-xl border border-border/30">
                 <p className="text-[10px] font-black uppercase tracking-widest text-muted-foreground px-4 pt-3 pb-2">Detalles del cálculo</p>
-                <table className="w-full text-[11px]">
+                <HorizontalTableScroller className="w-full min-w-0 rounded-xl border-0 bg-transparent shadow-none" label="Desplazamiento horizontal · columna por columna">
+                <table className="w-full min-w-[520px] text-[11px]">
                   <thead className="bg-muted/20">
                     <tr>
                       <th className="text-left px-4 py-2 font-bold text-muted-foreground">Campo</th>
@@ -579,6 +581,7 @@ export function ReportesFiscalesView() {
                     ))}
                   </tbody>
                 </table>
+                </HorizontalTableScroller>
               </div>
             )}
           </div>

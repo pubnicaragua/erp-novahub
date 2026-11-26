@@ -14,6 +14,7 @@ import { useAuth } from '../../contexts/AuthContext';
 import { CurrencyDisplayAmount } from '../ui/CurrencyValuation';
 import { beginNotificationAction, completeNotificationAction, failNotificationAction } from '../../services/notification-action-coordinator';
 import { formatDateOnly, formatInstantDate, todayIso } from '../../utils/dateFormat';
+import { HorizontalTableScroller } from '../ui/HorizontalTableScroller';
 
 type RevaluationPreview = {
   asOfDate: string;
@@ -299,7 +300,7 @@ export function DiferenciasCambiariasView() {
                 </Button>
               </CardHeader>
               <CardContent className="min-w-0 p-0">
-                <div className="sales-responsive-table min-w-0 overflow-x-auto">
+                <HorizontalTableScroller className="w-full min-w-0 rounded-none border-0 bg-transparent shadow-none" label="Desplazamiento horizontal · columna por columna">
                   <table className="w-full min-w-[920px] text-sm">
                     <thead className="border-y border-border/40 bg-muted/30 text-left text-[10px] uppercase tracking-wider text-muted-foreground">
                       <tr>
@@ -329,7 +330,7 @@ export function DiferenciasCambiariasView() {
                       ))}
                     </tbody>
                   </table>
-                </div>
+                </HorizontalTableScroller>
               </CardContent>
             </Card>
           )}
@@ -351,7 +352,7 @@ export function DiferenciasCambiariasView() {
               {items.length === 0 ? (
                 <div className="p-8 text-center text-sm text-muted-foreground">No hay cuentas por cobrar o pagar en moneda extranjera pendientes de valoración.</div>
               ) : (
-                <div className="sales-responsive-table min-w-0 overflow-x-auto">
+                <HorizontalTableScroller className="w-full min-w-0 rounded-none border-0 bg-transparent shadow-none" label="Desplazamiento horizontal · columna por columna">
                   <table className="w-full min-w-[980px] text-sm">
                     <thead className="border-y border-border/40 bg-muted/30 text-left text-[10px] uppercase tracking-wider text-muted-foreground">
                       <tr>
@@ -389,7 +390,7 @@ export function DiferenciasCambiariasView() {
                       ))}
                     </tbody>
                   </table>
-                </div>
+                </HorizontalTableScroller>
               )}
             </CardContent>
           </Card>

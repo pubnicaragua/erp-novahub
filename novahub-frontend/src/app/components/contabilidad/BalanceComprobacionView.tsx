@@ -947,7 +947,7 @@ export function BalanceComprobacionView() {
                         </Badge>
                       </div>
 
-                      <div className="grid grid-cols-3 gap-2 border-t border-border/50 px-3 py-2.5 bg-background/30">
+                      <div data-accounting-metrics="true" className="grid grid-cols-3 gap-2 border-t border-border/50 px-3 py-2.5 bg-background/30">
                         <div className="min-w-0">
                           <p className="text-[9px] font-bold uppercase tracking-wider text-muted-foreground">Débitos</p>
                           <p className={cn("mt-0.5 truncate font-mono text-xs", row.debitos > 0 && "text-emerald-600", isParent && "font-bold")}>{fmt(row.debitos)}</p>
@@ -956,7 +956,7 @@ export function BalanceComprobacionView() {
                           <p className="text-[9px] font-bold uppercase tracking-wider text-muted-foreground">Créditos</p>
                           <p className={cn("mt-0.5 truncate font-mono text-xs", row.creditos > 0 && "text-emerald-600", isParent && "font-bold")}>{fmt(row.creditos)}</p>
                         </div>
-                        <div className="min-w-0 text-right">
+                        <div className="min-w-0">
                           <p className="text-[9px] font-bold uppercase tracking-wider text-muted-foreground">Saldo</p>
                           <p className={cn("mt-0.5 truncate font-mono text-xs font-bold", row.saldo >= 0 ? "text-emerald-600" : "text-red-600")}>{fmt(row.saldo)}</p>
                         </div>

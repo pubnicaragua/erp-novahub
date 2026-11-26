@@ -11,6 +11,7 @@ import { contabilidadService } from '../../services/contabilidad.service'
 import { accountingList, useAccountingQuery } from '../../hooks/useAccountingQuery'
 import { useAuth } from '../../contexts/AuthContext'
 import { beginNotificationAction, completeNotificationAction, failNotificationAction } from '../../services/notification-action-coordinator'
+import { HorizontalTableScroller } from '../ui/HorizontalTableScroller'
 
 interface TaxEntry {
   id?: string
@@ -216,8 +217,9 @@ export function TaxCatalogView() {
           <div className="flex items-center justify-center py-8"><Loader2 className="size-5 animate-spin text-muted-foreground" /></div>
         ) : (
           <div className="space-y-2">
-          <div data-accounting-layout="table" className="hidden overflow-x-auto md:block">
-            <table className="w-full text-xs">
+          <div data-accounting-layout="table" className="hidden min-w-0 md:block">
+            <HorizontalTableScroller className="w-full min-w-0 rounded-none border-0 bg-transparent shadow-none" label="Desplazamiento horizontal · columna por columna">
+            <table className="w-full min-w-[820px] text-xs">
               <thead>
                 <tr className="border-b text-muted-foreground">
                   <th className="text-left py-2 px-1 font-bold uppercase tracking-wider">Nombre</th>
@@ -300,6 +302,7 @@ export function TaxCatalogView() {
                 )}
               </tbody>
             </table>
+            </HorizontalTableScroller>
           </div>
           <div data-accounting-layout="cards" className="space-y-2 md:hidden">
             {entries.length === 0 ? <p className="py-8 text-center text-xs text-muted-foreground">Sin entradas.</p> : entries.map(entry => (

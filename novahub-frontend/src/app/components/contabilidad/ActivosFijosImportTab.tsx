@@ -16,6 +16,7 @@ import { ImportPreviewMobileCard } from '../ui/ImportPreviewMobile';
 import { parseSpreadsheetInWorker } from '../../utils/import-spreadsheet';
 import { beginNotificationAction, completeNotificationAction, failNotificationAction } from '../../services/notification-action-coordinator';
 import { getCurrencyDecimalPlaces } from '../../utils/currency';
+import { HorizontalTableScroller } from '../ui/HorizontalTableScroller';
 
 const TEMPLATE_HEADERS = [
   'Código', 'Nombre', 'Categoría', 'Marca', 'Modelo', 'No. serie', 'Sucursal', 'Centro de costo',
@@ -308,7 +309,8 @@ export function ActivosFijosImportTab() {
                   <AlertTriangle className="size-3.5" /> Errores por fila
                 </p>
                 <div data-accounting-layout="table" className="hidden max-h-56 overflow-y-auto rounded-xl border border-border/40 scrollbar-overlay sm:block">
-                  <table className="w-full text-xs">
+                  <HorizontalTableScroller className="w-full min-w-0 rounded-none border-0 bg-transparent shadow-none" label="Desplazamiento horizontal · columna por columna">
+                  <table className="w-full min-w-[900px] text-xs">
                     <thead className="sticky top-0 bg-muted/50 text-left text-[10px] uppercase tracking-wider text-muted-foreground">
                       <tr>
                         <th className="px-3 py-2">Fila</th>
@@ -324,6 +326,7 @@ export function ActivosFijosImportTab() {
                       ))}
                     </tbody>
                   </table>
+                  </HorizontalTableScroller>
                 </div>
                 <section data-accounting-layout="cards" className="space-y-3 sm:hidden" aria-label="Errores de activos fijos para revisar">
                   {(result.invalidRows || []).slice(0, 50).map((item: any, idx: number) => (

@@ -9,6 +9,7 @@ import { formatCurrencyAmount } from '../../utils/currency';
 import { toast } from '@/app/services/toast';
 import { useAuth } from '../../contexts/AuthContext';
 import { formatInstant } from '../../utils/dateFormat';
+import { HorizontalTableScroller } from '../ui/HorizontalTableScroller';
 
 type IntegrityStatus = 'OK' | 'REVISAR' | 'ERROR' | 'INFO';
 type IntegrityCheck = {
@@ -129,7 +130,8 @@ export function IntegrityCheckPanel() {
                       )}
                       {check.howToFix && <p className="rounded-lg bg-background/60 p-2 text-xs text-foreground"><span className="font-semibold">Qué hacer: </span>{check.howToFix}</p>}
                       {check.details && check.details.length > 0 && (
-                        <div data-table-content-sized="true" className="max-w-full overflow-x-auto rounded-lg border border-border/50 bg-background/60">
+                        <div data-table-content-sized="true" className="max-w-full rounded-lg border border-border/50 bg-background/60">
+                          <HorizontalTableScroller className="w-full min-w-0 rounded-lg border-0 bg-transparent shadow-none" label="Desplazamiento horizontal · columna por columna">
                           <table className="w-full min-w-[420px] text-xs">
                             <thead><tr className="text-left text-muted-foreground">{columns.map((column) => <th key={column} className="px-2 py-1.5 font-semibold">{COLUMN_LABEL[column] || column}</th>)}</tr></thead>
                             <tbody>
@@ -140,6 +142,7 @@ export function IntegrityCheckPanel() {
                               ))}
                             </tbody>
                           </table>
+                          </HorizontalTableScroller>
                         </div>
                       )}
                     </div>

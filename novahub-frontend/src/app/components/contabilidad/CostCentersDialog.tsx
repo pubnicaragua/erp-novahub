@@ -13,6 +13,7 @@ import { contabilidadService, type CostCenter, type CostCenterReport } from '../
 import { getCurrencyDecimalPlaces } from '../../utils/currency';
 import { useAuth } from '../../contexts/AuthContext';
 import { todayIso } from '../../utils/dateFormat';
+import { HorizontalTableScroller } from '../ui/HorizontalTableScroller';
 
 const COST_CENTER_TYPES: Record<string, string> = {
   DEPARTMENT: 'Área / departamento',
@@ -157,8 +158,9 @@ export function CostCentersDialog({ open, onOpenChange, canEdit }: { open: boole
               {loading ? <div className="flex justify-center p-6"><Loader2 className="size-5 animate-spin" /></div> : centers.length === 0 ? (
                 <p className="rounded-xl border border-dashed p-6 text-center text-sm text-muted-foreground">Aún no hay centros de costo. Crea el primero con "Nuevo centro".</p>
               ) : (
-                <div className="overflow-x-auto rounded-xl border">
-                  <table className="w-full text-sm">
+                <div className="min-w-0 rounded-xl border">
+                  <HorizontalTableScroller className="w-full min-w-0 rounded-xl border-0 bg-transparent shadow-none" label="Desplazamiento horizontal · columna por columna">
+                  <table className="w-full min-w-[720px] text-sm">
                     <thead className="bg-muted/50 text-left text-xs"><tr><th className="p-2">Código</th><th className="p-2">Nombre</th><th className="p-2">Tipo</th><th className="p-2">Activo</th><th className="p-2" /></tr></thead>
                     <tbody>
                       {centers.map((center) => (
@@ -172,6 +174,7 @@ export function CostCentersDialog({ open, onOpenChange, canEdit }: { open: boole
                       ))}
                     </tbody>
                   </table>
+                  </HorizontalTableScroller>
                 </div>
               )}
               <p className="text-xs text-muted-foreground">Un centro inactivo ya no se puede elegir en movimientos nuevos; los anteriores se conservan.</p>
@@ -183,8 +186,9 @@ export function CostCentersDialog({ open, onOpenChange, canEdit }: { open: boole
                 <Button size="sm" onClick={() => void loadReport()} disabled={reportLoading || !dateFrom || !dateTo}>{reportLoading && <Loader2 className="mr-1 size-4 animate-spin" />}Ver reporte</Button>
               </div>
               {report && (
-                <div className="overflow-x-auto rounded-xl border">
-                  <table className="w-full text-sm">
+                <div className="min-w-0 rounded-xl border">
+                  <HorizontalTableScroller className="w-full min-w-0 rounded-xl border-0 bg-transparent shadow-none" label="Desplazamiento horizontal · columna por columna">
+                  <table className="w-full min-w-[640px] text-sm">
                     <thead className="bg-muted/50 text-left text-xs"><tr><th className="p-2">Área</th><th className="p-2 text-right">Ingresos</th><th className="p-2 text-right">Gastos</th><th className="p-2 text-right">Resultado</th></tr></thead>
                     <tbody>
                       {report.centros.map((c) => <tr key={c.centroId} className="border-t"><td className="p-2">{c.codigo} · {c.nombre}</td><td className="p-2 text-right tabular-nums">{money(c.ingresos)}</td><td className="p-2 text-right tabular-nums">{money(c.gastos)}</td><td className="p-2 text-right tabular-nums">{money(c.resultado)}</td></tr>)}
@@ -192,6 +196,7 @@ export function CostCentersDialog({ open, onOpenChange, canEdit }: { open: boole
                       <tr className="border-t font-semibold"><td className="p-2">Total (igual al Estado de Resultados)</td><td className="p-2 text-right tabular-nums">{money(report.totalIngresos)}</td><td className="p-2 text-right tabular-nums">{money(report.totalGastos)}</td><td className="p-2 text-right tabular-nums">{money(report.resultado)}</td></tr>
                     </tbody>
                   </table>
+                  </HorizontalTableScroller>
                 </div>
               )}
             </TabsContent>

@@ -10,6 +10,7 @@ import {
 import { motion, AnimatePresence } from 'motion/react';
 import { Button } from '../ui/button';
 import { ModuleSubnavigation } from '../ui/ModuleSubnavigation';
+import { TableNavigationProvider } from '../ui/table';
 import { Tag, Wallet } from 'lucide-react';
 import { cn } from '../ui/utils';
 import { PlanCuentasView } from './PlanCuentasView';
@@ -394,39 +395,41 @@ export function ContabilidadPage({ activeSubModule, onSubModuleChange, isSidebar
 
           <div className="flex min-w-0 flex-col gap-6 lg:flex-row">
             <div className="flex-1 min-w-0">
-              <AnimatePresence mode="wait">
-                <motion.div
-                  key={activeSection}
-                  initial={{ opacity: 0, y: 12 }}
-                  animate={{ opacity: 1, y: 0 }}
-                  exit={{ opacity: 0, y: -12 }}
-                  transition={{ duration: 0.2 }}
-                  className="accounting-module-content min-w-0 max-w-full"
-                >
-                  {SECTIONS_WITHOUT_OWN_TITLE.has(activeSection) && (
-                    <h2 className="nh-module-title mb-4">{SECTIONS.find((section) => section.id === activeSection)?.label}</h2>
-                  )}
-                  {activeSection === 'plan-cuentas' && <PlanCuentasView isSidebarCollapsed={isSidebarCollapsed} helpTrigger={helpTrigger} />}
-                  {activeSection === 'solicitudes-pago' && <SolicitudesPagoRRHHView />}
-                  {activeSection === 'diario' && <DiarioView />}
-                  {activeSection === 'libro-mayor' && <LibroMayorView />}
-                  {activeSection === 'balance-comprobacion' && <BalanceComprobacionView />}
-                  {activeSection === 'estado-resultados' && <EstadoResultadosView />}
-                  {activeSection === 'balance-general-contable' && <BalanceGeneralView />}
-                  {activeSection === 'flujo-efectivo' && <FlujoEfectivoView />}
-                  {activeSection === 'diferencias-cambiarias' && <DiferenciasCambiariasView />}
-                  {activeSection === 'cambios-patrimonio' && <CambiosPatrimonioView />}
-                  {activeSection === 'activos-fijos' && <ActivosFijosView />}
-                  {activeSection === 'libro-bancos' && <LibroBancosView onGoToSection={handleSectionChange} />}
-                  {activeSection === 'conciliacion' && <ConciliacionView onGoToConfig={() => setActiveSection('configuracion')} />}
-                  {activeSection === 'periodos' && <PeriodosView />}
-                  {activeSection === 'reportes-fiscales' && <ReportesFiscalesView />}
-                  {activeSection === 'auditoria-facturas' && <InvoiceAuditView />}
-                  {activeSection === 'presupuestos' && <BudgetItemsView />}
-                  {activeSection === 'categorias-gastos' && <CategoriasGastosView />}
-                  {activeSection === 'configuracion' && <ConfiguracionContableView />}
-                </motion.div>
-              </AnimatePresence>
+              <TableNavigationProvider>
+                <AnimatePresence mode="wait">
+                  <motion.div
+                    key={activeSection}
+                    initial={{ opacity: 0, y: 12 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    exit={{ opacity: 0, y: -12 }}
+                    transition={{ duration: 0.2 }}
+                    className="accounting-module-content min-w-0 max-w-full"
+                  >
+                    {SECTIONS_WITHOUT_OWN_TITLE.has(activeSection) && (
+                      <h2 className="nh-module-title mb-4">{SECTIONS.find((section) => section.id === activeSection)?.label}</h2>
+                    )}
+                    {activeSection === 'plan-cuentas' && <PlanCuentasView isSidebarCollapsed={isSidebarCollapsed} helpTrigger={helpTrigger} />}
+                    {activeSection === 'solicitudes-pago' && <SolicitudesPagoRRHHView />}
+                    {activeSection === 'diario' && <DiarioView />}
+                    {activeSection === 'libro-mayor' && <LibroMayorView />}
+                    {activeSection === 'balance-comprobacion' && <BalanceComprobacionView />}
+                    {activeSection === 'estado-resultados' && <EstadoResultadosView />}
+                    {activeSection === 'balance-general-contable' && <BalanceGeneralView />}
+                    {activeSection === 'flujo-efectivo' && <FlujoEfectivoView />}
+                    {activeSection === 'diferencias-cambiarias' && <DiferenciasCambiariasView />}
+                    {activeSection === 'cambios-patrimonio' && <CambiosPatrimonioView />}
+                    {activeSection === 'activos-fijos' && <ActivosFijosView />}
+                    {activeSection === 'libro-bancos' && <LibroBancosView onGoToSection={handleSectionChange} />}
+                    {activeSection === 'conciliacion' && <ConciliacionView onGoToConfig={() => setActiveSection('configuracion')} />}
+                    {activeSection === 'periodos' && <PeriodosView />}
+                    {activeSection === 'reportes-fiscales' && <ReportesFiscalesView />}
+                    {activeSection === 'auditoria-facturas' && <InvoiceAuditView />}
+                    {activeSection === 'presupuestos' && <BudgetItemsView />}
+                    {activeSection === 'categorias-gastos' && <CategoriasGastosView />}
+                    {activeSection === 'configuracion' && <ConfiguracionContableView />}
+                  </motion.div>
+                </AnimatePresence>
+              </TableNavigationProvider>
             </div>
 
             {/* Help panel */}

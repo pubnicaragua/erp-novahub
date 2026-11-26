@@ -15,6 +15,7 @@ import { Input } from '../ui/input'
 import { Badge } from '../ui/badge'
 import { Switch } from '../ui/switch'
 import { CostCentersDialog } from './CostCentersDialog'
+import { HorizontalTableScroller } from '../ui/HorizontalTableScroller'
 import { SalesLineIncomeSettings } from './SalesLineIncomeSettings'
 import { Label } from '../ui/label'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../ui/select'
@@ -2305,6 +2306,7 @@ const [mappingsSearch, setMappingsSearch] = useState('')
                 </button>
               </div>
               <div data-accounting-layout="table" className="relative hidden max-h-60 overflow-auto sm:block">
+                <HorizontalTableScroller className="w-full min-w-0 rounded-none border-0 bg-transparent shadow-none" label="Desplazamiento horizontal · columna por columna">
                 <table className="w-full min-w-[560px] text-[11px]">
                   <thead className="sticky top-0 z-10 bg-card/95 backdrop-blur">
                     <tr className="border-b border-border/20">
@@ -2327,6 +2329,7 @@ const [mappingsSearch, setMappingsSearch] = useState('')
                     ))}
                   </tbody>
                 </table>
+                </HorizontalTableScroller>
               </div>
               <div data-accounting-layout="cards" className="space-y-2 p-2 sm:hidden">
                 {previewAccounts.map((acc, i) => (
@@ -2376,6 +2379,7 @@ const [mappingsSearch, setMappingsSearch] = useState('')
           </div>
           <div className="rounded-xl border border-border/30">
             <div data-accounting-layout="table" className="relative hidden max-h-[28rem] overflow-auto sm:block">
+            <HorizontalTableScroller className="w-full min-w-0 rounded-none border-0 bg-transparent shadow-none" label="Desplazamiento horizontal · columna por columna">
             <table className="w-full min-w-[680px] text-[11px]">
               <thead className="sticky top-0 z-10 bg-card/95 backdrop-blur">
                 <tr className="border-b border-border/20">
@@ -2410,6 +2414,7 @@ const [mappingsSearch, setMappingsSearch] = useState('')
                 ))}
               </tbody>
             </table>
+            </HorizontalTableScroller>
             </div>
             <div data-accounting-layout="cards" className="space-y-2 p-2 sm:hidden">
               {allAccounts.length === 0 ? (

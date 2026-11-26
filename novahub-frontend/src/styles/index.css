@@ -2976,13 +2976,6 @@ main.module-notificaciones:has([data-message-scroll-layout="contained"]) {
 }
 
 @container accounting-content (max-width: 1279px) {
-  .accounting-module-content :where(.font-mono, .tabular-nums):not(input):not(textarea) {
-    min-width: 0;
-    max-width: 100%;
-    overflow-wrap: anywhere;
-    white-space: normal !important;
-  }
-
   .accounting-module-content :where(p, span, code, strong, small) {
     max-width: 100%;
     overflow-wrap: anywhere;
@@ -2991,11 +2984,6 @@ main.module-notificaciones:has([data-message-scroll-layout="contained"]) {
   .accounting-module-content :where(.truncate) {
     overflow-wrap: anywhere;
     text-overflow: clip;
-    white-space: normal !important;
-  }
-
-  .accounting-module-content :where(.whitespace-nowrap) {
-    overflow-wrap: anywhere;
     white-space: normal !important;
   }
 }
@@ -3047,8 +3035,9 @@ main.module-notificaciones:has([data-message-scroll-layout="contained"]) {
   .accounting-module-content [data-accounting-layout="cards"] :where(.font-mono, .tabular-nums) {
     min-width: 0;
     max-width: 100%;
-    overflow-wrap: anywhere;
-    white-space: normal !important;
+    overflow-wrap: normal;
+    word-break: normal;
+    white-space: nowrap !important;
   }
 }
 
@@ -3071,6 +3060,56 @@ main.module-notificaciones:has([data-message-scroll-layout="contained"]) {
   }
 }
 
+.accounting-module-content [data-accounting-layout="cards"] [data-accounting-metrics="true"] {
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 9.5rem), 1fr)) !important;
+  align-items: start;
+}
+
+.accounting-module-content [data-accounting-metrics="true"] > * {
+  min-width: 0;
+  text-align: left !important;
+}
+
+.accounting-module-content :where(.accounting-keep-inline) {
+  overflow-wrap: normal !important;
+  word-break: normal !important;
+  white-space: nowrap !important;
+}
+
+.accounting-module-content [data-accounting-layout="cards"] .accounting-keep-inline {
+  overflow-wrap: normal !important;
+  word-break: normal !important;
+  white-space: nowrap !important;
+}
+
+.accounting-module-content [data-slot="table-cell"].accounting-keep-inline,
+.accounting-module-content table :is(th, td).accounting-keep-inline {
+  max-width: none;
+  overflow-wrap: normal !important;
+  word-break: normal !important;
+  white-space: nowrap !important;
+}
+
+.accounting-module-content .accounting-ledger-table {
+  min-width: 1380px;
+  table-layout: fixed;
+}
+
+.accounting-module-content .accounting-ledger-table :where(th, td):nth-child(1) { width: 104px; }
+.accounting-module-content .accounting-ledger-table :where(th, td):nth-child(2) { width: 138px; }
+.accounting-module-content .accounting-ledger-table :where(th, td):nth-child(3) { width: 190px; }
+.accounting-module-content .accounting-ledger-table :where(th, td):nth-child(4) { width: 112px; }
+.accounting-module-content .accounting-ledger-table :where(th, td):nth-child(5) { width: 340px; }
+.accounting-module-content .accounting-ledger-table :where(th, td):nth-child(6) { width: 150px; }
+.accounting-module-content .accounting-ledger-table :where(th, td):nth-child(7) { width: 130px; }
+.accounting-module-content .accounting-ledger-table :where(th, td):nth-child(8) { width: 130px; }
+.accounting-module-content .accounting-ledger-table :where(th, td):nth-child(9) { width: 140px; }
+
+.accounting-module-content .accounting-ledger-table .accounting-wrap-cell {
+  overflow-wrap: anywhere;
+  white-space: normal !important;
+}
+
 .accounting-module-content table[data-responsive-cards="true"] td :where(p, span, code, strong, small, a) {
   max-width: 100%;
   overflow-wrap: anywhere;
@@ -3078,23 +3117,29 @@ main.module-notificaciones:has([data-message-scroll-layout="contained"]) {
   white-space: normal !important;
 }
 
+.accounting-module-content table[data-responsive-cards="true"] td :where(.font-mono, .tabular-nums, .whitespace-nowrap, .accounting-keep-inline) {
+  overflow-wrap: normal !important;
+  word-break: normal !important;
+  white-space: nowrap !important;
+}
+
 @media (max-width: 1279px) {
-  .accounting-module-content table[data-responsive-cards="true"] > tbody > tr > td {
-    overflow-wrap: anywhere;
-  }
-
-  .accounting-module-content table[data-responsive-cards="true"] > tbody > tr > td > :where(p, span, code, div) {
-    min-width: 0;
-    max-width: 100%;
-    overflow-wrap: anywhere;
-    text-overflow: clip;
-    white-space: normal !important;
-  }
-
   .accounting-module-content table:not([data-responsive-cards="true"]) :is(th, td) {
     max-width: 100%;
+    overflow-wrap: normal;
+    word-break: normal;
+    white-space: nowrap;
+  }
+
+  .accounting-module-content table:not([data-responsive-cards="true"]) .accounting-wrap-cell {
     overflow-wrap: anywhere;
     white-space: normal;
+  }
+}
+
+@container accounting-content (max-width: 959px) {
+  .accounting-module-content [data-table-scroll-controls="true"] {
+    display: none !important;
   }
 }
 

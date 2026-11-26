@@ -481,38 +481,38 @@ export function LibroMayorView() {
           ) : (
             <>
             <div data-accounting-layout="table" className="hidden overflow-x-auto md:block">
-              <Table>
+              <Table className="accounting-ledger-table min-w-[1380px] table-fixed">
                 <TableHeader className="bg-muted/50">
                   <TableRow className="hover:bg-transparent border-border/50">
-                    <TableHead className="text-[10px] font-black uppercase tracking-widest text-muted-foreground/60">Fecha</TableHead>
-                    <TableHead className="text-[10px] font-black uppercase tracking-widest text-muted-foreground/60">Código</TableHead>
-                    <TableHead className="text-[10px] font-black uppercase tracking-widest text-muted-foreground/60">Cuenta</TableHead>
-                    <TableHead className="text-[10px] font-black uppercase tracking-widest text-muted-foreground/60">Tipo</TableHead>
-                    <TableHead className="text-[10px] font-black uppercase tracking-widest text-muted-foreground/60">Descripción</TableHead>
-                    <TableHead className="text-[10px] font-black uppercase tracking-widest text-muted-foreground/60">Referencia</TableHead>
-                    <TableHead className="text-[10px] font-black uppercase tracking-widest text-muted-foreground/60 text-right">Débito</TableHead>
-                    <TableHead className="text-[10px] font-black uppercase tracking-widest text-muted-foreground/60 text-right">Crédito</TableHead>
-                    <TableHead className="text-[10px] font-black uppercase tracking-widest text-muted-foreground/60 text-right">Saldo</TableHead>
+                    <TableHead className="w-[104px] text-[10px] font-black uppercase tracking-widest text-muted-foreground/60">Fecha</TableHead>
+                    <TableHead className="w-[138px] text-[10px] font-black uppercase tracking-widest text-muted-foreground/60">Código</TableHead>
+                    <TableHead className="w-[190px] text-[10px] font-black uppercase tracking-widest text-muted-foreground/60">Cuenta</TableHead>
+                    <TableHead className="w-[112px] text-[10px] font-black uppercase tracking-widest text-muted-foreground/60">Tipo</TableHead>
+                    <TableHead className="w-[340px] text-[10px] font-black uppercase tracking-widest text-muted-foreground/60">Descripción</TableHead>
+                    <TableHead className="w-[150px] text-[10px] font-black uppercase tracking-widest text-muted-foreground/60">Referencia</TableHead>
+                    <TableHead className="w-[130px] text-[10px] font-black uppercase tracking-widest text-muted-foreground/60 text-right">Débito</TableHead>
+                    <TableHead className="w-[130px] text-[10px] font-black uppercase tracking-widest text-muted-foreground/60 text-right">Crédito</TableHead>
+                    <TableHead className="w-[140px] text-[10px] font-black uppercase tracking-widest text-muted-foreground/60 text-right">Saldo</TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
                   {visibleEntries.map((entry) => (
                     <TableRow key={entry.id} className="cursor-pointer border-border/30 hover:bg-primary/5" onClick={() => { void handleEntryClick(entry); }} title="Ver detalle del asiento contable">
-                      <TableCell className="text-xs font-mono">{formatAccountingDate(entry.date)}</TableCell>
-                      <TableCell className="font-mono text-xs">{entry.accountCode}</TableCell>
-                      <TableCell className="font-medium text-xs">{entry.accountName}</TableCell>
+                      <TableCell className="accounting-keep-inline text-xs font-mono">{formatAccountingDate(entry.date)}</TableCell>
+                      <TableCell className="accounting-keep-inline font-mono text-xs">{entry.accountCode}</TableCell>
+                      <TableCell className="max-w-[190px] whitespace-normal font-medium text-xs">{entry.accountName}</TableCell>
                       <TableCell>
-                        <Badge variant="outline" className="whitespace-nowrap text-[9px] font-bold uppercase tracking-wider">{accountTypeLabel(entry.accountType)}</Badge>
+                        <Badge variant="outline" className="accounting-keep-inline text-[9px] font-bold uppercase tracking-wider">{accountTypeLabel(entry.accountType)}</Badge>
                       </TableCell>
-                      <TableCell className="text-xs text-muted-foreground max-w-[200px] truncate">{entry.description}</TableCell>
-                      <TableCell className="text-xs text-muted-foreground">{entry.reference || '-'}</TableCell>
-                      <TableCell className={cn("text-right font-mono text-xs", entry.debit > 0 && "text-emerald-600")}>
+                      <TableCell className="accounting-wrap-cell max-w-[340px] whitespace-normal text-xs text-muted-foreground">{entry.description}</TableCell>
+                      <TableCell className="accounting-keep-inline text-xs text-muted-foreground">{entry.reference || '-'}</TableCell>
+                      <TableCell className={cn("accounting-keep-inline text-right font-mono text-xs", entry.debit > 0 && "text-emerald-600")}>
                         {entry.debit > 0 ? formatCurrency(entry.debit) : '-'}
                       </TableCell>
-                      <TableCell className={cn("text-right font-mono text-xs", entry.credit > 0 && "text-red-600")}>
+                      <TableCell className={cn("accounting-keep-inline text-right font-mono text-xs", entry.credit > 0 && "text-red-600")}>
                         {entry.credit > 0 ? formatCurrency(entry.credit) : '-'}
                       </TableCell>
-                      <TableCell className={cn("text-right font-mono text-xs font-bold", entry.balance >= 0 ? "text-emerald-600" : "text-red-600")}>
+                      <TableCell className={cn("accounting-keep-inline text-right font-mono text-xs font-bold", entry.balance >= 0 ? "text-emerald-600" : "text-red-600")}>
                         {formatCurrency(entry.balance)}
                       </TableCell>
                     </TableRow>
@@ -524,11 +524,14 @@ export function LibroMayorView() {
               {visibleEntries.map((entry) => (
                 <div key={entry.id} className="cursor-pointer rounded-xl border border-border/60 bg-card/60 p-3 shadow-sm transition-colors hover:border-primary/40 hover:bg-primary/5" onClick={() => { void handleEntryClick(entry); }} title="Ver detalle del asiento contable">
                   <div className="flex min-w-0 items-start justify-between gap-3">
-                    <div className="min-w-0">
-                      <p className="font-mono text-[10px] text-muted-foreground">{formatAccountingDate(entry.date)} · {entry.accountCode}</p>
-                      <p className="mt-0.5 truncate text-sm font-bold" title={entry.accountName}>{entry.accountName}</p>
-                      <p className="mt-1 truncate text-xs text-muted-foreground" title={entry.description}>{entry.description}</p>
-                      <Badge variant="outline" className="mt-1.5 text-[9px] font-bold uppercase tracking-wider">{accountTypeLabel(entry.accountType)}</Badge>
+                    <div className="min-w-0 flex-1">
+                      <div className="flex min-w-0 flex-wrap items-center gap-x-3 gap-y-1">
+                        <p className="accounting-keep-inline font-mono text-[10px] text-muted-foreground">{formatAccountingDate(entry.date)}</p>
+                        <p className="accounting-keep-inline font-mono text-[10px] text-muted-foreground">{entry.accountCode}</p>
+                      </div>
+                      <p className="mt-0.5 break-words text-sm font-bold" title={entry.accountName}>{entry.accountName}</p>
+                      <p className="mt-1 break-words text-xs text-muted-foreground" title={entry.description}>{entry.description}</p>
+                      <Badge variant="outline" className="accounting-keep-inline mt-1.5 text-[9px] font-bold uppercase tracking-wider">{accountTypeLabel(entry.accountType)}</Badge>
                     </div>
                     <span className={cn("shrink-0 font-mono text-sm font-black", entry.balance >= 0 ? "text-emerald-600" : "text-red-600")}>
                       {formatCurrency(entry.balance)}
@@ -538,7 +541,7 @@ export function LibroMayorView() {
                     <div className="min-w-0"><p className="text-[9px] font-bold uppercase tracking-wider text-muted-foreground">Débito</p><p className={cn("truncate font-mono text-xs", entry.debit > 0 && "text-emerald-600")}>{entry.debit > 0 ? formatCurrency(entry.debit) : '-'}</p></div>
                     <div className="min-w-0 text-right"><p className="text-[9px] font-bold uppercase tracking-wider text-muted-foreground">Crédito</p><p className={cn("truncate font-mono text-xs", entry.credit > 0 && "text-red-600")}>{entry.credit > 0 ? formatCurrency(entry.credit) : '-'}</p></div>
                   </div>
-                  <div className="mt-2 truncate border-t border-border/50 pt-2 text-[10px] text-muted-foreground"><span className="font-bold text-foreground/80">Referencia:</span> {entry.reference || 'Sin referencia'}</div>
+                  <div className="mt-2 break-words border-t border-border/50 pt-2 text-[10px] text-muted-foreground"><span className="font-bold text-foreground/80">Referencia:</span> {entry.reference || 'Sin referencia'}</div>
                 </div>
               ))}
             </div>
