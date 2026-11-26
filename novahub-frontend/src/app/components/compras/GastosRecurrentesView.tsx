@@ -38,7 +38,15 @@ import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, D
 import { Label } from '../ui/label';
 import { getMonthlyRecurrenceFactor, RecurrenceScheduleFields, recurrenceFrequencyOptions } from '../ui/RecurrenceScheduleFields';
 import { beginNotificationAction, completeNotificationAction, failNotificationAction } from '../../services/notification-action-coordinator';
-import { ExpenseVatFields, calculateIncludedVat, type ExpenseTaxMode } from './ExpenseVatFields';
+import {
+  ExpenseVatFields,
+  calculateAddedVat,
+  calculateIncludedVat,
+  getExpenseEntryAmount,
+  getExpenseTaxBreakdown,
+  resolveExpenseTaxMode,
+  type ExpenseTaxMode,
+} from './ExpenseVatFields';
 
 interface ExpenseCategoryOption { id: string; name: string; isActive?: boolean; }
 interface Props { data: RecurringExpense[]; summaryData?: RecurringExpenseSummary; summaryLoading?: boolean; summaryError?: boolean; loading: boolean; onRefresh: () => void; supplierCatalog?: Supplier[]; expenseCategoryCatalog?: ExpenseCategoryOption[]; accountCatalog?: any[]; accountCatalogLoading?: boolean; canCreateCategoryInline?: boolean; pagination?: SalesPaginationControls; onSearchChange?: (value: string) => void; }
@@ -114,7 +122,16 @@ export function GastosRecurrentesView({ data, summaryData, summaryLoading, summa
       });
     } else if (id) {
       const found = data.find(x => x.id === id);
-      setLocalDoc(found ? JSON.parse(JSON.stringify(found)) : null);
+      if (!found) {
+        setLocalDoc(null);
+      } else {
+        const mode = resolveExpenseTaxMode(Number(found.amount || 0), Number(found.taxAmount || 0), found.taxMode);
+        setLocalDoc({
+          ...JSON.parse(JSON.stringify(found)),
+          amount: getExpenseEntryAmount(Number(found.amount || 0), Number(found.taxAmount || 0), mode),
+          taxMode: mode,
+        });
+      }
     } else {
       setLocalDoc(null);
     }
@@ -287,18 +304,16 @@ export function GastosRecurrentesView({ data, summaryData, summaryLoading, summa
 
   const handleSaveDoc = async () => {
     if (!localDoc?.description) return toast.error('La descripción es obligatoria');
-    if (!localDoc?.amount || localDoc.amount <= 0) return toast.error('El monto debe ser mayor a 0');
+    const enteredAmount = Number(localDoc.amount);
+    if (!Number.isFinite(enteredAmount) || enteredAmount <= 0) return toast.error('El monto debe ser mayor a 0');
     if (!String(localDoc.category || '').trim()) return toast.error('Selecciona una categoría');
 
-    const amount = Number(localDoc.amount);
     const taxMode = (localDoc.taxMode || 'NONE') as ExpenseTaxMode;
-    const taxAmount = taxMode === 'NONE'
-      ? 0
-      : taxMode === 'INCLUDED_15'
-        ? calculateIncludedVat(amount)
-        : Number(localDoc.taxAmount || 0);
-    if (!Number.isFinite(taxAmount) || taxAmount < 0 || taxAmount > amount) {
-      return toast.error('El IVA no puede ser mayor que el monto total del gasto recurrente.');
+    const enteredTaxAmount = Number(localDoc.taxAmount ?? 0);
+    if (!Number.isFinite(enteredTaxAmount) || enteredTaxAmount < 0) return toast.error('Ingresa un monto de IVA válido e igual o mayor que cero.');
+    const taxBreakdown = getExpenseTaxBreakdown(enteredAmount, enteredTaxAmount, taxMode);
+    if (!Number.isFinite(taxBreakdown.taxAmount) || taxBreakdown.taxAmount < 0 || !Number.isFinite(taxBreakdown.totalAmount)) {
+      return toast.error('Ingresa un monto y un IVA válidos para el gasto recurrente.');
     }
 
     const linkedCategory = expenseCategoryCatalog.find((category) => category.id === localDoc.expenseCategoryId);
@@ -314,8 +329,8 @@ export function GastosRecurrentesView({ data, summaryData, summaryLoading, summa
       ...localDoc,
       category: selectedCategory?.name || localDoc.category,
       expenseCategoryId: selectedCategory?.id || localDoc.expenseCategoryId || null,
-      amount,
-      taxAmount,
+      amount: taxBreakdown.totalAmount,
+      taxAmount: taxBreakdown.taxAmount,
       taxMode,
       exchangeRate: Number(localDoc.exchangeRate),
       baseAmount: Number(localDoc.baseAmount),
@@ -382,6 +397,13 @@ export function GastosRecurrentesView({ data, summaryData, summaryLoading, summa
   if (editingId && localDoc) {
     const isNew = editingId === 'NEW';
     const currentStatus = statusOpts.find(s => s.value === (localDoc.status||'').toUpperCase());
+    const expenseTaxMode = (localDoc.taxMode || 'NONE') as ExpenseTaxMode;
+    const taxBreakdown = getExpenseTaxBreakdown(Number(localDoc.amount || 0), Number(localDoc.taxAmount || 0), expenseTaxMode);
+    const amountLabel = expenseTaxMode === 'INCLUDED_15'
+      ? 'Monto ingresado (ya incluye IVA)'
+      : expenseTaxMode === 'NONE'
+        ? 'Monto del gasto'
+        : 'Monto antes de IVA';
     const currentCategoryId = localDoc.expenseCategoryId || '';
     const selectableCategories = expenseCategoryCatalog.filter((category) =>
       (category.isActive !== false || category.id === currentCategoryId)
@@ -577,7 +599,7 @@ export function GastosRecurrentesView({ data, summaryData, summaryLoading, summa
                         />
                      </div>
                      <div className="min-w-0">
-                        <p className="mb-1 text-[10px] font-black uppercase tracking-widest text-muted-foreground">Monto Total (incluye IVA)</p>
+                        <p className="mb-1 text-[10px] font-black uppercase tracking-widest text-muted-foreground">{amountLabel}</p>
                         <Input 
                           disabled={isNew ? !canPerform('PURCHASES_EXPENSES_REC', 'create') : !canPerform('PURCHASES_EXPENSES_REC', 'edit')}
                           type="text"
@@ -589,10 +611,12 @@ export function GastosRecurrentesView({ data, summaryData, summaryLoading, summa
                             setLocalDoc({
                               ...localDoc,
                               amount: normalizeDecimalInput(e.target.value) as any,
-                              ...(String(localDoc.taxMode || 'NONE') === 'INCLUDED_15' ? { taxAmount: calculateIncludedVat(amount) } : {}),
+                              ...(['INCLUDED_15', 'ADDED_15'].includes(String(localDoc.taxMode || 'NONE')) ? {
+                                taxAmount: localDoc.taxMode === 'INCLUDED_15' ? calculateIncludedVat(amount) : calculateAddedVat(amount),
+                              } : {}),
                             });
                           }}
-                          className="h-9 w-full text-right text-lg font-black text-rose-500"
+                          className="h-9 w-full text-right text-lg font-black text-foreground"
                           placeholder="0.00" currencyPrecision />
                      </div>
                   </div>
@@ -600,24 +624,24 @@ export function GastosRecurrentesView({ data, summaryData, summaryLoading, summa
                     idPrefix="recurring-expense"
                     amount={Number(localDoc.amount || 0)}
                     taxAmount={Number(localDoc.taxAmount || 0)}
-                    mode={(localDoc.taxMode || 'NONE') as ExpenseTaxMode}
+                    mode={expenseTaxMode}
                     disabled={isNew ? !canPerform('PURCHASES_EXPENSES_REC', 'create') : !canPerform('PURCHASES_EXPENSES_REC', 'edit')}
                     onChange={(mode, taxAmount) => setLocalDoc({ ...localDoc, taxMode: mode, taxAmount })}
                     onTaxAmountChange={(taxAmount) => setLocalDoc({ ...localDoc, taxAmount })}
                   />
                   <div className="grid grid-cols-2 gap-2 text-xs">
                     <span className="text-muted-foreground">Base antes de IVA</span>
-                    <span className="text-right font-bold tabular-nums">{formatCurrencyAmount(Math.max(0, Number(localDoc.amount || 0) - (localDoc.taxMode === 'INCLUDED_15' ? calculateIncludedVat(Number(localDoc.amount || 0)) : Number(localDoc.taxAmount || 0))), localDoc.currency || baseCurrency)}</span>
-                    <span className="text-muted-foreground">IVA incluido</span>
-                    <span className="text-right font-bold tabular-nums">{formatCurrencyAmount(localDoc.taxMode === 'INCLUDED_15' ? calculateIncludedVat(Number(localDoc.amount || 0)) : Number(localDoc.taxAmount || 0), localDoc.currency || baseCurrency)}</span>
+                    <span className="text-right font-bold tabular-nums">{formatCurrencyAmount(taxBreakdown.baseAmount, localDoc.currency || baseCurrency)}</span>
+                    <span className="text-muted-foreground">IVA</span>
+                    <span className="text-right font-bold tabular-nums">{formatCurrencyAmount(taxBreakdown.taxAmount, localDoc.currency || baseCurrency)}</span>
                     <span className="font-black">Total del gasto recurrente</span>
-                    <span className="text-right font-black tabular-nums text-rose-500">{formatCurrencyAmount(Number(localDoc.amount || 0), localDoc.currency || baseCurrency)}</span>
+                    <span className="text-right font-black tabular-nums text-foreground">{formatCurrencyAmount(taxBreakdown.totalAmount, localDoc.currency || baseCurrency)}</span>
                   </div>
                   <div className="flex justify-between items-center text-base pt-2">
                     <span className="font-black uppercase text-[10px] tracking-widest">Equivalente Estimado</span>
                     <span className="font-black text-muted-foreground tabular-nums text-xs text-right">
                        {(() => {
-                         const equivalent = equivalentInOtherCurrency(localDoc.amount, localDoc.currency, localDoc.exchangeRate, globalRate);
+                         const equivalent = equivalentInOtherCurrency(taxBreakdown.totalAmount, localDoc.currency, localDoc.exchangeRate, globalRate);
                          return formatCurrencyAmount(equivalent.amount, equivalent.currency);
                        })()}
                     </span>

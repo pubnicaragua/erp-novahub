@@ -1390,7 +1390,7 @@ export interface Expense {
   amount: number;
   /** IVA reconocido dentro del importe total, si aplica. */
   taxAmount?: number;
-  taxMode?: 'NONE' | 'INCLUDED_15' | 'MANUAL_INCLUDED';
+  taxMode?: 'NONE' | 'INCLUDED_15' | 'ADDED_15' | 'MANUAL_ADDED' | 'MANUAL_INCLUDED';
   currency: Currency;
   exchangeRate?: number;
   baseAmount?: number;
@@ -1438,7 +1438,7 @@ export interface RecurringExpense {
   nextDate: string;
   amount: number;
   taxAmount?: number;
-  taxMode?: 'NONE' | 'INCLUDED_15' | 'MANUAL_INCLUDED';
+  taxMode?: 'NONE' | 'INCLUDED_15' | 'ADDED_15' | 'MANUAL_ADDED' | 'MANUAL_INCLUDED';
   currency: Currency;
   exchangeRate?: number;
   baseAmount?: number;
