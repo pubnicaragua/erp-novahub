@@ -988,12 +988,12 @@ export function DiarioView() {
               ) : (
                 <>
                   <div className="rounded-2xl border border-primary/15 bg-primary/5 p-4">
-                    <div className="flex min-w-0 items-start justify-between gap-3">
-                      <div className="min-w-0">
+                    <div className="flex min-w-0 flex-col items-start gap-2 sm:flex-row sm:justify-between sm:gap-3">
+                      <div className="min-w-0 flex-1">
                         <p className="font-mono text-[10px] font-bold uppercase tracking-[0.18em] text-primary">Asiento contable · #{viewJournal.number}</p>
-                        <h3 className="mt-1 break-words text-lg font-black tracking-tight" title={accountingDescriptionLabel(viewJournal.description)}>{accountingDescriptionLabel(viewJournal.description)}</h3>
+                        <h3 className="mt-1 break-words text-base font-black tracking-tight sm:text-lg" title={accountingDescriptionLabel(viewJournal.description)}>{accountingDescriptionLabel(viewJournal.description)}</h3>
                       </div>
-                      <Badge variant={STATUS_COLORS[viewJournal.status?.toLowerCase()] || 'outline'} className="shrink-0">
+                      <Badge variant={STATUS_COLORS[viewJournal.status?.toLowerCase()] || 'outline'} className="w-fit shrink-0">
                         {journalStatusLabel(viewJournal.status)}
                       </Badge>
                     </div>
