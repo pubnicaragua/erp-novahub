@@ -155,6 +155,9 @@ export const flotaService = {
   listTrips: (sourceType: TripSourceType, sourceId: string, signal?: AbortSignal) => api.get<SavedTripCost[]>(`/fleet/trips/${sourceType}/${sourceId}`, { signal }),
   saveTrip: (sourceType: TripSourceType, sourceId: string, data: TripCostInput) => api.put<SavedTripCost & { summary: TripCostResult }>(`/fleet/trips/${sourceType}/${sourceId}`, data),
   removeTrip: (sourceType: TripSourceType, sourceId: string, lineId = '') => api.delete<{ deleted: number }>(`/fleet/trips/${sourceType}/${sourceId}?lineId=${encodeURIComponent(lineId)}`),
+  /** Compras con código de pedido del proveedor (sin precios) y reporte de ventas con su compra. */
+  supplierOrders: (signal?: AbortSignal) => api.get<SupplierOrderOption[]>('/fleet/supplier-orders', { signal }),
+  fuelTrace: (params: { dateFrom?: string; dateTo?: string; search?: string }, signal?: AbortSignal) => api.get<FuelTraceReportData>('/fleet/reports/fuel-trace', { params, signal }),
   /** Camiones y rutas sin costos ni tarifas: para capturar la remisión de una orden de venta. */
   remissionOptions: (signal?: AbortSignal) => api.get<RemissionOptions>('/fleet/remission/options', { signal }),
   inheritedTrip: (invoiceId: string, signal?: AbortSignal) => api.get<InheritedTrip>(`/fleet/trips/inherited/${invoiceId}`, { signal }),
@@ -220,3 +223,16 @@ export function parseRateSheet(matrix: unknown[][]): { rows: RateImportRow[]; wa
   });
   return { rows, warnings };
 }
+
+export interface SupplierOrderOption { id: string; code: string; purchaseOrderNumber: string; date: string; supplierName: string | null }
+
+export interface FuelTraceRow {
+  id: string; invoiceId: string; invoiceNumber: string; invoiceDate: string; invoiceStatus: string; orderNumber: string | null;
+  remisionNumber: string | null; origin: string | null; customer: string | null; product: string; quantity: number;
+  saleUnitPrice: number; saleTotal: number; saleCurrency: string; supplierOrderCode: string | null; supplierName: string | null;
+  purchaseOrderNumber: string | null; supplierInvoiceNumber: string | null; purchaseDate: string | null;
+  purchaseUnitPrice: number | null; purchaseAmount: number | null; purchaseCurrency: string | null;
+  linkStatus: 'LINKED' | 'NO_CODE' | 'CODE_NOT_FOUND' | 'PRODUCT_NOT_IN_PURCHASE';
+}
+
+export interface FuelTraceReportData { rows: FuelTraceRow[]; truncated: boolean; pendingLink: number }

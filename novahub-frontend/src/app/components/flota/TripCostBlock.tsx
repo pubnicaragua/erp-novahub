@@ -156,6 +156,10 @@ export function TripCostBlock({ sourceType, sourceId, lineId = '', revenue, quan
   // Costo interno: camiones y rutas completos. Remisión: solo lo necesario, sin rendimiento, comisión ni tarifas.
   const fullVehicles = useTenantQuery(['fleet', 'vehicles', 'trip-block'], (signal) => flotaService.listVehicles({ status: 'ACTIVE' }, signal), { enabled: enabled && full });
   const fullRoutes = useTenantQuery(['fleet', 'routes', 'trip-block'], (signal) => flotaService.listRoutes(undefined, signal), { enabled: enabled && full });
+  // Amarre venta ↔ compra: solo si el superadmin habilitó la trazabilidad para la empresa. La lista no trae precios.
+  const fuelTrace = tenantFeatures.has('SALES_FUEL_TRACE_REPORT');
+  const supplierOrders = useTenantQuery(['fleet', 'supplier-orders'], (signal) => flotaService.supplierOrders(signal), { enabled: enabled && fuelTrace, retry: false });
+  const findSupplierOrder = (code: string) => (supplierOrders.data || []).find((order) => order.code.trim().toLowerCase() === code.trim().toLowerCase());
   const remissionOptions = useTenantQuery(['fleet', 'remission-options'], (signal) => flotaService.remissionOptions(signal), { enabled: enabled && !full, retry: false });
   const vehicles = { data: full ? fullVehicles.data : remissionOptions.data?.vehicles as unknown as FleetVehicle[] | undefined };
   const routes = { data: full ? fullRoutes.data : remissionOptions.data?.routes.map((route) => ({ ...route, rate: 0, rateUnit: 'PER_TRIP' as const, distanceKm: null })) as unknown as FleetRoute[] | undefined };
@@ -321,7 +325,13 @@ export function TripCostBlock({ sourceType, sourceId, lineId = '', revenue, quan
                 <p className="mb-2 text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">Remisión y viaje</p>
                 <div className="grid gap-3 sm:grid-cols-2 2xl:grid-cols-4">
                   <Field label="Remisión Nº" htmlFor={id('remision')}><Input id={id('remision')} disabled={disabled} value={draft.remisionNumber} onChange={(event) => set({ remisionNumber: event.target.value })} placeholder="Ej.: 30718" /></Field>
-                  <Field label="Pedido del proveedor Nº" htmlFor={id('pedido')} hint="El código del pedido en Puma u otro proveedor."><Input id={id('pedido')} disabled={disabled} value={draft.supplierOrderNumber} onChange={(event) => set({ supplierOrderNumber: event.target.value })} placeholder="Ej.: 5010" /></Field>
+                  <Field label="Pedido del proveedor Nº" htmlFor={id('pedido')} hint="El código del pedido en Puma u otro proveedor."><Input id={id('pedido')} disabled={disabled} value={draft.supplierOrderNumber} onChange={(event) => { const linked = findSupplierOrder(event.target.value); set({ supplierOrderNumber: event.target.value, ...(linked?.supplierName ? { supplierName: linked.supplierName } : {}) }); }} placeholder="Ej.: 5010" list={fuelTrace ? id('pedidos-lista') : undefined} />
+                    {fuelTrace && <datalist id={id('pedidos-lista')}>{(supplierOrders.data || []).map((order) => <option key={order.id} value={order.code}>{`${order.purchaseOrderNumber} · ${order.supplierName || 'Sin proveedor'}`}</option>)}</datalist>}
+                    {fuelTrace && draft.supplierOrderNumber.trim() && supplierOrders.data && (() => {
+                      const linked = findSupplierOrder(draft.supplierOrderNumber);
+                      return <p className={`mt-1 text-[10px] ${linked ? 'text-emerald-600' : 'text-amber-600'}`}>{linked ? `Amarrado a ${linked.purchaseOrderNumber} · ${linked.supplierName || 'Sin proveedor'}` : 'Ninguna orden de compra tiene este código todavía.'}</p>;
+                    })()}
+                  </Field>
                   <Field label="Proveedor" htmlFor={id('proveedor')}>
                     {suppliers.data && suppliers.data.length > 0 ? (
                       <Combobox

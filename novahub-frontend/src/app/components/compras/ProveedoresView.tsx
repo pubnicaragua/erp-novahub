@@ -17,6 +17,8 @@ import { toast } from '@/app/services/toast';
 import { cn } from '../ui/utils';
 import { ConfirmDialog } from '../ui/ConfirmDialog';
 import { useAuth } from '../../contexts/AuthContext';
+import { useEnabledTenantFeatures } from '../../hooks/useEnabledTenantFeatures';
+import { SupplierCreditTermsFields } from './SupplierCreditTermsFields';
 import { SupplierDetailDrawer } from './SupplierDetailDrawer';
 import { useCurrency } from '../../contexts/CurrencyContext';
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '../ui/dialog';
@@ -42,6 +44,8 @@ import { NicaraguanRucInput } from '../ui/NicaraguanRucInput';
 interface ProveedoresViewProps { data: Supplier[]; loading: boolean; onRefresh: () => void; pagination?: SalesPaginationControls; onSearchChange?: (value: string) => void; summaryData?: SupplierKpiSummary; summaryLoading?: boolean; summaryError?: boolean; isSidebarCollapsed?: boolean; }
 
 const emptyDraft = () => ({
+  creditDays: '',
+  creditLimit: '',
   code: '',
   name: '',
   companyName: '',
@@ -93,6 +97,7 @@ export function ProveedoresView({ data, loading, onRefresh, pagination, onSearch
   const [editOpen, setEditOpen] = useState(false);
   const [editingSupplier, setEditingSupplier] = useState<Supplier | null>(null);
   const [draft, setDraft] = useState(emptyDraft());
+  const supplierCreditTerms = useEnabledTenantFeatures().has('PURCHASE_SUPPLIER_CREDIT_TERMS');
   const [saving, setSaving] = useState(false);
 
   useEffect(() => () => {
@@ -575,6 +580,8 @@ export function ProveedoresView({ data, loading, onRefresh, pagination, onSearch
       city: row.city || '',
       country: row.country || '',
       notes: row.notes || '',
+      creditDays: (row as any).creditDays != null ? String((row as any).creditDays) : '',
+      creditLimit: (row as any).creditLimit != null ? String(Number((row as any).creditLimit)) : '',
       status: String(row.status || 'ACTIVE').toUpperCase() === 'INACTIVE' ? 'INACTIVE' : 'ACTIVE',
     });
     setEditOpen(true);
@@ -593,6 +600,7 @@ export function ProveedoresView({ data, loading, onRefresh, pagination, onSearch
       city: draft.city || undefined,
       country: draft.country || undefined,
       notes: draft.notes.trim() || undefined,
+      ...(supplierCreditTerms ? { creditDays: draft.creditDays === '' ? null : Number(draft.creditDays), creditLimit: draft.creditLimit === '' ? null : Number(draft.creditLimit) } : {}),
     };
     if (!editingSupplier) payload.status = draft.status;
     return payload;
@@ -845,6 +853,7 @@ export function ProveedoresView({ data, loading, onRefresh, pagination, onSearch
               </div>
             </section>
             <section className="space-y-3 border-t border-border/40 pt-5">
+              {supplierCreditTerms && <SupplierCreditTermsFields idPrefix="supplier" creditDays={draft.creditDays} creditLimit={draft.creditLimit} onChange={(change) => setDraft({ ...draft, ...change })} />}
               <div><h3 className="text-sm font-black uppercase tracking-widest">Notas</h3><p className="text-xs text-muted-foreground">Referencia interna del proveedor. En importaciones, las empresas sin RUC recibirán un aviso y la nota “RUC pendiente”.</p></div>
               <Textarea id="supplier-create-notes" aria-label="Notas del proveedor" value={draft.notes} onChange={(e) => setDraft({ ...draft, notes: e.target.value })} placeholder="Código anterior: CLN0001" rows={3} className="rounded-xl" />
             </section>
@@ -887,6 +896,7 @@ export function ProveedoresView({ data, loading, onRefresh, pagination, onSearch
               </div>
             </section>
             <section className="space-y-3 border-t border-border/40 pt-5">
+              {supplierCreditTerms && <SupplierCreditTermsFields idPrefix="supplier" creditDays={draft.creditDays} creditLimit={draft.creditLimit} onChange={(change) => setDraft({ ...draft, ...change })} />}
               <div><h3 className="text-sm font-black uppercase tracking-widest">Notas</h3><p className="text-xs text-muted-foreground">Referencia interna del proveedor. En importaciones, las empresas sin RUC recibirán un aviso y la nota “RUC pendiente”.</p></div>
               <Textarea id="supplier-edit-notes" aria-label="Notas del proveedor" value={draft.notes} onChange={(e) => setDraft({ ...draft, notes: e.target.value })} placeholder="Código anterior: CLN0001" rows={3} className="rounded-xl" />
             </section>

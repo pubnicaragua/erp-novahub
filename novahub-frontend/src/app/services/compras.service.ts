@@ -34,6 +34,7 @@ export const purchaseOrdersService = {
   getById: (id: string) => api.get<PurchaseOrder>(`/purchases/orders/${id}`),
   create: (data: Partial<PurchaseOrder>, idempotencyKey?: string) => api.idempotentPost<PurchaseOrder>('/purchases/orders', data, idempotencyKey),
   update: (id: string, data: Partial<PurchaseOrder>) => api.patch<PurchaseOrder>(`/purchases/orders/${id}`, data),
+  setSupplierOrderCode: (id: string, supplierOrderCode: string) => api.patch<{ id: string; supplierOrderCode: string | null }>(`/purchases/orders/${id}/supplier-order-code`, { supplierOrderCode }),
   submit: (id: string) => api.post<PurchaseOrder>(`/purchases/orders/${id}/submit`, {}),
   approve: (id: string, idempotencyKey?: string) => api.idempotentPatch<{ order: PurchaseOrder; receipt: PurchaseReceipt }>(`/purchases/orders/${id}/approve`, {}, idempotencyKey),
   checkNumber: (number: string, excludeId?: string) =>

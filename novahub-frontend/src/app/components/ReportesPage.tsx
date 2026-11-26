@@ -6,6 +6,7 @@ import { useAuth } from '../contexts/AuthContext';
 
 import { FinanceReportTab } from './reportes/FinanceReportTab';
 import { SalesReportTab } from './reportes/SalesReportTab';
+import { FuelTraceReport } from './reportes/FuelTraceReport';
 import { ProvidersReportTab } from './reportes/ProvidersReportTab';
 import { PurchasesReportTab } from './reportes/PurchasesReportTab';
 import { CustomersReportTab } from './reportes/CustomersReportTab';
@@ -157,6 +158,7 @@ export function ReportesPage({ activeSubModule, onSubModuleChange, isSidebarColl
         />
 
         <TabsContent value="reportes-ventas" className="m-0 mt-4 outline-none">
+          {activeTab === 'reportes-ventas' && <FuelTraceReport />}
           {activeTab === 'reportes-ventas' && <SalesReportTab ref={salesRef} dateRange={dateRange} />}
         </TabsContent>
         <TabsContent value="reportes-compras" className="m-0 mt-4 outline-none">

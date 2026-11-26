@@ -35,6 +35,8 @@ import { cn } from '../ui/utils';
 import { parseSpreadsheetInWorker } from '../../utils/import-spreadsheet';
 import { useCurrency } from '../../contexts/CurrencyContext';
 import { useAuth } from '../../contexts/AuthContext';
+import { useEnabledTenantFeatures } from '../../hooks/useEnabledTenantFeatures';
+import { SupplierOrderCodeField } from './SupplierOrderCodeField';
 import { generatePurchaseRecordPDF, generatePurchaseListPDF } from '../../utils/purchaseExports';
 import { PurchaseKpiCard } from './PurchaseKpiCard';
 import { KpiSummaryNotice } from '../ui/KpiSummaryNotice';
@@ -1056,6 +1058,8 @@ const buildPendingPurchaseCatalogFromRow = (row: PurchaseImportRow, priceCurrenc
 
 export function OrdenesCompraView({ data, summarySearch, loading, onRefresh, supplierCatalog = [], warehouseCatalog = [], selectedBranchId = '', productCatalog = [], productCategories = [], isSidebarCollapsed = true, pagination, onSearchChange, onStatusChange, purchaseAlert, targetId, onClearTargetId, initialStatus, prefillDoc, onPrefillHandled, onApprovedToReceipt }: Props) {
   const { canPerform, user } = useAuth();
+  // Función por empresa: amarra la compra con las ventas mediante el código de pedido que da el proveedor.
+  const fuelTrace = useEnabledTenantFeatures().has('SALES_FUEL_TRACE_REPORT');
   const { exchangeRate: globalRate, displayCurrency, displayCurrencyLabel, displayMode, formatConvertedAmount, convertDisplayAmount, convertBetweenCurrencies } = useCurrency();
   const [searchTerm, setSearchTerm] = useState('');
   const [layoutMode, setLayoutMode] = useLocalStorageState<'table' | 'cards'>('purchases-orders-layout', 'table', 24 * 365);
@@ -2940,6 +2944,15 @@ export function OrdenesCompraView({ data, summarySearch, loading, onRefresh, sup
                     <p className="text-[10px] text-foreground mb-1">Solicitud de Compra</p>
                     <Input value={localDoc?.purchaseRequestNumber || ''} disabled className="h-8 text-xs font-bold uppercase bg-muted/20" />
                   </div>
+                )}
+                {fuelTrace && (
+                  <SupplierOrderCodeField
+                    orderId={isNew ? null : localDoc.id}
+                    value={(localDoc as any).supplierOrderCode || ''}
+                    disabled={!canPerform('PURCHASES_ORDERS', isNew ? 'create' : 'edit')}
+                    onChange={(supplierOrderCode) => setLocalDoc((current: any) => (current ? { ...current, supplierOrderCode } : current))}
+                    onSaved={onRefresh}
+                  />
                 )}
                 <div className={(isNew && !localDoc?.purchaseRequestNumber) ? 'col-span-2' : ''}>
                   <p className="text-[10px] text-foreground mb-1">Proveedor</p>
