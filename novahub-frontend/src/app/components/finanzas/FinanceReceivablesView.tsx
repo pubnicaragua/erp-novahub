@@ -1,3 +1,4 @@
+import { formatDateOnly } from '../../utils/dateFormat';
 import { useMemo } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import { AlertTriangle, CheckCircle2 } from 'lucide-react'
@@ -181,7 +182,7 @@ export function FinanceReceivablesView() {
                             <span className="break-all font-mono text-primary">{inv.number || inv.code || '—'}</span>
                           </div>
                         </td>
-                        <td className="py-2 text-muted-foreground">{inv.date ? new Date(inv.date).toLocaleDateString('es-NI') : '—'}</td>
+                        <td className="py-2 text-muted-foreground">{inv.date ? formatDateOnly(inv.date) : '—'}</td>
                         <td className="py-2 text-muted-foreground">{due ? due.toLocaleDateString('es-NI') : '—'}</td>
                         <td className="py-2 text-right font-mono text-foreground">{fmt(toDisplayAmount(Number(inv.total || 0), inv.currency, inv.exchangeRate))}</td>
                         <td className="py-2 text-right font-black text-foreground">{fmt(balanceOf(inv))}</td>
@@ -211,7 +212,7 @@ export function FinanceReceivablesView() {
                       {daysOverdue > 0 ? <Badge variant="destructive" className="shrink-0 text-[9px]">{daysOverdue}d vencido</Badge> : <Badge variant="secondary" className="shrink-0 text-[9px]">Al día</Badge>}
                     </div>
                     <div className="mt-3 grid grid-cols-2 gap-2 border-t border-border/30 pt-3 text-[10px]">
-                      <div><span className="block text-muted-foreground">Emisión</span><span>{inv.date ? new Date(inv.date).toLocaleDateString('es-NI') : '—'}</span></div>
+                      <div><span className="block text-muted-foreground">Emisión</span><span>{inv.date ? formatDateOnly(inv.date) : '—'}</span></div>
                       <div><span className="block text-muted-foreground">Vencimiento</span><span>{due ? due.toLocaleDateString('es-NI') : '—'}</span></div>
                       <div><span className="block text-muted-foreground">Monto</span><span className="font-mono">{fmt(toDisplayAmount(Number(inv.total || 0), inv.currency, inv.exchangeRate))}</span></div>
                       <div><span className="block text-muted-foreground">Saldo</span><span className="font-black">{fmt(balanceOf(inv))}</span></div>

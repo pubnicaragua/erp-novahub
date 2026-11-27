@@ -1,3 +1,4 @@
+import { formatDateOnly } from '../../utils/dateFormat';
 import { useState } from 'react';
 import { TrendingDown, PackageX, BookOpenCheck, ExternalLink, Eye, AlertTriangle } from 'lucide-react';
 import { Card, CardContent } from '../ui/card';
@@ -187,7 +188,7 @@ export function InventoryLossesView({ warehouses, warehouseId, active = true }: 
                   <div className="flex min-w-0 items-start justify-between gap-3">
                     <div className="min-w-0">
                       <p className="truncate font-mono text-xs font-bold">{row.number}</p>
-                      <p className="mt-1 text-[10px] text-muted-foreground">{row.date ? new Date(row.date).toLocaleDateString('es-NI') : 'N/A'}</p>
+                      <p className="mt-1 text-[10px] text-muted-foreground">{row.date ? formatDateOnly(row.date) : 'N/A'}</p>
                     </div>
                     <Badge variant="outline" className="shrink-0 border-destructive/20 bg-destructive/5 text-[9px] font-bold uppercase tracking-wider text-destructive">
                       {reasonLabel(row.reason)}
@@ -279,7 +280,7 @@ export function InventoryLossesView({ warehouses, warehouseId, active = true }: 
                 <TableRow key={row.id}>
                   <TableCell><span className="font-mono text-xs font-bold">{row.number}</span></TableCell>
                   <TableCell className="text-xs text-muted-foreground">
-                    {row.date ? new Date(row.date).toLocaleDateString('es-NI') : 'N/A'}
+                    {row.date ? formatDateOnly(row.date) : 'N/A'}
                   </TableCell>
                   <TableCell>
                     <Badge variant="outline" className="text-[9px] font-bold uppercase tracking-wider bg-destructive/5 text-destructive border-destructive/20">

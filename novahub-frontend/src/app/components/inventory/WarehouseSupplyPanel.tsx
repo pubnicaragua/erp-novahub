@@ -1,3 +1,4 @@
+import { formatDateOnly } from '../../utils/dateFormat';
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { ArrowRight, ClipboardList, Loader2, PackageSearch, Send, Warehouse } from 'lucide-react';
 import { toast } from '@/app/services/toast';
@@ -237,7 +238,7 @@ export function WarehouseSupplyPanel() {
                 {requests.length === 0 ? <p className="rounded-xl border border-dashed p-4 text-sm text-muted-foreground">Aún no hay solicitudes.</p> : (
                   <div className="overflow-x-auto rounded-xl border">
                     <table className="w-full min-w-[680px] text-sm"><thead className="bg-muted/40 text-left text-xs uppercase tracking-wide text-muted-foreground"><tr><th className="px-3 py-2">Solicitud</th><th className="px-3 py-2">Origen</th><th className="px-3 py-2">Destino</th><th className="px-3 py-2">Estado</th><th className="px-3 py-2">Fecha</th></tr></thead><tbody>
-                      {requests.slice(0, 20).map((request) => <tr key={request.id} className="border-t"><td className="px-3 py-2 font-medium">{request.number}</td><td className="px-3 py-2">{request.sourceWarehouse?.name || '—'}</td><td className="px-3 py-2">{request.destinationWarehouse?.name || '—'}</td><td className="px-3 py-2"><Badge variant="outline">{statusLabel[request.status] || request.status}</Badge></td><td className="px-3 py-2 text-muted-foreground">{request.date ? new Date(request.date).toLocaleDateString() : '—'}</td></tr>)}
+                      {requests.slice(0, 20).map((request) => <tr key={request.id} className="border-t"><td className="px-3 py-2 font-medium">{request.number}</td><td className="px-3 py-2">{request.sourceWarehouse?.name || '—'}</td><td className="px-3 py-2">{request.destinationWarehouse?.name || '—'}</td><td className="px-3 py-2"><Badge variant="outline">{statusLabel[request.status] || request.status}</Badge></td><td className="px-3 py-2 text-muted-foreground">{request.date ? formatDateOnly(request.date) : '—'}</td></tr>)}
                     </tbody></table>
                   </div>
                 )}

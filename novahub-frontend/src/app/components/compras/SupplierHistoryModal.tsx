@@ -1,3 +1,4 @@
+import { formatDateOnly } from '../../utils/dateFormat';
 import React, { useState, useEffect } from 'react';
 import { fetchAllReportPages } from '../../utils/reportPagination';
 import { 
@@ -283,7 +284,7 @@ export function SupplierHistoryModal({ supplier, open, onOpenChange }: SupplierH
                         </div>
                         <div className="flex flex-wrap items-center gap-x-3 gap-y-1 mt-1.5">
                           <span className="text-[11px] font-bold text-muted-foreground/70 flex items-center gap-1.5 whitespace-nowrap">
-                            <Calendar className="size-3.5" /> {new Date(it.date).toLocaleDateString()}
+                            <Calendar className="size-3.5" /> {formatDateOnly(it.date)}
                           </span>
                           <span className="text-[10px] uppercase font-black tracking-widest text-muted-foreground/30 flex items-center gap-1 whitespace-nowrap">
                             • {pdfStatusLabel(it.status)}

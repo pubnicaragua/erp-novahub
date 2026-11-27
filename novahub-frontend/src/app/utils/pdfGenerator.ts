@@ -1,3 +1,4 @@
+import { formatDateOnly } from './dateFormat';
 import { jsPDF } from 'jspdf';
 import jspdfAutoTable from 'jspdf-autotable';
 import JsBarcode from 'jsbarcode';
@@ -1051,7 +1052,7 @@ async function generateHtmlTemplatePdf({ savedDesign, estimate, tenantName, form
     fiscal: design.fiscalInfo || '',
     documentTitle: titleMap[documentType] || documentType.toUpperCase(),
     documentNumber: estimate.number || 'N/A',
-    date: estimate.date ? new Date(estimate.date).toLocaleDateString() : 'N/A',
+    date: estimate.date ? formatDateOnly(estimate.date) : 'N/A',
     customer: customer.name || estimate.customCustomerName || 'Cliente sin registrar',
     address: customerAddress || '',
     phone: customer.phone || customer.telephone || customer.contactPhone || estimate.customCustomerPhone || '',
@@ -1226,7 +1227,7 @@ export const generateEstimatePDF = async ({ estimate, tenantName, formatAmount, 
         footerText: design.footerText,
         logo: templateLogoFromSettings(design) || resolvedTenantLogo,
       },
-      document: { title: ({ estimate: 'COTIZACIÓN', order: 'ORDEN DE VENTA', invoice: 'FACTURA', recurring: 'FACTURA RECURRENTE', payment: 'PAGO RECIBIDO', return: 'DEVOLUCIÓN', credit: 'CRÉDITO', 'credit-note': 'NOTA DE CRÉDITO' } as Record<string, string>)[documentType] || documentType.toUpperCase(), number: estimate.number || 'N/A', date: estimate.date ? new Date(estimate.date).toLocaleDateString('es-NI') : 'N/A', status: estimate.status || '', notes: configuredNotes, extra: configuredExtra, terms: design.terms || '', legal: design.legalText || '' },
+      document: { title: ({ estimate: 'COTIZACIÓN', order: 'ORDEN DE VENTA', invoice: 'FACTURA', recurring: 'FACTURA RECURRENTE', payment: 'PAGO RECIBIDO', return: 'DEVOLUCIÓN', credit: 'CRÉDITO', 'credit-note': 'NOTA DE CRÉDITO' } as Record<string, string>)[documentType] || documentType.toUpperCase(), number: estimate.number || 'N/A', date: estimate.date ? formatDateOnly(estimate.date) : 'N/A', status: estimate.status || '', notes: configuredNotes, extra: configuredExtra, terms: design.terms || '', legal: design.legalText || '' },
       customer: { name: customerSource.name || estimate.customCustomerName || 'Cliente sin registrar', taxId: customerSource.taxId || customerSource.ruc || '', address: customerAddress || '', city: customerSource.city || '', department: customerSource.department || '', country: customerSource.country || '', phone: customerSource.phone || customerSource.telephone || customerSource.contactPhone || estimate.customCustomerPhone || '', email: customerSource.email || customerSource.contactEmail || estimate.customCustomerEmail || '', contact: customerSource.contact || customerSource.contactName || '', contactName: customerSource.contactName || '', contactEmail: customerSource.contactEmail || '', contactPhone: customerSource.contactPhone || '', fiscalRegime: customerSource.fiscalRegime || '', razonSocial: customerSource.razonSocial || '' },
       items: configuredItems.map((item: any) => ({ description: commercialItemDescription(item), quantity: item.quantity || 0, unitPrice: formatAmount(Number(item.unitPrice || 0), estimate.currency, estimate.exchangeRate), total: formatAmount(Number(item.total || 0), estimate.currency, estimate.exchangeRate) })),
       totals: {
@@ -1397,7 +1398,7 @@ export const generateEstimatePDF = async ({ estimate, tenantName, formatAmount, 
     doc.setFont(fontName, 'normal');
     doc.setFontSize(8.5);
     doc.setTextColor(textColor[0], textColor[1], textColor[2]);
-    doc.text(`Nº ${estimate.number || 'N/A'} · ${estimate.date ? new Date(estimate.date).toLocaleDateString() : 'N/A'}`, centerX, centeredY + 8, { align: 'center' });
+    doc.text(`Nº ${estimate.number || 'N/A'} · ${estimate.date ? formatDateOnly(estimate.date) : 'N/A'}`, centerX, centeredY + 8, { align: 'center' });
   } else {
     const identityX = logoPosition === 'left' ? logoX + logoSize.width + 6 : logoPosition === 'right' ? rightEdge : logoX;
     const identityAlign = logoPosition === 'right' ? 'right' : 'left';
@@ -1436,7 +1437,7 @@ export const generateEstimatePDF = async ({ estimate, tenantName, formatAmount, 
     doc.setFont(fontName, 'normal');
     doc.setTextColor(textColor[0], textColor[1], textColor[2]);
     doc.text(`Nº ${estimate.number || 'N/A'}`, rightEdge, 29, { align: 'right' });
-    doc.text(`Fecha  ${estimate.date ? new Date(estimate.date).toLocaleDateString() : 'N/A'}`, rightEdge, 35, { align: 'right' });
+    doc.text(`Fecha  ${estimate.date ? formatDateOnly(estimate.date) : 'N/A'}`, rightEdge, 35, { align: 'right' });
     if (documentType === 'order') doc.text(`Entrega  ${estimate.expectedDelivery ? new Date(estimate.expectedDelivery).toLocaleDateString() : 'N/A'}`, rightEdge, 41, { align: 'right' });
     else doc.text(`Válida hasta  ${estimate.expiryDate ? new Date(estimate.expiryDate).toLocaleDateString() : 'N/A'}`, rightEdge, 41, { align: 'right' });
   }
@@ -1539,7 +1540,7 @@ export const generateEstimatePDF = async ({ estimate, tenantName, formatAmount, 
       financingRows.push(['Frecuencia', financingContract.planCalculationMode === 'MANUAL' ? 'Manual' : frequencyLabels[String(financingContract.frequency || '').toUpperCase()] || 'Según calendario']);
       if (Number(financingContract.installmentAmount) > 0) financingRows.push(['Monto objetivo por abono', formatAmount(Number(financingContract.installmentAmount), currency, rate)]);
       installments.forEach((installment: any) => {
-        const dueDate = installment?.dueDate ? new Date(installment.dueDate).toLocaleDateString('es-NI') : '—';
+        const dueDate = installment?.dueDate ? formatDateOnly(installment.dueDate) : '—';
         financingRows.push([
           `Cuota ${installment.installmentNumber} · ${dueDate}`,
           `${formatAmount(Number(installment.totalAmount || 0), currency, rate)} (capital ${formatAmount(Number(installment.principalAmount || 0), currency, rate)}; interés ${formatAmount(Number(installment.interestAmount || 0), currency, rate)})`,
@@ -1770,7 +1771,7 @@ function customerCreditFinancingDetails(document: any, formatAmount: (amount: nu
     lines.push('Calendario de abonos:');
     if (installments.length) {
       for (const installment of installments) {
-        const date = installment?.dueDate ? new Date(installment.dueDate).toLocaleDateString('es-NI') : '—';
+        const date = installment?.dueDate ? formatDateOnly(installment.dueDate) : '—';
         lines.push(`Cuota ${installment.installmentNumber}: ${date} · ${formatAmount(Number(installment.totalAmount || 0), currency, exchangeRate)} (capital ${formatAmount(Number(installment.principalAmount || 0), currency, exchangeRate)}; interés ${formatAmount(Number(installment.interestAmount || 0), currency, exchangeRate)})`);
       }
     } else {
@@ -2435,7 +2436,7 @@ async function generateSalesTicketPDF({
   doc.setFontSize(7);
   doc.text(`Nº ${transaction.number || transaction.id || 'N/A'}`, width / 2, y, { align: 'center' });
   y += 3.5;
-  doc.text(`Fecha ${transaction.date ? new Date(transaction.date).toLocaleDateString('es-NI') : new Date().toLocaleDateString('es-NI')}`, width / 2, y, { align: 'center' });
+  doc.text(`Fecha ${transaction.date ? formatDateOnly(transaction.date) : new Date().toLocaleDateString('es-NI')}`, width / 2, y, { align: 'center' });
   y += 5;
 
   const customerName = transaction.customer?.name || transaction.customerName || 'Cliente general';
@@ -4173,7 +4174,7 @@ export const generateExpensePDF = async ({
   doc.setFontSize(10);
   doc.setFont('helvetica', 'normal');
   doc.text(`N°: ${expense.number || expense.id || 'N/A'}`, 196, 22, { align: 'right' });
-  doc.text(`Fecha: ${expense.date ? new Date(expense.date).toLocaleDateString() : 'N/A'}`, 196, 28, { align: 'right' });
+  doc.text(`Fecha: ${expense.date ? formatDateOnly(expense.date) : 'N/A'}`, 196, 28, { align: 'right' });
   doc.text(`Hora: ${expense.time || (expense.date ? new Date(expense.date).toLocaleTimeString() : 'N/A')}`, 196, 34, { align: 'right' });
 
   autoTable(doc, {
@@ -4245,7 +4246,7 @@ export const generatePurchaseOrderPDF = async ({
   doc.setFontSize(10);
   doc.setFont('helvetica', 'normal');
   doc.text(`N°: ${order.number || order.id || 'N/A'}`, 196, 22, { align: 'right' });
-  doc.text(`Fecha: ${order.date ? new Date(order.date).toLocaleDateString() : 'N/A'}`, 196, 28, { align: 'right' });
+  doc.text(`Fecha: ${order.date ? formatDateOnly(order.date) : 'N/A'}`, 196, 28, { align: 'right' });
   doc.text(`Entrega: ${order.expectedDelivery ? new Date(order.expectedDelivery).toLocaleDateString() : 'N/A'}`, 196, 34, { align: 'right' });
   const orderStatus = pdfStatusLabel(order.status);
   const orderOrigin = order.purchaseRequestNumber || order.purchaseRequestId
@@ -4374,7 +4375,7 @@ export const generatePurchaseRequestPDF = async ({
   doc.setFontSize(10);
   doc.setFont('helvetica', 'normal');
   doc.text(`N°: ${request.number || request.id || 'N/A'}`, 196, 22, { align: 'right' });
-  doc.text(`Fecha: ${request.date ? new Date(request.date).toLocaleDateString() : 'N/A'}`, 196, 28, { align: 'right' });
+  doc.text(`Fecha: ${request.date ? formatDateOnly(request.date) : 'N/A'}`, 196, 28, { align: 'right' });
   doc.text(`Estado: ${status}`, 196, 34, { align: 'right' });
 
   autoTable(doc, {
@@ -4508,7 +4509,7 @@ export const generateRecurringInvoicePDF = async ({
   doc.setFontSize(10);
   doc.setFont('helvetica', 'normal');
   doc.text(`N°: ${recurringInvoice.number || recurringInvoice.id || 'N/A'}`, 196, 22, { align: 'right' });
-  doc.text(`Inicio: ${recurringInvoice.startDate ? new Date(recurringInvoice.startDate).toLocaleDateString() : 'N/A'}`, 196, 28, { align: 'right' });
+  doc.text(`Inicio: ${recurringInvoice.startDate ? formatDateOnly(recurringInvoice.startDate) : 'N/A'}`, 196, 28, { align: 'right' });
   doc.text(`Próxima: ${recurringInvoice.nextInvoiceDate ? new Date(recurringInvoice.nextInvoiceDate).toLocaleDateString() : 'N/A'}`, 196, 34, { align: 'right' });
 
   const frequencyMap: Record<string, string> = {
@@ -4529,7 +4530,7 @@ export const generateRecurringInvoicePDF = async ({
       ['Frecuencia', freqLabel],
       ['Estado', pdfStatusLabel(recurringInvoice.status, '-')],
       ['Moneda', recurringInvoice.currency || '-'],
-      ['Fin', recurringInvoice.endDate ? new Date(recurringInvoice.endDate).toLocaleDateString() : 'Sin fin'],
+      ['Fin', recurringInvoice.endDate ? formatDateOnly(recurringInvoice.endDate) : 'Sin fin'],
     ],
     theme: 'grid',
     headStyles: { fillColor: primaryColor, textColor: 255, fontStyle: 'bold' },
@@ -4611,7 +4612,7 @@ export const generateSupplierInvoicePDF = async ({
 }) => {
   ensurePdfBrowserPreview('Factura de proveedor');
   const invoiceLines = Array.isArray(invoice.items) ? invoice.items : Array.isArray(invoice.lines) ? invoice.lines : [];
-  const configured = await renderConfiguredDefinition({ targetKey: 'compras.supplier-invoice', tenantName, tenantLogo, fileName: buildLabeledPdfFileName('Factura de proveedor', invoice.number), data: { document: { title: 'FACTURA DE PROVEEDOR', number: invoice.number || invoice.id || 'N/A', date: invoice.date, status: invoice.status, extra: invoice.dueDate ? `Vencimiento: ${new Date(invoice.dueDate).toLocaleDateString('es-NI')}` : '', notes: invoice.notes || '' }, party: { ...(invoice.supplier || {}), name: invoice.supplier?.name || invoice.supplierName || '' }, items: invoiceLines.map((line: any) => ({ description: commercialItemDescription(line, line.description || line.product?.name || 'Producto'), quantity: line.quantity || 0, unitPrice: formatAmount(Number(line.unitPrice || line.price || 0), invoice.currency, invoice.exchangeRate), total: formatAmount(Number(line.total || 0), invoice.currency, invoice.exchangeRate) })), totals: { subtotal: formatAmount(Number(invoice.subtotal || 0), invoice.currency, invoice.exchangeRate), tax: formatAmount(Number(invoice.taxAmount || invoice.tax || 0), invoice.currency, invoice.exchangeRate), total: formatAmount(Number(invoice.total || 0), invoice.currency, invoice.exchangeRate) } } });
+  const configured = await renderConfiguredDefinition({ targetKey: 'compras.supplier-invoice', tenantName, tenantLogo, fileName: buildLabeledPdfFileName('Factura de proveedor', invoice.number), data: { document: { title: 'FACTURA DE PROVEEDOR', number: invoice.number || invoice.id || 'N/A', date: invoice.date, status: invoice.status, extra: invoice.dueDate ? `Vencimiento: ${formatDateOnly(invoice.dueDate)}` : '', notes: invoice.notes || '' }, party: { ...(invoice.supplier || {}), name: invoice.supplier?.name || invoice.supplierName || '' }, items: invoiceLines.map((line: any) => ({ description: commercialItemDescription(line, line.description || line.product?.name || 'Producto'), quantity: line.quantity || 0, unitPrice: formatAmount(Number(line.unitPrice || line.price || 0), invoice.currency, invoice.exchangeRate), total: formatAmount(Number(line.total || 0), invoice.currency, invoice.exchangeRate) })), totals: { subtotal: formatAmount(Number(invoice.subtotal || 0), invoice.currency, invoice.exchangeRate), tax: formatAmount(Number(invoice.taxAmount || invoice.tax || 0), invoice.currency, invoice.exchangeRate), total: formatAmount(Number(invoice.total || 0), invoice.currency, invoice.exchangeRate) } } });
   if (configured) return configured.doc;
   const settings = await getPdfDesignSettings('compras.supplier-invoice');
   const doc = new jsPDF(pdfDesignPaper(settings));
@@ -4630,8 +4631,8 @@ export const generateSupplierInvoicePDF = async ({
   doc.setFontSize(10);
   doc.setFont('helvetica', 'normal');
   doc.text(`N°: ${invoice.number || invoice.id || 'N/A'}`, 196, 22, { align: 'right' });
-  doc.text(`Emisión: ${invoice.date ? new Date(invoice.date).toLocaleDateString() : 'N/A'}`, 196, 28, { align: 'right' });
-  doc.text(`Vence: ${invoice.dueDate ? new Date(invoice.dueDate).toLocaleDateString() : 'N/A'}`, 196, 34, { align: 'right' });
+  doc.text(`Emisión: ${invoice.date ? formatDateOnly(invoice.date) : 'N/A'}`, 196, 28, { align: 'right' });
+  doc.text(`Vence: ${invoice.dueDate ? formatDateOnly(invoice.dueDate) : 'N/A'}`, 196, 34, { align: 'right' });
 
   autoTable(doc, {
     startY: 45,
@@ -4926,7 +4927,7 @@ export const generateHistoricalCashReportPDF = async ({
   const summary = report.summary || {};
   const money = (value: any) => formatCurrencyNumber(value);
   const configuredRows = (report.items || []).map((item: any) => ({
-    date: item.date ? new Date(item.date).toLocaleDateString('es-NI') : '—',
+    date: item.date ? formatDateOnly(item.date) : '—',
     register: item.register?.name || 'Sin caja',
     cashier: item.openedBy?.name || '—',
     sales: String(item.saleCount || 0),

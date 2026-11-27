@@ -1,3 +1,4 @@
+import { formatDateOnly } from '../../utils/dateFormat';
 import { useState, useMemo, useEffect } from 'react';
 import { motion } from 'motion/react';
 import {
@@ -229,7 +230,7 @@ export function SolicitudCompraView({ data, summaryData, summaryLoading, summary
         columns: [
           { label: 'N° Solicitud', value: (row) => row.number },
           { label: 'Proveedor', value: (row) => row.supplier?.name || row.management?.[0]?.supplier?.name || 'Sin proveedor' },
-          { label: 'Fecha', value: (row) => row.date ? new Date(row.date).toLocaleDateString('es-NI') : '—' },
+          { label: 'Fecha', value: (row) => row.date ? formatDateOnly(row.date) : '—' },
           { label: 'Total', align: 'right', value: (row) => { const management = row.management?.[0]; return management ? formatRequestAmount(management.total, management.currency, management.exchangeRate) : '—'; } },
           { label: 'Estado', align: 'center', value: (row) => STATUS_LABELS[normalizeRequestStatus(row.status)] },
         ],
@@ -540,7 +541,7 @@ export function SolicitudCompraView({ data, summaryData, summaryLoading, summary
         document: {
           title: 'Solicitud de compra',
           number: request.number,
-          date: request.date ? new Date(request.date).toLocaleDateString('es-NI') : undefined,
+          date: request.date ? formatDateOnly(request.date) : undefined,
           status: STATUS_LABELS[normalizeRequestStatus(request.status)],
           supplier: request.supplier?.name || management?.supplier?.name || 'Sin proveedor',
           fields: [
@@ -694,7 +695,7 @@ export function SolicitudCompraView({ data, summaryData, summaryLoading, summary
                   <div className="flex items-start justify-between gap-3">
                     <div className="min-w-0">
                       <p className="font-mono text-sm font-black text-primary">{req.number}</p>
-                      <p className="mt-1 text-[11px] text-muted-foreground">{new Date(req.date).toLocaleDateString()}</p>
+                      <p className="mt-1 text-[11px] text-muted-foreground">{formatDateOnly(req.date)}</p>
                     </div>
                     <Badge variant="outline" className={cn('shrink-0 border-none px-2 py-0.5 text-[9px] font-black uppercase tracking-widest', STATUS_STYLES[normalizeRequestStatus(req.status)])}>
                       {STATUS_LABELS[normalizeRequestStatus(req.status)]}

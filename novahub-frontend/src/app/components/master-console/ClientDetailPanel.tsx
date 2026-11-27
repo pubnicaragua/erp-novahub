@@ -1,3 +1,4 @@
+import { formatDateOnly } from '../../utils/dateFormat';
 import React, { useState } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from '../ui/card';
 import { Badge } from '../ui/badge';
@@ -259,7 +260,7 @@ export function ClientDetailPanel({ data, onBack, onRefresh }: Props) {
                 <tbody>{data.invoices.slice(0, 10).map((inv: any) => (
                   <tr key={inv.id} className="border-b border-border/30 hover:bg-muted/5">
                     <td className="p-3 font-bold">{inv.number}</td>
-                    <td className="p-3 text-muted-foreground">{new Date(inv.date).toLocaleDateString()}</td>
+                    <td className="p-3 text-muted-foreground">{formatDateOnly(inv.date)}</td>
                     <td className="p-3 text-right font-bold">{formatAmount(inv.total, 'USD')}</td>
                     <td className="p-3 text-center">
                       <Badge className={inv.status === 'PAID' ? 'bg-emerald-500/10 text-emerald-500' : 'bg-amber-500/10 text-amber-500'}>
@@ -298,7 +299,7 @@ export function ClientDetailPanel({ data, onBack, onRefresh }: Props) {
                 </tr></thead>
                 <tbody>{data.payments.slice(0, 15).map((p: any) => (
                   <tr key={p.id} className="border-b border-border/30 hover:bg-muted/5">
-                    <td className="p-3 text-muted-foreground">{new Date(p.date).toLocaleDateString()}</td>
+                    <td className="p-3 text-muted-foreground">{formatDateOnly(p.date)}</td>
                     <td className="p-3 text-right font-bold text-emerald-500">{formatAmount(p.amount, 'USD')}</td>
                     <td className="p-3"><Badge variant="outline" className="text-[9px]">{p.method}</Badge></td>
                     <td className="p-3 text-muted-foreground text-xs">{p.reference || '—'}</td>
@@ -398,7 +399,7 @@ export function ClientDetailPanel({ data, onBack, onRefresh }: Props) {
                 <div key={d.id} className="flex items-center justify-between p-2.5 rounded-lg border border-border/40">
                   <div>
                     <p className="text-sm font-bold">{d.title}</p>
-                    <p className="text-[10px] text-muted-foreground">{d.type} • {new Date(d.date).toLocaleDateString()}</p>
+                    <p className="text-[10px] text-muted-foreground">{d.type} • {formatDateOnly(d.date)}</p>
                   </div>
                   {d.url && <Button variant="ghost" size="sm" onClick={() => window.open(d.url, '_blank')}><Download className="size-3.5" /></Button>}
                 </div>

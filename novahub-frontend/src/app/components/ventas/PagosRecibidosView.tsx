@@ -34,7 +34,7 @@ import { SalesKpiCard } from './SalesKpiCard';
 import { KpiSummaryNotice } from '../ui/KpiSummaryNotice';
 import { fetchAllReportPages } from '../../hooks/useTenantQuery';
 import { ColumnFilterMenu, useColumnFilters } from '../ui/ColumnFilterMenu';
-import { formatDateEs } from '../../utils/dateFormat';
+import { formatDateEs, formatDateOnly } from '../../utils/dateFormat';
 import { hasPaymentReferenceField, isBankPaymentMethod, requiresManualPaymentAccount, requiresPaymentReference, paymentMethodLabel, isCardPaymentMethod, calculateCardCommission, formatCommissionPercent } from '../../utils/paymentMethods';
 import { getSalesAdditionalCharges } from '../../utils/salesCharges';
 import { cn } from '../ui/utils';
@@ -834,7 +834,7 @@ export function PagosRecibidosView({ data, summaryData, summaryLoading, summaryE
     { key: 'customer', header: 'Cliente', headerExtra: <ColumnFilterMenu label="Cliente" options={distinctCustomers} selected={colFilters.state.customer?.values || []} onSelect={(values) => colFilters.setValues('customer', values)} sort={colFilters.state.customer?.sort || null} onSort={(sort) => colFilters.setSort('customer', sort)} />, render: (_, row) => <span className="text-[13px] font-bold text-foreground">{row.customer?.name || 'Cliente'}</span> },
     { key: 'date', header: 'Fecha', headerExtra: <ColumnFilterMenu label="Fecha" sort={colFilters.state.date?.sort || null} onSort={(sort) => colFilters.setSort('date', sort)} sortOptions={[{ value: 'desc', label: 'Más recientes' }, { value: 'asc', label: 'Más antiguas' }]} />, render: (val) => {
       if (!val) return <span className="text-xs text-muted-foreground">Sin fecha</span>;
-      return <span className="text-xs font-medium text-muted-foreground">{formatDateEs(val, true)}</span>;
+      return <span className="text-xs font-medium text-muted-foreground">{formatDateOnly(val)}</span>;
     } },
     {
       key: 'amount', header: 'Monto', width: '150px', headerExtra: <ColumnFilterMenu label="Monto" sort={colFilters.state.amount?.sort || null} onSort={(sort) => colFilters.setSort('amount', sort)} />, render: (val, row) => (
@@ -1224,7 +1224,7 @@ export function PagosRecibidosView({ data, summaryData, summaryLoading, summaryE
 
               <div className="grid gap-3 sm:grid-cols-2">
                 <div className="rounded-xl border border-border/50 bg-muted/10 p-3"><p className="text-[10px] font-black uppercase tracking-widest text-muted-foreground">Cliente</p><p className="mt-1 break-words text-sm font-bold">{detailPayment.customer?.name || 'Cliente'}</p></div>
-                <div className="rounded-xl border border-border/50 bg-muted/10 p-3"><p className="text-[10px] font-black uppercase tracking-widest text-muted-foreground">Fecha</p><p className="mt-1 text-sm font-bold">{formatDateEs(detailPayment.date, true) || '—'}</p></div>
+                <div className="rounded-xl border border-border/50 bg-muted/10 p-3"><p className="text-[10px] font-black uppercase tracking-widest text-muted-foreground">Fecha</p><p className="mt-1 text-sm font-bold">{formatDateOnly(detailPayment.date) || '—'}</p></div>
                 <div className="rounded-xl border border-border/50 bg-muted/10 p-3"><p className="text-[10px] font-black uppercase tracking-widest text-muted-foreground">Método</p><p className="mt-1 text-sm font-bold">{paymentMethodLabel(String(detailPayment.method || '').toUpperCase())}</p></div>
                 <div className="rounded-xl border border-border/50 bg-muted/10 p-3"><p className="text-[10px] font-black uppercase tracking-widest text-muted-foreground">Documento / destino</p><p className="mt-1 break-words text-sm font-bold text-primary">{detailPayment.invoice?.number || detailPayment.creditNote?.number || (detailPayment.balanceApplicationType === 'GENERAL_BALANCE' ? 'Abono al saldo general del cliente' : detailPayment.reference || 'Anticipo')}</p></div>
               </div>

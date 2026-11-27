@@ -1,3 +1,4 @@
+import { formatDateOnly } from '../../utils/dateFormat';
 import { useMemo, useState, useEffect } from 'react';
 import { useQueryClient } from '@tanstack/react-query';
 import { CalendarClock, Plus, Search, Eye, Pencil, RotateCcw, TrendingDown, Clock, Ban, ChevronLeft, PlayCircle, PauseCircle } from 'lucide-react';
@@ -172,7 +173,7 @@ export function GastosRecurrentesView({ data, summaryData, summaryLoading, summa
           { label: 'Descripción', value: (row) => row.description || '—' },
           { label: 'Monto', align: 'right', value: (row) => formatConvertedAmount(Number(row.amount || 0), row.currency || displayCurrency, row.exchangeRate) },
           { label: 'Frecuencia', align: 'center', value: (row) => freqMap[String(row.frequency || '').toLowerCase()] || row.frequency || '—' },
-          { label: 'Inicio', value: (row) => row.startDate ? new Date(row.startDate).toLocaleDateString('es-NI') : '—' },
+          { label: 'Inicio', value: (row) => row.startDate ? formatDateOnly(row.startDate) : '—' },
           { label: 'Estado', align: 'center', value: (row) => statusOpts.find((option) => option.value === String(row.status || '').toUpperCase())?.label || row.status || '—' },
         ],
       });
@@ -215,8 +216,8 @@ export function GastosRecurrentesView({ data, summaryData, summaryLoading, summa
           supplier: expense.supplier?.name || 'Sin proveedor',
           fields: [
             { label: 'Frecuencia', value: freqMap[String(expense.frequency || '').toLowerCase()] || expense.frequency || '—' },
-            { label: 'Inicio', value: expense.startDate ? new Date(expense.startDate).toLocaleDateString('es-NI') : '—' },
-            { label: 'Fin', value: expense.endDate ? new Date(expense.endDate).toLocaleDateString('es-NI') : 'Sin fecha de fin' },
+            { label: 'Inicio', value: expense.startDate ? formatDateOnly(expense.startDate) : '—' },
+            { label: 'Fin', value: expense.endDate ? formatDateOnly(expense.endDate) : 'Sin fecha de fin' },
             { label: 'Categoría', value: expense.category || '—' },
           ],
           totals: [
@@ -769,7 +770,7 @@ export function GastosRecurrentesView({ data, summaryData, summaryLoading, summa
             status: String(detailExpense.status || 'ACTIVE').toUpperCase(),
             totalLabel: formatConvertedAmount(Number(detailExpense.amount || 0), detailExpense.currency || displayCurrency, detailExpense.exchangeRate),
             summaryDetails: [{ label: 'Frecuencia', value: freqMap[String(detailExpense.frequency || '').toLowerCase()] || detailExpense.frequency || '—' }, { label: 'Categoría', value: detailExpense.category || '—' }],
-            metadata: [{ label: 'Inicio', value: detailExpense.startDate ? new Date(detailExpense.startDate).toLocaleDateString('es-NI') : 'No disponible' }, { label: 'Fin', value: detailExpense.endDate ? new Date(detailExpense.endDate).toLocaleDateString('es-NI') : 'Sin fecha de fin' }, { label: 'Proveedor', value: detailExpense.supplier?.name || 'No disponible' }],
+            metadata: [{ label: 'Inicio', value: detailExpense.startDate ? formatDateOnly(detailExpense.startDate) : 'No disponible' }, { label: 'Fin', value: detailExpense.endDate ? formatDateOnly(detailExpense.endDate) : 'Sin fecha de fin' }, { label: 'Proveedor', value: detailExpense.supplier?.name || 'No disponible' }],
             lines: [{ id: detailExpense.id, description: detailExpense.description || 'Gasto recurrente', quantity: 1, unitPriceLabel: formatConvertedAmount(Number(detailExpense.amount || 0), detailExpense.currency || displayCurrency, detailExpense.exchangeRate), totalLabel: formatConvertedAmount(Number(detailExpense.amount || 0), detailExpense.currency || displayCurrency, detailExpense.exchangeRate) }],
           } : null}
           entity="RECURRING_EXPENSE"

@@ -1,3 +1,4 @@
+import { formatDateOnly } from '../../utils/dateFormat';
 import { useState } from 'react';
 import { Plus, Search, FolderKanban, Pencil, Trash2, ExternalLink } from 'lucide-react';
 import { Card, CardContent } from '../ui/card';
@@ -113,8 +114,8 @@ export function ProyectosListView({ loading, onSelect, onChanged, canCreate, can
         Estado: project.status,
         Prioridad: project.priority,
         Responsable: project.manager?.name || '—',
-        Inicio: project.startDate ? new Date(project.startDate).toLocaleDateString('es-NI') : '—',
-        Fin: project.endDate ? new Date(project.endDate).toLocaleDateString('es-NI') : '—',
+        Inicio: project.startDate ? formatDateOnly(project.startDate) : '—',
+        Fin: project.endDate ? formatDateOnly(project.endDate) : '—',
         ...(canViewTimeline ? { Avance: `${Number(project.progress || 0).toFixed(2)}%` } : {}),
         ...(canViewCosts ? { Presupuesto: project.plannedBudget, Ejecutado: project.executedCost } : {}),
       })) as Array<Record<string, string | number | undefined>>;

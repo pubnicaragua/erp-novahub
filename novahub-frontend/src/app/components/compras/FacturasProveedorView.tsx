@@ -29,7 +29,7 @@ import type { PdfDownloadFormat, PdfExportScope } from '../../utils/pdfDownloadF
 import { fetchAllPaginatedRows } from '../../utils/export-utils';
 import { createReportWorkbook } from '../../utils/reportWorkbook';
 import { buildDatedDownloadFileName } from '../../utils/exportFileNames';
-import { formatDateEs } from '../../utils/dateFormat';
+import { formatDateEs, formatDateOnly} from '../../utils/dateFormat';
 import { PurchaseAuditButton } from './PurchaseAuditButton';
 import { getPurchaseInvoiceOriginBadge } from '../../utils/document-origin-badges';
 import { PurchaseKpiCard } from './PurchaseKpiCard';
@@ -174,8 +174,8 @@ export function FacturasProveedorView({ data, summaryData, summaryLoading, summa
       b.supplier?.phone,
       b.notes,
       b.status,
-      b.date ? new Date(b.date).toLocaleDateString() : '',
-      b.dueDate ? new Date(b.dueDate).toLocaleDateString() : '',
+      b.date ? formatDateOnly(b.date) : '',
+      b.dueDate ? formatDateOnly(b.dueDate) : '',
       String(b.total ?? ''),
       String(b.amountPaid ?? ''),
       String(b.balance ?? ''),
@@ -468,13 +468,13 @@ export function FacturasProveedorView({ data, summaryData, summaryLoading, summa
         document: {
           title: 'Factura de proveedor',
           number: String(sourceDocument.number || sourceDocument.id || 'N/A'),
-          date: sourceDocument.date ? new Date(sourceDocument.date).toLocaleDateString('es-NI') : undefined,
+          date: sourceDocument.date ? formatDateOnly(sourceDocument.date) : undefined,
           status: sourceDocument.status,
           supplier: sourceDocument.supplier?.name || sourceDocument.supplierName || '',
           supplierData: sourceDocument.supplier || undefined,
           fields: [
             { label: 'Moneda', value: currency },
-            ...(sourceDocument.dueDate ? [{ label: 'Vencimiento', value: new Date(sourceDocument.dueDate).toLocaleDateString('es-NI') }] : []),
+            ...(sourceDocument.dueDate ? [{ label: 'Vencimiento', value: formatDateOnly(sourceDocument.dueDate) }] : []),
           ],
           lines: items.map((item: any) => ({
             description: item.description || item.product?.name || 'Producto',

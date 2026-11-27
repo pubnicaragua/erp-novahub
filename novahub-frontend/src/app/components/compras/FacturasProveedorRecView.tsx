@@ -1,3 +1,4 @@
+import { formatDateOnly } from '../../utils/dateFormat';
 import { useState, useEffect } from 'react';
 import { RotateCcw, Plus, Search, Eye, Pencil, TrendingDown, CheckCircle2, Clock, ChevronLeft, Trash2, Ban, PlayCircle, PauseCircle } from 'lucide-react';
 import { Card, CardContent } from '../ui/card';
@@ -275,7 +276,7 @@ export function FacturasProveedorRecView({ data, summaryData, summaryLoading, su
             { label: 'Frecuencia', value: freqMap[String(invoice.frequency || '').toLowerCase()] || invoice.frequency || '—' },
             { label: 'Próxima emisión', value: invoice.nextInvoiceDate ? new Date(invoice.nextInvoiceDate).toLocaleDateString('es-NI') : '—' },
             { label: 'Entrega esperada', value: invoice.expectedDelivery ? new Date(invoice.expectedDelivery).toLocaleDateString('es-NI') : '—' },
-            { label: 'Inicio', value: invoice.startDate ? new Date(invoice.startDate).toLocaleDateString('es-NI') : '—' },
+            { label: 'Inicio', value: invoice.startDate ? formatDateOnly(invoice.startDate) : '—' },
             { label: 'Dirección', value: invoice.address || '—' },
           ],
           lines: ((invoice as any).items || []).map((item: any) => ({ description: item.description || 'Concepto sin descripción', code: item.code, productCode: item.productCode, variantId: item.variantId, variantSku: item.variantSku, variantName: item.variantName, variantAttributes: item.variantAttributes, variant: item.variant, quantity: item.quantity || 0, unitPrice: formatConvertedAmount(Number(item.unitPrice || 0), invoice.currency || displayCurrency, invoice.exchangeRate), total: formatConvertedAmount(Number(item.total || 0), invoice.currency || displayCurrency, invoice.exchangeRate), secondary: item.commercialNoteSnapshot ? `Nota: ${item.commercialNoteSnapshot}` : undefined })),
@@ -874,7 +875,7 @@ export function FacturasProveedorRecView({ data, summaryData, summaryLoading, su
                { label: 'Bodega', value: detailInvoice.warehouse?.name || 'No disponible' },
                { label: 'Próxima emisión', value: detailInvoice.nextInvoiceDate ? new Date(detailInvoice.nextInvoiceDate).toLocaleDateString('es-NI') : 'No disponible' },
                { label: 'Entrega esperada', value: detailInvoice.expectedDelivery ? new Date(detailInvoice.expectedDelivery).toLocaleDateString('es-NI') : 'No disponible' },
-               { label: 'Inicio', value: detailInvoice.startDate ? new Date(detailInvoice.startDate).toLocaleDateString('es-NI') : 'No disponible' },
+               { label: 'Inicio', value: detailInvoice.startDate ? formatDateOnly(detailInvoice.startDate) : 'No disponible' },
                { label: 'Dirección', value: detailInvoice.address || 'No disponible' },
              ],
             lines: ((detailInvoice as any).items || []).map((item: any, index: number) => ({ id: String(item.id || index), description: item.description || 'Concepto sin descripción', quantity: Number(item.quantity || 0), unitPriceLabel: formatConvertedAmount(Number(item.unitPrice || 0), detailInvoice.currency || displayCurrency, detailInvoice.exchangeRate), totalLabel: formatConvertedAmount(Number(item.total || 0), detailInvoice.currency || displayCurrency, detailInvoice.exchangeRate), secondaryLabel: item.commercialNoteSnapshot ? `Nota: ${item.commercialNoteSnapshot}` : undefined })),

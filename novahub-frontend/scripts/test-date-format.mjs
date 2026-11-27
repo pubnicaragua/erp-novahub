@@ -11,13 +11,14 @@ const source = readFileSync(fileURLToPath(new URL('../src/app/utils/dateFormat.t
 const js = ts.transpileModule(source, { compilerOptions: { module: 'commonjs', target: 'es2020' } }).outputText;
 const mod = { exports: {} };
 new Function('module', 'exports', js)(mod, mod.exports);
-const { formatDateEs } = mod.exports;
+const { formatDateEs, formatDateOnly } = mod.exports;
 
 for (const zone of ['America/Managua', 'UTC', 'Pacific/Auckland', 'America/Los_Angeles']) {
   process.env.TZ = zone;
   assert.equal(formatDateEs('2026-12-03'), '03/12/2026', `fecha civil en ${zone}`);
   assert.equal(formatDateEs('2026-01-01'), '01/01/2026', `primero de año en ${zone}`);
   assert.equal(formatDateEs('2026-12-31'), '31/12/2026', `fin de año en ${zone}`);
+  assert.equal(formatDateOnly('2026-11-27T12:00:00.000Z'), formatDateOnly('2026-11-27'), `ancla civil ISO en ${zone}`);
 }
 assert.equal(formatDateEs(''), '');
 assert.equal(formatDateEs(null), '');

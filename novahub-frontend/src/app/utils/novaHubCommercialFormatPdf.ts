@@ -1,3 +1,4 @@
+import { formatDateOnly } from './dateFormat';
 import { jsPDF } from 'jspdf';
 import autoTable from 'jspdf-autotable';
 import { getReadableForeground } from './color-contrast';
@@ -566,7 +567,7 @@ function buildNovaHubPaymentContext(transaction: any) {
 
 function buildDocumentMetaLines(estimate: any, documentType: string): string[] {
   const lines: string[] = [];
-  const issueDate = estimate.date ? new Date(estimate.date).toLocaleDateString('es-NI') : new Date().toLocaleDateString('es-NI');
+  const issueDate = estimate.date ? formatDateOnly(estimate.date) : new Date().toLocaleDateString('es-NI');
   const currencyStr = String(estimate.currency || 'NIO').toUpperCase();
   const statusStr = translateSalesStatus(estimate.status, documentType);
   const sellerName = estimate.salesRep || estimate.seller?.name || estimate.userName;
@@ -582,7 +583,7 @@ function buildDocumentMetaLines(estimate: any, documentType: string): string[] {
   }
 
   if (documentType === 'recurring') {
-    const startStr = estimate.startDate ? new Date(estimate.startDate).toLocaleDateString('es-NI') : issueDate;
+    const startStr = estimate.startDate ? formatDateOnly(estimate.startDate) : issueDate;
     const nextStr = estimate.nextInvoiceDate ? new Date(estimate.nextInvoiceDate).toLocaleDateString('es-NI') : 'Pendiente';
     lines.push(`Inicio: ${startStr}`);
     lines.push(`Próx. emisión: ${nextStr}`);

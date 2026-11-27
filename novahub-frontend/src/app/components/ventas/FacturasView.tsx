@@ -2112,7 +2112,7 @@ export function FacturasView({ data, summaryData, summaryLoading, summaryError, 
       key: 'date',
       header: 'Fecha Emisión',
       headerExtra: <ColumnFilterMenu label="Fecha Emisión" sort={colFilters.state.date?.sort || null} onSort={(sort) => colFilters.setSort('date', sort)} sortOptions={[{ value: 'desc', label: 'Más recientes' }, { value: 'asc', label: 'Más antiguas' }]} />,
-      render: (val) => <span className="text-xs font-medium text-muted-foreground">{formatDateTimeSafe(val)}</span>
+      render: (val) => <span className="text-xs font-medium text-muted-foreground">{formatDateSafe(val)}</span>
     },
     {
       key: 'status',

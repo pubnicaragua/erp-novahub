@@ -35,6 +35,7 @@ import { AuditHistoryDisclosure } from '../ui/AuditHistoryDisclosure';
 import type { PdfPaperFormat } from '../../utils/pdfDownloadFormats';
 import { ExportMenu } from '../ui/ExportMenu';
 import { showPdfInBrowserPreview } from '../../utils/pdfBrowserPreview';
+import { formatDateOnly } from '../../utils/dateFormat';
 
 interface Column {
   key: string;
@@ -514,7 +515,8 @@ export function FinanceTableView({
       const body = filteredData.map(item => reportColumns.map(col => {
         if (col.key === '__reportCurrency') return displayMode === 'ORIGINAL' ? (item.currency || '—') : displayCurrency;
         if (col.type === 'currency') return col.key === 'total' ? '' : formatConvertedAmount(Number(item[col.key] || 0), item.currency, item.exchangeRate);
-        if (col.type === 'date' || col.type === 'datetime') return item[col.key] ? new Date(item[col.key]).toLocaleString('es-NI') : '-';
+        if (col.type === 'date') return item[col.key] ? formatDateOnly(item[col.key]) : '-';
+        if (col.type === 'datetime') return item[col.key] ? new Date(item[col.key]).toLocaleString('es-NI') : '-';
         if (col.type === 'select') return col.key.toLowerCase().includes('status') || col.key.toLowerCase().includes('estado') ? pdfStatusLabel(getLabelForValue(col, item[col.key])) : getLabelForValue(col, item[col.key]);
         if (col.key === 'description' || col.key === 'notes') return translatePaymentMethodText(item[col.key]);
         return String(item[col.key] ?? '-');
@@ -572,9 +574,10 @@ export function FinanceTableView({
     }
     if (col.type === 'date' || col.type === 'datetime') {
       if (!value) return '-';
+      if (col.type === 'date') return formatDateOnly(value) || '-';
       const d = new Date(value);
       if (isNaN(d.getTime())) return String(value);
-      return col.type === 'datetime' ? d.toLocaleString('es-NI') : d.toLocaleDateString('es-NI');
+      return d.toLocaleString('es-NI');
     }
     if (col.type === 'select') {
       const label = getLabelForValue(col, value);

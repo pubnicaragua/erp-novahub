@@ -3,6 +3,7 @@ import type { PaymentReceived } from '../../types';
 import { Button } from '../ui/button';
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '../ui/dialog';
 import { paymentMethodLabel } from '../../utils/paymentMethods';
+import { formatDateOnly } from '../../utils/dateFormat';
 
 interface SalesPaymentReceiptDialogProps {
   payment: PaymentReceived | null;
@@ -60,7 +61,7 @@ export function SalesPaymentReceiptDialog({
           <div className="grid gap-3 sm:grid-cols-2">
             <div className="rounded-xl border border-border/50 bg-background/60 p-3">
               <p className="text-[9px] font-black uppercase tracking-widest text-muted-foreground">Fecha</p>
-              <p className="mt-1 text-sm font-bold">{payment.date ? new Date(payment.date).toLocaleString('es-NI') : '—'}</p>
+              <p className="mt-1 text-sm font-bold">{formatDateOnly(payment.date) || '—'}</p>
             </div>
             <div className="rounded-xl border border-border/50 bg-background/60 p-3">
               <p className="text-[9px] font-black uppercase tracking-widest text-muted-foreground">Documento aplicado</p>

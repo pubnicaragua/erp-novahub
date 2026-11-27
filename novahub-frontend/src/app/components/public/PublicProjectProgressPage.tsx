@@ -1,3 +1,4 @@
+import { formatDateOnly } from '../../utils/dateFormat';
 import { useEffect, useState } from 'react';
 import { Calendar, CheckCircle2, Clock, FolderKanban, Image as ImageIcon, Layers, AlertCircle, Building2, Sparkles } from 'lucide-react';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '../ui/card';
@@ -169,12 +170,12 @@ export function PublicProjectProgressPage() {
             <div className="flex flex-wrap items-center gap-4 text-xs text-muted-foreground pt-1">
               {project.startDate ? (
                 <span className="flex items-center gap-1.5">
-                  <Calendar className="size-3.5 text-primary" /> Inicio: {new Date(project.startDate).toLocaleDateString('es-NI')}
+                  <Calendar className="size-3.5 text-primary" /> Inicio: {formatDateOnly(project.startDate)}
                 </span>
               ) : null}
               {project.endDate ? (
                 <span className="flex items-center gap-1.5">
-                  <Clock className="size-3.5 text-muted-foreground" /> Estimado fin: {new Date(project.endDate).toLocaleDateString('es-NI')}
+                  <Clock className="size-3.5 text-muted-foreground" /> Estimado fin: {formatDateOnly(project.endDate)}
                 </span>
               ) : null}
             </div>
@@ -240,7 +241,7 @@ export function PublicProjectProgressPage() {
                       <Progress value={Number(st.progress)} className="h-2 rounded-full" />
                       {st.dueDate ? (
                         <p className="text-[11px] text-muted-foreground flex items-center gap-1 pt-1">
-                          <Calendar className="size-3" /> Entrega: {new Date(st.dueDate).toLocaleDateString('es-NI')}
+                          <Calendar className="size-3" /> Entrega: {formatDateOnly(st.dueDate)}
                         </p>
                       ) : null}
                     </CardContent>

@@ -1,3 +1,4 @@
+import { formatDateOnly } from '../../utils/dateFormat';
 import { useEffect, useMemo, useRef } from 'react';
 import * as Sentry from '@sentry/react';
 import { useQuery } from '@tanstack/react-query';
@@ -415,7 +416,7 @@ export function FinanceDashboardView({ incomes, expenses, undatedExpenses = [], 
                     <div className="size-7 rounded-lg bg-emerald-500/10 flex items-center justify-center shrink-0"><ArrowUpRight className="size-3.5 text-emerald-500" /></div>
                     <div className="min-w-0">
                       <p className="text-xs font-bold text-foreground truncate">{inc.description || inc.source || 'Ingreso'}</p>
-                      <p className="text-[10px] text-muted-foreground truncate">{inc.category} · {inc.date ? new Date(inc.date).toLocaleDateString('es-NI') : ''}</p>
+                      <p className="text-[10px] text-muted-foreground truncate">{inc.category} · {inc.date ? formatDateOnly(inc.date) : ''}</p>
                     </div>
                   </div>
                   <span className="text-xs font-black text-emerald-500 shrink-0 ml-2">{fmt(cv(inc))}</span>
@@ -444,7 +445,7 @@ export function FinanceDashboardView({ incomes, expenses, undatedExpenses = [], 
                     <div className="size-7 rounded-lg bg-rose-500/10 flex items-center justify-center shrink-0"><ArrowDownRight className="size-3.5 text-rose-500" /></div>
                     <div className="min-w-0">
                       <p className="text-xs font-bold text-foreground truncate">{exp.description || exp.source || 'Gasto'}</p>
-                      <p className="text-[10px] text-muted-foreground truncate">{exp.category} · {exp.date ? new Date(exp.date).toLocaleDateString('es-NI') : ''}</p>
+                      <p className="text-[10px] text-muted-foreground truncate">{exp.category} · {exp.date ? formatDateOnly(exp.date) : ''}</p>
                     </div>
                   </div>
                   <span className="text-xs font-black text-rose-500 shrink-0 ml-2">{fmt(cv(exp))}</span>

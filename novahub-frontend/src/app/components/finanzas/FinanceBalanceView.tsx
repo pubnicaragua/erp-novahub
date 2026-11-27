@@ -1,3 +1,4 @@
+import { formatDateOnly } from '../../utils/dateFormat';
 import { useState, useMemo } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from '../ui/card';
 import { DateField } from '../ui/DateField';
@@ -702,7 +703,7 @@ export function FinanceBalanceView({ incomes, expenses, recurringIncomes, recurr
             doc.setFontSize(8);
             doc.setFont('helvetica', 'normal');
             doc.setTextColor(60, 60, 60);
-            doc.text(`${new Date(inc.date || inc.createdAt).toLocaleDateString('es-NI')} - ${(inc.source || inc.notes || 'Ingreso').substring(0, 45)}`, marginX, currentY);
+            doc.text(`${inc.date ? formatDateOnly(inc.date) : new Date(inc.createdAt).toLocaleDateString('es-NI')} - ${(inc.source || inc.notes || 'Ingreso').substring(0, 45)}`, marginX, currentY);
             doc.setFont('helvetica', 'bold');
             doc.setTextColor(16, 185, 129);
             doc.text(`+${fmtNum(cv(inc))}`, marginX + contentWidth - 5, currentY, { align: 'right' });
@@ -722,7 +723,7 @@ export function FinanceBalanceView({ incomes, expenses, recurringIncomes, recurr
             doc.setFontSize(8);
             doc.setFont('helvetica', 'normal');
             doc.setTextColor(60, 60, 60);
-            doc.text(`${new Date(exp.date || exp.createdAt).toLocaleDateString('es-NI')} - ${(exp.description || 'Gasto').substring(0, 45)}`, marginX, currentY);
+            doc.text(`${exp.date ? formatDateOnly(exp.date) : new Date(exp.createdAt).toLocaleDateString('es-NI')} - ${(exp.description || 'Gasto').substring(0, 45)}`, marginX, currentY);
             doc.setFont('helvetica', 'bold');
             doc.setTextColor(244, 63, 94);
             doc.text(`-${fmtNum(cv(exp))}`, marginX + contentWidth - 5, currentY, { align: 'right' });
@@ -984,7 +985,7 @@ export function FinanceBalanceView({ incomes, expenses, recurringIncomes, recurr
 
         lastIncomes.forEach((inc:any) => {
           const r = ws.addRow([
-            new Date(inc.date || inc.createdAt).toLocaleDateString('es-NI'),
+            inc.date ? formatDateOnly(inc.date) : new Date(inc.createdAt).toLocaleDateString('es-NI'),
             inc.source || inc.notes || 'Ingreso',
             inc.category || 'Sin categoría',
             Math.round(cv(inc) * 100) / 100
@@ -1018,7 +1019,7 @@ export function FinanceBalanceView({ incomes, expenses, recurringIncomes, recurr
 
         lastExpenses.forEach((exp:any) => {
           const r = ws.addRow([
-            new Date(exp.date || exp.createdAt).toLocaleDateString('es-NI'),
+            exp.date ? formatDateOnly(exp.date) : new Date(exp.createdAt).toLocaleDateString('es-NI'),
             exp.description || 'Gasto',
             exp.category || 'Sin categoría',
             Math.round(cv(exp) * 100) / 100
@@ -1244,7 +1245,7 @@ export function FinanceBalanceView({ incomes, expenses, recurringIncomes, recurr
                   <div key={inc.id} className="flex items-start justify-between p-3 rounded-lg bg-emerald-500/5 border border-emerald-500/10 hover:bg-emerald-500/10 transition-colors">
                     <div className="min-w-0 flex-1">
                       <p className="text-sm font-bold break-words">{inc.source || inc.notes || 'Ingreso'}</p>
-                      <p className="text-[10px] text-muted-foreground break-words">{inc.category || 'Sin categoría'} · {new Date(inc.date || inc.createdAt).toLocaleDateString('es-NI')}</p>
+                      <p className="text-[10px] text-muted-foreground break-words">{inc.category || 'Sin categoría'} · {inc.date ? formatDateOnly(inc.date) : new Date(inc.createdAt).toLocaleDateString('es-NI')}</p>
                     </div>
                     <CurrencyValuationAmount amount={Number(inc.amount) || 0} sourceCurrency={inc.currency} sourceExchangeRate={inc.exchangeRate} className="text-sm font-black text-emerald-500 shrink-0 ml-3 mt-0.5" />
                   </div>
@@ -1260,7 +1261,7 @@ export function FinanceBalanceView({ incomes, expenses, recurringIncomes, recurr
                   <div key={exp.id} className="flex items-start justify-between p-3 rounded-lg bg-rose-500/5 border border-rose-500/10 hover:bg-rose-500/10 transition-colors">
                     <div className="min-w-0 flex-1">
                       <p className="text-sm font-bold break-words">{exp.description || 'Gasto'}</p>
-                      <p className="text-[10px] text-muted-foreground break-words">{exp.source ? `${exp.source} · ` : ''}{exp.category || 'Sin categoría'} · {new Date(exp.date || exp.createdAt).toLocaleDateString('es-NI')}</p>
+                      <p className="text-[10px] text-muted-foreground break-words">{exp.source ? `${exp.source} · ` : ''}{exp.category || 'Sin categoría'} · {exp.date ? formatDateOnly(exp.date) : new Date(exp.createdAt).toLocaleDateString('es-NI')}</p>
                     </div>
                     <CurrencyValuationAmount amount={Number(exp.amount) || 0} sourceCurrency={exp.currency} sourceExchangeRate={exp.exchangeRate} className="text-sm font-black text-rose-500 shrink-0 ml-3 mt-0.5" />
                   </div>

@@ -1,3 +1,4 @@
+import { formatDateOnly } from '../../utils/dateFormat';
 import { useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { Plus, Truck, Ban } from 'lucide-react';
@@ -175,7 +176,7 @@ export function InventoryShortfallsPanel({ active = true }: { active?: boolean }
               ) : rows.map((row: any) => (
                 <TableRow key={row.id} className={row.status === 'CANCELLED' ? 'opacity-50' : undefined}>
                   <TableCell className="font-mono text-xs font-bold">{row.number}</TableCell>
-                  <TableCell className="text-xs">{new Date(row.date).toLocaleDateString('es-NI')}</TableCell>
+                  <TableCell className="text-xs">{formatDateOnly(row.date)}</TableCell>
                   <TableCell className="text-xs">{row.productName || '—'}</TableCell>
                   <TableCell className="font-mono text-xs">{row.invoiceNumber || '—'}</TableCell>
                   <TableCell className="text-xs">{row.customerName || '—'}</TableCell>

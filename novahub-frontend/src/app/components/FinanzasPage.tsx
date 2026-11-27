@@ -38,6 +38,7 @@ import { fetchAllReportPages } from '../hooks/useTenantQuery';
 import { beginNotificationAction, completeNotificationAction, failNotificationAction } from '../services/notification-action-coordinator';
 import { getCurrencyDecimalPlaces } from '../utils/currency';
 import { initialDocumentExchangeRate } from '../utils/currency';
+import { formatDateOnly } from '../utils/dateFormat';
 
 interface FinanzasPageProps {
   activeSubModule?: string;
@@ -442,7 +443,7 @@ export function FinanzasPage({ activeSubModule, onSubModuleChange, isSidebarColl
             <div className="min-w-0">
               <p className="font-mono text-xs font-black text-primary">{child.number || 'Ingreso'}</p>
               <p className="mt-1 text-xs font-semibold text-foreground">{child.description || 'Ingreso automático'}</p>
-              <p className="mt-1 text-[10px] text-muted-foreground">{child.createdAt || child.date ? new Date(child.createdAt || child.date).toLocaleString('es-NI') : 'Sin fecha'}{child.notes ? ` · ${child.notes}` : ''}</p>
+              <p className="mt-1 text-[10px] text-muted-foreground">{child.createdAt ? new Date(child.createdAt).toLocaleString('es-NI') : child.date ? formatDateOnly(child.date) : 'Sin fecha'}{child.notes ? ` · ${child.notes}` : ''}</p>
               {child.sourcePaymentId && !child.accountId && <p className="mt-2 text-[10px] font-semibold text-amber-700 dark:text-amber-300">Sin cuenta contable · Ventas→Contabilidad desconectada</p>}
             </div>
             <CurrencyValuationAmount amount={Number(child.amount || 0)} sourceCurrency={child.currency} sourceExchangeRate={child.exchangeRate} className="shrink-0 font-black text-emerald-600" />
@@ -459,7 +460,7 @@ export function FinanzasPage({ activeSubModule, onSubModuleChange, isSidebarColl
           <div className="min-w-0">
             <p className="font-mono text-xs font-black text-primary">{item.number || 'Gasto'}</p>
             <p className="mt-1 text-xs font-semibold text-foreground">{item.description || 'Gasto registrado'}</p>
-            <p className="mt-1 text-[10px] text-muted-foreground">{item.createdAt || item.date ? new Date(item.createdAt || item.date).toLocaleString('es-NI') : 'Sin fecha'}{item.notes ? ` · ${item.notes}` : ''}</p>
+            <p className="mt-1 text-[10px] text-muted-foreground">{item.createdAt ? new Date(item.createdAt).toLocaleString('es-NI') : item.date ? formatDateOnly(item.date) : 'Sin fecha'}{item.notes ? ` · ${item.notes}` : ''}</p>
           </div>
           <CurrencyValuationAmount amount={Number(item.amount || 0)} sourceCurrency={item.currency} sourceExchangeRate={item.exchangeRate} className="shrink-0 font-black text-rose-600" />
         </div>

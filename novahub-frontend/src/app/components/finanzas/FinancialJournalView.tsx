@@ -1,3 +1,4 @@
+import { formatDateOnly } from '../../utils/dateFormat';
 import { useQuery } from '@tanstack/react-query';
 import { BookOpen, FileText, Loader2 } from 'lucide-react';
 import { Card, CardContent, CardHeader, CardTitle } from '../ui/card';
@@ -48,7 +49,7 @@ export function FinancialJournalView({ kind }: FinancialJournalViewProps) {
               </tr></thead>
               <tbody>{rows.map((row: any, index: number) => (
                 <tr key={row.id || index} className="border-b border-border/30 last:border-0">
-                  <td className="px-5 py-3 text-muted-foreground">{row.date || row.createdAt ? new Date(row.date || row.createdAt).toLocaleDateString('es-NI') : '—'}</td>
+                  <td className="px-5 py-3 text-muted-foreground">{row.date ? formatDateOnly(row.date) : row.createdAt ? new Date(row.createdAt).toLocaleDateString('es-NI') : '—'}</td>
                   <td className="px-5 py-3 font-mono font-semibold">{row.number || row.reference || row.id || '—'}</td>
                   <td className="px-5 py-3">{row.description || row.memo || row.source || 'Sin descripción'}</td>
                   <td className="px-5 py-3 text-right font-black">{Number(row.amount || row.total || row.debit || 0).toLocaleString('es-NI', { minimumFractionDigits: getCurrencyDecimalPlaces() })}</td>

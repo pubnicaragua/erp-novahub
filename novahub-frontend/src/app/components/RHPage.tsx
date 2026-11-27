@@ -1,3 +1,4 @@
+import { formatDateOnly } from '../utils/dateFormat';
 import { useState, useEffect } from 'react';
 import { Users, UserCircle, FileSpreadsheet, CalendarClock, Plus, Search, Edit, DollarSign, Trash2, AlertTriangle, RefreshCw } from 'lucide-react';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from './ui/card';
@@ -446,8 +447,8 @@ export function RHPage({ activeSubModule }: RHPageProps) {
                   <TableCell className="font-medium">{v.id}</TableCell>
                   <TableCell className="font-medium">{v.employee?.firstName} {firstReadable(v.employee?.lastName, v.employeeId)}</TableCell>
                   <TableCell className="text-muted-foreground">{v.type}</TableCell>
-                  <TableCell className="text-muted-foreground">{new Date(v.startDate).toLocaleDateString()}</TableCell>
-                  <TableCell className="text-muted-foreground">{new Date(v.endDate).toLocaleDateString()}</TableCell>
+                  <TableCell className="text-muted-foreground">{formatDateOnly(v.startDate)}</TableCell>
+                  <TableCell className="text-muted-foreground">{formatDateOnly(v.endDate)}</TableCell>
                   <TableCell><Badge variant="secondary" className={statusColors[v.status]}>{v.status}</Badge></TableCell>
                   <TableCell className="text-right">
                     <div className="flex justify-end gap-1">

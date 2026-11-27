@@ -42,7 +42,7 @@ import { fetchAllReportPages } from '../../hooks/useTenantQuery';
 import { buildCustomerWhatsAppUrl, resolveCustomerPhone, WhatsAppActionButton } from './WhatsAppActionButton';
 import { PurchaseAlertsButton, type PurchaseAlertDetail } from '../compras/PurchaseAlertsButton';
 import { ColumnFilterMenu, useColumnFilters } from '../ui/ColumnFilterMenu';
-import { formatDateEs, resolveDocumentDateAtSave } from '../../utils/dateFormat';
+import { formatDateEs, formatDateOnly, resolveDocumentDateAtSave } from '../../utils/dateFormat';
 import { getSalesStatusColor, SALES_WORKFLOW_STATUS_COLORS } from '../../utils/salesStatus';
 import { SalesDocumentDetailSheet, getSalesLineIdentifiers, type SalesDocumentPanelData } from './SalesDocumentDetailSheet';
 import { getLegacySalesExtraCostFields, getSalesExtraChargesAmount, getSalesExtraChargesPayload, normalizeSalesExtraCharges, type SalesExtraChargeLine } from '../../utils/salesCharges';
@@ -453,7 +453,7 @@ export function OrdenesVentaView({ data, summaryData, summaryLoading, summaryErr
       ...(Number(order.deliveryAmount || 0) > 0 ? [{ label: order.deliveryDescription || 'Delivery', value: formatConvertedAmount(Number(order.deliveryAmount), order.currency, order.exchangeRate) }] : []),
     ],
     metadata: [
-      { label: 'Fecha', value: formatDateEs(order.date, true) },
+      { label: 'Fecha', value: formatDateOnly(order.date) },
       { label: 'Entrega estimada', value: order.expectedDelivery ? formatDateEs(order.expectedDelivery) : 'No definida' },
       ...(order.invoiceNumber ? [{ label: 'Factura relacionada', value: order.invoiceNumber }] : []),
     ],
@@ -874,7 +874,7 @@ export function OrdenesVentaView({ data, summaryData, summaryLoading, summaryErr
       render: (val) => (
         <div className="flex items-center gap-1.5 text-[10px] font-medium text-muted-foreground">
            <Clock className="size-3" />
-           {formatDateEs(val, true)}
+           {formatDateOnly(val)}
         </div>
       )
     },
@@ -935,10 +935,10 @@ export function OrdenesVentaView({ data, summaryData, summaryLoading, summaryErr
       }
     },
     { key: 'invoiceNumber', header: 'Factura relacionada', render: (val, row) => <span className="text-xs font-mono font-bold text-primary">{val || row.invoiceId || '—'}</span> },
-    { key: 'invoicedAt', header: 'Fecha facturación', headerExtra: <ColumnFilterMenu label="Fecha facturación" sort={colFilters.state.invoicedAt?.sort || null} onSort={(sort) => colFilters.setSort('invoicedAt', sort)} sortOptions={[{ value: 'desc', label: 'Más recientes' }, { value: 'asc', label: 'Más antiguas' }]} />, render: (val) => <span className="text-xs text-muted-foreground">{val ? formatDateEs(val, true) : '—'}</span> },
+    { key: 'invoicedAt', header: 'Fecha facturación', headerExtra: <ColumnFilterMenu label="Fecha facturación" sort={colFilters.state.invoicedAt?.sort || null} onSort={(sort) => colFilters.setSort('invoicedAt', sort)} sortOptions={[{ value: 'desc', label: 'Más recientes' }, { value: 'asc', label: 'Más antiguas' }]} />, render: (val) => <span className="text-xs text-muted-foreground">{val ? formatDateOnly(val) : '—'}</span> },
     { key: 'invoicedBy', header: 'Facturado por', render: (_val, row) => <span className="text-xs text-muted-foreground">{row.invoicedBy?.name || '—'}</span> },
     { key: 'paymentNumber', header: 'Pago relacionado', render: (val, row) => <span className="text-xs font-mono font-bold text-emerald-500">{val || (row.invoiceId ? 'Pendiente' : '—')}</span> },
-    { key: 'paymentDate', header: 'Fecha pago', render: (val) => <span className="text-xs text-muted-foreground">{val ? formatDateEs(val, true) : '—'}</span> },
+    { key: 'paymentDate', header: 'Fecha pago', render: (val) => <span className="text-xs text-muted-foreground">{val ? formatDateOnly(val) : '—'}</span> },
     {
       key: 'paymentStatus',
       header: 'Estado pago',

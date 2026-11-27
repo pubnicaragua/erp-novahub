@@ -15,7 +15,7 @@ import { useAuth } from '../../contexts/AuthContext';
 import { salesSellersService, type SalesSellerCommissionRule, type SalesSellerSale } from '../../services/sales-sellers.service';
 import { hrService } from '../../services/hr.service';
 import { areCommissionScaleRulesConsecutive } from '../../utils/commission-scale';
-import { formatDateEs } from '../../utils/dateFormat';
+import { formatDateEs, formatDateOnly } from '../../utils/dateFormat';
 import { DateField } from '../ui/DateField';
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '../ui/dialog';
 import { Sheet, SheetContent, SheetDescription, SheetHeader, SheetTitle } from '../ui/sheet';
@@ -72,7 +72,7 @@ function InvoiceDetailContent({ invoice }: { invoice?: SalesSellerSale | null })
   return <div className="min-w-0 space-y-4">
     <div className="grid min-w-0 gap-3 sm:grid-cols-2 lg:grid-cols-4">
       <div className="rounded-xl border border-border p-3"><p className="text-xs text-muted-foreground">Factura</p><p className="font-semibold">{invoice.number}</p></div>
-      <div className="rounded-xl border border-border p-3"><p className="text-xs text-muted-foreground">Fecha</p><p className="font-semibold">{formatDateEs(invoice.date, true)}</p></div>
+      <div className="rounded-xl border border-border p-3"><p className="text-xs text-muted-foreground">Fecha</p><p className="font-semibold">{formatDateOnly(invoice.date)}</p></div>
       <div className="rounded-xl border border-border p-3"><p className="text-xs text-muted-foreground">Cliente</p><p className="break-words font-semibold">{customer}</p></div>
       <div className="rounded-xl border border-border p-3"><p className="text-xs text-muted-foreground">Estado</p><p className="font-semibold">{documentStatus(invoice.status)}</p></div>
       <div className="rounded-xl border border-border p-3"><p className="text-xs text-muted-foreground">Total</p><p className="font-semibold">{money(Number(invoice.total), invoice.currency)}</p></div>
@@ -91,7 +91,7 @@ function InvoiceDetailContent({ invoice }: { invoice?: SalesSellerSale | null })
     <div className="min-w-0 space-y-2">
       <h3 className="font-semibold">Pagos recibidos</h3>
       {invoice.payments.length === 0 ? <p className="rounded-xl border border-border p-3 text-sm text-muted-foreground">Sin pagos registrados.</p> : <div className="max-h-48 overflow-auto rounded-xl border border-border"><table className="w-full min-w-[480px] text-sm"><thead><tr><th className={stickyHeaderCell}>Fecha</th><th className={stickyHeaderCell}>Referencia</th><th className={stickyHeaderCell}>Método</th><th className={`${stickyHeaderCell} text-right`}>Importe</th></tr></thead><tbody>
-        {invoice.payments.map((payment) => <tr key={payment.id} className="border-t border-border/60"><td className="px-3 py-2">{formatDateEs(payment.date, true)}</td><td className="px-3 py-2">{payment.reference || payment.number}</td><td className="px-3 py-2">{paymentMethod(payment.method)}</td><td className="px-3 py-2 text-right font-medium">{money(Number(payment.amount), payment.currency)}</td></tr>)}
+        {invoice.payments.map((payment) => <tr key={payment.id} className="border-t border-border/60"><td className="px-3 py-2">{formatDateOnly(payment.date)}</td><td className="px-3 py-2">{payment.reference || payment.number}</td><td className="px-3 py-2">{paymentMethod(payment.method)}</td><td className="px-3 py-2 text-right font-medium">{money(Number(payment.amount), payment.currency)}</td></tr>)}
       </tbody></table></div>}
     </div>
   </div>;
@@ -567,7 +567,7 @@ export function VendedoresView({ historicalOnly = false, employeeMode = false, o
             {sellerSalesQuery.isPending ? <div className="rounded-xl border border-border p-6 text-center text-sm text-muted-foreground">Cargando ventas…</div>
               : sellerSalesQuery.isError ? <div className="rounded-xl border border-destructive/40 p-4 text-sm text-destructive">No se pudieron cargar las ventas del vendedor.</div>
               : <div className="max-h-[calc(100dvh-19rem)] overflow-auto rounded-xl border border-border"><table className="w-full min-w-[820px] text-sm"><thead><tr><th className={stickyHeaderCell}>Factura</th><th className={stickyHeaderCell}>Cliente</th><th className={stickyHeaderCell}>Fecha</th><th className={stickyHeaderCell}>Estado</th><th className={`${stickyHeaderCell} text-right`}>Total</th><th className={`${stickyHeaderCell} text-right`}>Abonado</th><th className={`${stickyHeaderCell} text-right`}>Saldo</th></tr></thead>
-                  <tbody>{(sellerSalesQuery.data || []).map((sale) => <tr key={sale.id} className="border-t border-border/60"><td className="px-3 py-2 font-medium">{sale.number}</td><td className="max-w-xs whitespace-normal break-words px-3 py-2">{sale.customer?.name || sale.customCustomerName || 'Cliente general'}</td><td className="whitespace-nowrap px-3 py-2">{formatDateEs(sale.date, true)}</td><td className="px-3 py-2">{documentStatus(sale.status)}</td><td className="px-3 py-2 text-right">{money(Number(sale.total), sale.currency)}</td><td className="px-3 py-2 text-right">{money(Number(sale.amountPaid), sale.currency)}</td><td className="px-3 py-2 text-right">{money(Number(sale.balance), sale.currency)}</td></tr>)}
+                  <tbody>{(sellerSalesQuery.data || []).map((sale) => <tr key={sale.id} className="border-t border-border/60"><td className="px-3 py-2 font-medium">{sale.number}</td><td className="max-w-xs whitespace-normal break-words px-3 py-2">{sale.customer?.name || sale.customCustomerName || 'Cliente general'}</td><td className="whitespace-nowrap px-3 py-2">{formatDateOnly(sale.date)}</td><td className="px-3 py-2">{documentStatus(sale.status)}</td><td className="px-3 py-2 text-right">{money(Number(sale.total), sale.currency)}</td><td className="px-3 py-2 text-right">{money(Number(sale.amountPaid), sale.currency)}</td><td className="px-3 py-2 text-right">{money(Number(sale.balance), sale.currency)}</td></tr>)}
                     {!(sellerSalesQuery.data || []).length && <tr><td colSpan={7} className="px-3 py-6 text-center text-muted-foreground">No se encontraron ventas para las fechas seleccionadas.</td></tr>}
                   </tbody>
                 </table></div>}
@@ -589,7 +589,7 @@ export function VendedoresView({ historicalOnly = false, employeeMode = false, o
                   <div className="rounded-xl border border-border p-3"><p className="text-xs text-muted-foreground">Comisión</p><p className="font-semibold">{money(Number(commissionDetailsQuery.data.amount), commissionDetailsQuery.data.currency)}</p></div>
                 </div>
                 {commissionDetailsQuery.data.invoice ? <InvoiceDetailContent invoice={commissionDetailsQuery.data.invoice} />
-                  : commissionDetailsQuery.data.creditNote ? <div className="grid gap-3 rounded-xl border border-border p-4 sm:grid-cols-2 lg:grid-cols-4"><div><p className="text-xs text-muted-foreground">Nota de crédito</p><p className="font-semibold">{commissionDetailsQuery.data.creditNote.number}</p></div><div><p className="text-xs text-muted-foreground">Fecha</p><p className="font-semibold">{formatDateEs(commissionDetailsQuery.data.creditNote.date, true)}</p></div><div><p className="text-xs text-muted-foreground">Estado</p><p className="font-semibold">{documentStatus(commissionDetailsQuery.data.creditNote.status)}</p></div><div><p className="text-xs text-muted-foreground">Importe</p><p className="font-semibold">{money(Number(commissionDetailsQuery.data.creditNote.total), commissionDetailsQuery.data.creditNote.currency)}</p></div></div>
+                  : commissionDetailsQuery.data.creditNote ? <div className="grid gap-3 rounded-xl border border-border p-4 sm:grid-cols-2 lg:grid-cols-4"><div><p className="text-xs text-muted-foreground">Nota de crédito</p><p className="font-semibold">{commissionDetailsQuery.data.creditNote.number}</p></div><div><p className="text-xs text-muted-foreground">Fecha</p><p className="font-semibold">{formatDateOnly(commissionDetailsQuery.data.creditNote.date)}</p></div><div><p className="text-xs text-muted-foreground">Estado</p><p className="font-semibold">{documentStatus(commissionDetailsQuery.data.creditNote.status)}</p></div><div><p className="text-xs text-muted-foreground">Importe</p><p className="font-semibold">{money(Number(commissionDetailsQuery.data.creditNote.total), commissionDetailsQuery.data.creditNote.currency)}</p></div></div>
                     : <p className="rounded-xl border border-border p-4 text-sm text-muted-foreground">No hay factura ni nota de crédito vinculada.</p>}
               </div>}
           </div>
@@ -617,7 +617,7 @@ export function VendedoresView({ historicalOnly = false, employeeMode = false, o
                 const source = invoice?.number || creditNote?.number || goal?.title || 'Incentivo';
                 const date = invoice?.date || creditNote?.date;
                 const type = goal ? `Recompensa · ${goalLevel(line.goalAward.level || '')}` : 'Comisión';
-                return <tr key={line.id} className="border-t border-border/60"><td className="px-3 py-2">{type}</td><td className="px-3 py-2">{source}</td><td className="px-3 py-2">{date ? formatDateEs(date, true) : '—'}</td><td className="px-3 py-2 text-right font-semibold">{money(Number(line.amount), line.currency || payoutForDetail.currency)}</td></tr>;
+                return <tr key={line.id} className="border-t border-border/60"><td className="px-3 py-2">{type}</td><td className="px-3 py-2">{source}</td><td className="whitespace-nowrap px-3 py-2">{date ? formatDateOnly(date) : '—'}</td><td className="px-3 py-2 text-right font-semibold">{money(Number(line.amount), line.currency || payoutForDetail.currency)}</td></tr>;
               })}
               {!(payoutForDetail.lines || []).length && <tr><td colSpan={4} className="px-3 py-5 text-center text-muted-foreground">Este pago no tiene líneas de detalle disponibles.</td></tr>}
             </tbody></table></div></div>

@@ -86,10 +86,19 @@ const toDateInputValue = (dateValue?: string) => {
   return dateValue.includes('T') ? dateValue.split('T')[0] : dateValue;
 };
 
-const calculateNextInvoiceDate = (frequency: string, startDate: string, intervalDays?: number | null, selectedDay?: number | null) => {
+const getLocalTodayInputValue = () => {
+  const today = new Date();
+  return `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, '0')}-${String(today.getDate()).padStart(2, '0')}`;
+};
+
+const calculateNextInvoiceDate = (frequency: string, startDate: string, intervalDays?: number | null, selectedDay?: number | null, notBeforeDate?: string) => {
   if (!startDate) return '';
   const base = new Date(startDate.includes('T') ? startDate : `${startDate}T00:00:00`);
   if (Number.isNaN(base.getTime())) return '';
+  if (notBeforeDate) {
+    const minimum = new Date(`${notBeforeDate}T00:00:00`);
+    if (!Number.isNaN(minimum.getTime()) && minimum.getTime() > base.getTime()) base.setTime(minimum.getTime());
+  }
   const next = new Date(base);
   switch ((frequency || '').toUpperCase()) {
     case 'DAILY':
@@ -476,7 +485,20 @@ export function FacturasRecurrentesView({ data, summaryData, summaryLoading, sum
     const saveToastId = toast.loading(isCreating ? 'Creando factura recurrente...' : 'Guardando cambios...');
     const normalizedStartDate = toIsoDate(localDoc.startDate);
     const normalizedEndDate = localDoc.endDate ? toIsoDate(localDoc.endDate) : undefined;
-    const calculatedNextInvoiceDate = calculateNextInvoiceDate(localDoc.frequency, localDoc.startDate, localDoc.intervalDays, localDoc.dayOfMonth);
+    const originalRecurring = !isCreating ? data.find((row) => row.id === String(localDoc.id)) : undefined;
+    const scheduleChanged = Boolean(originalRecurring) && (
+      String(localDoc.frequency || '').toUpperCase() !== String(originalRecurring?.frequency || '').toUpperCase()
+      || Number(localDoc.intervalDays ?? 0) !== Number(originalRecurring?.intervalDays ?? 0)
+      || Number(localDoc.dayOfMonth ?? 0) !== Number(originalRecurring?.dayOfMonth ?? 0)
+      || toDateInputValue(localDoc.startDate) !== toDateInputValue(originalRecurring?.startDate)
+    );
+    const calculatedNextInvoiceDate = calculateNextInvoiceDate(
+      localDoc.frequency,
+      localDoc.startDate,
+      localDoc.intervalDays,
+      localDoc.dayOfMonth,
+      scheduleChanged ? getLocalTodayInputValue() : undefined,
+    );
     const normalizedItems = (localDoc.items || []).map((item: any) => {
       const resolvedItemType = String(item.itemType || (item.productId ? 'PRODUCT' : 'SERVICE')).toUpperCase();
       return {
@@ -552,6 +574,7 @@ export function FacturasRecurrentesView({ data, summaryData, summaryLoading, sum
           ...updatePayload,
           startDate: normalizedStartDate,
           endDate: normalizedEndDate,
+          ...(scheduleChanged ? { nextInvoiceDate: calculatedNextInvoiceDate } : {}),
           items: normalizedItems,
         } as any);
         toast.success('Factura recurrente actualizada', { id: saveToastId });
@@ -689,7 +712,13 @@ export function FacturasRecurrentesView({ data, summaryData, summaryLoading, sum
                   onChange={(schedule) => setLocalDoc((current) => current ? {
                     ...current,
                     ...schedule,
-                    ...(isCreating ? { nextInvoiceDate: calculateNextInvoiceDate(schedule.frequency, current.startDate || '', schedule.intervalDays, schedule.dayOfMonth) } : {}),
+                    nextInvoiceDate: calculateNextInvoiceDate(
+                      schedule.frequency,
+                      current.startDate || '',
+                      schedule.intervalDays,
+                      schedule.dayOfMonth,
+                      isCreating ? undefined : getLocalTodayInputValue(),
+                    ),
                   } : current)}
                 />
                 <div><p className="text-[10px] text-muted-foreground mb-1">Fecha Inicio</p>
@@ -698,7 +727,13 @@ export function FacturasRecurrentesView({ data, summaryData, summaryLoading, sum
                     value={toDateInputValue(localDoc?.startDate)}
                     onChange={(e) => {
                       const newStartDate = e.target.value;
-                      const nextInvoiceDate = isCreating ? calculateNextInvoiceDate(localDoc?.frequency || 'MONTHLY', newStartDate, localDoc?.intervalDays, localDoc?.dayOfMonth) : localDoc?.nextInvoiceDate;
+                      const nextInvoiceDate = calculateNextInvoiceDate(
+                        localDoc?.frequency || 'MONTHLY',
+                        newStartDate,
+                        localDoc?.intervalDays,
+                        localDoc?.dayOfMonth,
+                        isCreating ? undefined : getLocalTodayInputValue(),
+                      );
                       setLocalDoc({ ...localDoc, startDate: newStartDate, nextInvoiceDate, ...(isCreating && !localDoc?.dayOfMonth ? { dayOfMonth: new Date(`${newStartDate}T00:00:00`).getDate() } : {}) });
                     }}
                     className="h-8 text-xs"

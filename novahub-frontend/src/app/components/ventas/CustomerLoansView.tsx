@@ -20,7 +20,7 @@ import { useCurrency } from '../../contexts/CurrencyContext';
 import { useTenantQuery } from '../../hooks/useTenantQuery';
 import { useDebouncedValue } from '../../hooks/useDebouncedValue';
 import { formatCurrencyAmount } from '../../utils/currency';
-import { formatDateEs } from '../../utils/dateFormat';
+import { formatDateEs, formatDateOnly } from '../../utils/dateFormat';
 import type { Customer, CustomerLoan } from '../../types';
 import { toast } from '@/app/services/toast';
 
@@ -235,7 +235,7 @@ export function CustomerLoansView({ enabled, selectedBranchId, onRefresh }: { en
             return <TableRow key={loan.id} className="cursor-pointer" onClick={() => openDetail(loan)} tabIndex={0} onKeyDown={(event) => { if (event.key === 'Enter' || event.key === ' ') { event.preventDefault(); openDetail(loan); } }}>
               <TableCell className="font-semibold text-primary">{loan.invoice?.number || loan.number || '—'}</TableCell>
               <TableCell className="max-w-[240px] whitespace-normal break-words">{loan.customer?.name || 'Cliente'}</TableCell>
-              <TableCell>{formatDateEs(loan.invoice?.date || loan.disbursedAt || loan.createdAt, true)}</TableCell>
+              <TableCell>{loan.invoice?.date ? formatDateOnly(loan.invoice.date) : formatDateEs(loan.disbursedAt || loan.createdAt, true)}</TableCell>
               <TableCell><Badge variant="outline" className={statusClass[loanStatus] || statusClass.ACTIVE}>{loanStatus === 'ACTIVE' && Number(loan.overdueBalance || 0) > 0.01 ? 'Activo (Atrasado)' : statusLabel[loanStatus] || loanStatus}</Badge></TableCell>
               <TableCell className="font-black tabular-nums">{formatCurrencyAmount(balance, loan.currency || baseCurrency)}</TableCell>
               <TableCell>{loan.nextInstallment ? `${localDate(loan.nextInstallment.dueDate)} · ${formatCurrencyAmount(loan.nextInstallment.remainingAmount, loan.currency || baseCurrency)}` : '—'}</TableCell>

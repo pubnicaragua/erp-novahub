@@ -1,3 +1,4 @@
+import { formatDateOnly } from '../../utils/dateFormat';
 import { useState } from 'react';
 import { TrendingDown, PackageX, BookOpenCheck, LayoutGrid, List, Settings2 } from 'lucide-react';
 import { Card, CardContent } from '../ui/card';
@@ -237,7 +238,7 @@ export function FinanceLossesView({ globalDateRange, onClearGlobalDateRange }: F
                     const qty = (row.items || []).reduce((sum: number, item: any) => sum + Number(item.lossQuantity || 0), 0);
                     const values: Record<string, React.ReactNode> = {
                       number: <span className="font-mono font-bold">{row.number}</span>,
-                      date: row.date ? new Date(row.date).toLocaleDateString('es-NI') : 'N/A',
+                      date: row.date ? formatDateOnly(row.date) : 'N/A',
                       reason: reasonLabel(row.reason),
                       warehouse: row.warehouse?.name || '—',
                       quantity: <span className="font-mono font-bold text-red-600">-{Number(qty).toLocaleString('es-NI', { maximumFractionDigits: 2 })}</span>,
@@ -267,7 +268,7 @@ export function FinanceLossesView({ globalDateRange, onClearGlobalDateRange }: F
                 const qty = (row.items || []).reduce((sum: number, item: any) => sum + Number(item.lossQuantity || 0), 0);
                 const cells: Record<string, React.ReactNode> = {
                   number: <span className="font-mono text-xs font-bold">{row.number}</span>,
-                  date: <span className="text-xs text-muted-foreground">{row.date ? new Date(row.date).toLocaleDateString('es-NI') : 'N/A'}</span>,
+                  date: <span className="text-xs text-muted-foreground">{row.date ? formatDateOnly(row.date) : 'N/A'}</span>,
                   reason: <Badge variant="outline" className="border-red-500/20 bg-red-500/5 text-[9px] font-bold uppercase tracking-wider text-red-500">{reasonLabel(row.reason)}</Badge>,
                   warehouse: <span className="text-xs">{row.warehouse?.name || '—'}</span>,
                   quantity: <span className="font-mono text-xs font-bold text-red-600">-{Number(qty).toLocaleString('es-NI', { maximumFractionDigits: 2 })}</span>,

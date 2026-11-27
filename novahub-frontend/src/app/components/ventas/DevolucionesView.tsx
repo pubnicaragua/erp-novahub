@@ -32,7 +32,7 @@ import { fetchAllReportPages } from '../../hooks/useTenantQuery';
 import type { SalesReturnKpiSummary } from '../../services/ventas.service';
 import { PurchaseAlertsButton, type PurchaseAlertDetail } from '../compras/PurchaseAlertsButton';
 import { ColumnFilterMenu, useColumnFilters } from '../ui/ColumnFilterMenu';
-import { formatDateEs } from '../../utils/dateFormat';
+import { formatDateEs, formatDateOnly } from '../../utils/dateFormat';
 import { SALES_STATUS_COLORS, SALES_WORKFLOW_STATUS_COLORS } from '../../utils/salesStatus';
 import { SalesDocumentDetailSheet, getSalesLineIdentifiers, type SalesDocumentPanelData } from './SalesDocumentDetailSheet';
 import { SalesWarehouseSelect, getDefaultSalesWarehouseId } from './SalesWarehouseSelect';
@@ -452,7 +452,7 @@ export function DevolucionesView({ data, summaryData, summaryLoading, summaryErr
         value: formatConvertedAmount(Number(charge.amount || 0), row.currency, row.exchangeRate),
       })),
     metadata: [
-      { label: 'Fecha', value: formatDateEs(row.date, true) },
+      { label: 'Fecha', value: formatDateOnly(row.date) },
       { label: 'Factura origen', value: row.invoice?.number || 'No disponible' },
     ],
     lines: (row.items || []).map((item) => ({
@@ -510,7 +510,7 @@ export function DevolucionesView({ data, summaryData, summaryLoading, summaryErr
       )
     },
     { key: 'customer', header: 'Cliente', headerExtra: <ColumnFilterMenu label="Cliente" options={distinctCustomers} selected={colFilters.state.customer?.values || []} onSelect={(values) => colFilters.setValues('customer', values)} sort={colFilters.state.customer?.sort || null} onSort={(sort) => colFilters.setSort('customer', sort)} />, render: (_, row) => <span className="text-[13px] font-bold text-foreground">{row.customer?.name || 'Cliente'}</span> },
-    { key: 'date', header: 'Fecha', headerExtra: <ColumnFilterMenu label="Fecha" sort={colFilters.state.date?.sort || null} onSort={(sort) => colFilters.setSort('date', sort)} sortOptions={[{ value: 'desc', label: 'Más recientes' }, { value: 'asc', label: 'Más antiguas' }]} />, render: (val) => <span className="text-xs font-medium text-muted-foreground">{formatDateEs(val, true)}</span> },
+    { key: 'date', header: 'Fecha', headerExtra: <ColumnFilterMenu label="Fecha" sort={colFilters.state.date?.sort || null} onSort={(sort) => colFilters.setSort('date', sort)} sortOptions={[{ value: 'desc', label: 'Más recientes' }, { value: 'asc', label: 'Más antiguas' }]} />, render: (val) => <span className="text-xs font-medium text-muted-foreground">{formatDateOnly(val)}</span> },
     { key: 'status', header: 'Estado', width: '110px', headerExtra: <ColumnFilterMenu label="Estado" options={statusOptionsForFilter} selected={colFilters.state.status?.values || []} onSelect={(values) => colFilters.setValues('status', values)} sort={colFilters.state.status?.sort || null} onSort={(sort) => colFilters.setSort('status', sort)} />, render: (val) => {
       const opt = statusOptions.find(o => o.value === (val||'').toUpperCase());
       return <Badge variant="outline" className={cn("text-[9px] font-black uppercase tracking-widest px-2 py-0.5 border-none shadow-none", opt?.color || 'bg-muted/20 text-muted-foreground')}>{opt?.label || val}</Badge>; } },

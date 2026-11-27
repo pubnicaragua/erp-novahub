@@ -1,3 +1,4 @@
+import { formatDateOnly } from './dateFormat';
 import { purchaseOrdersService, supplierInvoicesService, expensesService, recurringExpensesService } from '../services/compras.service';
 import { runWithReportRequestLimit } from './report-request-limiter';
 
@@ -73,7 +74,7 @@ export async function fetchSupplierHistoryItems(supplierId: string, signal?: Abo
   rawOrders.filter((order: any) => order.supplierId === supplierId).forEach((order: any) => {
     (order.items || []).forEach((item: any) => {
       historyItems.push({
-        date: new Date(order.date).toLocaleDateString(),
+        date: formatDateOnly(order.date),
         rawDate: new Date(order.date),
         type: 'Orden',
         docNumber: order.number,
@@ -97,7 +98,7 @@ export async function fetchSupplierHistoryItems(supplierId: string, signal?: Abo
   rawInvoices.filter((invoice: any) => invoice.supplierId === supplierId).forEach((invoice: any) => {
     (invoice.items || []).forEach((item: any) => {
       historyItems.push({
-        date: new Date(invoice.date).toLocaleDateString(),
+        date: formatDateOnly(invoice.date),
         rawDate: new Date(invoice.date),
         type: 'Factura',
         docNumber: invoice.number,
@@ -120,7 +121,7 @@ export async function fetchSupplierHistoryItems(supplierId: string, signal?: Abo
 
   rawExpenses.filter((expense: any) => expense.supplierId === supplierId).forEach((expense: any) => {
     historyItems.push({
-      date: new Date(expense.date).toLocaleDateString(),
+      date: formatDateOnly(expense.date),
       rawDate: new Date(expense.date),
       type: 'Gasto',
       docNumber: expense.number || '-',
@@ -135,7 +136,7 @@ export async function fetchSupplierHistoryItems(supplierId: string, signal?: Abo
 
   rawRecurring.filter((expense: any) => expense.supplierId === supplierId).forEach((expense: any) => {
     historyItems.push({
-      date: new Date(expense.startDate).toLocaleDateString(),
+      date: formatDateOnly(expense.startDate),
       rawDate: new Date(expense.startDate),
       type: 'Gasto Recurrente',
       docNumber: `REC-${expense.id ? expense.id.slice(0, 6).toUpperCase() : ''}`,

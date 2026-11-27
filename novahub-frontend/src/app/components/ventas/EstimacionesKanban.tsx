@@ -10,7 +10,7 @@ import { FastColorInput } from '../ui/FastColorInput';
 import type { Estimate } from '../../types';
 import { useCurrency } from '../../contexts/CurrencyContext';
 import { useAuth } from '../../contexts/AuthContext';
-import { formatDateEs } from '../../utils/dateFormat';
+import { formatDateEs, formatDateOnly } from '../../utils/dateFormat';
 import { useUserViewPreferences } from '../../hooks/useUserViewPreferences';
 
 export interface KanbanColumn {
@@ -419,7 +419,7 @@ function KanbanCard({ estimate, column, formatConvertedAmount, onViewDetail, onD
       <div className="flex items-center gap-2 text-[10px] text-muted-foreground mb-2.5">
         <span className="flex items-center gap-1">
           <Clock className="size-3" />
-          {formatDateEs(estimate.date, true)}
+          {formatDateOnly(estimate.date)}
         </span>
         {expiryDate && (
           <span className={cn(

@@ -1,3 +1,4 @@
+import { formatDateOnly } from '../../utils/dateFormat';
 import { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
 import {
@@ -547,7 +548,7 @@ function RemindersTab({ reminders, onRefresh, onNew, canPerform }: { reminders: 
                       {r.description && <p className="text-xs text-muted-foreground truncate">{r.description}</p>}
                       <div className="flex items-center gap-3 mt-1">
                         <span className={cn('text-xs flex items-center gap-1', isOverdue(r.dueDate) ? 'text-rose-600' : 'text-muted-foreground')}>
-                          <Clock className="size-3" />{new Date(r.dueDate).toLocaleDateString('es-NI')}
+                          <Clock className="size-3" />{formatDateOnly(r.dueDate)}
                         </span>
                         {r.caseId && <Badge variant="outline" className="text-[10px]">Vinculado</Badge>}
                       </div>
@@ -571,7 +572,7 @@ function RemindersTab({ reminders, onRefresh, onNew, canPerform }: { reminders: 
                     <div className="flex-1 min-w-0">
                       <p className="text-sm font-bold truncate">{r.title}</p>
                       <span className="text-xs text-rose-600 flex items-center gap-1">
-                        <Clock className="size-3" />Venció {new Date(r.dueDate).toLocaleDateString('es-NI')}
+                        <Clock className="size-3" />Venció {formatDateOnly(r.dueDate)}
                       </span>
                     </div>
                     {canPerform('LEGAL_REMINDERS', 'delete') && (

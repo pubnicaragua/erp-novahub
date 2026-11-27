@@ -1,3 +1,4 @@
+import { formatDateOnly } from '../../utils/dateFormat';
 import { useState } from 'react';
 import {
   Calendar,
@@ -489,7 +490,7 @@ export function ProyectoAvancePanel({ projectId, project }: ProyectoAvancePanelP
                           )}
                         </td>
                         <td className="p-3 text-right pr-4 text-muted-foreground">
-                          {m.dueDate ? new Date(m.dueDate).toLocaleDateString('es-NI') : '—'}
+                          {m.dueDate ? formatDateOnly(m.dueDate) : '—'}
                         </td>
                       </tr>
                     );

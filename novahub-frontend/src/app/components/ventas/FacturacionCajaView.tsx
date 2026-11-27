@@ -23,6 +23,7 @@ import { useSalesIntegrationPolicy } from '../../hooks/useSalesIntegrationPolicy
 import { useQueryClient } from '@tanstack/react-query';
 import { cn } from '../ui/utils';
 import { buildSalesPdfFileName } from '../../utils/exportFileNames';
+import { formatDateOnly } from '../../utils/dateFormat';
 import {
   cajaService,
   type CashRegister,
@@ -231,7 +232,7 @@ async function printPosTicket(invoice: PosInvoice, cart: CartItem[], payments: P
     const deliveryAmount = Number(invoice.deliveryAmount || 0);
     if (deliveryAmount > 0) extraChargeRows.push({ description: invoice.deliveryDescription || 'Delivery', quantity: '', unitPrice: '', total: money(deliveryAmount / safeRate) });
     const rows = [...itemRows, ...extraChargeRows];
-    const documentDate = invoice.date ? new Date(invoice.date).toLocaleString('es-NI') : new Date().toLocaleString('es-NI');
+    const documentDate = formatDateOnly(invoice.date || new Date());
     const settingsLogo = getPdfTemplateLogo(settings, companyLogo, targetKey);
     const ticketData = {
       company: { name: settings.companyName || companyName, slogan: settings.slogan, fiscalInfo: settings.fiscalInfo, address: settings.address, phone: settings.phone, email: settings.email, logo: settingsLogo },
@@ -334,7 +335,7 @@ function getTodayInputDate() {
 }
 
 function formatInvoiceDate(date: string) {
-  return new Date(date).toLocaleString('es-NI');
+  return formatDateOnly(date);
 }
 
 function getErrorMessage(error: unknown, fallback: string) {
