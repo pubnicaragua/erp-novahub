@@ -889,16 +889,6 @@ export function EstimacionesView({ data, summaryData, summaryLoading, summaryErr
       render: (val) => <span className="text-xs font-medium text-muted-foreground">{formatDateEs(val, true)}</span>
     },
     { 
-      key: 'total', 
-      header: 'Total Neto', 
-      width: '150px',
-      render: (val, row) => (
-        <span className="text-[13px] font-black tabular-nums text-foreground">
-          {formatConvertedAmount(Number(val || 0), row.currency, row.exchangeRate)}
-        </span>
-      )
-    },
-    { 
       key: 'status', 
       header: 'Estado', 
       width: '135px',
@@ -916,7 +906,17 @@ export function EstimacionesView({ data, summaryData, summaryLoading, summaryErr
         );
       }
     },
-    { 
+    {
+      key: 'total',
+      header: 'Total Neto',
+      width: '150px',
+      render: (val, row) => (
+        <span className="text-[13px] font-black tabular-nums text-foreground">
+          {formatConvertedAmount(Number(val || 0), row.currency, row.exchangeRate)}
+        </span>
+      )
+    },
+    {
       key: 'expiryDate', 
       header: 'Validez', 
       render: (val) => (

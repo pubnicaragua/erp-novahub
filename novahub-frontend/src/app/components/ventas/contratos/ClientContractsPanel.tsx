@@ -117,7 +117,7 @@ export function ClientContractsPanel() {
         : (
           <div className="overflow-x-auto rounded-2xl border border-border/60">
             <table className="w-full min-w-[860px] text-sm">
-              <thead className="bg-muted/40 text-left text-[10px] font-black uppercase tracking-widest text-muted-foreground"><tr><th className="px-3 py-2">Contrato</th><th className="px-3 py-2">Cliente</th><th className="px-3 py-2">Estado</th><th className="px-3 py-2 text-right">Monto</th><th className="px-3 py-2">Vigencia</th><th className="px-3 py-2">Hitos</th></tr></thead>
+              <thead className="bg-muted/40 text-left text-[10px] font-black uppercase tracking-widest text-muted-foreground"><tr><th className="px-3 py-2">Contrato</th><th className="px-3 py-2">Cliente</th><th className="px-3 py-2">Vigencia</th><th className="px-3 py-2">Estado</th><th className="px-3 py-2 text-right">Monto</th><th className="px-3 py-2">Hitos</th></tr></thead>
               <tbody>
                 {list.data.items.map((row) => {
                   const healthLabel = CONTRACT_HEALTH_LABEL[row.health];
@@ -125,9 +125,9 @@ export function ClientContractsPanel() {
                     <tr key={row.id} className="cursor-pointer border-t border-border/40 hover:bg-muted/30" onClick={() => setOpenId(row.id)}>
                       <td className="px-3 py-2"><button type="button" className="text-left font-bold text-primary underline-offset-2 hover:underline dark:text-accent" onClick={(e) => { e.stopPropagation(); setOpenId(row.id); }}>{row.number}</button><p className="max-w-[220px] truncate text-xs text-muted-foreground">{row.title}</p></td>
                       <td className="px-3 py-2">{row.clientName}</td>
+                      <td className="whitespace-nowrap px-3 py-2 text-xs">{row.startDate || row.endDate ? `${day(row.startDate)} → ${day(row.endDate)}` : '—'}{row.autoRenew ? ' · se renueva' : ''}</td>
                       <td className="px-3 py-2"><span className={cn('rounded-full px-2 py-0.5 text-[11px] font-semibold', CONTRACT_STATUS_LABEL[row.status].tone)}>{CONTRACT_STATUS_LABEL[row.status].label}</span>{healthLabel && <span className={cn('ml-1 rounded-full px-2 py-0.5 text-[11px] font-semibold', healthLabel.tone)}>{healthLabel.label}</span>}</td>
                       <td className="whitespace-nowrap px-3 py-2 text-right font-bold tabular-nums">{money(row.amount, row.currency)}</td>
-                      <td className="whitespace-nowrap px-3 py-2 text-xs">{row.startDate || row.endDate ? `${day(row.startDate)} → ${day(row.endDate)}` : '—'}{row.autoRenew ? ' · se renueva' : ''}</td>
                       <td className="px-3 py-2 text-xs tabular-nums">{row.milestoneProgress.total ? `${row.milestoneProgress.done}/${row.milestoneProgress.total}` : '—'}</td>
                     </tr>
                   );

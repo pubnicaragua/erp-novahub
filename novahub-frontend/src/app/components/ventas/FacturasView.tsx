@@ -2115,17 +2115,21 @@ export function FacturasView({ data, summaryData, summaryLoading, summaryError, 
       render: (val) => <span className="text-xs font-medium text-muted-foreground">{formatDateTimeSafe(val)}</span>
     },
     {
-      key: 'dueDate',
-      header: 'Vencimiento',
-      headerExtra: <ColumnFilterMenu label="Vencimiento" sort={colFilters.state.dueDate?.sort || null} onSort={(sort) => colFilters.setSort('dueDate', sort)} sortOptions={[{ value: 'asc', label: 'Próximos a vencer' }, { value: 'desc', label: 'Más lejanos' }]} />,
-      render: (val, row) => (
-        <span className={cn(
-          "text-xs font-bold",
-           (row.status || '').toUpperCase() === 'OVERDUE' ? 'text-primary' : 'text-muted-foreground'
-        )}>
-          {formatDateSafe(val)}
-        </span>
-      )
+      key: 'status',
+      header: 'Estado',
+      width: '145px',
+      render: (val, row) => {
+        const key = invoiceStatusFilterKey(row);
+        const opt = statusOptions.find(o => o.value === key);
+        return (
+          <Badge variant="outline" className={cn(
+            "max-w-full whitespace-normal break-words text-center text-[9px] font-black uppercase leading-tight tracking-widest px-1.5 py-0.5 border-none shadow-none",
+            opt?.color || 'bg-muted/20 text-muted-foreground'
+          )}>
+            {invoiceStatusLabel(row)}
+          </Badge>
+        );
+      }
     },
     {
       key: 'total',
@@ -2151,6 +2155,19 @@ export function FacturasView({ data, summaryData, summaryLoading, summaryError, 
           </div>
         );
       }
+    },
+    {
+      key: 'dueDate',
+      header: 'Vencimiento',
+      headerExtra: <ColumnFilterMenu label="Vencimiento" sort={colFilters.state.dueDate?.sort || null} onSort={(sort) => colFilters.setSort('dueDate', sort)} sortOptions={[{ value: 'asc', label: 'Próximos a vencer' }, { value: 'desc', label: 'Más lejanos' }]} />,
+      render: (val, row) => (
+        <span className={cn(
+          "text-xs font-bold",
+           (row.status || '').toUpperCase() === 'OVERDUE' ? 'text-primary' : 'text-muted-foreground'
+        )}>
+          {formatDateSafe(val)}
+        </span>
+      )
     },
     {
       key: 'balance',
@@ -2196,23 +2213,6 @@ export function FacturasView({ data, summaryData, summaryLoading, summaryError, 
             </Badge>
             {presentation.methodLabel && <span className="text-[9px] font-bold uppercase text-muted-foreground/70">{presentation.methodLabel}</span>}
           </div>
-        );
-      }
-    },
-    {
-      key: 'status',
-      header: 'Estado',
-      width: '145px',
-      render: (val, row) => {
-        const key = invoiceStatusFilterKey(row);
-        const opt = statusOptions.find(o => o.value === key);
-        return (
-          <Badge variant="outline" className={cn(
-            "max-w-full whitespace-normal break-words text-center text-[9px] font-black uppercase leading-tight tracking-widest px-1.5 py-0.5 border-none shadow-none",
-            opt?.color || 'bg-muted/20 text-muted-foreground'
-          )}>
-            {invoiceStatusLabel(row)}
-          </Badge>
         );
       }
     }

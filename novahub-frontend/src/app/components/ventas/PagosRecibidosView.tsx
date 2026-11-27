@@ -830,6 +830,16 @@ export function PagosRecibidosView({ data, summaryData, summaryLoading, summaryE
   const columns: ColumnDef<PaymentReceived>[] = [
     { key: 'number', header: 'N° Pago', width: '120px', render: (val) => <span className="text-[11px] font-black font-mono text-muted-foreground/60">{val}</span> },
     { key: 'customer', header: 'Cliente', headerExtra: <ColumnFilterMenu label="Cliente" options={distinctCustomers} selected={colFilters.state.customer?.values || []} onSelect={(values) => colFilters.setValues('customer', values)} sort={colFilters.state.customer?.sort || null} onSort={(sort) => colFilters.setSort('customer', sort)} />, render: (_, row) => <span className="text-[13px] font-bold text-foreground">{row.customer?.name || 'Cliente'}</span> },
+    { key: 'date', header: 'Fecha', headerExtra: <ColumnFilterMenu label="Fecha" sort={colFilters.state.date?.sort || null} onSort={(sort) => colFilters.setSort('date', sort)} sortOptions={[{ value: 'desc', label: 'Más recientes' }, { value: 'asc', label: 'Más antiguas' }]} />, render: (val) => {
+      if (!val) return <span className="text-xs text-muted-foreground">Sin fecha</span>;
+      return <span className="text-xs font-medium text-muted-foreground">{formatDateEs(val, true)}</span>;
+    } },
+    {
+      key: 'amount', header: 'Monto', width: '150px', headerExtra: <ColumnFilterMenu label="Monto" sort={colFilters.state.amount?.sort || null} onSort={(sort) => colFilters.setSort('amount', sort)} />, render: (val, row) => (
+        <span className="text-[13px] font-black tabular-nums text-emerald-500">
+          {formatConvertedAmount(Number(val || 0), row.currency, row.exchangeRate)}
+        </span>)
+    },
     { key: 'reference', header: 'Referencia / Documento', render: (val, row) => <span className="text-xs font-bold text-primary">{row.invoice?.number || row.creditNote?.number || (row.balanceApplicationType === 'GENERAL_BALANCE' ? 'Abono al saldo general' : val || 'Anticipo')}</span> },
     {
       key: 'sourceType', header: 'Origen', width: '180px', render: (_val, row) => {
@@ -849,16 +859,6 @@ export function PagosRecibidosView({ data, summaryData, summaryLoading, summaryE
           </Badge>
         );
       }
-    },
-    { key: 'date', header: 'Fecha', headerExtra: <ColumnFilterMenu label="Fecha" sort={colFilters.state.date?.sort || null} onSort={(sort) => colFilters.setSort('date', sort)} sortOptions={[{ value: 'desc', label: 'Más recientes' }, { value: 'asc', label: 'Más antiguas' }]} />, render: (val) => {
-      if (!val) return <span className="text-xs text-muted-foreground">Sin fecha</span>;
-      return <span className="text-xs font-medium text-muted-foreground">{formatDateEs(val, true)}</span>;
-    } },
-    {
-      key: 'amount', header: 'Monto', width: '150px', headerExtra: <ColumnFilterMenu label="Monto" sort={colFilters.state.amount?.sort || null} onSort={(sort) => colFilters.setSort('amount', sort)} />, render: (val, row) => (
-        <span className="text-[13px] font-black tabular-nums text-emerald-500">
-          {formatConvertedAmount(Number(val || 0), row.currency, row.exchangeRate)}
-        </span>)
     },
     {
       key: 'method', header: 'Método', width: '160px',

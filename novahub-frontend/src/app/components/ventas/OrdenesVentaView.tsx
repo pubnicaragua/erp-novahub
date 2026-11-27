@@ -832,21 +832,15 @@ export function OrdenesVentaView({ data, summaryData, summaryLoading, summaryErr
       headerExtra: <ColumnFilterMenu label="Cliente" options={distinctCustomers} selected={colFilters.state.customer?.values || []} onSelect={(values) => colFilters.setValues('customer', values)} sort={colFilters.state.customer?.sort || null} onSort={(sort) => colFilters.setSort('customer', sort)} />,
       render: (_val, row) => <span className="text-[13px] font-bold text-foreground">{row.customer?.name || 'Varios'}</span>
     },
-    { 
-      key: 'itemCount', 
-      header: 'Items', 
-      width: '100px',
-      render: (_val, row) => <span className="text-xs font-medium text-muted-foreground">{row.items?.length || 0} art.</span>
-    },
-    { 
-      key: 'total', 
-      header: 'Monto Total', 
-      width: '150px',
-      headerExtra: <ColumnFilterMenu label="Monto Total" sort={colFilters.state.total?.sort || null} onSort={(sort) => colFilters.setSort('total', sort)} />,
-      render: (val, row) => (
-        <span className="text-[13px] font-black tabular-nums text-emerald-500">
-          {formatConvertedAmount(Number(val || 0), row.currency, row.exchangeRate)}
-        </span>
+    {
+      key: 'date',
+      header: 'Fecha Compromiso',
+      headerExtra: <ColumnFilterMenu label="Fecha Compromiso" sort={colFilters.state.date?.sort || null} onSort={(sort) => colFilters.setSort('date', sort)} sortOptions={[{ value: 'desc', label: 'Más recientes' }, { value: 'asc', label: 'Más antiguas' }]} />,
+      render: (val) => (
+        <div className="flex items-center gap-1.5 text-[10px] font-medium text-muted-foreground">
+           <Clock className="size-3" />
+           {formatDateEs(val, true)}
+        </div>
       )
     },
     { 
@@ -867,16 +861,22 @@ export function OrdenesVentaView({ data, summaryData, summaryLoading, summaryErr
         );
       }
     },
-    { 
-      key: 'date', 
-      header: 'Fecha Compromiso', 
-      headerExtra: <ColumnFilterMenu label="Fecha Compromiso" sort={colFilters.state.date?.sort || null} onSort={(sort) => colFilters.setSort('date', sort)} sortOptions={[{ value: 'desc', label: 'Más recientes' }, { value: 'asc', label: 'Más antiguas' }]} />,
-      render: (val) => (
-        <div className="flex items-center gap-1.5 text-[10px] font-medium text-muted-foreground">
-           <Clock className="size-3" />
-           {formatDateEs(val, true)}
-        </div>
+    {
+      key: 'total',
+      header: 'Monto Total',
+      width: '150px',
+      headerExtra: <ColumnFilterMenu label="Monto Total" sort={colFilters.state.total?.sort || null} onSort={(sort) => colFilters.setSort('total', sort)} />,
+      render: (val, row) => (
+        <span className="text-[13px] font-black tabular-nums text-emerald-500">
+          {formatConvertedAmount(Number(val || 0), row.currency, row.exchangeRate)}
+        </span>
       )
+    },
+    {
+      key: 'itemCount',
+      header: 'Items',
+      width: '100px',
+      render: (_val, row) => <span className="text-xs font-medium text-muted-foreground">{row.items?.length || 0} art.</span>
     },
     {
       key: 'paymentMethod',
@@ -926,10 +926,10 @@ export function OrdenesVentaView({ data, summaryData, summaryLoading, summaryErr
   const columnOptions = [
     { key: 'number', label: 'N° Orden' },
     { key: 'customer', label: 'Cliente' },
-    { key: 'itemCount', label: 'Artículos' },
-    { key: 'total', label: 'Monto total' },
-    { key: 'status', label: 'Estado de la orden' },
     { key: 'date', label: 'Fecha compromiso' },
+    { key: 'status', label: 'Estado de la orden' },
+    { key: 'total', label: 'Monto total' },
+    { key: 'itemCount', label: 'Artículos' },
     { key: 'paymentMethod', label: 'Forma de pago' },
     { key: 'invoiceNumber', label: 'Factura relacionada' },
     { key: 'invoicedAt', label: 'Fecha facturación' },

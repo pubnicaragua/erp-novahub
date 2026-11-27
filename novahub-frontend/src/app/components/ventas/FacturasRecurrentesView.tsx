@@ -585,16 +585,17 @@ export function FacturasRecurrentesView({ data, summaryData, summaryLoading, sum
       )
     },
     { key: 'customer', header: 'Cliente', render: (_, row) => <span className="text-[13px] font-bold text-foreground">{row.customer?.name || 'Cliente'}</span> },
-    { key: 'frequency', header: 'Frecuencia', width: '190px', editable: canPerform('SALES_RECURRING', 'edit'), type: 'select', options: frequencyOptions,
-      render: (val) => <Badge variant="secondary" className="text-[9px] font-black uppercase tracking-widest bg-blue-500/10 text-blue-500 border-none">{getRecurrenceFrequencyLabel(val)}</Badge> },
+    { key: 'startDate', header: 'Fecha de inicio', render: (val) => <span className="text-xs font-medium text-muted-foreground">{formatDateSafe(val)}</span> },
+    { key: 'status', header: 'Estado', width: '110px', render: (val) => { const opt = statusOptions.find(o => o.value === (val||'').toUpperCase());
+      return <Badge variant="outline" className={cn("text-[9px] font-black uppercase tracking-widest px-2 py-0.5 border-none shadow-none", opt?.color || 'bg-muted/20 text-muted-foreground')}>{opt?.label || val}</Badge>; } },
     { key: 'total', header: 'Monto Ciclo', width: '150px',
       render: (val, row) => (
         <span className="text-[13px] font-black tabular-nums text-foreground">
           {formatConvertedAmount(Number(val || 0), (row as any).currency, (row as any).exchangeRate)}
         </span>
       ) },
-    { key: 'status', header: 'Estado', width: '110px', render: (val) => { const opt = statusOptions.find(o => o.value === (val||'').toUpperCase());
-      return <Badge variant="outline" className={cn("text-[9px] font-black uppercase tracking-widest px-2 py-0.5 border-none shadow-none", opt?.color || 'bg-muted/20 text-muted-foreground')}>{opt?.label || val}</Badge>; } },
+    { key: 'frequency', header: 'Frecuencia', width: '190px', editable: canPerform('SALES_RECURRING', 'edit'), type: 'select', options: frequencyOptions,
+      render: (val) => <Badge variant="secondary" className="text-[9px] font-black uppercase tracking-widest bg-blue-500/10 text-blue-500 border-none">{getRecurrenceFrequencyLabel(val)}</Badge> },
     { key: 'nextInvoiceDate', header: 'Próxima Fecha', render: (val) => <div className="flex items-center gap-1.5 text-[10px] font-medium text-muted-foreground"><Calendar className="size-3" />{formatDateSafe(val)}</div> },
   ];
 

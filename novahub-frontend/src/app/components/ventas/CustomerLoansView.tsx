@@ -227,7 +227,7 @@ export function CustomerLoansView({ enabled, selectedBranchId, onRefresh }: { en
     <Card className="min-w-0 overflow-hidden rounded-2xl border-border/60 bg-card shadow-sm">
       {loansQuery.isPending ? <div role="status" className="p-10 text-center text-sm text-muted-foreground">Cargando préstamos…</div> : loansQuery.isError ? <div role="alert" className="flex flex-col items-center gap-3 p-10 text-center text-sm text-destructive"><p>No se pudo cargar la cartera.</p><Button type="button" variant="outline" onClick={() => void loansQuery.refetch()}>Reintentar</Button></div> : !loans.length ? <div className="p-10 text-center"><Banknote className="mx-auto size-8 text-muted-foreground/40" /><p className="mt-2 text-sm font-bold">Sin préstamos para mostrar</p><p className="mt-1 text-xs text-muted-foreground">Cambia los filtros o registra un préstamo nuevo.</p></div> : <div className="sales-responsive-table max-w-full overflow-x-auto">
         <Table className="min-w-[860px]">
-          <TableHeader><TableRow><TableHead>Préstamo</TableHead><TableHead>Cliente</TableHead><TableHead>Fecha</TableHead><TableHead>Próxima cuota</TableHead><TableHead>Vencido</TableHead><TableHead>Saldo</TableHead><TableHead>Estado</TableHead><TableHead><span className="sr-only">Acciones</span></TableHead></TableRow></TableHeader>
+          <TableHeader><TableRow><TableHead>Préstamo</TableHead><TableHead>Cliente</TableHead><TableHead>Fecha</TableHead><TableHead>Estado</TableHead><TableHead>Saldo</TableHead><TableHead>Próxima cuota</TableHead><TableHead>Vencido</TableHead><TableHead><span className="sr-only">Acciones</span></TableHead></TableRow></TableHeader>
           <TableBody>{loans.map((loan: any) => {
             const balance = Number(loan.invoice?.balance ?? loan.balance ?? 0);
             const rawStatus = String(loan.status || (balance <= 0.01 ? 'PAID' : 'ACTIVE')).toUpperCase();
@@ -236,10 +236,10 @@ export function CustomerLoansView({ enabled, selectedBranchId, onRefresh }: { en
               <TableCell className="font-semibold text-primary">{loan.invoice?.number || loan.number || '—'}</TableCell>
               <TableCell className="max-w-[240px] whitespace-normal break-words">{loan.customer?.name || 'Cliente'}</TableCell>
               <TableCell>{formatDateEs(loan.invoice?.date || loan.disbursedAt || loan.createdAt, true)}</TableCell>
+              <TableCell><Badge variant="outline" className={statusClass[loanStatus] || statusClass.ACTIVE}>{loanStatus === 'ACTIVE' && Number(loan.overdueBalance || 0) > 0.01 ? 'Activo (Atrasado)' : statusLabel[loanStatus] || loanStatus}</Badge></TableCell>
+              <TableCell className="font-black tabular-nums">{formatCurrencyAmount(balance, loan.currency || baseCurrency)}</TableCell>
               <TableCell>{loan.nextInstallment ? `${localDate(loan.nextInstallment.dueDate)} · ${formatCurrencyAmount(loan.nextInstallment.remainingAmount, loan.currency || baseCurrency)}` : '—'}</TableCell>
               <TableCell className="font-semibold text-rose-600 dark:text-rose-400">{formatCurrencyAmount(loan.overdueBalance || 0, loan.currency || baseCurrency)}</TableCell>
-              <TableCell className="font-black tabular-nums">{formatCurrencyAmount(balance, loan.currency || baseCurrency)}</TableCell>
-              <TableCell><Badge variant="outline" className={statusClass[loanStatus] || statusClass.ACTIVE}>{loanStatus === 'ACTIVE' && Number(loan.overdueBalance || 0) > 0.01 ? 'Activo (Atrasado)' : statusLabel[loanStatus] || loanStatus}</Badge></TableCell>
               <TableCell><SalesActionTooltip label="Abrir préstamo"><Button type="button" size="icon" variant="ghost" className="size-8" aria-label={`Ver préstamo ${loan.invoice?.number || loan.number || ''}`} onClick={(event) => { event.stopPropagation(); openDetail(loan); }}><Eye className="size-4" /></Button></SalesActionTooltip></TableCell>
             </TableRow>;
           })}</TableBody>
