@@ -239,7 +239,8 @@ export interface FuelTraceRow {
   saleUnitPrice: number; saleTotal: number; saleCurrency: string; supplierOrderCode: string | null; supplierName: string | null;
   purchaseOrderNumber: string | null; supplierInvoiceNumber: string | null; purchaseDate: string | null;
   purchaseUnitPrice: number | null; purchaseAmount: number | null; purchaseCurrency: string | null;
+  saleNet: number; grossProfit: number | null; tripCost: number | null; netProfit: number | null;
   linkStatus: 'LINKED' | 'NO_CODE' | 'CODE_NOT_FOUND' | 'PRODUCT_NOT_IN_PURCHASE';
 }
 
-export interface FuelTraceReportData { rows: FuelTraceRow[]; truncated: boolean; pendingLink: number }
+export interface FuelTraceReportData { rows: FuelTraceRow[]; truncated: boolean; pendingLink: number; includesTripCost?: boolean }

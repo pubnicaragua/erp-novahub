@@ -23,7 +23,7 @@ const LINK_LABEL: Record<FuelTraceRow['linkStatus'], string> = {
 
 const isoDay = (date: Date) => `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`;
 const day = (value: string | null) => (value ? String(value).slice(0, 10).split('-').reverse().join('/') : '—');
-const money = (value: number | null, currency: string | null, digits = 2) => (value === null
+const money = (value: number | null | undefined, currency: string | null, digits = 2) => (value == null
   ? '—'
   : `${currency || ''} ${value.toLocaleString('es-NI', { minimumFractionDigits: 2, maximumFractionDigits: digits })}`.trim());
 
@@ -38,6 +38,31 @@ export function FuelTraceReport() {
   return allowed ? <FuelTraceTable /> : null;
 }
 
+const EXCEL_AMOUNTS: Record<string, (row: FuelTraceRow) => number | null> = {
+  'Precio venta': (row) => row.saleUnitPrice,
+  'Total venta': (row) => row.saleTotal,
+  'Precio compra': (row) => row.purchaseUnitPrice,
+  'Compra de lo vendido': (row) => row.purchaseAmount,
+  'Venta sin IVA': (row) => row.saleNet,
+  'Ganancia bruta': (row) => row.grossProfit,
+  'Flete': (row) => row.tripCost,
+  'Ganancia después del flete': (row) => row.netProfit,
+};
+
+/** Totales por moneda de venta. La ganancia final solo suma las ventas que ya tienen compra y flete. */
+function traceTotals(rows: FuelTraceRow[]) {
+  const byCurrency = new Map<string, { currency: string; sales: number; gross: number; grossCount: number; net: number; netCount: number; count: number }>();
+  for (const row of rows) {
+    const total = byCurrency.get(row.saleCurrency) || { currency: row.saleCurrency, sales: 0, gross: 0, grossCount: 0, net: 0, netCount: 0, count: 0 };
+    total.sales += row.saleNet || 0;
+    total.count += 1;
+    if (row.grossProfit != null) { total.gross += row.grossProfit; total.grossCount += 1; }
+    if (row.netProfit != null) { total.net += row.netProfit; total.netCount += 1; }
+    byCurrency.set(row.saleCurrency, total);
+  }
+  return [...byCurrency.values()];
+}
+
 function FuelTraceTable() {
   const today = new Date();
   const [from, setFrom] = useState(isoDay(new Date(today.getFullYear(), today.getMonth(), 1)));
@@ -49,6 +74,9 @@ function FuelTraceTable() {
     row.supplierOrderCode, row.supplierName, row.purchaseOrderNumber, row.supplierInvoiceNumber, row.origin]
     .some((value) => String(value ?? '').toLowerCase().includes(term)));
   const pending = rows.filter((row) => row.linkStatus !== 'LINKED').length;
+
+  const showTripCost = Boolean(report.data?.includesTripCost);
+  const totals = traceTotals(rows);
 
   const columns: Array<[string, (row: FuelTraceRow) => string | number]> = [
     ['Fecha venta', (row) => day(row.invoiceDate)],
@@ -68,13 +96,23 @@ function FuelTraceTable() {
     ['Fecha compra', (row) => day(row.purchaseDate)],
     ['Precio compra', (row) => money(row.purchaseUnitPrice, row.purchaseCurrency, 4)],
     ['Compra de lo vendido', (row) => money(row.purchaseAmount, row.purchaseCurrency)],
+    ['Venta sin IVA', (row) => money(row.saleNet, row.saleCurrency)],
+    ['Ganancia bruta', (row) => money(row.grossProfit, row.saleCurrency)],
+    ...(showTripCost ? ([
+      ['Flete', (row: FuelTraceRow) => (row.tripCost == null ? 'Pendiente' : money(row.tripCost, row.saleCurrency))],
+      ['Ganancia después del flete', (row: FuelTraceRow) => money(row.netProfit, row.saleCurrency)],
+    ] as Array<[string, (row: FuelTraceRow) => string]>) : []),
     ['Estado', (row) => LINK_LABEL[row.linkStatus]],
   ];
 
   const exportExcel = () => {
     createReportWorkbook({
       fileName: buildDatedDownloadFileName(['ventas_y_compras'], 'xlsx'),
-      sheets: [{ name: 'Ventas y compras', rows: rows.map((row) => Object.fromEntries(columns.map(([label, value]) => [label, value(row)]))) }],
+      // Los montos salen como número para que contabilidad pueda sumarlos; las monedas van en sus propias columnas.
+      sheets: [{ name: 'Ventas y compras', rows: rows.map((row) => ({
+        ...Object.fromEntries(columns.map(([label, value]) => [label, label in EXCEL_AMOUNTS ? EXCEL_AMOUNTS[label](row) ?? '' : value(row)])),
+        'Moneda venta': row.saleCurrency, 'Moneda compra': row.purchaseCurrency || '',
+      })) }],
       filters: { Desde: from, Hasta: to, ...(term ? { Búsqueda: search.trim() } : {}) },
     });
   };
@@ -96,6 +134,22 @@ function FuelTraceTable() {
       {report.data && (
         <>
           <p className="text-xs text-muted-foreground">{rows.length} renglones{pending > 0 ? ` · ${pending} sin amarrar a su compra` : ''}{report.data.truncated ? ' · se muestran las facturas más recientes; acota las fechas' : ''}</p>
+          {totals.map((total) => (
+            <dl key={total.currency} className="grid gap-2 sm:grid-cols-3" data-testid="fuel-trace-totals">
+              {([
+                ['Venta sin IVA', total.sales, `${total.count} renglones`],
+                ['Ganancia bruta', total.grossCount ? total.gross : null, `${total.grossCount} de ${total.count} con su compra`],
+                ...(showTripCost ? [['Ganancia después del flete', total.netCount ? total.net : null, `${total.netCount} de ${total.count} con compra y flete`]] : []),
+              ] as Array<[string, number | null, string]>).map(([label, amount, hint]) => (
+                <div key={label} className="rounded-xl border border-border/60 p-3">
+                  <dt className="text-[10px] font-black uppercase tracking-widest text-muted-foreground">{label}</dt>
+                  <dd className="text-lg font-black tabular-nums">{money(amount, total.currency)}</dd>
+                  <dd className="text-[11px] text-muted-foreground">{hint}</dd>
+                </div>
+              ))}
+            </dl>
+          ))}
+          <p className="text-[11px] text-muted-foreground">La ganancia es la venta sin IVA menos la compra de lo vendido{showTripCost ? ' y, en la última cifra, menos el flete' : ''}. No descuenta notas de crédito, devoluciones ni otros gastos.</p>
           <div className="max-w-full overflow-x-auto rounded-xl border border-border/60">
             <table className="w-max min-w-full text-xs" data-table-content-sized="true">
               <thead className="bg-muted/50"><tr>{columns.map(([label]) => <th key={label} className="whitespace-nowrap px-3 py-2 text-left font-bold">{label}</th>)}</tr></thead>
