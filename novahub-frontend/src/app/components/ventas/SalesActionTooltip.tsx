@@ -46,19 +46,14 @@ function describeSalesAction(source: string, documentLabel: string): string {
   // a disabled control cannot be used.
   if (/no hay|sin tel[eé]fono|selecciona|debe cubrir|disponible debe|no est[aá] disponible/.test(action)) return label;
   if (/whatsapp/.test(action)) return `Enviar ${document} por WhatsApp`;
-  if (/caja/.test(action)) {
-    if (/crear/.test(action)) return `Crear y enviar ${document} a Caja`;
-    if (/aprobar/.test(action) && /orden/.test(action)) return `Aprobar ${document} y crear la orden`;
-    if (/aprobar/.test(action)) return `Aprobar ${document} y enviar a Caja`;
-    return `Enviar ${document} a Caja`;
-  }
+  if (/caja/.test(action)) return `Enviar ${document} a Caja`;
   if (/solicitar/.test(action) && /anular|cancelar/.test(action)) return `Enviar solicitud de anulación de ${document}`;
   if (/link/.test(action)) return `Administrar enlaces de pago de ${document}`;
   if (/poket/.test(action)) return `Administrar cobros con Poket de ${document}`;
   if (/cr[eé]dito/.test(action)) return `Enviar ${document} a crédito`;
   if (/facturar|enviar a facturas/.test(action)) return `Facturar ${document}`;
   if (/^ver(?:\s|$)|^abrir(?:\s|$)/.test(action)) return `Abrir ${document}`;
-  if (/crear orden/.test(action)) return `Crear una orden a partir de ${document}`;
+  if (/crear orden/.test(action)) return `Enviar ${document} a orden de venta`;
   if (/imprimir|descargar|exportar pdf/.test(action)) {
     if (/plan|estado de cuenta|comprobante|recibo|ticket/.test(action)) return label;
     return `Imprimir ${document}`;
