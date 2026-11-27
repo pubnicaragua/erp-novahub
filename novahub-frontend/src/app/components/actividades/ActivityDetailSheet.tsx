@@ -1,6 +1,6 @@
 import { CalendarDays, CalendarClock, CheckCircle2, Clock3, DollarSign, FileText, Flag, Hash, History, Info, Link2, MapPin, Paperclip, Trash2, Users, UserCog, XCircle, BookOpen, ArrowDownLeft, ArrowUpRight, Copy, Eye, Mail, Phone, Loader2, Pencil, Plus, Save, ShieldCheck, Timer, ArrowRight } from 'lucide-react';
 import { useMemo, useState, type ReactNode } from 'react';
-import { toast } from 'sonner';
+import { toast } from '@/app/services/toast';
 import { Badge } from '../ui/badge';
 import { Button } from '../ui/button';
 import { Card } from '../ui/card';

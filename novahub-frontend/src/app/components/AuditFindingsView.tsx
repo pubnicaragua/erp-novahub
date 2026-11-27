@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
-import { toast } from 'sonner';
+import { toast } from '@/app/services/toast';
 import { AlertTriangle, ArrowRight, FileCheck2, Link2, MessageSquare, Plus, Search, Send, SlidersHorizontal } from 'lucide-react';
 import { auditWorkspaceService, type AuditFindingsWorkspaceData } from '../services/audit-workspace.service';
 import { actionTone, DemoNotice, ExecutionHeader, Flow, Kpi, Panel, Pill, Tabs, Title, type AuditExecutionView } from './AuditExecutionCommon';

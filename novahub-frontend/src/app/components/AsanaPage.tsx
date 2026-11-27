@@ -1,7 +1,7 @@
 import { useMemo, useState } from 'react';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { Archive, ArrowLeft, ClipboardPen, Loader2, Plus, RefreshCw, Sparkles } from 'lucide-react';
-import { toast } from 'sonner';
+import { toast } from '@/app/services/toast';
 import { api } from '../services/api';
 import { asList, invalidateTenantQueries, useTenantQuery } from '../hooks/useTenantQuery';
 import { useAuth } from '../contexts/AuthContext';

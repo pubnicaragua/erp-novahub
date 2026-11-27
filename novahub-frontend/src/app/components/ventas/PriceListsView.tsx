@@ -22,7 +22,7 @@ import { useUserViewPreferences } from '../../hooks/useUserViewPreferences';
 import { formatSalesAmount } from '../../utils/salesPriceList';
 import { filterAllowedPriceLists } from '../../utils/permissions';
 import { formatExchangeRate } from '../../utils/currency';
-import { toast } from 'sonner';
+import { toast } from '@/app/services/toast';
 import { SalesViewTutorial } from './SalesViewTutorial';
 import { SalesKpiCard } from './SalesKpiCard';
 import { SalesActionTooltip } from './SalesActionTooltip';

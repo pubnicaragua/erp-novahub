@@ -1,6 +1,6 @@
 import { useState, type ReactNode } from 'react';
 import { useQuery } from '@tanstack/react-query';
-import { toast } from 'sonner';
+import { toast } from '@/app/services/toast';
 import { CheckCircle2, ChevronRight, FileCheck2, FileText, LayoutDashboard, ListChecks, Plus, Save, Send, Settings2, Target } from 'lucide-react';
 import { cn } from './ui/utils';
 import { auditWorkspaceService, DEMO_AUDIT_PLANNING, normalizePlanning, type AuditPlanningData, type AuditRisk } from '../services/audit-workspace.service';

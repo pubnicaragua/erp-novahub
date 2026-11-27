@@ -4,7 +4,7 @@ import { Button } from '../ui/button';
 import { Input } from '../ui/input';
 import { tasksService } from '../../services/actividades.service';
 import type { ActivitySubtask } from '../../types';
-import { toast } from 'sonner';
+import { toast } from '@/app/services/toast';
 import { cn } from '../ui/utils';
 
 interface SubtasksManagerProps {

@@ -1,7 +1,7 @@
 import { useMemo, useState, type SetStateAction } from 'react';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { BadgeCheck, CircleDollarSign, Eye, Loader2, Plus, RefreshCw, Trash2, Users } from 'lucide-react';
-import { toast } from 'sonner';
+import { toast } from '@/app/services/toast';
 import { Badge } from '../ui/badge';
 import { Button } from '../ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '../ui/card';

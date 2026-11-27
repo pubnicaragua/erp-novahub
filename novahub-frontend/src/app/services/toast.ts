@@ -24,10 +24,52 @@ export const TOAST_DURATION_MS = {
 
 type ToastCallable = (...args: any[]) => any;
 
+const recentNotificationIds = new Map<string, { id: string | number; expiresAt: number }>();
+let notificationSequence = 0;
+
 function withDuration<T extends ToastCallable>(method: T, duration: number): T {
   return ((...args: Parameters<T>) => {
     const [message, options] = args;
     return method(message, { ...(options as ExternalToast | undefined), duration });
+  }) as T;
+}
+
+function withDeduplicatedToast<T extends ToastCallable>(method: T, duration: number): T {
+  return ((...args: Parameters<T>) => {
+    const [message, rawOptions] = args;
+    const options = rawOptions as ExternalToast | undefined;
+    const messageText = typeof message === 'string' || typeof message === 'number'
+      ? String(message).trim().replace(/\s+/g, ' ')
+      : '';
+
+    if (!messageText) return withDuration(method, duration)(...args);
+
+    const description = typeof options?.description === 'string'
+      ? options.description.trim().replace(/\s+/g, ' ')
+      : '';
+    const key = JSON.stringify([messageText, description]);
+    const now = Date.now();
+    for (const [recentKey, entry] of recentNotificationIds) {
+      if (entry.expiresAt <= now) recentNotificationIds.delete(recentKey);
+    }
+
+    const recent = recentNotificationIds.get(key);
+    const id = recent && recent.expiresAt > now
+      ? recent.id
+      : options?.id ?? `novahub-notice-${++notificationSequence}`;
+
+    if (options?.id !== undefined && options.id !== id) {
+      sonnerToast.dismiss(options.id);
+    }
+
+    recentNotificationIds.set(key, { id, expiresAt: now + duration });
+    while (recentNotificationIds.size > 256) {
+      const oldestKey = recentNotificationIds.keys().next().value;
+      if (oldestKey === undefined) break;
+      recentNotificationIds.delete(oldestKey);
+    }
+
+    return withDuration(method, duration)(message, { ...options, id });
   }) as T;
 }
 
@@ -36,9 +78,9 @@ function showApiErrorToast(
   message: Parameters<typeof sonnerToast.error>[0],
   options?: ExternalToast,
 ): ReturnType<typeof sonnerToast.error> {
-  if (variant === 'warning') return withDuration(sonnerToast.warning, TOAST_DURATION_MS.warning)(message, options);
-  if (variant === 'info') return withDuration(sonnerToast.info, TOAST_DURATION_MS.info)(message, options);
-  return withDuration(sonnerToast.error, TOAST_DURATION_MS.error)(message, options);
+  if (variant === 'warning') return withDeduplicatedToast(sonnerToast.warning, TOAST_DURATION_MS.warning)(message, options);
+  if (variant === 'info') return withDeduplicatedToast(sonnerToast.info, TOAST_DURATION_MS.info)(message, options);
+  return withDeduplicatedToast(sonnerToast.error, TOAST_DURATION_MS.error)(message, options);
 }
 
 function requestIdFromError(error: unknown): string | undefined {
@@ -86,7 +128,7 @@ const classifiedError = ((...args: Parameters<typeof sonnerToast.error>) => {
   const userFacingMessage = typeof message === 'string' ? normalizeLocalNoticeMessage(message) : message;
   if (!category) {
     const nextStepOptions = typeof message === 'string' ? withTechnicalNextStep(options, message, message) : options;
-    return withDuration(sonnerToast.error, TOAST_DURATION_MS.error)(message, nextStepOptions);
+    return withDeduplicatedToast(sonnerToast.error, TOAST_DURATION_MS.error)(message, nextStepOptions);
   }
   const nextStepOptions = category === 'TECHNICAL' && typeof message === 'string'
     ? withTechnicalNextStep(options, message, message)
@@ -230,12 +272,12 @@ const promise = <T,>(
 };
 
 /** Shared Sonner facade: all completed toasts follow one duration policy. */
-export const toast = Object.assign(withDuration(sonnerToast, TOAST_DURATION_MS.message), {
-  success: withDuration(sonnerToast.success, TOAST_DURATION_MS.success),
-  info: withDuration(sonnerToast.info, TOAST_DURATION_MS.info),
-  warning: withDuration(sonnerToast.warning, TOAST_DURATION_MS.warning),
+export const toast = Object.assign(withDeduplicatedToast(sonnerToast, TOAST_DURATION_MS.message), {
+  success: withDeduplicatedToast(sonnerToast.success, TOAST_DURATION_MS.success),
+  info: withDeduplicatedToast(sonnerToast.info, TOAST_DURATION_MS.info),
+  warning: withDeduplicatedToast(sonnerToast.warning, TOAST_DURATION_MS.warning),
   error: classifiedError,
-  message: withDuration(sonnerToast.message, TOAST_DURATION_MS.message),
+  message: withDeduplicatedToast(sonnerToast.message, TOAST_DURATION_MS.message),
   custom: withDuration(sonnerToast.custom, TOAST_DURATION_MS.message),
   loading,
   promise,

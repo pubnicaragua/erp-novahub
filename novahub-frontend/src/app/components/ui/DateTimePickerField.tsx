@@ -9,7 +9,7 @@ import { CalendarDays, Clock, X } from 'lucide-react';
 import { cn } from './utils';
 import { es } from 'date-fns/locale';
 import { format, parseISO, isValid } from 'date-fns';
-import { toast } from 'sonner';
+import { toast } from '@/app/services/toast';
 
 interface DateTimePickerFieldProps {
   /** Valor en formato ISO o YYYY-MM-DDTHH:mm. */

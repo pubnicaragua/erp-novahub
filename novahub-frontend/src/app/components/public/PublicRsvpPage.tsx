@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 import { CalendarDays, Clock, MapPin, CheckCircle2, XCircle, Building2, User, Video, ExternalLink, Sparkles, Download, QrCode, CalendarPlus, X } from 'lucide-react';
 import { api, getApiUrl } from '../../services/api';
-import { toast } from 'sonner';
+import { toast } from '@/app/services/toast';
 
 export function PublicRsvpPage() {
   const [loading, setLoading] = useState(true);

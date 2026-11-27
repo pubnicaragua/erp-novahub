@@ -1,6 +1,6 @@
 import { useState, type ReactNode } from 'react';
 import { useQuery } from '@tanstack/react-query';
-import { toast } from 'sonner';
+import { toast } from '@/app/services/toast';
 import { AlertTriangle, ArrowRight, BookOpen, Check, CheckCircle2, ChevronRight, CircleDollarSign, FileCheck2, FileText, Link2, Search, SlidersHorizontal, Sparkles, WalletCards } from 'lucide-react';
 import { cn } from './ui/utils';
 import { auditWorkspaceService, type AuditTrialBalanceData } from '../services/audit-workspace.service';
