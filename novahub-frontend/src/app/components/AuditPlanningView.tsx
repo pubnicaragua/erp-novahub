@@ -9,7 +9,7 @@ type PlanningNavigation = 'engagements' | 'acceptance' | 'planning';
 
 function Pill({ label, tone = 'neutral' }: { label: string; tone?: 'success' | 'warning' | 'danger' | 'info' | 'neutral' }) {
   const styles = { success: 'bg-[#e4f5e7] text-[#17754e]', warning: 'bg-[#fff3d6] text-[#986d05]', danger: 'bg-[#ffe3e5] text-[#c83f4b]', info: 'bg-[#e2f1f7] text-[#246a82]', neutral: 'bg-[#edf1ef] text-[#66766f]' };
-  return <span className={cn('inline-flex items-center gap-1 rounded-md px-2 py-1 text-[10px] font-bold whitespace-nowrap', styles[tone])}><span className="size-1.5 rounded-full bg-current" />{label}</span>;
+  return <span className={cn('inline-flex min-w-0 max-w-full items-center gap-1 rounded-md px-2 py-1 text-[10px] font-bold whitespace-normal break-words [overflow-wrap:anywhere]', styles[tone])}><span className="size-1.5 shrink-0 rounded-full bg-current" />{label}</span>;
 }
 function RiskPill({ risk }: { risk: AuditRisk }) { return <Pill label={risk} tone={risk === 'Alto' ? 'danger' : risk === 'Medio' ? 'warning' : 'success'} />; }
 function Panel({ children, className = '' }: { children: ReactNode; className?: string }) { return <section className={cn('rounded-xl border border-[#e7eeea] bg-white p-4 shadow-[0_5px_18px_rgba(13,66,45,0.035)]', className)}>{children}</section>; }

@@ -628,11 +628,11 @@ function StatusBadge({ status, onClick }: { status: ChangeStatus; onClick?: () =
   return (
     <span onClick={onClick}
       className={cn(
-        'inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[9px] font-bold border uppercase tracking-wider cursor-pointer transition-all shrink-0',
+        'inline-flex min-w-0 max-w-full items-center gap-1 px-2 py-0.5 rounded-full text-[9px] font-bold border uppercase tracking-wider cursor-pointer transition-all whitespace-normal break-words [overflow-wrap:anywhere]',
         m.color,
         onClick && 'hover:ring-2 hover:ring-offset-1',
       )}>
-      <span className="text-xs leading-none">{m.icon}</span>
+      <span className="shrink-0 text-xs leading-none">{m.icon}</span>
       {m.label}
     </span>
   );

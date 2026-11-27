@@ -207,7 +207,7 @@ export function AccountingBalanceDetailSheet({ open, onOpenChange, document, det
 
 function StatusBadge({ status, side }: { status: string; side: AccountingBalanceSide }) {
   const paid = status === 'PAID';
-  return <Badge variant="outline" className={cn('whitespace-nowrap', paid ? 'border-emerald-500/30 bg-emerald-500/10 text-emerald-600' : 'border-amber-500/30 bg-amber-500/10 text-amber-600')}>{paid ? 'Pagado' : side === 'RECEIVABLES' ? 'Por cobrar' : 'Por pagar'}</Badge>;
+  return <Badge variant="outline" className={cn('min-w-0 max-w-full whitespace-normal break-words [overflow-wrap:anywhere]', paid ? 'border-emerald-500/30 bg-emerald-500/10 text-emerald-600' : 'border-amber-500/30 bg-amber-500/10 text-amber-600')}>{paid ? 'Pagado' : side === 'RECEIVABLES' ? 'Por cobrar' : 'Por pagar'}</Badge>;
 }
 
 function journalStatusLabel(status?: string): string {

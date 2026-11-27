@@ -316,7 +316,7 @@ function TableCell({ className, children, ...props }: React.ComponentProps<"td">
       data-slot="table-cell"
       data-table-cell-copyable={copyValue ? "true" : undefined}
       className={cn(
-        "p-2 align-middle whitespace-nowrap [&:has([role=checkbox])]:pr-0 [&>[role=checkbox]]:translate-y-[2px]",
+        "min-w-0 p-2 align-middle whitespace-normal break-words [overflow-wrap:anywhere] [&:has([role=checkbox])]:pr-0 [&>[role=checkbox]]:translate-y-[2px]",
         className,
         copyValue && "group/table-cell relative",
       )}

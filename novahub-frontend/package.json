@@ -12,6 +12,7 @@
     "test:money-rounding": "node scripts/test-money-rounding.mjs",
     "test:commission-scale": "node scripts/test-commission-scale.mjs",
     "test:date-format": "node scripts/test-date-format.mjs",
+    "test:document-date-at-save": "node scripts/test-document-date-at-save.mjs",
     "check:init": "node scripts/check-use-before-init.mjs",
     "test:check-init": "node scripts/test-check-use-before-init.mjs",
     "check:names": "node scripts/check-undefined-names.mjs",

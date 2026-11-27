@@ -22,6 +22,7 @@ const Toaster = ({ className, style, toastOptions, visibleToasts, ...props }: To
       {...props}
       theme={theme}
       expand
+      richColors
       closeButton
       toastOptions={{
         ...toastOptions,

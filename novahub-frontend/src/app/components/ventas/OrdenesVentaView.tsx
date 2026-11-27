@@ -42,7 +42,7 @@ import { fetchAllReportPages } from '../../hooks/useTenantQuery';
 import { buildCustomerWhatsAppUrl, resolveCustomerPhone, WhatsAppActionButton } from './WhatsAppActionButton';
 import { PurchaseAlertsButton, type PurchaseAlertDetail } from '../compras/PurchaseAlertsButton';
 import { ColumnFilterMenu, useColumnFilters } from '../ui/ColumnFilterMenu';
-import { formatDateEs } from '../../utils/dateFormat';
+import { formatDateEs, resolveDocumentDateAtSave } from '../../utils/dateFormat';
 import { getSalesStatusColor, SALES_WORKFLOW_STATUS_COLORS } from '../../utils/salesStatus';
 import { SalesDocumentDetailSheet, getSalesLineIdentifiers, type SalesDocumentPanelData } from './SalesDocumentDetailSheet';
 import { getLegacySalesExtraCostFields, getSalesExtraChargesAmount, getSalesExtraChargesPayload, normalizeSalesExtraCharges, type SalesExtraChargeLine } from '../../utils/salesCharges';
@@ -578,7 +578,11 @@ export function OrdenesVentaView({ data, summaryData, summaryLoading, summaryErr
     deliveryDescription: localDoc?.deliveryDescription || null,
     deliveryAmount: localDoc?.deliveryAmount || 0,
     priceListId: localDoc?.priceListId || null,
-    date: localDoc?.date,
+    date: resolveDocumentDateAtSave(
+      localDoc?.date,
+      (localDoc as any)?._draftStartedAt,
+      String(localDoc?.id || '').startsWith('local-'),
+    ),
     expectedDelivery: localDoc?.expectedDelivery || null,
     subtotal: localDoc?.subtotal,
     taxAmount: localDoc?.taxAmount,
@@ -803,7 +807,30 @@ export function OrdenesVentaView({ data, summaryData, summaryLoading, summaryErr
   }, [draftHydrated, editingId, data]);
 
   const handleAddOrder = () => {
-    const draft = { id: `local-${Date.now()}`, number: '', customerId: '', sellerEmployeeId: getLoggedInSellerEmployeeId(user) || undefined, date: new Date().toISOString(), expectedDelivery: new Date(Date.now() + 7 * 86400000).toISOString(), discountAmount: 0, extraCostDescription: null, extraCostAmount: 0, extraCharges: [], deliveryDescription: null, deliveryAmount: 0, total: 0, subtotal: 0, taxAmount: 0, currency: displayCurrency as any, exchangeRate: initialDocumentExchangeRate(displayCurrency as any, baseCurrency, globalRate), status: 'DRAFT', items: [], warehouseId: undefined } as any as SalesOrder;
+    const now = new Date().toISOString();
+    const draft = {
+      id: `local-${Date.now()}`,
+      number: '',
+      customerId: '',
+      sellerEmployeeId: getLoggedInSellerEmployeeId(user) || undefined,
+      date: now,
+      _draftStartedAt: now,
+      expectedDelivery: new Date(Date.now() + 7 * 86400000).toISOString(),
+      discountAmount: 0,
+      extraCostDescription: null,
+      extraCostAmount: 0,
+      extraCharges: [],
+      deliveryDescription: null,
+      deliveryAmount: 0,
+      total: 0,
+      subtotal: 0,
+      taxAmount: 0,
+      currency: displayCurrency as any,
+      exchangeRate: initialDocumentExchangeRate(displayCurrency as any, baseCurrency, globalRate),
+      status: 'DRAFT',
+      items: [],
+      warehouseId: undefined,
+    } as any as SalesOrder;
     commitLocalDoc(draft);
     setLocalRates({ dRate: 0, tRate: 0 });
     setPricingMode('global');

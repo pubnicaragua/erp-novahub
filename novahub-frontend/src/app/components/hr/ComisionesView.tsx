@@ -98,7 +98,7 @@ const statusLabel = (status: unknown) => STATUS_LABELS[String(status || '').toUp
 const statusClass = (status: unknown) => STATUS_TONES[String(status || '').toUpperCase()] || 'border-border bg-muted text-muted-foreground';
 
 function StatusBadge({ status }: { status: unknown }) {
-  return <Badge variant="outline" className={cn('whitespace-nowrap text-[9px] font-black uppercase tracking-widest', statusClass(status))}>{statusLabel(status)}</Badge>;
+  return <Badge variant="outline" className={cn('min-w-0 max-w-full whitespace-normal break-words text-[9px] font-black uppercase tracking-widest [overflow-wrap:anywhere]', statusClass(status))}>{statusLabel(status)}</Badge>;
 }
 
 function getCommissionLines(item: any, baseCurrency: string) {

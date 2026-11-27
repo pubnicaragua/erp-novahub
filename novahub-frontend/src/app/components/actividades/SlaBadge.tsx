@@ -86,8 +86,8 @@ export const SlaBadge: React.FC<SlaBadgeProps> = ({
     >
       <span aria-hidden="true" className={cn('size-1.5 shrink-0 rounded-full', tone.dot)} />
       {/* Si ya dice «Vencida hace 3d» no repetimos «Vencida» delante: se cortaba en columnas angostas. */}
-      {showLabel && !(slaStatus === 'BREACHED' && remaining) && <span className="min-w-0 truncate">{label}</span>}
-      {remaining && <span className="min-w-0 truncate font-bold normal-case tabular-nums">{remaining}</span>}
+      {showLabel && !(slaStatus === 'BREACHED' && remaining) && <span className="min-w-0 whitespace-normal break-words [overflow-wrap:anywhere]">{label}</span>}
+      {remaining && <span className="min-w-0 whitespace-normal break-words font-bold normal-case tabular-nums [overflow-wrap:anywhere]">{remaining}</span>}
       <span className="sr-only">{accessibleTitle}</span>
     </Badge>
   );

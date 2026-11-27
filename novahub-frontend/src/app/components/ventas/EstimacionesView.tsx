@@ -40,7 +40,7 @@ import { fetchAllReportPages } from '../../hooks/useTenantQuery';
 import { buildCustomerWhatsAppUrl, resolveCustomerPhone, WhatsAppActionButton } from './WhatsAppActionButton';
 import { PurchaseAlertsButton, type PurchaseAlertDetail } from '../compras/PurchaseAlertsButton';
 import { ColumnFilterMenu, useColumnFilters } from '../ui/ColumnFilterMenu';
-import { formatDateEs } from '../../utils/dateFormat';
+import { formatDateEs, resolveDocumentDateAtSave } from '../../utils/dateFormat';
 import { SALES_WORKFLOW_STATUS_COLORS } from '../../utils/salesStatus';
 import { SalesDocumentDetailSheet, getSalesLineIdentifiers, type SalesDocumentPanelData } from './SalesDocumentDetailSheet';
 import type { PdfDownloadFormat } from '../../utils/pdfDownloadFormats';
@@ -501,7 +501,11 @@ export function EstimacionesView({ data, summaryData, summaryLoading, summaryErr
     return {
       number: docToUse?.number,
       customerId: docToUse?.customerId || null,
-      date: docToUse?.date,
+      date: resolveDocumentDateAtSave(
+        docToUse?.date,
+        (docToUse as any)?._draftStartedAt,
+        isLocalEstimate(docToUse?.id),
+      ),
       expiryDate: docToUse?.expiryDate,
       subtotal: docToUse?.subtotal,
       taxAmount: docToUse?.taxAmount,
@@ -721,6 +725,7 @@ export function EstimacionesView({ data, summaryData, summaryLoading, summaryErr
       number: '',
       customerId: '',
       date: now,
+      _draftStartedAt: now,
       expiryDate: new Date(Date.now() + 30 * 86400000).toISOString(),
       items: [],
       subtotal: 0,

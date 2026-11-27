@@ -50,7 +50,7 @@ function StatusBadge({ status }: { status: string }) {
   const meta = STATUS_META[status] || STATUS_META.PENDIENTE;
   const Icon = meta.icon;
   return (
-    <Badge variant="outline" className={`gap-1 whitespace-nowrap ${meta.className}`}>
+    <Badge variant="outline" className={`min-w-0 max-w-full gap-1 whitespace-normal break-words [overflow-wrap:anywhere] ${meta.className}`}>
       <Icon className="size-3" /> {meta.label}
     </Badge>
   );

@@ -101,6 +101,28 @@ export function dateTimeLocalToIso(value: string, timeZone = 'America/Managua'):
   return result.toISOString();
 }
 
+/**
+ * Refreshes an untouched default document date immediately before creating the
+ * document. A date the user changed remains exactly as entered.
+ */
+export function resolveDocumentDateAtSave(
+  date: string | null | undefined,
+  draftStartedAt: string | null | undefined,
+  isNewDocument: boolean,
+  savedAt: Date = new Date(),
+): string | null | undefined {
+  if (!isNewDocument || !date || !draftStartedAt || Number.isNaN(savedAt.getTime())) return date;
+
+  const datePart = (value: string) => /^(\d{4}-\d{2}-\d{2})(?:$|T)/.exec(value.trim())?.[1] || null;
+  const currentDatePart = datePart(date);
+  if (!currentDatePart || currentDatePart !== datePart(draftStartedAt)) return date;
+
+  const savedAtIso = savedAt.toISOString();
+  return /^\d{4}-\d{2}-\d{2}$/.test(date.trim())
+    ? savedAtIso.slice(0, 10)
+    : savedAtIso;
+}
+
 /** Formats a civil date without shifting it through the browser's local zone. */
 export function formatDateOnly(value: string | number | Date | null | undefined, locale = 'es-NI'): string {
   if (value === null || value === undefined || value === '') return '';

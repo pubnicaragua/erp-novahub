@@ -1,5 +1,4 @@
-import { createElement, isValidElement, type ReactNode } from 'react';
-import { LoaderCircle } from 'lucide-react';
+import { isValidElement, type ReactNode } from 'react';
 import { toast as sonnerToast } from 'sonner';
 import type { ExternalToast } from 'sonner';
 import { getApiErrorMessage } from './api';
@@ -145,15 +144,15 @@ async function resolvePromiseToastValue(
 }
 
 /**
- * Loading notifications use a neutral message with a spinner so the shared
- * close button stays available. Infinity keeps them visible until replaced,
- * resolved, or dismissed by the user.
+ * Keep loading notifications as Sonner's loading type instead of attaching a
+ * spinner icon to a neutral message. When an operation replaces this toast
+ * with a warning/error/success using the same id, Sonner can then show that
+ * final state icon instead of retaining a stale spinner.
  */
 function loading(message: ReactNode, options?: ExternalToast): string | number {
-  return sonnerToast.message(message, {
+  return sonnerToast.loading(message, {
     ...options,
     duration: Number.POSITIVE_INFINITY,
-    icon: options?.icon ?? createElement(LoaderCircle, { className: 'size-4 animate-spin' }),
   });
 }
 

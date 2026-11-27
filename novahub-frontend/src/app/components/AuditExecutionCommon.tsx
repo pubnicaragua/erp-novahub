@@ -15,7 +15,7 @@ export function Title({ children, action, onAction }: { children: ReactNode; act
 export type PillTone = 'success' | 'warning' | 'danger' | 'info' | 'neutral';
 export function Pill({ label, tone = 'neutral' }: { label: string; tone?: PillTone }) {
   const tones = { success: 'bg-[#e2f4e5] text-[#208052]', warning: 'bg-[#fff2d4] text-[#9d6c08]', danger: 'bg-[#ffe5e6] text-[#c83e4b]', info: 'bg-[#e3f1f7] text-[#2c6e83]', neutral: 'bg-[#edf2ef] text-[#64776c]' };
-  return <span className={cn('inline-flex items-center gap-1 rounded-md px-2 py-1 text-[9px] font-bold whitespace-nowrap', tones[tone])}><span className="size-1.5 rounded-full bg-current" />{label}</span>;
+  return <span className={cn('inline-flex min-w-0 max-w-full items-center gap-1 rounded-md px-2 py-1 text-[9px] font-bold whitespace-normal break-words [overflow-wrap:anywhere]', tones[tone])}><span className="size-1.5 shrink-0 rounded-full bg-current" />{label}</span>;
 }
 
 export function Kpi({ label, value, detail, tone = 'green', icon = '▦' }: { label: string; value: string; detail: string; tone?: 'green' | 'amber' | 'danger'; icon?: string }) {

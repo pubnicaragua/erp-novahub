@@ -16,7 +16,7 @@ import { errorMessage, serifStyle } from '../organizacion/organizacion.utils';
 import { STATUS_CLASS } from './marketing.constants';
 
 export function StatusBadge({ status, label }: { status: string; label: string }) {
-  return <span className={cn('inline-flex items-center whitespace-nowrap rounded-full px-2.5 py-0.5 text-[11px] font-semibold', STATUS_CLASS[status] ?? STATUS_CLASS.DRAFT)}>{label}</span>;
+  return <span className={cn('inline-flex min-w-0 max-w-full items-center whitespace-normal break-words rounded-full px-2.5 py-0.5 text-[11px] font-semibold [overflow-wrap:anywhere]', STATUS_CLASS[status] ?? STATUS_CLASS.DRAFT)}>{label}</span>;
 }
 
 export function Kpi({ label, value, hint, icon }: { label: string; value: ReactNode; hint?: ReactNode; icon?: ReactNode }) {

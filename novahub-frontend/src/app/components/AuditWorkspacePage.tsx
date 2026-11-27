@@ -157,7 +157,7 @@ function StatusPill({ label, tone = 'neutral' }: { label: string; tone?: 'succes
     info: 'bg-[#e1f1f8] text-[#17617d]',
     neutral: 'bg-[#edf1ef] text-[#62736c]',
   };
-  return <span className={cn('inline-flex items-center gap-1.5 rounded-md px-2 py-1 text-[10px] font-bold whitespace-nowrap', tones[tone])}><span className="size-1.5 rounded-full bg-current" />{label}</span>;
+  return <span className={cn('inline-flex min-w-0 max-w-full items-center gap-1.5 rounded-md px-2 py-1 text-[10px] font-bold whitespace-normal break-words [overflow-wrap:anywhere]', tones[tone])}><span className="size-1.5 shrink-0 rounded-full bg-current" />{label}</span>;
 }
 
 function RiskPill({ risk }: { risk: AuditRisk }) {

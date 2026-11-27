@@ -841,6 +841,16 @@ main.module-overview [data-slot="card-description"] {
   text-transform: none !important;
 }
 
+/* Las etiquetas de estado deben seguir legibles dentro de columnas angostas. */
+[data-slot="badge"] {
+  min-width: 0;
+  max-width: 100%;
+  flex-shrink: 1 !important;
+  overflow: visible !important;
+  overflow-wrap: anywhere;
+  white-space: normal !important;
+}
+
 :is(main[class*="module-"], .manager-shell, .master-console-module) [data-slot="table-cell"] :is(.font-black, .font-extrabold, .font-bold, .font-semibold),
 :is(main[class*="module-"], .manager-shell, .master-console-module) td :is(.font-black, .font-extrabold, .font-bold, .font-semibold) {
   font-weight: 500 !important;

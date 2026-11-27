@@ -861,7 +861,7 @@ export function PlanCuentasView({ isSidebarCollapsed = true, helpTrigger }: Plan
           {effectiveColumnKeys.includes('credits') && <span className="min-w-0 truncate px-2 text-right text-xs tabular-nums text-muted-foreground">{formatConvertedAmount(account.periodCredit ?? 0, baseCurrency)}</span>}
           {effectiveColumnKeys.includes('balance') && <span className="min-w-0 truncate px-2 text-right text-sm font-medium tabular-nums">{formatConvertedAmount(account.balance, baseCurrency)}</span>}
           {effectiveColumnKeys.includes('currency') && <Badge variant="outline" className="mx-2 max-w-full justify-center truncate text-[10px] text-muted-foreground">{account.currency}</Badge>}
-          {effectiveColumnKeys.includes('status') && <Badge variant={account.isActive ? 'default' : 'secondary'} className="mx-2 max-w-full justify-center truncate text-[10px]">{account.isActive ? 'Activo' : 'Inactivo'}</Badge>}
+          {effectiveColumnKeys.includes('status') && <Badge variant={account.isActive ? 'default' : 'secondary'} className="mx-2 min-w-0 max-w-full justify-center whitespace-normal break-words text-[10px] [overflow-wrap:anywhere]">{account.isActive ? 'Activo' : 'Inactivo'}</Badge>}
           <div className="flex shrink-0 items-center justify-end gap-1" onClick={(e) => e.stopPropagation()}>
             {canCreateSubaccount && (
               <Button variant="ghost" size="icon" className="size-7" onClick={() => { void openAddDialog(account); }} title="Crear subcuenta" aria-label={`Crear subcuenta para ${account.code} · ${account.name}`}>

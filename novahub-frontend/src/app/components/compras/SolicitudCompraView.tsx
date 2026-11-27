@@ -315,7 +315,7 @@ export function SolicitudCompraView({ data, summaryData, summaryLoading, summary
         const status = normalizeRequestStatus(row.status);
         return (
           <div className="flex flex-wrap items-center gap-1">
-            <Badge variant="outline" className={cn('whitespace-nowrap border-none px-2 py-0.5 text-[9px] font-black uppercase tracking-widest', STATUS_STYLES[status])}>
+            <Badge variant="outline" className={cn('min-w-0 max-w-full whitespace-normal break-words border-none px-2 py-0.5 text-[9px] font-black uppercase tracking-widest [overflow-wrap:anywhere]', STATUS_STYLES[status])}>
               {STATUS_LABELS[status]}
             </Badge>
             {mgmt && mgmt.status === 'PENDING_APPROVAL' && (

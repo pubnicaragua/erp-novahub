@@ -87,9 +87,9 @@ export function PriceListPricingEditor({
         disabled={disabled}
         currencyPrecision={activeMode === 'FIXED'}
       />
-      {activeMode === 'MARGIN' && calculatedPrice !== null && (
+      {activeMode === 'MARGIN' && marginPercent !== '' && (
         <p className="text-[10px] leading-4 text-muted-foreground" role="status">
-          Precio de venta con esta ganancia: <strong className="text-foreground">{formatMoney(calculatedPrice, currency)}</strong>
+          Precio de venta con esta ganancia: <strong className="text-foreground">{calculatedPrice === null ? '—' : formatMoney(calculatedPrice, currency)}</strong>
         </p>
       )}
     </div>
