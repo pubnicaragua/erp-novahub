@@ -486,17 +486,6 @@ export function AddProductsModal({ open, onOpenChange, categories, warehouses, b
     }));
   };
 
-  const applyVariantMargin = (combination: VariantCombination, listCode: string, price: number) => {
-    const key = variantCombinationKey(combination);
-    setDraftProduct((prev: any) => ({
-      ...prev,
-      variantPrices: {
-        ...(prev.variantPrices || {}),
-        [key]: { ...(prev.variantPrices?.[key] || {}), [listCode]: price },
-      },
-    }));
-  };
-
   const updateVariantStockThreshold = (kind: 'min' | 'max', combination: VariantCombination, value: string) => {
     const key = variantCombinationKey(combination);
     const field = kind === 'min' ? 'variantMinStocks' : 'variantMaxStocks';
@@ -529,19 +518,6 @@ export function AddProductsModal({ open, onOpenChange, categories, warehouses, b
     setDraftProduct((prev: any) => ({
       ...prev,
       priceSettings: { ...(prev.priceSettings || {}), [code]: { pricingMode: 'MARGIN', marginPercent } },
-    }));
-  };
-
-  const applyListMargin = (code: string, price: number) => {
-    setDraftProduct((prev: any) => ({
-      ...prev,
-      prices: { ...(prev.prices || {}), [code]: price },
-      salePrice: (() => {
-        const nextPrices = { ...(prev.prices || {}), [code]: price };
-        const retailList = effectivePriceLists.find((list) => list.code.toUpperCase() === 'RETAIL');
-        const primaryList = (retailList && nextPrices[retailList.code] !== undefined ? retailList : undefined) || effectivePriceLists.find((list) => nextPrices[list.code] !== undefined);
-        return primaryList ? nextPrices[primaryList.code] ?? '' : '';
-      })(),
     }));
   };
 
@@ -1535,7 +1511,6 @@ export function AddProductsModal({ open, onOpenChange, categories, warehouses, b
                     inputTestId={`inventory-service-price-${list.code}`}
                     onPriceChange={(value) => updatePrice(list.code, value)}
                     onMarginPercentChange={(value) => updateMargin(list.code, value)}
-                    onApplyMargin={(price) => applyListMargin(list.code, price)}
                   />
                 </div>
               ))}
@@ -1565,7 +1540,6 @@ export function AddProductsModal({ open, onOpenChange, categories, warehouses, b
                     inputTestId={`inventory-product-price-${list.code}`}
                     onPriceChange={(value) => updatePrice(list.code, value)}
                     onMarginPercentChange={(value) => updateMargin(list.code, value)}
-                    onApplyMargin={(price) => applyListMargin(list.code, price)}
                   />
                 </div>
               ))}
@@ -1911,7 +1885,6 @@ export function AddProductsModal({ open, onOpenChange, categories, warehouses, b
                                   disabled={isSaving}
                                   onPriceChange={(value) => updateVariantPrice(combination, list.code, value)}
                                   onMarginPercentChange={(value) => updateVariantMargin(combination, list.code, value)}
-                                  onApplyMargin={(price) => applyVariantMargin(combination, list.code, price)}
                                 />)}
                               </div>
                             </div>

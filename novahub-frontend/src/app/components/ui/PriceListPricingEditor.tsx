@@ -49,7 +49,6 @@ interface PriceListPricingEditorProps {
   inputTestId?: string;
   onPriceChange: (value: string) => void;
   onMarginPercentChange: (value: string) => void;
-  onApplyMargin: (price: number) => void;
 }
 
 const formatMoney = (value: number, currency: string) => `${currency === 'USD' ? '$' : 'C$'} ${value.toLocaleString('es-NI', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
@@ -66,16 +65,11 @@ export function PriceListPricingEditor({
   inputTestId,
   onPriceChange,
   onMarginPercentChange,
-  onApplyMargin,
 }: PriceListPricingEditorProps) {
   const activeMode: PriceListPricingMode = allowMargin ? pricingMode : 'FIXED';
   const calculatedPrice = activeMode === 'MARGIN' && marginPercent !== ''
     ? priceFromCost(Number(cost), Number(marginPercent), 'markup')
     : null;
-
-  const commitMargin = () => {
-    if (calculatedPrice !== null) onApplyMargin(calculatedPrice);
-  };
 
   return (
     <div className="min-w-0 space-y-1.5">
@@ -87,24 +81,15 @@ export function PriceListPricingEditor({
         step={activeMode === 'MARGIN' ? '0.01' : 'any'}
         value={activeMode === 'MARGIN' ? marginPercent : price}
         onChange={(event) => activeMode === 'MARGIN' ? onMarginPercentChange(event.target.value) : onPriceChange(event.target.value)}
-        onKeyDown={(event) => {
-          if (event.key !== 'Enter' || activeMode !== 'MARGIN') return;
-          event.preventDefault();
-          event.stopPropagation();
-          commitMargin();
-        }}
         className="h-8 w-full text-right text-xs tabular-nums"
         placeholder={activeMode === 'MARGIN' ? 'Ej. 30' : '0.00'}
         aria-label={activeMode === 'MARGIN' ? `Porcentaje de ganancia sobre costo para ${listName}` : `Precio ${listName}`}
-        aria-invalid={activeMode === 'MARGIN' && marginPercent !== '' && calculatedPrice === null}
         disabled={disabled}
         currencyPrecision={activeMode === 'FIXED'}
       />
-      {activeMode === 'MARGIN' && (
+      {activeMode === 'MARGIN' && calculatedPrice !== null && (
         <p className="text-[10px] leading-4 text-muted-foreground" role="status">
-          {calculatedPrice === null
-            ? 'Ingresa un costo y un porcentaje de ganancia válido (0 o mayor).'
-            : <>Presiona Enter para aplicar · Precio de venta: <strong className="text-foreground">{formatMoney(calculatedPrice, currency)}</strong></>}
+          Precio de venta con esta ganancia: <strong className="text-foreground">{formatMoney(calculatedPrice, currency)}</strong>
         </p>
       )}
     </div>

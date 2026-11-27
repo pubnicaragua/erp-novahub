@@ -667,10 +667,6 @@ export function PriceListsView({ products = [], onRefresh, isSidebarCollapsed = 
     updateEditingPricing(productId, listId, { pricingMode: 'MARGIN', marginPercent });
   };
 
-  const applyEditingMargin = (productId: string, listId: string, price: number) => {
-    setEditingPrices((current) => ({ ...current, [productId]: { ...current[productId], [listId]: String(price) } }));
-  };
-
   const saveProductPrices = async (productId: string) => {
     if (!canEditPriceList || savingProductRef.current.has(productId)) return;
     const values = editingPrices[productId] || {};
@@ -1096,7 +1092,6 @@ export function PriceListsView({ products = [], onRefresh, isSidebarCollapsed = 
                         disabled={saving === product.id}
                         onPriceChange={(value) => updateEditingPrice(product.id, list.id, value)}
                         onMarginPercentChange={(value) => updateEditingMargin(product.id, list.id, value)}
-                        onApplyMargin={(value) => applyEditingMargin(product.id, list.id, value)}
                       />{!item && <span className="mt-1 block text-[9px] leading-3 text-muted-foreground">Sin precio configurado</span>}</div> : <div className={`ml-auto flex min-h-8 w-32 items-center justify-end rounded-md px-2 py-1.5 text-right text-sm font-semibold tabular-nums ${!item ? 'bg-muted/40 font-medium italic text-muted-foreground' : 'text-foreground'}`}>{item ? formatDisplayPrice(Number(item.basePrice ?? item.price ?? 0)) : 'Sin precio configurado'}</div>}</TableCell>;
                     })}
                       <TableCell className="min-w-52 text-right">
@@ -1170,7 +1165,6 @@ export function PriceListsView({ products = [], onRefresh, isSidebarCollapsed = 
                           disabled={saving === product.id}
                           onPriceChange={(value) => updateEditingPrice(product.id, list.id, value)}
                           onMarginPercentChange={(value) => updateEditingMargin(product.id, list.id, value)}
-                          onApplyMargin={(value) => applyEditingMargin(product.id, list.id, value)}
                         />{!item && <span className="mt-1 block text-[9px] leading-3 text-muted-foreground">Sin precio configurado</span>}</div> : <span className={`text-right text-sm font-bold tabular-nums ${!item ? 'italic text-muted-foreground' : 'text-foreground'}`}>{item ? formatDisplayPrice(Number(item.basePrice ?? item.price ?? 0)) : 'Sin precio configurado'}</span>}
                       </div>
                     </div>;
@@ -1474,7 +1468,6 @@ export function PriceListsView({ products = [], onRefresh, isSidebarCollapsed = 
                                     setEditingVariantPricing((current) => ({ ...current, [variant.id]: { ...current[variant.id], [list.id]: { pricingMode: 'FIXED', marginPercent: '' } } }));
                                   }}
                                   onMarginPercentChange={(value) => setEditingVariantPricing((current) => ({ ...current, [variant.id]: { ...current[variant.id], [list.id]: { pricingMode: 'MARGIN', marginPercent: value } } }))}
-                                  onApplyMargin={(price) => setEditingVariantPrices((current) => ({ ...current, [variant.id]: { ...current[variant.id], [list.id]: String(price) } }))}
                                 />
                                 {!baseItem && <span className="text-[9px] leading-3 text-muted-foreground">Sin precio configurado</span>}
                               </div>

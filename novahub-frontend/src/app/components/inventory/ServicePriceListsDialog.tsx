@@ -195,7 +195,6 @@ export function ServicePriceListsDialog({ open, onOpenChange, service, onSaved }
                         disabled={isSaving}
                         onPriceChange={(value) => updateDraft(list.id, { ...draft, price: value })}
                         onMarginPercentChange={(value) => updateDraft(list.id, { ...draft, marginPercent: value })}
-                        onApplyMargin={(value) => updateDraft(list.id, { ...draft, price: String(value) })}
                       />
                     </div>
                     <div className="min-w-0 space-y-1">
