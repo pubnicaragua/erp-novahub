@@ -28,7 +28,7 @@ import { SalesDateRangeFilter } from './SalesDateRangeFilter';
 import { SalesViewTutorial } from './SalesViewTutorial';
 import type { PdfDownloadFormat } from '../../utils/pdfDownloadFormats';
 import { PdfDownloadButton } from '../ui/PdfDownloadButton';
-import { SalesActionTooltip } from './SalesActionTooltip';
+import { SalesActionTooltip, SalesActionTooltips } from './SalesActionTooltip';
 import { SalesKpiCard } from './SalesKpiCard';
 import { KpiSummaryNotice } from '../ui/KpiSummaryNotice';
 import { fetchAllReportPages } from '../../hooks/useTenantQuery';
@@ -939,14 +939,14 @@ export function PagosRecibidosView({ data, summaryData, summaryLoading, summaryE
               <p className="text-[10px] font-black uppercase tracking-widest text-muted-foreground/40">Completar datos del pago recibido</p>
             </div>
           </div>
-          <div className="flex items-center gap-3" data-tour="sales-form-actions">
+          <SalesActionTooltips documentLabel="pago recibido"><div className="flex items-center gap-3" data-tour="sales-form-actions">
             <SalesViewTutorial view="payments" context="form" />
             {canPerform('SALES_PAYMENTS', 'pay') && (
             <Button className="rounded-xl bg-primary shadow-xl shadow-primary/20 text-primary-foreground font-black uppercase text-[10px] tracking-widest px-6" onClick={handleSave} disabled={paymentCustomerFavorExceeded || paymentGeneralBalanceExceeded || paymentChangeUnsupported || Boolean(cashRegisterId && (cashLoading || !cashSession)) || (paymentTermOverrideRequired && !creditTermOverrideConfirmed) || (Boolean(linkedPaymentDocument) && paymentRemainingBase > 0.01 && (!partialPaymentEnabled || !paymentPartialCreditFits || !localDoc.dueDate)) || !paymentLines.some((line) => Number(line.amount || 0) > 0) || paymentLines.some((line) => requiresPaymentReference(line.method) && !String(line.reference || '').trim()) || (salesAccountingRequired && paymentLines.some((line) => requiresManualPaymentAccount(line.method) && !line.accountId)) || (salesAccountingRequired && paymentLines.some((line) => isBankPaymentMethod(line.method, true) && !line.bankAccountId))}>
               Confirmar Pago
             </Button>
             )}
-          </div>
+          </div></SalesActionTooltips>
         </div>
 
         <div className="grid md:grid-cols-2 gap-4">
@@ -1143,7 +1143,7 @@ export function PagosRecibidosView({ data, summaryData, summaryLoading, summaryE
           highlightedRowId={highlightedAlertId}
           actions={(row) => (
             <div className="flex items-center gap-1">
-              <SalesActionTooltip label="Ver"><Button aria-label={`Ver pago ${row.number}`} variant="ghost" size="icon" className="size-8 rounded-lg text-muted-foreground hover:bg-primary/10 hover:text-primary transition-colors" onClick={() => setDetailPayment(row)}><Eye className="size-4" /></Button></SalesActionTooltip>
+              <SalesActionTooltip label="Abrir pago recibido"><Button aria-label={`Ver pago ${row.number}`} variant="ghost" size="icon" className="size-8 rounded-lg text-muted-foreground hover:bg-primary/10 hover:text-primary transition-colors" onClick={() => setDetailPayment(row)}><Eye className="size-4" /></Button></SalesActionTooltip>
             </div>
           )}
         />
@@ -1172,7 +1172,7 @@ export function PagosRecibidosView({ data, summaryData, summaryLoading, summaryE
                   <span>Moneda: {currencyLabels[String(detailPayment.currency || baseCurrency).toUpperCase()] || 'No especificada'}</span>
                 </div>
                 <div className="mt-3 flex flex-wrap gap-2">
-                  {canPerform('SALES_PAYMENTS', 'export') && <PdfDownloadButton onDownload={(format) => { void handleExportPDF(detailPayment, format); }} includePageSizes includeRoll label="Imprimir" action="print" />}
+                  {canPerform('SALES_PAYMENTS', 'export') && <SalesActionTooltip label={`Imprimir comprobante del pago ${detailPayment.number}`}><span className="inline-flex"><PdfDownloadButton onDownload={(format) => { void handleExportPDF(detailPayment, format); }} includePageSizes includeRoll label="Imprimir" action="print" /></span></SalesActionTooltip>}
                 </div>
               </div>
 

@@ -78,7 +78,9 @@ export function buildCustomerWhatsAppUrl(phone: string | null | undefined, messa
 
 export function WhatsAppActionButton({ phone, documentLabel, onSend, showLabel = false }: WhatsAppActionButtonProps) {
   const hasPhone = Boolean(String(phone || '').trim());
-  const actionLabel = hasPhone ? 'WhatsApp' : 'Sin teléfono';
+  const actionLabel = hasPhone
+    ? `Enviar ${documentLabel} por WhatsApp`
+    : `No hay teléfono para enviar ${documentLabel} por WhatsApp`;
 
   return (
     <SalesActionTooltip label={actionLabel}>

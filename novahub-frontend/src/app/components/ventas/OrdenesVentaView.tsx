@@ -6,7 +6,7 @@ import {
 } from 'lucide-react';
 import { Card, CardContent } from '../ui/card';
 import { Button } from '../ui/button';
-import { SalesActionTooltip } from './SalesActionTooltip';
+import { SalesActionTooltip, SalesActionTooltips } from './SalesActionTooltip';
 import { Input } from '../ui/input';
 import { Label } from '../ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../ui/select';
@@ -968,7 +968,7 @@ export function OrdenesVentaView({ data, summaryData, summaryLoading, summaryErr
               <p className="text-[10px] font-black uppercase tracking-widest text-muted-foreground/40">Detalle de la orden de venta</p>
             </div>
           </div>
-          <div className="sales-document-actions flex w-full min-w-0 flex-wrap items-center gap-2 sm:w-auto sm:justify-end" data-tour="sales-form-actions">
+          <SalesActionTooltips documentLabel="orden de venta"><div className="sales-document-actions flex w-full min-w-0 flex-wrap items-center gap-2 sm:w-auto sm:justify-end" data-tour="sales-form-actions">
             <SalesViewTutorial view="orders" context="form" />
             {(canPerform('SALES_ORDERS', 'edit') || (String(localDoc?.id || '').startsWith('local-') && canPerform('SALES_ORDERS', 'create'))) && !['APPROVED', 'CANCELLED'].includes(normalizeOrderStatus(localDoc?.status)) && (
               <>
@@ -981,7 +981,7 @@ export function OrdenesVentaView({ data, summaryData, summaryLoading, summaryErr
                     onClick={() => void handleSaveOrder('APPROVED')}>
                     <><Check className="mr-2 size-4" />Aprobar</>
                   </Button>}
-                  {canPerform('SALES_ORDERS', 'convert') && <SalesActionTooltip label={hasOpenCash ? 'Aprobar, facturar y enviar a Caja' : 'No hay una caja abierta en esta sucursal'}><Button
+                  {canPerform('SALES_ORDERS', 'convert') && <SalesActionTooltip label={hasOpenCash ? 'Aprobar, facturar orden de venta y enviar a Caja' : 'No hay una caja abierta en esta sucursal'}><Button
                     type="button"
                     data-testid="sales-order-send-cash"
                     variant="outline"
@@ -995,7 +995,7 @@ export function OrdenesVentaView({ data, summaryData, summaryLoading, summaryErr
                 </>}
               </>
             )}
-          </div>
+          </div></SalesActionTooltips>
         </div>
         <div className="grid min-w-0 grid-cols-1 gap-4 lg:grid-cols-2">
           <Card className="rounded-2xl border-border/50" data-tour="sales-form-data">
@@ -1649,11 +1649,11 @@ export function OrdenesVentaView({ data, summaryData, summaryLoading, summaryErr
                   documentLabel="orden de venta"
                   onSend={() => handleWhatsApp(row)}
                 />
-                <SalesActionTooltip label="Ver"><Button type="button" aria-label={`Ver orden ${row.number}`} variant="ghost" size="icon" className="size-8 shrink-0 rounded-lg text-muted-foreground hover:bg-muted/40 hover:text-muted-foreground transition-colors" onClick={() => setDetailOrder(row)}><Eye className="size-4 text-muted-foreground" /></Button></SalesActionTooltip>
+                <SalesActionTooltip label="Abrir orden de venta"><Button type="button" aria-label={`Ver orden ${row.number}`} variant="ghost" size="icon" className="size-8 shrink-0 rounded-lg text-muted-foreground hover:bg-muted/40 hover:text-muted-foreground transition-colors" onClick={() => setDetailOrder(row)}><Eye className="size-4 text-muted-foreground" /></Button></SalesActionTooltip>
                 {canPerform('SALES_ORDERS', 'cancel') &&
                   normalizeOrderStatus(row.status) === 'DRAFT' &&
                   !row.invoiceId && !row.invoiceNumber && (
-                  <SalesActionTooltip label="Anular"><Button
+                  <SalesActionTooltip label="Anular orden de venta"><Button
                     type="button"
                     aria-label={`Anular orden ${row.number}`}
                     variant="ghost"
@@ -1694,7 +1694,7 @@ export function OrdenesVentaView({ data, summaryData, summaryLoading, summaryErr
             showLabel
           />
           {canPerform('SALES_ORDERS', 'convert') && ['DRAFT', 'APPROVED'].includes(normalizeOrderStatus(detailOrder.status)) && !detailOrder.invoiceId && !detailOrder.invoiceNumber && <Button type="button" className="rounded-xl bg-primary text-primary-foreground" disabled={invoicingOrderId === detailOrder.id} onClick={() => { const order = detailOrder; setDetailOrder(null); void handleInvoiceOrder(order); }}><ArrowRightCircle className="mr-2 size-4" />Facturar</Button>}
-          {canPerform('SALES_ORDERS', 'convert') && ['DRAFT', 'APPROVED'].includes(normalizeOrderStatus(detailOrder.status)) && !detailOrder.invoiceId && !detailOrder.invoiceNumber && <SalesActionTooltip label={hasOpenCash ? 'Aprobar, facturar y enviar a Caja' : 'No hay una caja abierta en esta sucursal'}><Button type="button" variant="outline" aria-label="Enviar a Caja" className={cn('rounded-xl', !hasOpenCash && 'cursor-not-allowed opacity-50')} disabled={invoicingOrderId === detailOrder.id || !hasOpenCash} onClick={() => { const order = detailOrder; setDetailOrder(null); void handleInvoiceOrder(order, true); }}><Inbox className="mr-2 size-4" />Caja</Button></SalesActionTooltip>}
+          {canPerform('SALES_ORDERS', 'convert') && ['DRAFT', 'APPROVED'].includes(normalizeOrderStatus(detailOrder.status)) && !detailOrder.invoiceId && !detailOrder.invoiceNumber && <SalesActionTooltip label={hasOpenCash ? 'Aprobar, facturar orden de venta y enviar a Caja' : 'No hay una caja abierta en esta sucursal'}><Button type="button" variant="outline" aria-label="Enviar a Caja" className={cn('rounded-xl', !hasOpenCash && 'cursor-not-allowed opacity-50')} disabled={invoicingOrderId === detailOrder.id || !hasOpenCash} onClick={() => { const order = detailOrder; setDetailOrder(null); void handleInvoiceOrder(order, true); }}><Inbox className="mr-2 size-4" />Caja</Button></SalesActionTooltip>}
           {canPerform('SALES_ORDERS', 'cancel') && normalizeOrderStatus(detailOrder.status) === 'DRAFT' && !detailOrder.invoiceId && !detailOrder.invoiceNumber && <Button type="button" variant="outline" className="rounded-xl border-rose-500/30 text-rose-600 hover:bg-rose-500/10 dark:text-rose-400" onClick={() => { setDetailOrder(null); setPendingCancelId(detailOrder.id); }}><Ban className="mr-2 size-4" />Anular</Button>}
         </> : undefined}
         onDownloadPdf={canPerform('SALES_ORDERS', 'export') ? (format) => { if (detailOrder) void handleExportPDF(detailOrder, format); } : undefined}

@@ -7,7 +7,7 @@ import {
 import { Card, CardContent } from '../ui/card';
 import { useDebouncedValue } from '../../hooks/useDebouncedValue';
 import { Button } from '../ui/button';
-import { SalesActionTooltip } from './SalesActionTooltip';
+import { SalesActionTooltip, SalesActionTooltips } from './SalesActionTooltip';
 import { Input } from '../ui/input';
 import { DateField } from '../ui/DateField';
 import { Label } from '../ui/label';
@@ -1388,7 +1388,7 @@ export function NotasCreditoView({ data, summaryData, summaryLoading, summaryErr
       <div className="space-y-6 animate-in slide-in-from-right duration-300" data-tour="sales-form-title">
         <div className="flex flex-wrap items-center justify-between gap-4">
           <div className="flex items-center gap-4"><Button variant="ghost" size="icon" onClick={closeEditor} className="rounded-full"><ChevronLeft className="size-5" /></Button><div><h2 className="nh-module-title">{isCreating ? 'Nuevo Crédito' : `Crédito ${localDoc.number}`}</h2><p className="text-[10px] font-black uppercase tracking-widest text-muted-foreground/40">Productos y servicios entregados a crédito</p></div></div>
-          <div className="flex flex-wrap items-center gap-3">{canEditDocument && canPerform('SALES_CREDIT_NOTES', 'edit') && <><Button variant="outline" className="rounded-xl border-border/50 hover:bg-muted/70 hover:text-foreground font-black uppercase text-[10px] tracking-widest" onClick={handleSave}><Save className="mr-2 size-4" />Guardar</Button>{canApprove && canPerform('SALES_CREDIT_NOTES', 'issue') && <Button variant="outline" className="rounded-xl border-emerald-500/50 text-emerald-500 hover:bg-emerald-500/10 hover:text-emerald-700 dark:hover:text-emerald-300 font-black uppercase text-[10px] tracking-widest" onClick={() => handleApprove(localDoc.id)}><CheckCircle2 className="mr-2 size-3" /> Aprobar</Button>}</>}</div>
+          <SalesActionTooltips documentLabel="crédito"><div className="flex flex-wrap items-center gap-3">{canEditDocument && canPerform('SALES_CREDIT_NOTES', 'edit') && <><Button variant="outline" className="rounded-xl border-border/50 hover:bg-muted/70 hover:text-foreground font-black uppercase text-[10px] tracking-widest" onClick={handleSave}><Save className="mr-2 size-4" />Guardar</Button>{canApprove && canPerform('SALES_CREDIT_NOTES', 'issue') && <Button variant="outline" className="rounded-xl border-emerald-500/50 text-emerald-500 hover:bg-emerald-500/10 hover:text-emerald-700 dark:hover:text-emerald-300 font-black uppercase text-[10px] tracking-widest" onClick={() => handleApprove(localDoc.id)}><CheckCircle2 className="mr-2 size-3" /> Aprobar</Button>}</>}</div></SalesActionTooltips>
         </div>
         {!canEditDocument && <div className="rounded-xl border border-amber-500/30 bg-amber-500/10 px-4 py-3 text-xs text-amber-700 dark:text-amber-300">Este crédito ya fue emitido o aplicado. Se muestra en modo consulta para proteger el saldo y la trazabilidad.</div>}
         {customersError && <div role="alert" className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-rose-500/30 bg-rose-500/10 px-4 py-3 text-xs text-rose-700 dark:text-rose-300"><span>No se pudieron cargar los clientes ni sus límites de crédito.</span><Button type="button" variant="outline" size="sm" onClick={onRefresh}>Reintentar</Button></div>}
@@ -1817,8 +1817,8 @@ export function NotasCreditoView({ data, summaryData, summaryLoading, summaryErr
           actions={(row) => {
             const status = normalizeStatus(row.status);
             return <div className="flex items-center gap-1" onPointerDown={(event) => event.stopPropagation()} onClick={(event) => event.stopPropagation()}>
-              <SalesActionTooltip label="Ver"><Button aria-label={row.kind === 'CUSTOMER_LOAN' ? `Ver préstamo ${row.number}` : `Ver crédito ${row.number}`} variant="ghost" size="icon" className="size-8 rounded-lg text-muted-foreground hover:text-primary" onClick={() => setDetailCredit(row)}><Eye className="size-4" /></Button></SalesActionTooltip>
-              {row.kind === 'CREDIT_NOTE' && canPerform('SALES_CREDIT_NOTES', 'cancel') && ['DRAFT', 'APPROVED'].includes(status) && <SalesActionTooltip label="Anular"><Button aria-label={`Anular crédito ${row.number}`} variant="ghost" size="icon" className="size-8 rounded-lg text-muted-foreground hover:text-rose-500" onClick={() => { setCancelReason(''); setCancelReasonAttempted(false); setPendingDeleteIds([row.id]); }}><Ban className="size-4" /></Button></SalesActionTooltip>}
+              <SalesActionTooltip label={row.kind === 'CUSTOMER_LOAN' ? 'Abrir préstamo' : 'Abrir nota de crédito'}><Button aria-label={row.kind === 'CUSTOMER_LOAN' ? `Ver préstamo ${row.number}` : `Ver crédito ${row.number}`} variant="ghost" size="icon" className="size-8 rounded-lg text-muted-foreground hover:text-primary" onClick={() => setDetailCredit(row)}><Eye className="size-4" /></Button></SalesActionTooltip>
+              {row.kind === 'CREDIT_NOTE' && canPerform('SALES_CREDIT_NOTES', 'cancel') && ['DRAFT', 'APPROVED'].includes(status) && <SalesActionTooltip label="Anular nota de crédito"><Button aria-label={`Anular crédito ${row.number}`} variant="ghost" size="icon" className="size-8 rounded-lg text-muted-foreground hover:text-rose-500" onClick={() => { setCancelReason(''); setCancelReasonAttempted(false); setPendingDeleteIds([row.id]); }}><Ban className="size-4" /></Button></SalesActionTooltip>}
             </div>;
           }}
         />

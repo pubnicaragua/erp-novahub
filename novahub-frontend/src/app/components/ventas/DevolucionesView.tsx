@@ -5,7 +5,7 @@ import {
 } from 'lucide-react';
 import { Card, CardContent } from '../ui/card';
 import { Button } from '../ui/button';
-import { SalesActionTooltip } from './SalesActionTooltip';
+import { SalesActionTooltip, SalesActionTooltips } from './SalesActionTooltip';
 import { Input } from '../ui/input';
 import { EditableDataTable, ColumnDef } from '../ui/EditableDataTable';
 import { ViewLayoutSelect } from '../ui/ViewLayoutSelect';
@@ -563,7 +563,7 @@ export function DevolucionesView({ data, summaryData, summaryLoading, summaryErr
               <p className="text-[10px] font-black uppercase tracking-widest text-muted-foreground/40">{isCreating ? 'Aplicar saldo a favor desde una factura' : 'Detalle de la nota de crédito'}</p>
             </div>
           </div>
-          <div className="flex items-center gap-3" data-tour="sales-form-actions">
+          <SalesActionTooltips documentLabel="devolución"><div className="flex items-center gap-3" data-tour="sales-form-actions">
             <SalesViewTutorial view="returns" context="form" />
             {canPerform('SALES_RETURNS', 'edit') && (
               <>
@@ -577,7 +577,7 @@ export function DevolucionesView({ data, summaryData, summaryLoading, summaryErr
                 </Button>
               </>
             )}
-          </div>
+          </div></SalesActionTooltips>
         </div>
 
         <div className="grid md:grid-cols-2 gap-4">
@@ -745,7 +745,7 @@ export function DevolucionesView({ data, summaryData, summaryLoading, summaryErr
           highlightedRowId={highlightedAlertId}
           actions={(row) => (
             <div className="flex items-center gap-1" onPointerDown={(event) => event.stopPropagation()} onClick={(event) => event.stopPropagation()}>
-                <SalesActionTooltip label="Ver"><Button type="button" aria-label={`Ver devolución ${row.number}`} variant="ghost" size="icon" className="size-8 rounded-lg text-muted-foreground hover:bg-primary/10 hover:text-primary transition-colors" onClick={() => setDetailReturn(row)}><Eye className="size-4" /></Button></SalesActionTooltip>
+                <SalesActionTooltip label="Abrir devolución"><Button type="button" aria-label={`Ver devolución ${row.number}`} variant="ghost" size="icon" className="size-8 rounded-lg text-muted-foreground hover:bg-primary/10 hover:text-primary transition-colors" onClick={() => setDetailReturn(row)}><Eye className="size-4" /></Button></SalesActionTooltip>
             </div>
           )}
         />

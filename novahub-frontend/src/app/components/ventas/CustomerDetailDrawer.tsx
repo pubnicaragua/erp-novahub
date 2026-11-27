@@ -47,6 +47,7 @@ import {
   TabsTrigger,
   TabsContent,
 } from '../ui/tabs';
+import { SalesActionTooltips } from './SalesActionTooltip';
 import { Badge } from '../ui/badge';
 import { Button } from '../ui/button';
 import { Card } from '../ui/card';
@@ -635,7 +636,7 @@ export function CustomerDetailDrawer({
               </div>
             </div>
 
-            <div className="flex flex-wrap justify-end gap-2" data-tour="customer-detail-actions">
+            <SalesActionTooltips documentLabel="cliente"><div className="flex flex-wrap justify-end gap-2" data-tour="customer-detail-actions">
               {extraActions}
               {canExport && (
                 <Button
@@ -649,7 +650,7 @@ export function CustomerDetailDrawer({
                   <span className="truncate">Exportar historial del cliente</span>
                 </Button>
               )}
-            </div>
+            </div></SalesActionTooltips>
 
             <TabsList className="flex-nowrap w-full justify-start h-9 overflow-x-auto bg-muted/40 p-1 rounded-xl border border-border/40 font-bold text-xs">
               <TabsTrigger value="general" className="shrink-0 rounded-lg text-xs font-bold gap-1.5 px-3 py-1">

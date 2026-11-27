@@ -13,7 +13,7 @@ import { getSalesAdditionalCharges } from '../../utils/salesCharges';
 import { getInvoicePaymentPresentation } from '../../utils/paymentMethods';
 import { CurrencyRateDetails } from '../ui/CurrencyValuation';
 import { getCurrencyDecimalPlaces } from '../../utils/currency';
-import { SalesActionTooltip } from './SalesActionTooltip';
+import { SalesActionTooltip, SalesActionTooltips } from './SalesActionTooltip';
 
 type InvoiceSourceBadge = {
   label: string;
@@ -164,8 +164,8 @@ export function InvoiceDetailSheet({
                 <SalesActionTooltip label="Abrir factura"><Button type="button" variant="outline" aria-label="Abrir factura" className="gap-2 rounded-xl text-xs" onClick={() => onOpenInvoice(invoice)}>
                   <Eye className="size-4 shrink-0 text-primary" /> Abrir
                 </Button></SalesActionTooltip>
-                {extraActions}
-                {canExport && <PdfDownloadButton onDownload={(format) => onDownloadPdf(invoice, format)} includePageSizes includeRoll label="Imprimir" action="print" />}
+                {extraActions && <SalesActionTooltips documentLabel="factura">{extraActions}</SalesActionTooltips>}
+                {canExport && <SalesActionTooltip label="Imprimir factura"><span className="inline-flex"><PdfDownloadButton onDownload={(format) => onDownloadPdf(invoice, format)} includePageSizes includeRoll label="Imprimir" action="print" /></span></SalesActionTooltip>}
               </section>
 
               <section className="rounded-2xl border border-border/50 p-4">
@@ -265,13 +265,13 @@ export function InvoiceDetailSheet({
                             </div>
                             <Badge className={`mt-2 border-none px-1.5 py-0.5 text-[9px] font-black uppercase tracking-wide ${paymentStatus.className}`}>{paymentStatus.label}</Badge>
                           </div>
-                          {canExport && <PdfDownloadButton onDownload={(format) => onDownloadPayment(payment, invoice, format, remainingAfterPayment)} includePageSizes includeRoll label="Imprimir" action="print" />}
+                          {canExport && <SalesActionTooltip label={`Imprimir comprobante del pago ${payment.number}`}><span className="inline-flex"><PdfDownloadButton onDownload={(format) => onDownloadPayment(payment, invoice, format, remainingAfterPayment)} includePageSizes includeRoll label="Imprimir" action="print" /></span></SalesActionTooltip>}
                         </div>
                       );
                     })}
                     <div className="flex flex-wrap items-center justify-between gap-2 border-t border-border/50 pt-3">
                       <span className="text-xs font-bold text-muted-foreground">Historial de pagos</span>
-                      {canExport && <PdfDownloadButton onDownload={(format) => onDownloadPayment({ ...invoice.payments![0], payments: invoice.payments } as PaymentReceived, invoice, format)} includePageSizes includeRoll label="Imprimir" action="print" />}
+                      {canExport && <SalesActionTooltip label="Imprimir historial de pagos de la factura"><span className="inline-flex"><PdfDownloadButton onDownload={(format) => onDownloadPayment({ ...invoice.payments![0], payments: invoice.payments } as PaymentReceived, invoice, format)} includePageSizes includeRoll label="Imprimir" action="print" /></span></SalesActionTooltip>}
                     </div>
                   </div>
                 ) : <p className="mt-3 text-sm text-muted-foreground">Todavía no hay pagos recibidos para esta factura.</p>}

@@ -10,6 +10,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '.
 import { Sheet, SheetContent, SheetHeader, SheetTitle } from '../ui/sheet';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '../ui/table';
 import { SalesKpiCard } from './SalesKpiCard';
+import { SalesActionTooltip, SalesActionTooltips } from './SalesActionTooltip';
 import { CustomerLoansPanel } from './CustomerLoansPanel';
 import { CustomerCreditSettingsButton } from './CustomerCreditSettingsButton';
 import { CustomerCreditPaymentDialog, type CustomerPaymentTarget } from './CustomerCreditPaymentDialog';
@@ -239,7 +240,7 @@ export function CustomerLoansView({ enabled, selectedBranchId, onRefresh }: { en
               <TableCell className="font-semibold text-rose-600 dark:text-rose-400">{formatCurrencyAmount(loan.overdueBalance || 0, loan.currency || baseCurrency)}</TableCell>
               <TableCell className="font-black tabular-nums">{formatCurrencyAmount(balance, loan.currency || baseCurrency)}</TableCell>
               <TableCell><Badge variant="outline" className={statusClass[loanStatus] || statusClass.ACTIVE}>{loanStatus === 'ACTIVE' && Number(loan.overdueBalance || 0) > 0.01 ? 'Activo (Atrasado)' : statusLabel[loanStatus] || loanStatus}</Badge></TableCell>
-              <TableCell><Button type="button" size="icon" variant="ghost" className="size-8" aria-label={`Ver préstamo ${loan.invoice?.number || loan.number || ''}`} onClick={(event) => { event.stopPropagation(); openDetail(loan); }}><Eye className="size-4" /></Button></TableCell>
+              <TableCell><SalesActionTooltip label="Abrir préstamo"><Button type="button" size="icon" variant="ghost" className="size-8" aria-label={`Ver préstamo ${loan.invoice?.number || loan.number || ''}`} onClick={(event) => { event.stopPropagation(); openDetail(loan); }}><Eye className="size-4" /></Button></SalesActionTooltip></TableCell>
             </TableRow>;
           })}</TableBody>
         </Table>
@@ -258,11 +259,11 @@ export function CustomerLoansView({ enabled, selectedBranchId, onRefresh }: { en
                 <div className="min-w-0"><h3 className="break-words text-base font-bold text-foreground">{customer?.name || 'Cliente'}</h3><p className="mt-1 break-words text-xs text-muted-foreground">{customer?.phone || customer?.contactPhone || customer?.email || 'Sin datos de contacto'}</p></div>
                 <div className="flex shrink-0 flex-wrap gap-2"><Badge variant="outline" className={statusClass[String(detail.status || 'ACTIVE').toUpperCase()] || statusClass.ACTIVE}>{String(detail.status || 'ACTIVE').toUpperCase() === 'ACTIVE' && Number(detail.overdueBalance || 0) > 0.01 ? 'Activo (Atrasado)' : statusLabel[String(detail.status || 'ACTIVE').toUpperCase()] || detail.status}</Badge><Badge variant="outline">Código: {customer?.code || '—'}</Badge></div>
               </div>
-              <div className="mt-4 flex flex-wrap gap-2">
+              <SalesActionTooltips documentLabel="préstamo"><div className="mt-4 flex flex-wrap gap-2">
                 {detail.status === 'DRAFT' && canApproveLoan && <Button type="button" size="sm" className="rounded-lg" onClick={() => void runLoanAction('approve')}><CheckCircle2 className="mr-2 size-4" />Aprobar</Button>}
                 {detail.status === 'APPROVED' && canDisburseLoan && <Button type="button" size="sm" className="rounded-lg" onClick={() => void runLoanAction('disburse')}><CircleDollarSign className="mr-2 size-4" />Desembolsar</Button>}
                 {['DRAFT', 'APPROVED'].includes(String(detail.status || '').toUpperCase()) && canCancelLoan && <Button type="button" size="sm" variant="outline" className="rounded-lg text-destructive" onClick={() => void runLoanAction('cancel')}><Ban className="mr-2 size-4" />Anular</Button>}
-              </div>
+              </div></SalesActionTooltips>
             </Card>
             <CustomerLoansPanel customerId={detail.customerId} customerName={customer?.name || 'Cliente'} moraTypeId={customer?.moraTypeId} moraType={customer?.moraType} enabled={enabled && Boolean(detail.customerId)} canCreateLoan={false} canCreateMora={canCreateMora} canEditMora={canEditMora} canRegisterPayment={canPay} onRegisterPayment={(loan) => openPayment(loan)} detailMode onUpdated={() => void invalidate()} focusLoanId={detail.id} />
           </div>}

@@ -57,7 +57,7 @@ import { getInvoicePaymentPresentation, hasPaymentReferenceField, isBankPaymentM
 import { getSalesAdditionalCharges } from '../../utils/salesCharges';
 import { getPaymentLineDocumentAmount } from '../../utils/paymentSettlement';
 import { PdfDownloadButton } from '../ui/PdfDownloadButton';
-import { SalesActionTooltip } from './SalesActionTooltip';
+import { SalesActionTooltip, SalesActionTooltips } from './SalesActionTooltip';
 import { clearSalesEditorDraft, getSalesEditorDraftKey, readSalesEditorDraft, writeSalesEditorDraft } from '../../services/sales-draft-storage';
 import { SalesWarehouseStockHint } from './SalesWarehouseStockHint';
 import { PoketPayLinkDialog } from './PoketPayLinkDialog';
@@ -2290,7 +2290,7 @@ export function FacturasView({ data, summaryData, summaryLoading, summaryError, 
               )}
             </div>
           </div>
-          <div className="flex min-w-0 flex-wrap items-stretch justify-start gap-2 sm:justify-end" data-tour="sales-form-actions">
+          <SalesActionTooltips documentLabel="factura"><div className="flex min-w-0 flex-wrap items-stretch justify-start gap-2 sm:justify-end" data-tour="sales-form-actions">
             <SalesViewTutorial view="invoices" context="form" />
             {localDoc?.customerId && getCustomerPhone(localDoc) && (
             <SalesActionTooltip label={isCreating ? 'Guardar la factura como borrador antes de enviarla' : 'Enviar factura por WhatsApp'}><Button
@@ -2331,7 +2331,7 @@ export function FacturasView({ data, summaryData, summaryLoading, summaryError, 
                 >
                   <Inbox className="mr-2 size-4" />Caja
                 </Button></SalesActionTooltip>}
-                {isCreating && isDraftInvoice && canPerform('SALES_INVOICES', 'create') && canPerform('SALES_INVOICES', 'sendToCredit') && <SalesActionTooltip label={!localDoc.customerId ? 'Selecciona un cliente con crédito disponible' : 'El crédito disponible debe cubrir el saldo de la factura'}><Button
+                {isCreating && isDraftInvoice && canPerform('SALES_INVOICES', 'create') && canPerform('SALES_INVOICES', 'sendToCredit') && <SalesActionTooltip label={!localDoc.customerId ? 'Selecciona un cliente con crédito disponible' : !canEmitNewInvoiceToCredit ? 'El crédito disponible debe cubrir el saldo de la factura' : 'Enviar factura a crédito'}><Button
                   type="button"
                   variant="outline"
                   className="w-full rounded-xl border-primary/40 px-4 text-[10px] font-black uppercase tracking-widest text-primary hover:bg-primary/10 sm:w-auto"
@@ -2350,7 +2350,7 @@ export function FacturasView({ data, summaryData, summaryLoading, summaryError, 
                 </Button>}
               </>
             )}
-          </div>
+          </div></SalesActionTooltips>
         </div>
 
          <VoiceSaleComposer
@@ -3057,11 +3057,11 @@ export function FacturasView({ data, summaryData, summaryLoading, summaryError, 
                 onSend={() => handleWhatsApp(row)}
               />
               {canPerform('SALES_INVOICES', 'cancel') && isInvoiceCancellableFromList(row) && (
-                <SalesActionTooltip label="Anular"><Button type="button" aria-label={`Solicitar anulación de ${row.number}`} variant="ghost" size="icon" className="size-8 shrink-0 rounded-lg text-rose-500 hover:bg-rose-500/10 transition-colors" onClick={() => { setPendingCancelIds([row.id]); setCancelReason(''); setCancelReasonAttempted(false); }}>
+              <SalesActionTooltip label="Anular factura"><Button type="button" aria-label={`Solicitar anulación de ${row.number}`} variant="ghost" size="icon" className="size-8 shrink-0 rounded-lg text-rose-500 hover:bg-rose-500/10 transition-colors" onClick={() => { setPendingCancelIds([row.id]); setCancelReason(''); setCancelReasonAttempted(false); }}>
                   <Ban className="size-4" />
                 </Button></SalesActionTooltip>
               )}
-              <SalesActionTooltip label="Ver"><Button type="button" aria-label={`Ver factura ${row.number}`} variant="ghost" size="icon" className="size-8 shrink-0 rounded-lg text-muted-foreground hover:bg-primary/10 hover:text-primary transition-colors" onClick={(event) => { event.preventDefault(); event.stopPropagation(); void openInvoiceDetail(row); }}>
+              <SalesActionTooltip label="Abrir factura"><Button type="button" aria-label={`Ver factura ${row.number}`} variant="ghost" size="icon" className="size-8 shrink-0 rounded-lg text-muted-foreground hover:bg-primary/10 hover:text-primary transition-colors" onClick={(event) => { event.preventDefault(); event.stopPropagation(); void openInvoiceDetail(row); }}>
                 <Eye className="size-4" />
               </Button></SalesActionTooltip>
             </div>

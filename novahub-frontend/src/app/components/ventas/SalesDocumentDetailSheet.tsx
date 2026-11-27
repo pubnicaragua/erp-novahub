@@ -14,7 +14,7 @@ import { managerStatusLabel } from '../../utils/managerLabels';
 import { normalizeEstimateImages } from '../../types';
 import { EstimateImageGallery } from './EstimateImageGallery';
 import { CustomerCreditInstallmentSchedule } from './CustomerCreditInstallmentSchedule';
-import { SalesActionTooltip } from './SalesActionTooltip';
+import { SalesActionTooltip, SalesActionTooltips } from './SalesActionTooltip';
 
 export interface SalesDocumentPanelLine {
   id: string;
@@ -199,20 +199,22 @@ export function SalesDocumentDetailSheet({
                 {onGoToBranch && <SalesActionTooltip label="Ir a la sucursal del documento"><Button type="button" variant="outline" aria-label="Ir a la sucursal" className="gap-2 rounded-xl text-xs text-primary hover:text-primary" onClick={() => { onClose(); onGoToBranch(); }}>
                   <Building2 className="size-4 shrink-0" /> Sucursal <ArrowUpRight className="size-3.5 shrink-0" />
                 </Button></SalesActionTooltip>}
-                {onWhatsApp && <SalesActionTooltip label={hasWhatsApp ? 'WhatsApp' : 'Cliente sin teléfono'}><Button type="button" variant="outline" aria-label={hasWhatsApp ? 'WhatsApp' : 'Cliente sin teléfono'} className="gap-2 rounded-xl text-xs text-emerald-600 hover:text-emerald-700 dark:text-emerald-400 dark:hover:text-emerald-300" disabled={!hasWhatsApp} onClick={onWhatsApp}>
+                {onWhatsApp && <SalesActionTooltip label={hasWhatsApp ? `Enviar ${document.title.toLowerCase()} por WhatsApp` : `Cliente sin teléfono para enviar ${document.title.toLowerCase()} por WhatsApp`}><Button type="button" variant="outline" aria-label={hasWhatsApp ? `Enviar ${document.title.toLowerCase()} por WhatsApp` : 'Cliente sin teléfono'} className="gap-2 rounded-xl text-xs text-emerald-600 hover:text-emerald-700 dark:text-emerald-400 dark:hover:text-emerald-300" disabled={!hasWhatsApp} onClick={onWhatsApp}>
                   <WhatsAppIcon fontSize="inherit" className="size-4 shrink-0" aria-hidden="true" /> WhatsApp
                 </Button></SalesActionTooltip>}
-                {extraActions}
+                {extraActions && <SalesActionTooltips documentLabel={document.title}>{extraActions}</SalesActionTooltips>}
                 {onDownloadPdf && (
-                  <PdfDownloadButton
-                    onDownload={onDownloadPdf}
-                    includePageSizes
-                    includeRoll
-                    label="Imprimir"
-                    action="print"
-                    hasImages={Boolean(normalizeEstimateImages(document.images).items.length)}
-                    imagesCount={normalizeEstimateImages(document.images).items.length}
-                  />
+                  <SalesActionTooltip label={`Imprimir ${document.title.toLowerCase()}`}>
+                    <span className="inline-flex"><PdfDownloadButton
+                      onDownload={onDownloadPdf}
+                      includePageSizes
+                      includeRoll
+                      label="Imprimir"
+                      action="print"
+                      hasImages={Boolean(normalizeEstimateImages(document.images).items.length)}
+                      imagesCount={normalizeEstimateImages(document.images).items.length}
+                    /></span>
+                  </SalesActionTooltip>
                 )}
               </section>
 

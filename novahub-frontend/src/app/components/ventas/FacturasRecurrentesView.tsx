@@ -4,7 +4,7 @@ import {
 } from 'lucide-react';
 import { Card, CardContent } from '../ui/card';
 import { Button } from '../ui/button';
-import { SalesActionTooltip } from './SalesActionTooltip';
+import { SalesActionTooltip, SalesActionTooltips } from './SalesActionTooltip';
 import { Input } from '../ui/input';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../ui/select';
 import { EditableDataTable, ColumnDef } from '../ui/EditableDataTable';
@@ -642,7 +642,7 @@ export function FacturasRecurrentesView({ data, summaryData, summaryLoading, sum
               <p className="text-[10px] font-black uppercase tracking-widest text-muted-foreground/40">{isCreating ? 'Configurar programación' : 'Editar programación'}</p>
             </div>
           </div>
-          <div className="flex items-center gap-3" data-tour="sales-form-actions">
+          <SalesActionTooltips documentLabel="factura recurrente"><div className="flex items-center gap-3" data-tour="sales-form-actions">
             <SalesViewTutorial view="recurring" context="form" />
             {canEditDocument && canPerform('SALES_RECURRING', 'edit') && (
               <>
@@ -653,7 +653,7 @@ export function FacturasRecurrentesView({ data, summaryData, summaryLoading, sum
                 </Button>
               </>
             )}
-          </div>
+          </div></SalesActionTooltips>
         </div>
         {!canEditDocument && <div className="rounded-xl border border-amber-500/30 bg-amber-500/10 px-4 py-3 text-xs text-amber-700 dark:text-amber-300">Esta programación ya finalizó o fue cancelada. Se muestra en modo consulta y las facturas ya generadas se conservan.</div>}
 
@@ -964,9 +964,9 @@ export function FacturasRecurrentesView({ data, summaryData, summaryLoading, sum
           highlightedRowId={highlightedAlertId}
           actions={(row) => (
             <div className="flex items-center gap-1" onPointerDown={(event) => event.stopPropagation()} onClick={(event) => event.stopPropagation()}>
-               <SalesActionTooltip label="Ver"><Button type="button" aria-label={`Ver factura recurrente ${row.number || ''}`} variant="ghost" size="icon" className="size-8 rounded-lg text-muted-foreground hover:bg-primary/10 hover:text-primary transition-colors" onClick={() => setDetailRecurring(row)}><Eye className="size-4" /></Button></SalesActionTooltip>
+               <SalesActionTooltip label="Abrir factura recurrente"><Button type="button" aria-label={`Ver factura recurrente ${row.number || ''}`} variant="ghost" size="icon" className="size-8 rounded-lg text-muted-foreground hover:bg-primary/10 hover:text-primary transition-colors" onClick={() => setDetailRecurring(row)}><Eye className="size-4" /></Button></SalesActionTooltip>
                {canPerform('SALES_RECURRING', 'cancel') && ['ACTIVE', 'PAUSED'].includes((row.status||'').toUpperCase()) && (
-                 <SalesActionTooltip label="Anular recurrente"><Button aria-label="Anular factura recurrente" variant="ghost" size="icon" className="size-8 rounded-lg text-muted-foreground hover:bg-rose-500/10 hover:text-rose-500 transition-colors" onClick={() => { setCancelReason(''); setCancelReasonAttempted(false); setPendingDeleteIds([row.id]); }}><Ban className="size-4" /></Button></SalesActionTooltip>
+                 <SalesActionTooltip label="Cancelar factura recurrente"><Button aria-label="Anular factura recurrente" variant="ghost" size="icon" className="size-8 rounded-lg text-muted-foreground hover:bg-rose-500/10 hover:text-rose-500 transition-colors" onClick={() => { setCancelReason(''); setCancelReasonAttempted(false); setPendingDeleteIds([row.id]); }}><Ban className="size-4" /></Button></SalesActionTooltip>
                )}
             </div>
           )}

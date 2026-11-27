@@ -15,6 +15,7 @@ import { priceListsService, type PriceList } from '../../services/price-lists.se
 import { toast } from '@/app/services/toast';
 import { cn } from '../ui/utils';
 import { SalesKpiCard } from './SalesKpiCard';
+import { SalesActionTooltip } from './SalesActionTooltip';
 import { SalesDateRangeFilter } from './SalesDateRangeFilter';
 import { formatDateEs } from '../../utils/dateFormat';
 import { KpiSummaryNotice } from '../ui/KpiSummaryNotice';
@@ -1684,7 +1685,7 @@ export function ClientesView({ data, loading, error, onRefresh, pagination, onSe
               verticalScroll
               actions={(row) => (
                 <div className="flex items-center gap-1">
-                   <Button type="button" variant="ghost" size="icon" title="Ver detalle del cliente" aria-label={`Ver detalle del cliente ${row.name || row.code || ''}`} className="size-8 rounded-lg hover:bg-primary/10 hover:text-primary transition-colors" onClick={() => setSelectedCustomerDetail(row)}><Eye className="size-4" /></Button>
+                   <SalesActionTooltip label="Abrir ficha del cliente"><Button type="button" variant="ghost" size="icon" aria-label={`Ver detalle del cliente ${row.name || row.code || ''}`} className="size-8 rounded-lg hover:bg-primary/10 hover:text-primary transition-colors" onClick={() => setSelectedCustomerDetail(row)}><Eye className="size-4" /></Button></SalesActionTooltip>
                 </div>
               )}
               bulkActions={canPerform('SALES_CLIENTS', 'deactivate') ? (selectedIds) => (
