@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useInfiniteQuery, useQuery, useQueryClient } from '@tanstack/react-query';
-import { Banknote, CalendarDays, ChevronDown, ChevronLeft, CircleDollarSign, Clock3, FileText, Loader2, Plus, Save, Settings2 } from 'lucide-react';
+import { Banknote, CalendarDays, ChevronDown, ChevronLeft, CircleDollarSign, Clock3, FileText, Loader2, Plus, Save, Settings2, Printer } from 'lucide-react';
 import { Badge } from '../ui/badge';
 import { Button } from '../ui/button';
 import { Card } from '../ui/card';
@@ -668,7 +668,7 @@ export function CustomerLoansPanel({ customerId, customerName, customerOptions =
           </div>
           <div className="sales-document-actions flex w-full min-w-0 flex-col gap-2 sm:w-auto sm:flex-row sm:justify-end">
             <Button type="button" variant="outline" className="w-full rounded-xl px-6 sm:w-auto" onClick={() => { setCreateOpen(false); onCreateCancel?.(); }}>Cancelar</Button>
-            <Button type="submit" form="customer-loan-page-form" disabled={loanSubmitDisabled} className="w-full rounded-xl px-6 sm:w-auto">{saving && <Loader2 className="mr-2 size-4 animate-spin" />} Guardar borrador</Button>
+            <Button type="submit" form="customer-loan-page-form" disabled={loanSubmitDisabled} className="w-full rounded-xl px-6 sm:w-auto">{saving ? <Loader2 className="mr-2 size-4 animate-spin" /> : <Save className="mr-2 size-4" />} Guardar</Button>
           </div>
         </header>
         {loanCreatePageForm}
@@ -773,7 +773,7 @@ export function CustomerLoansPanel({ customerId, customerName, customerOptions =
                   <div className="shrink-0 sm:ml-auto sm:text-right"><p className="text-[9px] font-black uppercase tracking-wider text-muted-foreground">Pendiente</p><p className="mt-1 text-sm font-black tabular-nums text-rose-600 dark:text-rose-400">{money(balance, loan.currency)}</p></div>
                 </div>
                 <p className="mt-3 text-[10px] text-muted-foreground">Total facturado: <span className="font-bold text-foreground">{money(loan.total, loan.currency)}</span> · Abonado: <span className="font-bold text-foreground">{money(loan.invoice?.amountPaid, loan.currency)}</span></p>
-                <div className="mt-3 flex flex-wrap gap-2">{canRegisterPayment && balance > 0.01 && <Button type="button" size="sm" className="rounded-lg" onClick={() => onRegisterPayment?.(loan)}><CircleDollarSign className="mr-2 size-3.5" />Registrar abono</Button>}<Button type="button" size="sm" variant="outline" className="rounded-lg" onClick={() => void printDebtStatement(loan)}><FileText className="mr-2 size-3.5" />Descargar estado de deuda</Button></div>
+                <div className="mt-3 flex flex-wrap gap-2">{canRegisterPayment && balance > 0.01 && <Button type="button" size="sm" className="rounded-lg" onClick={() => onRegisterPayment?.(loan)}><CircleDollarSign className="mr-2 size-3.5" />Abonar</Button>}<Button type="button" size="sm" variant="outline" className="rounded-lg" onClick={() => void printDebtStatement(loan)}><Printer className="mr-2 size-3.5" />Imprimir estado</Button></div>
                 {loan.installments?.length ? <details className="mt-3 rounded-xl border border-border/50 p-3"><summary className="cursor-pointer text-[10px] font-black uppercase tracking-widest">Ver calendario ({loan.installments.length} cuotas)</summary><div className="mt-3"><CustomerCreditInstallmentSchedule
                   installments={loan.installments}
                   currency={loan.currency}
@@ -807,7 +807,7 @@ export function CustomerLoansPanel({ customerId, customerName, customerOptions =
         <DialogContent className="max-h-[90dvh] w-[calc(100%-1rem)] max-w-6xl overflow-y-auto rounded-2xl p-4 sm:w-[calc(100%-2rem)] sm:p-6">
           <DialogHeader><DialogTitle className="flex items-center gap-2"><Banknote className="size-5 text-primary" /> Crear préstamo</DialogTitle><DialogDescription>Se guardará como borrador. Después podrás aprobarlo y registrar el desembolso por separado.</DialogDescription></DialogHeader>
           {loanCreateForm}
-          <DialogFooter className="gap-2 sm:justify-end"><Button type="button" variant="outline" onClick={() => setCreateOpen(false)}>Cancelar</Button><Button type="submit" form="customer-loan-form" disabled={loanSubmitDisabled}>{saving && <Loader2 className="mr-2 size-4 animate-spin" />} Guardar borrador</Button></DialogFooter>
+          <DialogFooter className="gap-2 sm:justify-end"><Button type="button" variant="outline" onClick={() => setCreateOpen(false)}>Cancelar</Button><Button type="submit" form="customer-loan-form" disabled={loanSubmitDisabled}>{saving ? <Loader2 className="mr-2 size-4 animate-spin" /> : <Save className="mr-2 size-4" />} Guardar</Button></DialogFooter>
         </DialogContent>
       </Dialog>
 

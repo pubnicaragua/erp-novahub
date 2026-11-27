@@ -20,6 +20,8 @@ export interface PriceListItem {
   currency: string;
   exchangeRate: number;
   basePrice: number;
+  pricingMode?: 'FIXED' | 'MARGIN';
+  marginPercent?: number | null;
   product?: any;
   variant?: ProductVariant | null;
   priceList?: { code: string; name: string };
@@ -34,6 +36,8 @@ export interface PriceListItemVariant {
   currency: string;
   exchangeRate: number;
   basePrice: number;
+  pricingMode?: 'FIXED' | 'MARGIN';
+  marginPercent?: number | null;
   variant?: ProductVariant;
   priceList?: { code: string; name: string };
 }
@@ -94,18 +98,24 @@ export const priceListsService = {
     currency: string;
     exchangeRate?: number;
     variantId?: string | null;
+    pricingMode?: 'FIXED' | 'MARGIN';
+    marginPercent?: number | string | null;
   }) => api.patch<PriceListItem>(`/sales/price-lists/${id}/items/${productId}`, data),
 
   updateServiceItem: (id: string, productId: string, data: {
     price: number;
     currency: string;
     exchangeRate?: number;
+    pricingMode?: 'FIXED' | 'MARGIN';
+    marginPercent?: number | string | null;
   }) => api.patch<PriceListItem>(`/sales/price-lists/${id}/services/${productId}`, data),
 
   updateVariantItem: (listId: string, productId: string, variantId: string, data: {
     price: number;
     currency: string;
     exchangeRate?: number;
+    pricingMode?: 'FIXED' | 'MARGIN';
+    marginPercent?: number | string | null;
   }) => api.patch<PriceListItemVariant>(`/sales/price-lists/${listId}/items/${productId}/variants/${variantId}`, data),
 
   importMatrix: (data: {

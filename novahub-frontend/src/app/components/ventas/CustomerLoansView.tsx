@@ -260,8 +260,8 @@ export function CustomerLoansView({ enabled, selectedBranchId, onRefresh }: { en
               </div>
               <div className="mt-4 flex flex-wrap gap-2">
                 {detail.status === 'DRAFT' && canApproveLoan && <Button type="button" size="sm" className="rounded-lg" onClick={() => void runLoanAction('approve')}><CheckCircle2 className="mr-2 size-4" />Aprobar</Button>}
-                {detail.status === 'APPROVED' && canDisburseLoan && <Button type="button" size="sm" className="rounded-lg" onClick={() => void runLoanAction('disburse')}><CircleDollarSign className="mr-2 size-4" />Desembolsar y activar</Button>}
-                {['DRAFT', 'APPROVED'].includes(String(detail.status || '').toUpperCase()) && canCancelLoan && <Button type="button" size="sm" variant="outline" className="rounded-lg text-destructive" onClick={() => void runLoanAction('cancel')}><Ban className="mr-2 size-4" />Cancelar</Button>}
+                {detail.status === 'APPROVED' && canDisburseLoan && <Button type="button" size="sm" className="rounded-lg" onClick={() => void runLoanAction('disburse')}><CircleDollarSign className="mr-2 size-4" />Desembolsar</Button>}
+                {['DRAFT', 'APPROVED'].includes(String(detail.status || '').toUpperCase()) && canCancelLoan && <Button type="button" size="sm" variant="outline" className="rounded-lg text-destructive" onClick={() => void runLoanAction('cancel')}><Ban className="mr-2 size-4" />Anular</Button>}
               </div>
             </Card>
             <CustomerLoansPanel customerId={detail.customerId} customerName={customer?.name || 'Cliente'} moraTypeId={customer?.moraTypeId} moraType={customer?.moraType} enabled={enabled && Boolean(detail.customerId)} canCreateLoan={false} canCreateMora={canCreateMora} canEditMora={canEditMora} canRegisterPayment={canPay} onRegisterPayment={(loan) => openPayment(loan)} detailMode onUpdated={() => void invalidate()} focusLoanId={detail.id} />

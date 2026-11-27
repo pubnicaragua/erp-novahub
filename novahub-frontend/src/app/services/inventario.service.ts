@@ -180,7 +180,9 @@ export const inventoryService = {
   createProduct: (data: Partial<Product> & {
     initialStock?: number;
     allowSimilarProductCreate?: boolean;
-    variantInitialStocks?: Array<{ attributes: Array<{ attributeId: string; attributeName: string; value: string }>; quantity: number; costPrice?: number | null; minStock?: number; maxStock?: number; prices?: Record<string, number | string> }>;
+    prices?: Record<string, number | string>;
+    priceSettings?: Record<string, { pricingMode: 'FIXED' | 'MARGIN'; marginPercent?: number | string | null }>;
+    variantInitialStocks?: Array<{ attributes: Array<{ attributeId: string; attributeName: string; value: string }>; quantity: number; costPrice?: number | null; minStock?: number; maxStock?: number; prices?: Record<string, number | string>; priceSettings?: Record<string, { pricingMode: 'FIXED' | 'MARGIN'; marginPercent?: number | string | null }> }>;
   }) => api.post<Product>('/inventory/products', data),
   previewProductStockAccounting: (warehouseIds: string[]) =>
     api.post<{ ready: boolean; errors: string[]; warnings?: string[]; autoGenerationEnabled: boolean; accountingConnected?: boolean; warehouses: any[] }>('/inventory/products/accounting-preflight', { warehouseIds }),

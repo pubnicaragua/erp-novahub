@@ -1,5 +1,6 @@
 import { useState, type ReactNode } from 'react';
-import { ArrowUpRight, Building2, CalendarDays, ChevronRight, Eye, FileText, History, MessageCircle, UserRound } from 'lucide-react';
+import { ArrowUpRight, Building2, CalendarDays, ChevronRight, Eye, FileText, History, UserRound } from 'lucide-react';
+import WhatsAppIcon from '@mui/icons-material/WhatsApp';
 import { Badge } from '../ui/badge';
 import { Button } from '../ui/button';
 import { Sheet, SheetContent, SheetDescription, SheetFooter, SheetHeader, SheetTitle } from '../ui/sheet';
@@ -13,6 +14,7 @@ import { managerStatusLabel } from '../../utils/managerLabels';
 import { normalizeEstimateImages } from '../../types';
 import { EstimateImageGallery } from './EstimateImageGallery';
 import { CustomerCreditInstallmentSchedule } from './CustomerCreditInstallmentSchedule';
+import { SalesActionTooltip } from './SalesActionTooltip';
 
 export interface SalesDocumentPanelLine {
   id: string;
@@ -191,21 +193,23 @@ export function SalesDocumentDetailSheet({
               </section>
 
               <section className="flex flex-wrap gap-2">
-                {onOpenDocument && <Button type="button" variant="outline" className="gap-2 rounded-xl text-xs" onClick={onOpenDocument}>
-                  <Eye className="size-4 shrink-0 text-primary" /> Ver {document.title.toLowerCase()} completa
-                </Button>}
-                {onGoToBranch && <Button type="button" variant="outline" className="gap-2 rounded-xl text-xs text-primary hover:text-primary" onClick={() => { onClose(); onGoToBranch(); }}>
-                  <Building2 className="size-4 shrink-0" /> Ir a su sucursal <ArrowUpRight className="size-3.5 shrink-0" />
-                </Button>}
-                {onWhatsApp && <Button type="button" variant="outline" className="gap-2 rounded-xl text-xs text-emerald-600 hover:text-emerald-700 dark:text-emerald-400 dark:hover:text-emerald-300" disabled={!hasWhatsApp} title={hasWhatsApp ? 'Preparar mensaje en WhatsApp' : 'El cliente no tiene teléfono registrado'} onClick={onWhatsApp}>
-                  <MessageCircle className="size-4 shrink-0" /> WhatsApp
-                </Button>}
+                {onOpenDocument && <SalesActionTooltip label={`Abrir ${document.title.toLowerCase()}`}><Button type="button" variant="outline" className="gap-2 rounded-xl text-xs" aria-label={`Abrir ${document.title.toLowerCase()}`} onClick={onOpenDocument}>
+                  <Eye className="size-4 shrink-0 text-primary" /> Abrir
+                </Button></SalesActionTooltip>}
+                {onGoToBranch && <SalesActionTooltip label="Ir a la sucursal del documento"><Button type="button" variant="outline" aria-label="Ir a la sucursal" className="gap-2 rounded-xl text-xs text-primary hover:text-primary" onClick={() => { onClose(); onGoToBranch(); }}>
+                  <Building2 className="size-4 shrink-0" /> Sucursal <ArrowUpRight className="size-3.5 shrink-0" />
+                </Button></SalesActionTooltip>}
+                {onWhatsApp && <SalesActionTooltip label={hasWhatsApp ? 'WhatsApp' : 'Cliente sin teléfono'}><Button type="button" variant="outline" aria-label={hasWhatsApp ? 'WhatsApp' : 'Cliente sin teléfono'} className="gap-2 rounded-xl text-xs text-emerald-600 hover:text-emerald-700 dark:text-emerald-400 dark:hover:text-emerald-300" disabled={!hasWhatsApp} onClick={onWhatsApp}>
+                  <WhatsAppIcon fontSize="inherit" className="size-4 shrink-0" aria-hidden="true" /> WhatsApp
+                </Button></SalesActionTooltip>}
                 {extraActions}
                 {onDownloadPdf && (
                   <PdfDownloadButton
                     onDownload={onDownloadPdf}
                     includePageSizes
                     includeRoll
+                    label="Imprimir"
+                    action="print"
                     hasImages={Boolean(normalizeEstimateImages(document.images).items.length)}
                     imagesCount={normalizeEstimateImages(document.images).items.length}
                   />

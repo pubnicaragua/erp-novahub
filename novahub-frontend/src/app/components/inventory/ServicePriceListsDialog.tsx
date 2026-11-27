@@ -3,13 +3,14 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { Loader2, Save, Tags } from 'lucide-react';
 import { Button } from '../ui/button';
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '../ui/dialog';
-import { Input } from '../ui/input';
 import { Label } from '../ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../ui/select';
 import { toast } from '@/app/services/toast';
 import { useAuth } from '../../contexts/AuthContext';
 import { useCurrency } from '../../contexts/CurrencyContext';
 import { priceListsService, type PriceList } from '../../services/price-lists.service';
+import { PriceListPricingEditor, type PriceListPricingMode } from '../ui/PriceListPricingEditor';
+import { priceFromCost } from '../../utils/marginPricing';
 
 interface ServicePriceListsDialogProps {
   open: boolean;
@@ -22,7 +23,14 @@ interface ServicePriceDraft {
   price: string;
   currency: string;
   exchangeRate: number;
+  pricingMode: PriceListPricingMode;
+  marginPercent: string;
 }
+
+const convertBaseCostToCurrency = (cost: number, currency: string, baseCurrency: string, rate: number) => {
+  if (currency === baseCurrency) return cost;
+  return baseCurrency === 'NIO' ? cost / rate : cost * rate;
+};
 
 export function ServicePriceListsDialog({ open, onOpenChange, service, onSaved }: ServicePriceListsDialogProps) {
   const { user, canPerform } = useAuth();
@@ -30,6 +38,7 @@ export function ServicePriceListsDialog({ open, onOpenChange, service, onSaved }
   const queryClient = useQueryClient();
   const tenantKey = user?.tenantId || 'anonymous';
   const canRead = canPerform('SALES_PRICE_LISTS', 'view');
+  const canViewCost = canPerform('INVENTORY_SERVICES', 'viewCost');
   const serviceMatrix = useQuery({
     queryKey: ['sales', 'price-lists', 'services', tenantKey],
     queryFn: ({ signal }) => priceListsService.getServiceMatrix(signal),
@@ -59,6 +68,9 @@ export function ServicePriceListsDialog({ open, onOpenChange, service, onSaved }
           : '',
         currency,
         exchangeRate: rate,
+        pricingMode: item?.pricingMode === 'MARGIN' ? 'MARGIN' as const : 'FIXED' as const,
+        marginPercent: item?.marginPercent === null || item?.marginPercent === undefined ? '' : String(item.marginPercent),
+        costPrice: Number(serviceRecord.costPrice || 0),
         configured: Boolean(item),
       };
     });
@@ -79,12 +91,18 @@ export function ServicePriceListsDialog({ open, onOpenChange, service, onSaved }
 
   const savePrice = useMutation({
     mutationFn: async ({ list, draft, serviceId: targetServiceId }: { list: PriceList; draft: ServicePriceDraft; serviceId: string }) => {
-      const price = Number(draft.price);
+      const cost = convertBaseCostToCurrency(Number(serviceRecord?.costPrice || 0), draft.currency, baseCurrency, draft.exchangeRate || Number(exchangeRate || 1));
+      const price = draft.pricingMode === 'MARGIN'
+        ? priceFromCost(cost, Number(draft.marginPercent), 'margin')
+        : Number(draft.price);
+      if (price === null) throw new Error('Ingresa un costo mayor que cero y un margen entre 0% y 99.99%.');
       if (!Number.isFinite(price) || price < 0) throw new Error('Ingresa un precio válido mayor o igual a cero.');
       return priceListsService.updateServiceItem(list.id, targetServiceId, {
         price,
         currency: draft.currency,
         exchangeRate: draft.exchangeRate,
+        pricingMode: draft.pricingMode,
+        marginPercent: draft.pricingMode === 'MARGIN' ? Number(draft.marginPercent) : null,
       });
     },
     onSuccess: async (_item, variables) => {
@@ -125,12 +143,15 @@ export function ServicePriceListsDialog({ open, onOpenChange, service, onSaved }
           </div>
         ) : (
           <div className="space-y-3 py-2">
-            {rows.map(({ list, configured, price, currency, exchangeRate }) => {
+            {rows.map(({ list, configured, price, currency, exchangeRate, pricingMode, marginPercent, costPrice }) => {
               const draft = drafts[list.id] || {
                 price,
                 currency,
                 exchangeRate,
+                pricingMode,
+                marginPercent,
               };
+              const cost = convertBaseCostToCurrency(costPrice, draft.currency, baseCurrency, draft.exchangeRate || Number(exchangeRate || 1));
               const isSaving = savePrice.isPending && savePrice.variables?.list.id === list.id && savePrice.variables?.serviceId === serviceId;
               return (
                 <div key={list.id} className={`grid min-w-0 gap-3 rounded-xl border border-border/60 bg-card p-3 transition-opacity sm:grid-cols-[minmax(0,1fr)_minmax(0,1.2fr)_auto] sm:items-end ${configured ? '' : 'bg-muted/20 opacity-70 focus-within:opacity-100'}`}>
@@ -138,18 +159,22 @@ export function ServicePriceListsDialog({ open, onOpenChange, service, onSaved }
                     <p className="truncate text-sm font-semibold text-foreground">{list.name}</p>
                     <p className="mt-0.5 text-xs text-muted-foreground">{configured ? 'Precio configurado' : 'Sin precio configurado en esta lista'}</p>
                   </div>
-                  <div className="grid min-w-0 grid-cols-[minmax(0,1fr)_5.5rem] gap-2">
-                    <div className="min-w-0 space-y-1">
-                      <Label htmlFor={`service-price-${list.id}`} className="text-[10px] text-muted-foreground">Precio</Label>
-                      <Input
-                        id={`service-price-${list.id}`}
-                        type="number"
-                        min={0}
-                        step="any"
-                        value={draft.price}
-                        onChange={(event) => updateDraft(list.id, { ...draft, price: event.target.value })}
-                        className="h-9 min-w-0 text-right tabular-nums"
-                        aria-label={`Precio ${list.name} para ${service?.name || 'servicio'}`} currencyPrecision />
+                  <div className="grid min-w-0 grid-cols-[minmax(0,1fr)_5.5rem] items-end gap-2">
+                    <div className="min-w-0">
+                      <PriceListPricingEditor
+                        listName={list.name}
+                        price={draft.price}
+                        pricingMode={draft.pricingMode}
+                        marginPercent={draft.marginPercent}
+                        cost={cost}
+                        currency={draft.currency}
+                        allowMargin={canViewCost}
+                        disabled={isSaving}
+                        onPriceChange={(value) => updateDraft(list.id, { ...draft, price: value, pricingMode: 'FIXED', marginPercent: '' })}
+                        onPricingModeChange={(mode) => updateDraft(list.id, { ...draft, pricingMode: mode, ...(mode === 'FIXED' ? { marginPercent: '' } : {}) })}
+                        onMarginPercentChange={(value) => updateDraft(list.id, { ...draft, pricingMode: 'MARGIN', marginPercent: value })}
+                        onApplyMargin={(value) => updateDraft(list.id, { ...draft, price: String(value) })}
+                      />
                     </div>
                     <div className="min-w-0 space-y-1">
                       <Label className="text-[10px] text-muted-foreground">Moneda</Label>
@@ -167,7 +192,7 @@ export function ServicePriceListsDialog({ open, onOpenChange, service, onSaved }
                     type="button"
                     size="sm"
                     className="w-full shrink-0 sm:w-auto"
-                    disabled={isSaving || draft.price === '' || !canPerform('SALES_PRICE_LISTS', 'edit')}
+                    disabled={isSaving || (draft.pricingMode === 'MARGIN' ? draft.marginPercent === '' : draft.price === '') || !canPerform('SALES_PRICE_LISTS', 'edit')}
                     onClick={() => serviceId && savePrice.mutate({ list, draft, serviceId })}
                   >
                     {isSaving ? <Loader2 className="mr-2 size-4 animate-spin" /> : <Save className="mr-2 size-4" />}

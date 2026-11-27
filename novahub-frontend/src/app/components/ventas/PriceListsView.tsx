@@ -32,6 +32,8 @@ import { buildDownloadFileName } from '../../utils/exportFileNames';
 import { AuditHistoryModal } from '../ui/AuditHistoryModal';
 import { PriceListCustomersDialog } from './PriceListCustomersDialog';
 import { getCurrencyDecimalPlaces } from '../../utils/currency';
+import { PriceListPricingEditor, type PriceListPricingMode } from '../ui/PriceListPricingEditor';
+import { priceFromCost } from '../../utils/marginPricing';
 
 interface PriceListsViewProps { products?: any[]; onRefresh?: () => void; isSidebarCollapsed?: boolean; }
 type ImportRow = { code: string; name: string; cost: number | ''; prices: Record<string, number | ''>; error?: string };
@@ -264,6 +266,7 @@ export function PriceListsView({ products = [], onRefresh, isSidebarCollapsed = 
   const savingProductRef = useRef<Set<string>>(new Set());
   const [editingProductIds, setEditingProductIds] = useState<Set<string>>(new Set());
   const [editingPrices, setEditingPrices] = useState<Record<string, Record<string, string>>>({});
+  const [editingPricing, setEditingPricing] = useState<Record<string, Record<string, { pricingMode: PriceListPricingMode; marginPercent: string }>>>({});
   const [columnConfigOpen, setColumnConfigOpen] = useState(false);
   const [downloadOpen, setDownloadOpen] = useState(false);
   const [downloadScopeIds, setDownloadScopeIds] = useState<string[]>([]);
@@ -294,6 +297,7 @@ export function PriceListsView({ products = [], onRefresh, isSidebarCollapsed = 
   const [variantDetailOpen, setVariantDetailOpen] = useState(false);
   const [selectedVariantProduct, setSelectedVariantProduct] = useState<any>(null);
   const [editingVariantPrices, setEditingVariantPrices] = useState<Record<string, Record<string, string>>>({});
+  const [editingVariantPricing, setEditingVariantPricing] = useState<Record<string, Record<string, { pricingMode: PriceListPricingMode; marginPercent: string }>>>({});
   const [editingVariantIds, setEditingVariantIds] = useState<Set<string>>(new Set());
   const [savingVariant, setSavingVariant] = useState<string | null>(null);
   const savingVariantRef = useRef<Set<string>>(new Set());
@@ -432,6 +436,13 @@ export function PriceListsView({ products = [], onRefresh, isSidebarCollapsed = 
       : getDisplayPriceValue(item);
   };
 
+  const getPricingDraft = (productId: string, listId: string, item?: PriceListItem) => editingPricing[productId]?.[listId] || {
+    pricingMode: item?.pricingMode === 'MARGIN' ? 'MARGIN' as const : 'FIXED' as const,
+    marginPercent: item?.marginPercent === null || item?.marginPercent === undefined ? '' : String(item.marginPercent),
+  };
+
+  const canViewItemCost = canPerform(activeItemType === 'SERVICE' ? 'INVENTORY_SERVICES' : 'INVENTORY_PRODUCTS', 'viewCost');
+
   const openVariantDetail = (product: any) => {
     if (!product.variants?.length) return;
     setSelectedVariantProduct(product);
@@ -452,7 +463,16 @@ export function PriceListsView({ products = [], onRefresh, isSidebarCollapsed = 
       const baseItem = item || parentItem;
       return [list.id, baseItem ? getEditablePriceValue(Number(baseItem.basePrice)) : ''];
     }));
+    const settings = Object.fromEntries(visibleLists.map((list) => {
+      const item = matrixItems.find((i) => i.priceListId === list.id && i.productId === product.id && i.variantId === variantId);
+      const baseItem = item || matrixItems.find((i) => i.priceListId === list.id && i.productId === product.id && !i.variantId);
+      return [list.id, {
+        pricingMode: baseItem?.pricingMode === 'MARGIN' ? 'MARGIN' as const : 'FIXED' as const,
+        marginPercent: baseItem?.marginPercent === null || baseItem?.marginPercent === undefined ? '' : String(baseItem.marginPercent),
+      }];
+    }));
     setEditingVariantPrices((current) => ({ ...current, [variantId]: values }));
+    setEditingVariantPricing((current) => ({ ...current, [variantId]: settings }));
     setEditingVariantIds((current) => new Set(current).add(variantId));
   };
 
@@ -467,20 +487,33 @@ export function PriceListsView({ products = [], onRefresh, isSidebarCollapsed = 
       delete next[variantId];
       return next;
     });
+    setEditingVariantPricing((current) => {
+      const next = { ...current };
+      delete next[variantId];
+      return next;
+    });
   };
 
   const saveVariantPrices = async (variantId: string) => {
     if (!canEditPriceList || !selectedVariantProduct || savingVariantRef.current.has(variantId)) return;
     const values = editingVariantPrices[variantId] || {};
+    const variant = selectedVariantProduct.variants?.find((entry: any) => entry.id === variantId);
+    const cost = convertBaseToDisplay(Number(variant?.costPrice ?? selectedVariantProduct.costPrice ?? 0));
     const invalidList = visibleLists.find((list) => {
       const rawValue = String(values[list.id] ?? '').trim();
+      const setting = editingVariantPricing[variantId]?.[list.id] || { pricingMode: 'FIXED' as const, marginPercent: '' };
+      if (setting.pricingMode === 'MARGIN') return priceFromCost(cost, Number(setting.marginPercent), 'margin') === null;
       return rawValue !== '' && (!Number.isFinite(Number(rawValue)) || Number(rawValue) < 0);
     });
     if (invalidList) return toast.error(`El precio de ${invalidList.name} debe ser mayor o igual a cero`);
     const changes = visibleLists.map((list) => {
       const rawValue = String(values[list.id] ?? '').trim();
-      if (!rawValue) return null;
-      const price = Number(rawValue);
+      const setting = editingVariantPricing[variantId]?.[list.id] || { pricingMode: 'FIXED' as const, marginPercent: '' };
+      if (!rawValue && setting.pricingMode !== 'MARGIN') return null;
+      const price = setting.pricingMode === 'MARGIN'
+        ? priceFromCost(cost, Number(setting.marginPercent), 'margin')
+        : Number(rawValue);
+      if (price === null) return null;
       const variantItem = matrixItems.find(
         (item) => item.priceListId === list.id && item.productId === selectedVariantProduct.id && item.variantId === variantId,
       );
@@ -491,20 +524,26 @@ export function PriceListsView({ products = [], onRefresh, isSidebarCollapsed = 
       const previousPrice = effectiveItem ? convertBaseToDisplay(Number(effectiveItem.basePrice ?? effectiveItem.price ?? 0)) : null;
       const rate = displayCurrency === baseCurrency ? 1 : Number(exchangeRate || 1);
       const samePrice = previousPrice !== null && Math.abs(previousPrice - price) < 0.000001;
-      const sameFormat = !variantItem || (variantItem.currency === displayCurrency && Number(variantItem.exchangeRate || 1) === rate);
+      const sameFormat = Boolean(variantItem)
+        && variantItem?.currency === displayCurrency
+        && Number(variantItem?.exchangeRate || 1) === rate
+        && variantItem?.pricingMode === setting.pricingMode
+        && (setting.pricingMode !== 'MARGIN' || Math.abs(Number(variantItem?.marginPercent) - Number(setting.marginPercent)) < 0.000001);
       if (samePrice && sameFormat) return null;
-      return { list, price };
-    }).filter(Boolean) as Array<{ list: typeof visibleLists[number]; price: number }>;
+      return { list, price, setting };
+    }).filter(Boolean) as Array<{ list: typeof visibleLists[number]; price: number; setting: { pricingMode: PriceListPricingMode; marginPercent: string } }>;
     if (!changes.length) return cancelEditVariant(variantId);
     savingVariantRef.current.add(variantId);
     setSavingVariant(variantId);
     try {
-      await Promise.all(changes.map(({ list, price }) =>
+      await Promise.all(changes.map(({ list, price, setting }) =>
         priceListsService.updateItem(list.id, selectedVariantProduct.id, {
           price,
           currency: displayCurrency,
           exchangeRate: displayCurrency === baseCurrency ? 1 : Number(exchangeRate || 1),
           variantId,
+          pricingMode: setting.pricingMode,
+          marginPercent: setting.pricingMode === 'MARGIN' ? Number(setting.marginPercent) : null,
         })
       ));
       await refreshMatrix();
@@ -537,7 +576,15 @@ export function PriceListsView({ products = [], onRefresh, isSidebarCollapsed = 
       const item = byList?.get(list.id);
       return [list.id, item ? getEditablePriceValue(Number(item.basePrice)) : ''];
     }));
+    const settings = Object.fromEntries(visibleLists.map((list) => {
+      const item = byList?.get(list.id);
+      return [list.id, {
+        pricingMode: item?.pricingMode === 'MARGIN' ? 'MARGIN' as const : 'FIXED' as const,
+        marginPercent: item?.marginPercent === null || item?.marginPercent === undefined ? '' : String(item.marginPercent),
+      }];
+    }));
     setEditingPrices((current) => ({ ...current, [productId]: values }));
+    setEditingPricing((current) => ({ ...current, [productId]: settings }));
     setEditingProductIds((current) => new Set(current).add(productId));
   };
 
@@ -552,39 +599,71 @@ export function PriceListsView({ products = [], onRefresh, isSidebarCollapsed = 
       delete next[productId];
       return next;
     });
+    setEditingPricing((current) => {
+      const next = { ...current };
+      delete next[productId];
+      return next;
+    });
   };
 
   const updateEditingPrice = (productId: string, listId: string, value: string) => {
     setEditingPrices((current) => ({ ...current, [productId]: { ...current[productId], [listId]: value } }));
+    setEditingPricing((current) => ({
+      ...current,
+      [productId]: { ...current[productId], [listId]: { pricingMode: 'FIXED', marginPercent: '' } },
+    }));
+  };
+
+  const updateEditingPricing = (productId: string, listId: string, setting: { pricingMode: PriceListPricingMode; marginPercent: string }) => {
+    setEditingPricing((current) => ({ ...current, [productId]: { ...current[productId], [listId]: setting } }));
+  };
+
+  const updateEditingMargin = (productId: string, listId: string, marginPercent: string) => {
+    updateEditingPricing(productId, listId, { pricingMode: 'MARGIN', marginPercent });
+  };
+
+  const applyEditingMargin = (productId: string, listId: string, price: number) => {
+    setEditingPrices((current) => ({ ...current, [productId]: { ...current[productId], [listId]: String(price) } }));
   };
 
   const saveProductPrices = async (productId: string) => {
     if (!canEditPriceList || savingProductRef.current.has(productId)) return;
     const values = editingPrices[productId] || {};
+    const settings = editingPricing[productId] || {};
     const byList = itemsByProduct.get(productId);
+    const product = catalogProducts.find((entry) => entry.id === productId);
+    const cost = convertBaseToDisplay(Number(product?.costPrice ?? product?.details?.costPrice ?? 0));
     const currency = displayCurrency;
     const rate = currency === baseCurrency ? 1 : Number(exchangeRate || 1);
     const invalidList = visibleLists.find((list) => {
       const rawValue = String(values[list.id] ?? '').trim();
+      const setting = settings[list.id] || { pricingMode: 'FIXED' as const, marginPercent: '' };
+      if (setting.pricingMode === 'MARGIN') return priceFromCost(cost, Number(setting.marginPercent), 'margin') === null;
       return rawValue !== '' && (!Number.isFinite(Number(rawValue)) || Number(rawValue) < 0);
     });
     if (invalidList) return toast.error(`El precio de ${invalidList.name} debe ser mayor o igual a cero`);
     const changes = visibleLists.map((list) => {
       const rawValue = String(values[list.id] ?? '').trim();
-      if (!rawValue) return null;
-      const price = Number(rawValue);
+      const setting = settings[list.id] || { pricingMode: 'FIXED' as const, marginPercent: '' };
+      if (!rawValue && setting.pricingMode !== 'MARGIN') return null;
+      const price = setting.pricingMode === 'MARGIN'
+        ? priceFromCost(cost, Number(setting.marginPercent), 'margin')
+        : Number(rawValue);
+      if (price === null) return null;
       const existing = byList?.get(list.id);
       const previous = existing ? convertBaseToDisplay(Number(existing.basePrice)) : null;
-      if (previous !== null && Math.abs(previous - price) < 0.000001 && existing?.currency === currency && Number(existing.exchangeRate) === rate) return null;
-      return { list, price };
-    }).filter(Boolean) as Array<{ list: typeof visibleLists[number]; price: number }>;
+      const sameSettings = existing?.pricingMode === setting.pricingMode
+        && (setting.pricingMode !== 'MARGIN' || Math.abs(Number(existing?.marginPercent) - Number(setting.marginPercent)) < 0.000001);
+      if (previous !== null && Math.abs(previous - price) < 0.000001 && existing?.currency === currency && Number(existing.exchangeRate) === rate && sameSettings) return null;
+      return { list, price, setting };
+    }).filter(Boolean) as Array<{ list: typeof visibleLists[number]; price: number; setting: { pricingMode: PriceListPricingMode; marginPercent: string } }>;
     if (!changes.length) return cancelEditProduct(productId);
     savingProductRef.current.add(productId);
     setSaving(productId);
     try {
-      await Promise.all(changes.map(({ list, price }) => activeItemType === 'SERVICE'
-        ? priceListsService.updateServiceItem(list.id, productId, { price, currency, exchangeRate: rate })
-        : priceListsService.updateItem(list.id, productId, { price, currency, exchangeRate: rate, variantId: null })));
+      await Promise.all(changes.map(({ list, price, setting }) => activeItemType === 'SERVICE'
+        ? priceListsService.updateServiceItem(list.id, productId, { price, currency, exchangeRate: rate, pricingMode: setting.pricingMode, marginPercent: setting.pricingMode === 'MARGIN' ? Number(setting.marginPercent) : null })
+        : priceListsService.updateItem(list.id, productId, { price, currency, exchangeRate: rate, variantId: null, pricingMode: setting.pricingMode, marginPercent: setting.pricingMode === 'MARGIN' ? Number(setting.marginPercent) : null })));
       // La respuesta de PATCH confirma la operación, pero la matriz debe
       // quedar basada en la lectura posterior al commit del servidor. Esto
       // evita mostrar un cambio solo local o conservar una fila variante en
@@ -957,7 +1036,21 @@ export function PriceListsView({ products = [], onRefresh, isSidebarCollapsed = 
                     <TableCell className="text-xs text-muted-foreground">{product.category?.name || '-'}</TableCell>
                     {visibleLists.map((list) => {
                       const item = byList?.get(list.id);
-                      return <TableCell key={list.id} className={`text-right ${!item ? 'opacity-60 focus-within:opacity-100' : ''}`}>{isEditing ? <div className="ml-auto flex w-32 flex-col items-end gap-1"><Input className="h-8 w-full text-right" type="number" min="0" value={getEditingPriceValue(product.id, list.id, item)} onChange={(event) => updateEditingPrice(product.id, list.id, event.target.value)} disabled={saving === product.id} aria-label={`Precio ${list.name} para ${product.name}`} currencyPrecision />{!item && <span className="text-[9px] leading-3 text-muted-foreground">Sin precio configurado</span>}</div> : <div className={`ml-auto flex min-h-8 w-32 items-center justify-end rounded-md px-2 py-1.5 text-right text-sm font-semibold tabular-nums ${!item ? 'bg-muted/40 font-medium italic text-muted-foreground' : 'text-foreground'}`}>{item ? formatDisplayPrice(Number(item.basePrice ?? item.price ?? 0)) : 'Sin precio configurado'}</div>}</TableCell>;
+                      const pricing = getPricingDraft(product.id, list.id, item);
+                      return <TableCell key={list.id} className={`min-w-40 text-right ${!item ? 'opacity-70 focus-within:opacity-100' : ''}`}>{isEditing ? <div className="mx-auto w-36 max-w-full text-left"><PriceListPricingEditor
+                        listName={list.name}
+                        price={getEditingPriceValue(product.id, list.id, item)}
+                        pricingMode={pricing.pricingMode}
+                        marginPercent={pricing.marginPercent}
+                        cost={convertBaseToDisplay(Number(product.costPrice ?? product.details?.costPrice ?? 0))}
+                        currency={displayCurrency}
+                        allowMargin={canViewItemCost}
+                        disabled={saving === product.id}
+                        onPriceChange={(value) => updateEditingPrice(product.id, list.id, value)}
+                        onPricingModeChange={(mode) => updateEditingPricing(product.id, list.id, { pricingMode: mode, marginPercent: mode === 'FIXED' ? '' : pricing.marginPercent })}
+                        onMarginPercentChange={(value) => updateEditingMargin(product.id, list.id, value)}
+                        onApplyMargin={(value) => applyEditingMargin(product.id, list.id, value)}
+                      />{!item && <span className="mt-1 block text-[9px] leading-3 text-muted-foreground">Sin precio configurado</span>}</div> : <div className={`ml-auto flex min-h-8 w-32 items-center justify-end rounded-md px-2 py-1.5 text-right text-sm font-semibold tabular-nums ${!item ? 'bg-muted/40 font-medium italic text-muted-foreground' : 'text-foreground'}`}>{item ? formatDisplayPrice(Number(item.basePrice ?? item.price ?? 0)) : 'Sin precio configurado'}</div>}</TableCell>;
                     })}
                       <TableCell className="text-right">
                       {isEditing ? <div className="flex items-center justify-end gap-1"><Button variant="ghost" size="icon" className="size-7 text-emerald-600" onClick={() => saveProductPrices(product.id)} disabled={saving === product.id} aria-label={`Guardar precios de ${product.name}`}>{saving === product.id ? <Loader2 className="size-4 animate-spin" /> : <Check className="size-4" />}</Button><Button variant="ghost" size="icon" className="size-7 text-red-600" onClick={() => cancelEditProduct(product.id)} disabled={saving === product.id}><X className="size-4" /></Button></div> : canEditPriceList && <Button variant="ghost" size="icon" className="size-7" title="Editar precios" aria-label={`Editar precios de ${product.name}`} onClick={() => beginEditProduct(product.id)}><Pencil className="size-4" /></Button>}
@@ -995,10 +1088,24 @@ export function PriceListsView({ products = [], onRefresh, isSidebarCollapsed = 
                 <div className="mt-3 divide-y divide-border/50 rounded-xl border border-border/50 bg-muted/10">
                   {visibleLists.map((list) => {
                     const item = byList?.get(list.id);
+                    const pricing = getPricingDraft(product.id, list.id, item);
                     return <div key={list.id} className={`flex min-w-0 items-center justify-between gap-3 px-3 py-2.5 first:rounded-t-xl last:rounded-b-xl ${!item ? 'opacity-70 focus-within:opacity-100' : ''}`}>
                       <span className="min-w-0 break-words text-xs font-bold">{list.name}<span className="ml-1.5 font-mono text-[9px] font-normal text-muted-foreground">{list.code}</span></span>
                       <div className="flex min-w-0 shrink-0 flex-col items-end">
-                        {isEditing ? <><Input className="h-8 w-32 max-w-[45vw] text-right text-xs" type="number" min="0" value={getEditingPriceValue(product.id, list.id, item)} onChange={(event) => updateEditingPrice(product.id, list.id, event.target.value)} disabled={saving === product.id} aria-label={`Precio ${list.name} para ${product.name}`} currencyPrecision />{!item && <span className="mt-1 text-[9px] leading-3 text-muted-foreground">Sin precio configurado</span>}</> : <span className={`text-right text-sm font-bold tabular-nums ${!item ? 'italic text-muted-foreground' : 'text-foreground'}`}>{item ? formatDisplayPrice(Number(item.basePrice ?? item.price ?? 0)) : 'Sin precio configurado'}</span>}
+                        {isEditing ? <div className="w-40 max-w-[58vw] text-left"><PriceListPricingEditor
+                          listName={list.name}
+                          price={getEditingPriceValue(product.id, list.id, item)}
+                          pricingMode={pricing.pricingMode}
+                          marginPercent={pricing.marginPercent}
+                          cost={convertBaseToDisplay(Number(product.costPrice ?? product.details?.costPrice ?? 0))}
+                          currency={displayCurrency}
+                          allowMargin={canViewItemCost}
+                          disabled={saving === product.id}
+                          onPriceChange={(value) => updateEditingPrice(product.id, list.id, value)}
+                          onPricingModeChange={(mode) => updateEditingPricing(product.id, list.id, { pricingMode: mode, marginPercent: mode === 'FIXED' ? '' : pricing.marginPercent })}
+                          onMarginPercentChange={(value) => updateEditingMargin(product.id, list.id, value)}
+                          onApplyMargin={(value) => applyEditingMargin(product.id, list.id, value)}
+                        />{!item && <span className="mt-1 block text-[9px] leading-3 text-muted-foreground">Sin precio configurado</span>}</div> : <span className={`text-right text-sm font-bold tabular-nums ${!item ? 'italic text-muted-foreground' : 'text-foreground'}`}>{item ? formatDisplayPrice(Number(item.basePrice ?? item.price ?? 0)) : 'Sin precio configurado'}</span>}
                       </div>
                     </div>;
                   })}
@@ -1268,20 +1375,31 @@ export function PriceListsView({ products = [], onRefresh, isSidebarCollapsed = 
                         const isFromParent = !variantItem && parentItem;
                         if (isEditing) {
                           const editValue = editingVariantPrices[variant.id]?.[list.id] ?? '';
+                          const setting = editingVariantPricing[variant.id]?.[list.id] || {
+                            pricingMode: baseItem?.pricingMode === 'MARGIN' ? 'MARGIN' as const : 'FIXED' as const,
+                            marginPercent: baseItem?.marginPercent === null || baseItem?.marginPercent === undefined ? '' : String(baseItem.marginPercent),
+                          };
+                          const variantCost = convertBaseToDisplay(Number(variant.costPrice ?? selectedVariantProduct.costPrice ?? 0));
                           return (
                             <TableCell key={list.id} className={`w-36 min-w-36 text-right ${!baseItem ? 'opacity-60 focus-within:opacity-100' : ''}`}>
-                              <div className="flex flex-col items-end gap-1">
-                                <Input
-                                  className="h-8 w-full max-w-full text-right text-xs"
-                                  type="number"
-                                  min="0"
-                                  value={editValue}
+                              <div className="text-left">
+                                <PriceListPricingEditor
+                                  listName={list.name}
+                                  price={editValue}
+                                  pricingMode={setting.pricingMode}
+                                  marginPercent={setting.marginPercent}
+                                  cost={variantCost}
+                                  currency={displayCurrency}
+                                  allowMargin={canViewItemCost}
                                   disabled={savingVariant === variant.id}
-                                  aria-label={`Precio ${list.name} para la variante ${variant.sku}`}
-                                  onChange={(e) => setEditingVariantPrices((current) => ({
-                                    ...current,
-                                    [variant.id]: { ...current[variant.id], [list.id]: e.target.value },
-                                  }))} currencyPrecision />
+                                  onPriceChange={(value) => {
+                                    setEditingVariantPrices((current) => ({ ...current, [variant.id]: { ...current[variant.id], [list.id]: value } }));
+                                    setEditingVariantPricing((current) => ({ ...current, [variant.id]: { ...current[variant.id], [list.id]: { pricingMode: 'FIXED', marginPercent: '' } } }));
+                                  }}
+                                  onPricingModeChange={(mode) => setEditingVariantPricing((current) => ({ ...current, [variant.id]: { ...current[variant.id], [list.id]: { pricingMode: mode, marginPercent: mode === 'FIXED' ? '' : setting.marginPercent } } }))}
+                                  onMarginPercentChange={(value) => setEditingVariantPricing((current) => ({ ...current, [variant.id]: { ...current[variant.id], [list.id]: { pricingMode: 'MARGIN', marginPercent: value } } }))}
+                                  onApplyMargin={(price) => setEditingVariantPrices((current) => ({ ...current, [variant.id]: { ...current[variant.id], [list.id]: String(price) } }))}
+                                />
                                 {!baseItem && <span className="text-[9px] leading-3 text-muted-foreground">Sin precio configurado</span>}
                               </div>
                             </TableCell>

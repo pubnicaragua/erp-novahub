@@ -1,10 +1,11 @@
 import { useEffect, useRef, useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { 
-  FileOutput, Plus, Search, Clock, CheckCircle2, XCircle, Eye, ChevronLeft, ShieldCheck
+  FileOutput, Plus, Search, Clock, CheckCircle2, XCircle, Eye, ChevronLeft, ShieldCheck, Save
 } from 'lucide-react';
 import { Card, CardContent } from '../ui/card';
 import { Button } from '../ui/button';
+import { SalesActionTooltip } from './SalesActionTooltip';
 import { Input } from '../ui/input';
 import { EditableDataTable, ColumnDef } from '../ui/EditableDataTable';
 import { ViewLayoutSelect } from '../ui/ViewLayoutSelect';
@@ -567,12 +568,12 @@ export function DevolucionesView({ data, summaryData, summaryLoading, summaryErr
             {canPerform('SALES_RETURNS', 'edit') && (
               <>
                 {!isCreating && (localDoc?.status || '').toUpperCase() === 'DRAFT' && canPerform('SALES_RETURNS', 'reject') && <Button variant="outline" className="rounded-xl border-rose-500/50 text-rose-500 hover:bg-rose-700 hover:text-white font-black uppercase text-[10px] tracking-widest px-4"
-                  onClick={async () => { if (!window.confirm('¿Rechazar esta nota de crédito? El registro se conservará y no se podrá revertir.')) return; try { await salesReturnsService.reject(localDoc.id); setEditingId(null); setLocalDoc(null); onRefresh(); } catch (e: any) { toast.error(e?.response?.data?.message || e?.message || 'No se pudo rechazar la nota'); } }}><XCircle className="size-3 mr-2" /> Rechazar Nota</Button>}
+                  onClick={async () => { if (!window.confirm('¿Rechazar esta nota de crédito? El registro se conservará y no se podrá revertir.')) return; try { await salesReturnsService.reject(localDoc.id); setEditingId(null); setLocalDoc(null); onRefresh(); } catch (e: any) { toast.error(e?.response?.data?.message || e?.message || 'No se pudo rechazar la nota'); } }}><XCircle className="size-3 mr-2" /> Rechazar</Button>}
                 {canApprove && <Button variant="outline" className="rounded-xl border-emerald-500/50 text-emerald-500 hover:bg-emerald-700 hover:text-white font-black uppercase text-[10px] tracking-widest px-4"
-                  onClick={() => { handleApprove(localDoc.id); setEditingId(null); setLocalDoc(null); }}><ShieldCheck className="size-3 mr-2" /> Aprobar Nota</Button>}
-                {!isCreating && (localDoc?.status || '').toUpperCase() === 'APPROVED' && canPerform('SALES_RETURNS', 'process') && <Button variant="outline" className="rounded-xl border-blue-500/50 text-blue-500 hover:bg-blue-700 hover:text-white font-black uppercase text-[10px] tracking-widest px-4" onClick={() => handleProcess(localDoc.id)}><CheckCircle2 className="mr-2 size-3" /> Aplicar Saldo</Button>}
+                  onClick={() => { handleApprove(localDoc.id); setEditingId(null); setLocalDoc(null); }}><ShieldCheck className="size-3 mr-2" /> Aprobar</Button>}
+                {!isCreating && (localDoc?.status || '').toUpperCase() === 'APPROVED' && canPerform('SALES_RETURNS', 'process') && <Button variant="outline" className="rounded-xl border-blue-500/50 text-blue-500 hover:bg-blue-700 hover:text-white font-black uppercase text-[10px] tracking-widest px-4" onClick={() => handleProcess(localDoc.id)}><CheckCircle2 className="mr-2 size-3" /> Aplicar</Button>}
                 <Button className="rounded-xl bg-primary shadow-xl shadow-primary/20 text-primary-foreground font-black uppercase text-[10px] tracking-widest px-6" onClick={handleSave}>
-                  {isCreating ? 'Registrar Nota' : 'Guardar Cambios'}
+                  <Save className="mr-2 size-4" />Guardar
                 </Button>
               </>
             )}
@@ -744,7 +745,7 @@ export function DevolucionesView({ data, summaryData, summaryLoading, summaryErr
           highlightedRowId={highlightedAlertId}
           actions={(row) => (
             <div className="flex items-center gap-1" onPointerDown={(event) => event.stopPropagation()} onClick={(event) => event.stopPropagation()}>
-                <Button type="button" title="Ver detalle de devolución" aria-label={`Ver detalle de devolución ${row.number}`} variant="ghost" size="icon" className="size-8 rounded-lg text-muted-foreground hover:bg-primary/10 hover:text-primary transition-colors" onClick={() => setDetailReturn(row)}><Eye className="size-4" /></Button>
+                <SalesActionTooltip label="Ver"><Button type="button" aria-label={`Ver devolución ${row.number}`} variant="ghost" size="icon" className="size-8 rounded-lg text-muted-foreground hover:bg-primary/10 hover:text-primary transition-colors" onClick={() => setDetailReturn(row)}><Eye className="size-4" /></Button></SalesActionTooltip>
             </div>
           )}
         />
@@ -763,7 +764,7 @@ export function DevolucionesView({ data, summaryData, summaryLoading, summaryErr
         }}
         extraActions={detailReturn ? <>
           {canPerform('SALES_RETURNS', 'approve') && String(detailReturn.status || '').toUpperCase() === 'DRAFT' && <Button type="button" className="rounded-xl bg-emerald-600 text-white hover:bg-emerald-700" onClick={() => handleApprove(detailReturn.id)}><ShieldCheck className="mr-2 size-4" />Aprobar</Button>}
-          {canPerform('SALES_RETURNS', 'process') && String(detailReturn.status || '').toUpperCase() === 'APPROVED' && <Button type="button" className="rounded-xl bg-blue-600 text-white hover:bg-blue-700" onClick={() => handleProcess(detailReturn.id)}><CheckCircle2 className="mr-2 size-4" />Aplicar saldo</Button>}
+          {canPerform('SALES_RETURNS', 'process') && String(detailReturn.status || '').toUpperCase() === 'APPROVED' && <Button type="button" className="rounded-xl bg-blue-600 text-white hover:bg-blue-700" onClick={() => handleProcess(detailReturn.id)}><CheckCircle2 className="mr-2 size-4" />Aplicar</Button>}
           {canPerform('SALES_RETURNS', 'reject') && String(detailReturn.status || '').toUpperCase() === 'DRAFT' && <Button type="button" variant="outline" className="rounded-xl border-rose-500/30 text-rose-600 hover:bg-rose-500/10 dark:text-rose-400" onClick={() => { setDetailReturn(null); setPendingDeleteId(detailReturn.id); }}><XCircle className="mr-2 size-4" />Rechazar</Button>}
         </> : undefined}
         onDownloadPdf={canPerform('SALES_RETURNS', 'export') ? (format) => { if (detailReturn) void handleExportPDF(detailReturn, format); } : undefined}

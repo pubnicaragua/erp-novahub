@@ -1,9 +1,10 @@
 import { useEffect, useRef, useState } from 'react';
 import { 
-  RotateCcw, Plus, Search, TrendingUp, Clock, Calendar, Play, Pause, Trash2, ChevronLeft, Ban, Eye
+  RotateCcw, Plus, Search, TrendingUp, Clock, Calendar, Play, Pause, Trash2, ChevronLeft, Ban, Eye, Save
 } from 'lucide-react';
 import { Card, CardContent } from '../ui/card';
 import { Button } from '../ui/button';
+import { SalesActionTooltip } from './SalesActionTooltip';
 import { Input } from '../ui/input';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../ui/select';
 import { EditableDataTable, ColumnDef } from '../ui/EditableDataTable';
@@ -637,8 +638,8 @@ export function FacturasRecurrentesView({ data, summaryData, summaryLoading, sum
           <div className="flex items-center gap-4">
             <Button variant="ghost" size="icon" onClick={() => { clearSalesEditorDraft(salesDraftStorageKey); localDocRef.current = null; setEditingId(null); setIsCreating(false); commitLocalDoc(null); }} className="rounded-full"><ChevronLeft className="size-5" /></Button>
             <div>
-              <h2 className="nh-module-title">{isCreating ? 'Agregar Factura Recurrente' : `Factura #${localDoc.id?.slice(0, 8)}`}</h2>
-              <p className="text-[10px] font-black uppercase tracking-widest text-muted-foreground/40">{isCreating ? 'Configurar nueva factura recurrente' : 'Editar factura recurrente'}</p>
+              <h2 className="nh-module-title">{isCreating ? 'Nueva recurrente' : `Factura #${localDoc.id?.slice(0, 8)}`}</h2>
+              <p className="text-[10px] font-black uppercase tracking-widest text-muted-foreground/40">{isCreating ? 'Configurar programación' : 'Editar programación'}</p>
             </div>
           </div>
           <div className="flex items-center gap-3" data-tour="sales-form-actions">
@@ -646,9 +647,9 @@ export function FacturasRecurrentesView({ data, summaryData, summaryLoading, sum
             {canEditDocument && canPerform('SALES_RECURRING', 'edit') && (
               <>
                 {!isCreating && ['ACTIVE', 'PAUSED'].includes(String(localDoc?.status || '').toUpperCase()) && canPerform('SALES_RECURRING', 'cancel') && <Button variant="outline" className="rounded-xl border-rose-500/50 text-rose-500 hover:bg-rose-700 hover:text-white font-black uppercase text-[10px] tracking-widest px-4"
-                  onClick={() => { setCancelReason(''); setCancelReasonAttempted(false); setPendingDeleteIds([String(localDoc.id)]); }}><Ban className="size-3 mr-2" /> Cancelar</Button>}
+                  onClick={() => { setCancelReason(''); setCancelReasonAttempted(false); setPendingDeleteIds([String(localDoc.id)]); }}><Ban className="size-3 mr-2" /> Anular</Button>}
                 <Button className="rounded-xl bg-primary shadow-xl shadow-primary/20 text-primary-foreground font-black uppercase text-[10px] tracking-widest px-6" onClick={handleSave}>
-                  Guardar Factura Recurrente
+                  <Save className="mr-2 size-4" />Guardar
                 </Button>
               </>
             )}
@@ -963,9 +964,9 @@ export function FacturasRecurrentesView({ data, summaryData, summaryLoading, sum
           highlightedRowId={highlightedAlertId}
           actions={(row) => (
             <div className="flex items-center gap-1" onPointerDown={(event) => event.stopPropagation()} onClick={(event) => event.stopPropagation()}>
-               <Button type="button" title="Ver detalle de factura recurrente" aria-label={`Ver detalle de factura recurrente ${row.number || ''}`} variant="ghost" size="icon" className="size-8 rounded-lg text-muted-foreground hover:bg-primary/10 hover:text-primary transition-colors" onClick={() => setDetailRecurring(row)}><Eye className="size-4" /></Button>
+               <SalesActionTooltip label="Ver"><Button type="button" aria-label={`Ver factura recurrente ${row.number || ''}`} variant="ghost" size="icon" className="size-8 rounded-lg text-muted-foreground hover:bg-primary/10 hover:text-primary transition-colors" onClick={() => setDetailRecurring(row)}><Eye className="size-4" /></Button></SalesActionTooltip>
                {canPerform('SALES_RECURRING', 'cancel') && ['ACTIVE', 'PAUSED'].includes((row.status||'').toUpperCase()) && (
-                 <Button title="Cancelar factura recurrente" aria-label="Cancelar factura recurrente" variant="ghost" size="icon" className="size-8 rounded-lg text-muted-foreground hover:bg-rose-500/10 hover:text-rose-500 transition-colors" onClick={() => { setCancelReason(''); setCancelReasonAttempted(false); setPendingDeleteIds([row.id]); }}><Ban className="size-4" /></Button>
+                 <SalesActionTooltip label="Anular recurrente"><Button aria-label="Anular factura recurrente" variant="ghost" size="icon" className="size-8 rounded-lg text-muted-foreground hover:bg-rose-500/10 hover:text-rose-500 transition-colors" onClick={() => { setCancelReason(''); setCancelReasonAttempted(false); setPendingDeleteIds([row.id]); }}><Ban className="size-4" /></Button></SalesActionTooltip>
                )}
             </div>
           )}
@@ -984,7 +985,7 @@ export function FacturasRecurrentesView({ data, summaryData, summaryLoading, sum
         }}
         extraActions={detailRecurring ? <>
           {canPerform('SALES_RECURRING', String(detailRecurring.status || '').toUpperCase() === 'ACTIVE' ? 'pause' : 'resume') && ['ACTIVE', 'PAUSED'].includes(String(detailRecurring.status || '').toUpperCase()) && <Button type="button" className="rounded-xl bg-primary text-primary-foreground" onClick={() => toggleStatus(detailRecurring)}>{String(detailRecurring.status || '').toUpperCase() === 'ACTIVE' ? <Pause className="mr-2 size-4" /> : <Play className="mr-2 size-4" />}{String(detailRecurring.status || '').toUpperCase() === 'ACTIVE' ? 'Pausar' : 'Reanudar'}</Button>}
-          {canPerform('SALES_RECURRING', 'cancel') && ['ACTIVE', 'PAUSED'].includes(String(detailRecurring.status || '').toUpperCase()) && <Button type="button" variant="outline" className="rounded-xl border-rose-500/30 text-rose-600 hover:bg-rose-500/10 dark:text-rose-400" onClick={() => { setDetailRecurring(null); setCancelReason(''); setCancelReasonAttempted(false); setPendingDeleteIds([detailRecurring.id]); }}><Ban className="mr-2 size-4" />Cancelar</Button>}
+          {canPerform('SALES_RECURRING', 'cancel') && ['ACTIVE', 'PAUSED'].includes(String(detailRecurring.status || '').toUpperCase()) && <Button type="button" variant="outline" className="rounded-xl border-rose-500/30 text-rose-600 hover:bg-rose-500/10 dark:text-rose-400" onClick={() => { setDetailRecurring(null); setCancelReason(''); setCancelReasonAttempted(false); setPendingDeleteIds([detailRecurring.id]); }}><Ban className="mr-2 size-4" />Anular</Button>}
         </> : undefined}
         onDownloadPdf={canPerform('SALES_RECURRING', 'export') ? (format) => { if (detailRecurring) void handleExportPDF(detailRecurring, format); } : undefined}
       />

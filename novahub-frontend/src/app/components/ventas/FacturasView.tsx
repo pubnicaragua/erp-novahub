@@ -3,7 +3,7 @@ import { useQuery } from '@tanstack/react-query';
 import * as Sentry from '@sentry/react';
 import WhatsAppIcon from '@mui/icons-material/WhatsApp';
 import {
-  FileText, Plus, Search, TrendingUp, CheckCircle2, AlertCircle, CreditCard, Eye, Trash2, Ban, ChevronLeft, Send, Inbox, Link2, Smartphone, Upload, Printer
+  FileText, Plus, Search, TrendingUp, CheckCircle2, AlertCircle, CreditCard, Eye, Trash2, Ban, ChevronLeft, Send, Inbox, Link2, Smartphone, Upload, Printer, Save
 } from 'lucide-react';
 import { Card, CardContent } from '../ui/card';
 import { useDebouncedValue } from '../../hooks/useDebouncedValue';
@@ -57,6 +57,7 @@ import { getInvoicePaymentPresentation, hasPaymentReferenceField, isBankPaymentM
 import { getSalesAdditionalCharges } from '../../utils/salesCharges';
 import { getPaymentLineDocumentAmount } from '../../utils/paymentSettlement';
 import { PdfDownloadButton } from '../ui/PdfDownloadButton';
+import { SalesActionTooltip } from './SalesActionTooltip';
 import { clearSalesEditorDraft, getSalesEditorDraftKey, readSalesEditorDraft, writeSalesEditorDraft } from '../../services/sales-draft-storage';
 import { SalesWarehouseStockHint } from './SalesWarehouseStockHint';
 import { PoketPayLinkDialog } from './PoketPayLinkDialog';
@@ -2292,14 +2293,14 @@ export function FacturasView({ data, summaryData, summaryLoading, summaryError, 
           <div className="flex min-w-0 flex-wrap items-stretch justify-start gap-2 sm:justify-end" data-tour="sales-form-actions">
             <SalesViewTutorial view="invoices" context="form" />
             {localDoc?.customerId && getCustomerPhone(localDoc) && (
-            <Button
+            <SalesActionTooltip label={isCreating ? 'Guardar la factura como borrador antes de enviarla' : 'Enviar factura por WhatsApp'}><Button
                 variant="outline"
-                title={isCreating ? 'Guarda la factura como borrador para enviarla por WhatsApp' : 'Enviar factura por WhatsApp'}
+                aria-label="WhatsApp"
                 onClick={() => void handleWhatsApp()}
                 className="w-full rounded-xl border-emerald-200 text-emerald-600 hover:bg-emerald-50 hover:text-emerald-700 dark:border-emerald-400/30 dark:hover:bg-emerald-500/10 dark:hover:text-emerald-300 gap-2 font-black uppercase text-[10px] tracking-widest px-4 sm:w-auto"
               >
                 <WhatsAppIcon fontSize="inherit" className="size-4" style={{ width: '1rem', height: '1rem', fontSize: '1rem' }} aria-hidden="true" /> WhatsApp
-              </Button>
+              </Button></SalesActionTooltip>
             )}
             {!isInvoiceLocked && ((isCreating && canPerform('SALES_INVOICES', 'create')) || (!isCreating && canPerform('SALES_INVOICES', 'edit'))) && (
               <>
@@ -2309,7 +2310,7 @@ export function FacturasView({ data, summaryData, summaryLoading, summaryError, 
                     className="w-full rounded-xl border-border/50 hover:bg-muted/70 hover:text-foreground font-black uppercase text-[10px] tracking-widest px-4 sm:w-auto"
                     onClick={() => void handleSaveInvoice('DRAFT')}
                   >
-                    Guardar Borrador
+                    <><Save className="mr-2 size-4" />Guardar</>
                   </Button>
                 )}
                 {isDraftInvoice && canPerform('SALES_INVOICES', 'submit') && canPerform('SALES_INVOICES', 'pay') && <Button
@@ -2318,34 +2319,34 @@ export function FacturasView({ data, summaryData, summaryLoading, summaryError, 
                   className="w-full rounded-xl border-emerald-500/30 px-4 text-[10px] font-black uppercase tracking-widest text-emerald-700 hover:bg-emerald-500/10 dark:text-emerald-400 sm:w-auto"
                   onClick={() => openInvoicePayment({ ...localDoc, status: 'DRAFT' } as Invoice)}
                 >
-                  <CreditCard className="mr-2 size-4" />Registrar pago
+                  <CreditCard className="mr-2 size-4" />Pagar
                 </Button>}
-                {isDraftInvoice && isCreating && canPerform('SALES_INVOICES', 'create') && canPerform('SALES_INVOICES', 'sendToCash') && <Button
+                {isDraftInvoice && isCreating && canPerform('SALES_INVOICES', 'create') && canPerform('SALES_INVOICES', 'sendToCash') && <SalesActionTooltip label={hasOpenCash ? 'Crear y enviar factura a Caja' : 'No hay una caja abierta en esta sucursal'}><Button
                   type="button"
                   variant="outline"
-                  title={hasOpenCash ? 'Crear la factura y enviarla a Caja' : 'No hay una caja abierta en esta sucursal'}
+                  aria-label="Enviar a Caja"
                   disabled={!hasOpenCash || cashAvailabilityQuery.isLoading}
                   className={cn('w-full rounded-xl border-emerald-500/30 px-4 text-[10px] font-black uppercase tracking-widest text-emerald-700 hover:bg-emerald-500/10 dark:text-emerald-400 sm:w-auto', (!hasOpenCash || cashAvailabilityQuery.isLoading) && 'cursor-not-allowed opacity-50')}
                   onClick={() => void handleSaveInvoice('CASH_QUEUE')}
                 >
-                  <Inbox className="mr-2 size-4" />Enviar a Caja
-                </Button>}
-                {isCreating && isDraftInvoice && canPerform('SALES_INVOICES', 'create') && canPerform('SALES_INVOICES', 'sendToCredit') && <Button
+                  <Inbox className="mr-2 size-4" />Caja
+                </Button></SalesActionTooltip>}
+                {isCreating && isDraftInvoice && canPerform('SALES_INVOICES', 'create') && canPerform('SALES_INVOICES', 'sendToCredit') && <SalesActionTooltip label={!localDoc.customerId ? 'Selecciona un cliente con crédito disponible' : 'El crédito disponible debe cubrir el saldo de la factura'}><Button
                   type="button"
                   variant="outline"
                   className="w-full rounded-xl border-primary/40 px-4 text-[10px] font-black uppercase tracking-widest text-primary hover:bg-primary/10 sm:w-auto"
                   disabled={!canEmitNewInvoiceToCredit}
-                  title={!localDoc.customerId ? 'Selecciona un cliente con crédito disponible' : 'El crédito disponible debe cubrir el saldo de la factura'}
+                  aria-label="Enviar a crédito"
                   onClick={() => openInvoiceCredit({ ...localDoc, status: 'DRAFT' } as Invoice)}
                 >
-                  <Send className="mr-2 size-4" />Enviar a crédito
-                </Button>}
+                  <Send className="mr-2 size-4" />A crédito
+                </Button></SalesActionTooltip>}
                 {!isDraftInvoice && <Button
                   variant="default"
                   className="w-full rounded-xl bg-primary px-4 text-[10px] font-black uppercase tracking-widest text-primary-foreground shadow-xl shadow-primary/20 hover:bg-primary/90 hover:text-primary-foreground sm:w-auto"
                   onClick={() => void handleSaveInvoice('SAVE')}
                 >
-                  Guardar
+                  <><Save className="mr-2 size-4" />Guardar</>
                 </Button>}
               </>
             )}
@@ -3056,13 +3057,13 @@ export function FacturasView({ data, summaryData, summaryLoading, summaryError, 
                 onSend={() => handleWhatsApp(row)}
               />
               {canPerform('SALES_INVOICES', 'cancel') && isInvoiceCancellableFromList(row) && (
-                <Button type="button" title="Solicitar anulación a Contabilidad" aria-label={`Solicitar anulación de ${row.number}`} variant="ghost" size="icon" className="size-8 shrink-0 rounded-lg text-rose-500 hover:bg-rose-500/10 transition-colors" onClick={() => { setPendingCancelIds([row.id]); setCancelReason(''); setCancelReasonAttempted(false); }}>
+                <SalesActionTooltip label="Anular"><Button type="button" aria-label={`Solicitar anulación de ${row.number}`} variant="ghost" size="icon" className="size-8 shrink-0 rounded-lg text-rose-500 hover:bg-rose-500/10 transition-colors" onClick={() => { setPendingCancelIds([row.id]); setCancelReason(''); setCancelReasonAttempted(false); }}>
                   <Ban className="size-4" />
-                </Button>
+                </Button></SalesActionTooltip>
               )}
-              <Button type="button" title="Ver detalle de factura" aria-label={`Ver detalle de factura ${row.number}`} variant="ghost" size="icon" className="size-8 shrink-0 rounded-lg text-muted-foreground hover:bg-primary/10 hover:text-primary transition-colors" onClick={(event) => { event.preventDefault(); event.stopPropagation(); void openInvoiceDetail(row); }}>
+              <SalesActionTooltip label="Ver"><Button type="button" aria-label={`Ver factura ${row.number}`} variant="ghost" size="icon" className="size-8 shrink-0 rounded-lg text-muted-foreground hover:bg-primary/10 hover:text-primary transition-colors" onClick={(event) => { event.preventDefault(); event.stopPropagation(); void openInvoiceDetail(row); }}>
                 <Eye className="size-4" />
-              </Button>
+              </Button></SalesActionTooltip>
             </div>
           )}
         />
@@ -3097,14 +3098,15 @@ export function FacturasView({ data, summaryData, summaryLoading, summaryError, 
             phone={resolveCustomerPhone(detailInvoice.customerId, detailInvoice.customer, customers, detailInvoice.customCustomerPhone)}
             documentLabel="factura"
             onSend={() => handleWhatsApp(detailInvoice)}
+            showLabel
           />
-          {canSendInvoiceToCash(detailInvoice) && <Button type="button" variant="outline" title={hasOpenCash ? 'Enviar factura a Caja' : 'No hay una caja abierta en esta sucursal'} className={cn('rounded-xl border-emerald-500/30 text-emerald-700 hover:bg-emerald-500/10 dark:text-emerald-400', (!hasOpenCash || cashAvailabilityQuery.isLoading) && 'cursor-not-allowed opacity-50')} disabled={sendToCashLoadingId === detailInvoice.id || !hasOpenCash || cashAvailabilityQuery.isLoading} onClick={() => void handleSendInvoiceToCash(detailInvoice)}><Inbox className="mr-2 size-4" />Enviar a Caja</Button>}
-          {canPerform('SALES_INVOICES', 'sendToCredit') && (String(detailInvoice.status).toUpperCase() !== 'DRAFT' || canPerform('SALES_INVOICES', 'submit')) && !['PAID', 'CANCELLED', 'CREDIT'].includes(String(detailInvoice.status).toUpperCase()) && !detailInvoice.creditNotes?.some((credit) => ['ACTIVE', 'ISSUED', 'PARTIAL', 'APPLIED'].includes(String(credit.status).toUpperCase())) && getInvoiceActionBalance(detailInvoice) > 0.01 && <Button type="button" variant="outline" className={cn('rounded-xl border-primary/30 text-primary hover:bg-primary/10', !invoiceFitsAvailableCredit(detailInvoice) && 'cursor-not-allowed text-muted-foreground opacity-60')} disabled={!invoiceFitsAvailableCredit(detailInvoice)} onClick={() => openInvoiceCredit(detailInvoice)}><Send className="mr-2 size-4" />Enviar a crédito</Button>}
-          {canPerform('SALES_INVOICES', 'pay') && (String(detailInvoice.status).toUpperCase() !== 'DRAFT' || canPerform('SALES_INVOICES', 'submit')) && !['PAID', 'CANCELLED'].includes(String(detailInvoice.status).toUpperCase()) && getInvoicePaymentBalance(detailInvoice, getInvoiceBalance(detailInvoice)) > 0 && <Button type="button" variant="outline" className="rounded-xl border-primary/30 text-primary hover:bg-primary/10" disabled={paymentLoading && paymentInvoice?.id === detailInvoice.id} onClick={() => openInvoicePayment(detailInvoice)}><CreditCard className="mr-2 size-4" />Registrar pago</Button>}
-          {(canPerform('SALES_INVOICES', 'createPaymentLink') || canPerform('SALES_INVOICES', 'reconcilePaymentLink') || canPerform('SALES_INVOICES', 'cancelPaymentLink')) && !['PAID', 'CANCELLED'].includes(String(detailInvoice.status).toUpperCase()) && getInvoiceBalance(detailInvoice) > 0.01 && <Button type="button" variant="outline" className="rounded-xl border-primary/30 text-primary hover:bg-primary/10" onClick={() => setPaylinkInvoice(detailInvoice)}><Link2 className="mr-2 size-4" />{canPerform('SALES_INVOICES', 'createPaymentLink') ? 'Links de pago' : 'Ver links de pago'}</Button>}
-          {(canPerform('SALES_INVOICES', 'createAppToAppPayment') || canPerform('SALES_INVOICES', 'reconcileAppToAppPayment')) && !['PAID', 'CANCELLED'].includes(String(detailInvoice.status).toUpperCase()) && getInvoiceBalance(detailInvoice) > 0.01 && <Button type="button" variant="outline" className="rounded-xl border-primary/30 text-primary hover:bg-primary/10" onClick={() => setPoketAppInvoice(detailInvoice)}><Smartphone className="mr-2 size-4" />{canPerform('SALES_INVOICES', 'createAppToAppPayment') ? 'Cobrar con Poket' : 'Ver cobros Poket'}</Button>}
-              {canPerform('SALES_INVOICES', 'cancel') && isInvoiceCancellableFromList(detailInvoice) && <Button type="button" variant="outline" className="rounded-xl border-rose-500/30 text-rose-600 hover:bg-rose-500/10 dark:text-rose-400" onClick={() => { setDetailInvoice(null); setPendingCancelIds([detailInvoice.id]); setCancelReason(''); setCancelReasonAttempted(false); }}><Ban className="mr-2 size-4" />Solicitar anulación</Button>}
-          {canPerform('SALES_INVOICES', 'read') && canPerform('SALES_INVOICES', 'delete') && String(detailInvoice.status).toUpperCase() === 'DRAFT' && <Button type="button" variant="outline" className="rounded-xl border-destructive/30 text-destructive hover:bg-destructive/10" onClick={() => setPendingDeleteInvoiceId(detailInvoice.id)}><Trash2 className="mr-2 size-4" />Eliminar borrador</Button>}
+          {canSendInvoiceToCash(detailInvoice) && <SalesActionTooltip label={hasOpenCash ? 'Enviar factura a Caja' : 'No hay una caja abierta en esta sucursal'}><Button type="button" variant="outline" aria-label="Enviar a Caja" className={cn('rounded-xl border-emerald-500/30 text-emerald-700 hover:bg-emerald-500/10 dark:text-emerald-400', (!hasOpenCash || cashAvailabilityQuery.isLoading) && 'cursor-not-allowed opacity-50')} disabled={sendToCashLoadingId === detailInvoice.id || !hasOpenCash || cashAvailabilityQuery.isLoading} onClick={() => void handleSendInvoiceToCash(detailInvoice)}><Inbox className="mr-2 size-4" />Caja</Button></SalesActionTooltip>}
+          {canPerform('SALES_INVOICES', 'sendToCredit') && (String(detailInvoice.status).toUpperCase() !== 'DRAFT' || canPerform('SALES_INVOICES', 'submit')) && !['PAID', 'CANCELLED', 'CREDIT'].includes(String(detailInvoice.status).toUpperCase()) && !detailInvoice.creditNotes?.some((credit) => ['ACTIVE', 'ISSUED', 'PARTIAL', 'APPLIED'].includes(String(credit.status).toUpperCase())) && getInvoiceActionBalance(detailInvoice) > 0.01 && <SalesActionTooltip label="Enviar factura a crédito"><Button type="button" variant="outline" aria-label="A crédito" className={cn('rounded-xl border-primary/30 text-primary hover:bg-primary/10', !invoiceFitsAvailableCredit(detailInvoice) && 'cursor-not-allowed text-muted-foreground opacity-60')} disabled={!invoiceFitsAvailableCredit(detailInvoice)} onClick={() => openInvoiceCredit(detailInvoice)}><Send className="mr-2 size-4" />A crédito</Button></SalesActionTooltip>}
+          {canPerform('SALES_INVOICES', 'pay') && (String(detailInvoice.status).toUpperCase() !== 'DRAFT' || canPerform('SALES_INVOICES', 'submit')) && !['PAID', 'CANCELLED'].includes(String(detailInvoice.status).toUpperCase()) && getInvoicePaymentBalance(detailInvoice, getInvoiceBalance(detailInvoice)) > 0 && <Button type="button" variant="outline" aria-label="Registrar pago" className="rounded-xl border-primary/30 text-primary hover:bg-primary/10" disabled={paymentLoading && paymentInvoice?.id === detailInvoice.id} onClick={() => openInvoicePayment(detailInvoice)}><CreditCard className="mr-2 size-4" />Pagar</Button>}
+          {(canPerform('SALES_INVOICES', 'createPaymentLink') || canPerform('SALES_INVOICES', 'reconcilePaymentLink') || canPerform('SALES_INVOICES', 'cancelPaymentLink')) && !['PAID', 'CANCELLED'].includes(String(detailInvoice.status).toUpperCase()) && getInvoiceBalance(detailInvoice) > 0.01 && <Button type="button" variant="outline" aria-label="Links de pago" className="rounded-xl border-primary/30 text-primary hover:bg-primary/10" onClick={() => setPaylinkInvoice(detailInvoice)}><Link2 className="mr-2 size-4" />Links</Button>}
+          {(canPerform('SALES_INVOICES', 'createAppToAppPayment') || canPerform('SALES_INVOICES', 'reconcileAppToAppPayment')) && !['PAID', 'CANCELLED'].includes(String(detailInvoice.status).toUpperCase()) && getInvoiceBalance(detailInvoice) > 0.01 && <Button type="button" variant="outline" aria-label="Cobros con Poket" className="rounded-xl border-primary/30 text-primary hover:bg-primary/10" onClick={() => setPoketAppInvoice(detailInvoice)}><Smartphone className="mr-2 size-4" />Poket</Button>}
+              {canPerform('SALES_INVOICES', 'cancel') && isInvoiceCancellableFromList(detailInvoice) && <SalesActionTooltip label="Solicitar anulación a Contabilidad"><Button type="button" variant="outline" aria-label="Solicitar anulación" className="rounded-xl border-rose-500/30 text-rose-600 hover:bg-rose-500/10 dark:text-rose-400" onClick={() => { setDetailInvoice(null); setPendingCancelIds([detailInvoice.id]); setCancelReason(''); setCancelReasonAttempted(false); }}><Ban className="mr-2 size-4" />Anular</Button></SalesActionTooltip>}
+          {canPerform('SALES_INVOICES', 'read') && canPerform('SALES_INVOICES', 'delete') && String(detailInvoice.status).toUpperCase() === 'DRAFT' && <Button type="button" variant="outline" aria-label="Eliminar borrador" className="rounded-xl border-destructive/30 text-destructive hover:bg-destructive/10" onClick={() => setPendingDeleteInvoiceId(detailInvoice.id)}><Trash2 className="mr-2 size-4" />Eliminar</Button>}
         </> : undefined}
       />
 
@@ -3317,7 +3319,7 @@ export function FacturasView({ data, summaryData, summaryLoading, summaryError, 
         <DialogContent className="!flex !flex-col !max-h-[calc(100dvh-1rem)] w-[calc(100%-1rem)] !max-w-xl !overflow-hidden rounded-3xl p-4 sm:w-[calc(100%-2rem)] sm:p-6">
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2 nh-module-title">
-              <CreditCard className="size-5 text-primary" /> Registrar pago de factura
+              <CreditCard className="size-5 text-primary" /> Pagar factura
             </DialogTitle>
           </DialogHeader>
           {paymentInvoice && (
@@ -3699,7 +3701,7 @@ export function FacturasView({ data, summaryData, summaryLoading, summaryError, 
             <Button type="button" variant="outline" onClick={() => setPaymentVoucher(null)}>Cerrar</Button>
             {paymentVoucher && <div className="flex flex-col-reverse gap-2 sm:flex-row">
               <Button type="button" onClick={() => void handlePrintPaymentVoucher(paymentVoucher.payment, paymentVoucher.invoice, paymentVoucher.remaining)} className="gap-2 font-black"><Printer className="size-4" />Imprimir ticket</Button>
-              <PdfDownloadButton onDownload={(format) => { void handleDownloadPaymentVoucher(paymentVoucher.payment, paymentVoucher.invoice, format, paymentVoucher.remaining); }} includePageSizes includeRoll />
+              <PdfDownloadButton onDownload={(format) => { void handleDownloadPaymentVoucher(paymentVoucher.payment, paymentVoucher.invoice, format, paymentVoucher.remaining); }} includePageSizes includeRoll label="Imprimir" action="print" />
             </div>}
           </DialogFooter>
         </DialogContent>

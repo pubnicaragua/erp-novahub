@@ -2,10 +2,11 @@ import { useState, useEffect, useRef } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import WhatsAppIcon from '@mui/icons-material/WhatsApp';
 import { 
-  FileSpreadsheet, Plus, Search, TrendingUp, Clock, CheckCircle2, ArrowRightCircle, Eye, Trash2, Ban, ChevronLeft, Upload, Image as ImageIcon, Loader2, X, FileText, Inbox
+  FileSpreadsheet, Plus, Search, TrendingUp, Clock, CheckCircle2, ArrowRightCircle, Eye, Trash2, Ban, ChevronLeft, Upload, Image as ImageIcon, Loader2, X, FileText, Inbox, Save
 } from 'lucide-react';
 import { Card, CardContent } from '../ui/card';
 import { Button } from '../ui/button';
+import { SalesActionTooltip } from './SalesActionTooltip';
 import { Input } from '../ui/input';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../ui/select';
 import { EditableDataTable, ColumnDef } from '../ui/EditableDataTable';
@@ -976,11 +977,11 @@ export function EstimacionesView({ data, summaryData, summaryLoading, summaryErr
                 {normalizeEstimateStatus(localDoc?.status) === 'DRAFT' && <>
                   <Button variant="outline" className="w-full rounded-xl border-border/50 px-6 text-[10px] font-black uppercase tracking-widest hover:bg-muted/70 hover:text-foreground sm:w-auto"
                     onClick={() => void handleSaveEstimate('DRAFT')}>
-                    Guardar Borrador
+                    <><Save className="mr-2 size-4" />Guardar</>
                   </Button>
                   {canPerform('SALES_QUOTES', 'convert') && <Button className="w-full rounded-xl bg-primary px-6 text-[10px] font-black uppercase tracking-widest text-primary-foreground shadow-xl shadow-primary/20 hover:bg-primary/90 hover:text-primary-foreground sm:w-auto"
                     onClick={() => void handleConvertToOrder(localDoc)}>
-                    Aprobar y enviar a Orden
+                    <><ArrowRightCircle className="mr-2 size-4" />Crear orden</>
                   </Button>}
                 </>}
               </>
@@ -988,11 +989,11 @@ export function EstimacionesView({ data, summaryData, summaryLoading, summaryErr
             {canPerform('SALES_QUOTES', 'convert') && ['DRAFT', 'APPROVED'].includes(normalizeEstimateStatus(localDoc?.status)) && (
               <>
                 <Button type="button" variant="outline" className="w-full rounded-xl sm:w-auto" disabled={convertingId === localDoc.id} onClick={() => void handleConvertEstimateDirect(localDoc, false)}>
-                  <FileText className="mr-2 size-4" />Enviar a Facturas
+                  <FileText className="mr-2 size-4" />Facturar
                 </Button>
-                <Button type="button" variant="outline" title={hasOpenCash ? 'Aprobar y enviar directamente a Caja' : 'No hay una caja abierta en esta sucursal'} className={cn('w-full rounded-xl sm:w-auto', !hasOpenCash && 'cursor-not-allowed opacity-50')} disabled={convertingId === localDoc.id || !hasOpenCash} onClick={() => void handleConvertEstimateDirect(localDoc, true)}>
-                  <Inbox className="mr-2 size-4" />Enviar a Caja
-                </Button>
+                <SalesActionTooltip label={hasOpenCash ? 'Aprobar y enviar directamente a Caja' : 'No hay una caja abierta en esta sucursal'}><Button type="button" variant="outline" aria-label="Enviar a Caja" className={cn('w-full rounded-xl sm:w-auto', !hasOpenCash && 'cursor-not-allowed opacity-50')} disabled={convertingId === localDoc.id || !hasOpenCash} onClick={() => void handleConvertEstimateDirect(localDoc, true)}>
+                  <Inbox className="mr-2 size-4" />Caja
+                </Button></SalesActionTooltip>
               </>
             )}
           </div>
@@ -1652,13 +1653,13 @@ export function EstimacionesView({ data, summaryData, summaryLoading, summaryErr
                 documentLabel="cotización"
                 onSend={() => handleWhatsApp(row)}
               />
-              <Button type="button" variant="ghost" title="Ver detalle de cotización" aria-label={`Ver detalle de cotización ${row.number}`} size="icon" className={actionButtonClass} onClick={() => setDetailEstimate(row)}>
+              <SalesActionTooltip label="Ver"><Button type="button" variant="ghost" aria-label={`Ver cotización ${row.number}`} size="icon" className={actionButtonClass} onClick={() => setDetailEstimate(row)}>
                 <Eye className={actionIconClass} />
-              </Button>
+              </Button></SalesActionTooltip>
               {canPerform('SALES_QUOTES', 'cancel') && normalizeEstimateStatus(row.status) === 'DRAFT' && (
-                <Button type="button" title="Cancelar cotización" variant="ghost" size="icon" className={actionButtonClass} onClick={() => setPendingCancelId(row.id)}>
+                <SalesActionTooltip label="Anular"><Button type="button" aria-label={`Anular cotización ${row.number}`} variant="ghost" size="icon" className={actionButtonClass} onClick={() => setPendingCancelId(row.id)}>
                   <Ban className={actionIconClass} />
-                </Button>
+                </Button></SalesActionTooltip>
               )}
             </div>
           )}
@@ -1682,13 +1683,14 @@ export function EstimacionesView({ data, summaryData, summaryLoading, summaryErr
             phone={resolveCustomerPhone(detailEstimate.customerId, detailEstimate.customer, customers, detailEstimate.customCustomerPhone)}
             documentLabel="cotización"
             onSend={() => handleWhatsApp(detailEstimate)}
+            showLabel
           />
-          {canPerform('SALES_QUOTES', 'convert') && normalizeEstimateStatus(detailEstimate.status) === 'DRAFT' && <Button type="button" className="rounded-xl bg-primary text-primary-foreground" disabled={convertingId === detailEstimate.id} onClick={() => { const estimate = detailEstimate; setDetailEstimate(null); void handleConvertToOrder(estimate); }}><ArrowRightCircle className="mr-2 size-4" />Aprobar y enviar a orden</Button>}
+          {canPerform('SALES_QUOTES', 'convert') && normalizeEstimateStatus(detailEstimate.status) === 'DRAFT' && <Button type="button" className="rounded-xl bg-primary text-primary-foreground" aria-label="Crear orden" disabled={convertingId === detailEstimate.id} onClick={() => { const estimate = detailEstimate; setDetailEstimate(null); void handleConvertToOrder(estimate); }}><ArrowRightCircle className="mr-2 size-4" />Crear orden</Button>}
           {canPerform('SALES_QUOTES', 'convert') && ['DRAFT', 'APPROVED'].includes(normalizeEstimateStatus(detailEstimate.status)) && <>
-            <Button type="button" variant="outline" className="rounded-xl" disabled={convertingId === detailEstimate.id} onClick={() => { const estimate = detailEstimate; setDetailEstimate(null); void handleConvertEstimateDirect(estimate, false); }}><FileText className="mr-2 size-4" />Enviar a Facturas</Button>
-            <Button type="button" variant="outline" title={hasOpenCash ? 'Enviar directamente a Caja' : 'No hay una caja abierta en esta sucursal'} className={cn('rounded-xl', !hasOpenCash && 'cursor-not-allowed opacity-50')} disabled={convertingId === detailEstimate.id || !hasOpenCash} onClick={() => { const estimate = detailEstimate; setDetailEstimate(null); void handleConvertEstimateDirect(estimate, true); }}><Inbox className="mr-2 size-4" />Enviar a Caja</Button>
+            <Button type="button" variant="outline" className="rounded-xl" disabled={convertingId === detailEstimate.id} onClick={() => { const estimate = detailEstimate; setDetailEstimate(null); void handleConvertEstimateDirect(estimate, false); }}><FileText className="mr-2 size-4" />Facturar</Button>
+            <SalesActionTooltip label={hasOpenCash ? 'Enviar directamente a Caja' : 'No hay una caja abierta en esta sucursal'}><Button type="button" variant="outline" aria-label="Enviar a Caja" className={cn('rounded-xl', !hasOpenCash && 'cursor-not-allowed opacity-50')} disabled={convertingId === detailEstimate.id || !hasOpenCash} onClick={() => { const estimate = detailEstimate; setDetailEstimate(null); void handleConvertEstimateDirect(estimate, true); }}><Inbox className="mr-2 size-4" />Caja</Button></SalesActionTooltip>
           </>}
-          {canPerform('SALES_QUOTES', 'cancel') && normalizeEstimateStatus(detailEstimate.status) === 'DRAFT' && <Button type="button" variant="outline" className="rounded-xl border-rose-500/30 text-rose-600 hover:bg-rose-500/10 dark:text-rose-400" onClick={() => { setDetailEstimate(null); setPendingCancelId(detailEstimate.id); }}><Ban className="mr-2 size-4" />Cancelar</Button>}
+          {canPerform('SALES_QUOTES', 'cancel') && normalizeEstimateStatus(detailEstimate.status) === 'DRAFT' && <Button type="button" variant="outline" className="rounded-xl border-rose-500/30 text-rose-600 hover:bg-rose-500/10 dark:text-rose-400" onClick={() => { setDetailEstimate(null); setPendingCancelId(detailEstimate.id); }}><Ban className="mr-2 size-4" />Anular</Button>}
         </> : undefined}
         onDownloadPdf={canPerform('SALES_QUOTES', 'export') ? (format, _scope, _filter, options) => { if (detailEstimate) void handleExportPDF(detailEstimate, format, options); } : undefined}
       />

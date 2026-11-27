@@ -28,6 +28,7 @@ import { SalesDateRangeFilter } from './SalesDateRangeFilter';
 import { SalesViewTutorial } from './SalesViewTutorial';
 import type { PdfDownloadFormat } from '../../utils/pdfDownloadFormats';
 import { PdfDownloadButton } from '../ui/PdfDownloadButton';
+import { SalesActionTooltip } from './SalesActionTooltip';
 import { SalesKpiCard } from './SalesKpiCard';
 import { KpiSummaryNotice } from '../ui/KpiSummaryNotice';
 import { fetchAllReportPages } from '../../hooks/useTenantQuery';
@@ -1142,7 +1143,7 @@ export function PagosRecibidosView({ data, summaryData, summaryLoading, summaryE
           highlightedRowId={highlightedAlertId}
           actions={(row) => (
             <div className="flex items-center gap-1">
-              <Button title="Ver detalle" aria-label={`Ver detalle del pago ${row.number}`} variant="ghost" size="icon" className="size-8 rounded-lg text-muted-foreground hover:bg-primary/10 hover:text-primary transition-colors" onClick={() => setDetailPayment(row)}><Eye className="size-4" /></Button>
+              <SalesActionTooltip label="Ver"><Button aria-label={`Ver pago ${row.number}`} variant="ghost" size="icon" className="size-8 rounded-lg text-muted-foreground hover:bg-primary/10 hover:text-primary transition-colors" onClick={() => setDetailPayment(row)}><Eye className="size-4" /></Button></SalesActionTooltip>
             </div>
           )}
         />
@@ -1171,7 +1172,7 @@ export function PagosRecibidosView({ data, summaryData, summaryLoading, summaryE
                   <span>Moneda: {currencyLabels[String(detailPayment.currency || baseCurrency).toUpperCase()] || 'No especificada'}</span>
                 </div>
                 <div className="mt-3 flex flex-wrap gap-2">
-                  {canPerform('SALES_PAYMENTS', 'export') && <PdfDownloadButton onDownload={(format) => { void handleExportPDF(detailPayment, format); }} includePageSizes includeRoll />}
+                  {canPerform('SALES_PAYMENTS', 'export') && <PdfDownloadButton onDownload={(format) => { void handleExportPDF(detailPayment, format); }} includePageSizes includeRoll label="Imprimir" action="print" />}
                 </div>
               </div>
 

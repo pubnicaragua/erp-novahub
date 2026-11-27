@@ -20,6 +20,7 @@ import { InventoryViewTutorial } from './InventoryViewTutorial';
 import type { SimilarProductGroup, SimilarProductMatch } from '@/app/services/inventario.service';
 import { priceListsService, type PriceList } from '@/app/services/price-lists.service';
 import { resolveStandardProductPriceLists } from '@/app/utils/product-price-lists';
+import { PriceListPricingEditor, type PriceListPricingMode } from '../ui/PriceListPricingEditor';
 
 interface AddProductsModalProps {
   open: boolean;
@@ -47,6 +48,7 @@ const makeDefaultDraft = (categoryId: string, itemType: string) => ({
   commercialNote: '',
   priceCurrency: 'NIO',
   prices: {} as Record<string, number | string>,
+  priceSettings: {} as Record<string, { pricingMode: PriceListPricingMode; marginPercent: number | string }>,
   costPrice: '',
   taxRate: itemType === 'SERVICE' ? '0' : '0.15',
   unit: 'unidad',
@@ -62,6 +64,7 @@ const makeDefaultDraft = (categoryId: string, itemType: string) => ({
   initialStock: '',
   variantInitialStocks: {} as Record<string, number>,
   variantPrices: {} as Record<string, Record<string, number | string>>,
+  variantPriceSettings: {} as Record<string, Record<string, { pricingMode: PriceListPricingMode; marginPercent: number | string }>>,
   variantCostPrices: {} as Record<string, number | string>,
   variantMinStocks: {} as Record<string, number | string>,
   variantMaxStocks: {} as Record<string, number | string>,
@@ -458,6 +461,52 @@ export function AddProductsModal({ open, onOpenChange, categories, warehouses, b
           [priceListCode]: value,
         },
       },
+      variantPriceSettings: {
+        ...(prev.variantPriceSettings || {}),
+        [key]: {
+          ...(prev.variantPriceSettings?.[key] || {}),
+          [priceListCode]: { pricingMode: 'FIXED', marginPercent: '' },
+        },
+      },
+    }));
+  };
+
+  const updateVariantPricingMode = (combination: VariantCombination, listCode: string, pricingMode: PriceListPricingMode) => {
+    const key = variantCombinationKey(combination);
+    setDraftProduct((prev: any) => ({
+      ...prev,
+      variantPriceSettings: {
+        ...(prev.variantPriceSettings || {}),
+        [key]: {
+          ...(prev.variantPriceSettings?.[key] || {}),
+          [listCode]: { ...(prev.variantPriceSettings?.[key]?.[listCode] || {}), pricingMode, ...(pricingMode === 'FIXED' ? { marginPercent: '' } : {}) },
+        },
+      },
+    }));
+  };
+
+  const updateVariantMargin = (combination: VariantCombination, listCode: string, marginPercent: string) => {
+    const key = variantCombinationKey(combination);
+    setDraftProduct((prev: any) => ({
+      ...prev,
+      variantPriceSettings: {
+        ...(prev.variantPriceSettings || {}),
+        [key]: {
+          ...(prev.variantPriceSettings?.[key] || {}),
+          [listCode]: { pricingMode: 'MARGIN', marginPercent },
+        },
+      },
+    }));
+  };
+
+  const applyVariantMargin = (combination: VariantCombination, listCode: string, price: number) => {
+    const key = variantCombinationKey(combination);
+    setDraftProduct((prev: any) => ({
+      ...prev,
+      variantPrices: {
+        ...(prev.variantPrices || {}),
+        [key]: { ...(prev.variantPrices?.[key] || {}), [listCode]: price },
+      },
     }));
   };
 
@@ -474,6 +523,7 @@ export function AddProductsModal({ open, onOpenChange, categories, warehouses, b
     setDraftProduct((prev: any) => ({
       ...prev,
       prices: { ...(prev.prices || {}), [code]: value },
+      priceSettings: { ...(prev.priceSettings || {}), [code]: { pricingMode: 'FIXED', marginPercent: '' } },
       salePrice: (() => {
         const nextPrices = { ...(prev.prices || {}), [code]: value };
         const hasPrice = (list: Pick<PriceList, 'code' | 'name'>) => nextPrices[list.code] !== undefined && nextPrices[list.code] !== null && nextPrices[list.code] !== '';
@@ -484,11 +534,43 @@ export function AddProductsModal({ open, onOpenChange, categories, warehouses, b
     }));
   };
 
+  const updatePricingMode = (code: string, pricingMode: PriceListPricingMode) => {
+    setDraftProduct((prev: any) => ({
+      ...prev,
+      priceSettings: {
+        ...(prev.priceSettings || {}),
+        [code]: { ...(prev.priceSettings?.[code] || {}), pricingMode, ...(pricingMode === 'FIXED' ? { marginPercent: '' } : {}) },
+      },
+    }));
+  };
+
+  const updateMargin = (code: string, marginPercent: string) => {
+    setDraftProduct((prev: any) => ({
+      ...prev,
+      priceSettings: { ...(prev.priceSettings || {}), [code]: { pricingMode: 'MARGIN', marginPercent } },
+    }));
+  };
+
+  const applyListMargin = (code: string, price: number) => {
+    setDraftProduct((prev: any) => ({
+      ...prev,
+      prices: { ...(prev.prices || {}), [code]: price },
+      salePrice: (() => {
+        const nextPrices = { ...(prev.prices || {}), [code]: price };
+        const retailList = effectivePriceLists.find((list) => list.code.toUpperCase() === 'RETAIL');
+        const primaryList = (retailList && nextPrices[retailList.code] !== undefined ? retailList : undefined) || effectivePriceLists.find((list) => nextPrices[list.code] !== undefined);
+        return primaryList ? nextPrices[primaryList.code] ?? '' : '';
+      })(),
+    }));
+  };
+
   const applySuggestedPrice = (price: number) => {
     setDraftProduct((prev: any) => {
       const prices: Record<string, number | string> = { ...(prev.prices || {}) };
       effectivePriceLists.forEach((list) => { prices[list.code] = price; });
-      return { ...prev, prices, salePrice: price };
+      const priceSettings = { ...(prev.priceSettings || {}) };
+      effectivePriceLists.forEach((list) => { priceSettings[list.code] = { pricingMode: 'FIXED', marginPercent: '' }; });
+      return { ...prev, prices, priceSettings, salePrice: price };
     });
     toast.success('Precio sugerido aplicado. Puedes ajustarlo antes de guardar.');
   };
@@ -503,13 +585,69 @@ export function AddProductsModal({ open, onOpenChange, categories, warehouses, b
       updated += 1;
       const prices: Record<string, number | string> = { ...(product.prices || {}) };
       effectivePriceLists.forEach((list) => { prices[list.code] = price; });
-      return { ...product, prices, salePrice: price };
+      const priceSettings = { ...(product.priceSettings || {}) };
+      effectivePriceLists.forEach((list) => { priceSettings[list.code] = { pricingMode: 'FIXED', marginPercent: '' }; });
+      return { ...product, prices, priceSettings, salePrice: price };
     }));
     // setState diferido: el conteo se informa en el siguiente turno del event loop
     window.setTimeout(() => {
       if (updated > 0) toast.success(`Precio calculado en ${updated} producto(s)${skipped ? `; ${skipped} sin costo se omitieron` : ''}.`);
       else toast.warning('Ningún producto de la lista tiene costo para calcular el precio.');
     }, 0);
+  };
+
+  const materializePriceSettings = (product: any) => {
+    const prices: Record<string, number | string> = { ...(product.prices || {}) };
+    const priceSettings: Record<string, { pricingMode: PriceListPricingMode; marginPercent: number | null }> = {};
+    for (const list of effectivePriceLists) {
+      const setting = product.priceSettings?.[list.code] || { pricingMode: 'FIXED' as const, marginPercent: '' };
+      if (setting.pricingMode === 'MARGIN') {
+        const marginPercent = Number(setting.marginPercent);
+        const calculated = priceFromCost(Number(product.costPrice), marginPercent, 'margin');
+        if (calculated === null) {
+          throw new Error(`${product.name || (catalogItemType === 'SERVICE' ? 'Servicio' : 'Producto')} · ${list.name}: ingresa un costo mayor que cero y un margen entre 0% y 99.99%.`);
+        }
+        prices[list.code] = calculated;
+        priceSettings[list.code] = { pricingMode: 'MARGIN', marginPercent };
+        continue;
+      }
+      const rawPrice = prices[list.code];
+      if (rawPrice === undefined || rawPrice === null || rawPrice === '') continue;
+      priceSettings[list.code] = { pricingMode: 'FIXED', marginPercent: null };
+    }
+
+    const variantPrices: Record<string, Record<string, number | string>> = { ...(product.variantPrices || {}) };
+    const variantPriceSettings: Record<string, Record<string, { pricingMode: PriceListPricingMode; marginPercent: number | null }>> = {};
+    if (product.isVariable) {
+      for (const combination of buildVariantCombinations(product.linkedAttributes)) {
+        const key = variantCombinationKey(combination);
+        variantPrices[key] = { ...(variantPrices[key] || {}) };
+        variantPriceSettings[key] = {};
+        const rawVariantCost = product.variantCostPrices?.[key];
+        const variantCost = rawVariantCost === '' || rawVariantCost === null || rawVariantCost === undefined
+          ? Number(product.costPrice)
+          : Number(rawVariantCost);
+        for (const list of effectivePriceLists) {
+          const setting = product.variantPriceSettings?.[key]?.[list.code] || { pricingMode: 'FIXED' as const, marginPercent: '' };
+          if (setting.pricingMode === 'MARGIN') {
+            const marginPercent = Number(setting.marginPercent);
+            const calculated = priceFromCost(variantCost, marginPercent, 'margin');
+            if (calculated === null) {
+              const label = combination.map((attribute) => attribute.value).join(' / ');
+              throw new Error(`${product.name || 'Producto'} · ${label} · ${list.name}: ingresa un costo mayor que cero y un margen entre 0% y 99.99%.`);
+            }
+            variantPrices[key][list.code] = calculated;
+            variantPriceSettings[key][list.code] = { pricingMode: 'MARGIN', marginPercent };
+            continue;
+          }
+          const rawPrice = variantPrices[key][list.code];
+          if (rawPrice !== undefined && rawPrice !== null && rawPrice !== '') {
+            variantPriceSettings[key][list.code] = { pricingMode: 'FIXED', marginPercent: null };
+          }
+        }
+      }
+    }
+    return { ...product, prices, priceSettings, variantPrices, variantPriceSettings };
   };
 
   const validateVariableStockDistribution = (product: any) => {
@@ -531,10 +669,20 @@ export function AddProductsModal({ open, onOpenChange, categories, warehouses, b
   };
 
   const hasValidSellingPrice = (product: any) => {
-    if (product.itemType === 'SERVICE') return effectivePriceLists.some((list) => product.prices?.[list.code] !== undefined && product.prices?.[list.code] !== '' && Number.isFinite(Number(product.prices[list.code])) && Number(product.prices[list.code]) >= 0);
-    const hasParentPrice = effectivePriceLists.some((list) => product.prices?.[list.code] !== undefined && product.prices?.[list.code] !== '' && Number.isFinite(Number(product.prices[list.code])) && Number(product.prices[list.code]) >= 0);
-    const hasVariantPrice = product.isVariable && Object.values(product.variantPrices || {}).some((prices: any) =>
-      effectivePriceLists.some((list) => prices?.[list.code] !== undefined && prices?.[list.code] !== '' && Number.isFinite(Number(prices[list.code])) && Number(prices[list.code]) >= 0),
+    const hasPrice = (prices: Record<string, any>, settings: Record<string, any>, listCode: string, cost: number) => {
+      const setting = settings?.[listCode];
+      if (setting?.pricingMode === 'MARGIN') return priceFromCost(cost, Number(setting.marginPercent), 'margin') !== null;
+      const value = prices?.[listCode];
+      return value !== undefined && value !== '' && Number.isFinite(Number(value)) && Number(value) >= 0;
+    };
+    if (product.itemType === 'SERVICE') return effectivePriceLists.some((list) => hasPrice(product.prices, product.priceSettings, list.code, Number(product.costPrice)));
+    const hasParentPrice = effectivePriceLists.some((list) => hasPrice(product.prices, product.priceSettings, list.code, Number(product.costPrice)));
+    const hasVariantPrice = product.isVariable && Object.entries(product.variantPrices || {}).some(([key, prices]: [string, any]) =>
+      effectivePriceLists.some((list) => {
+        const rawCost = product.variantCostPrices?.[key];
+        const cost = rawCost === '' || rawCost === undefined || rawCost === null ? Number(product.costPrice) : Number(rawCost);
+        return hasPrice(prices, product.variantPriceSettings?.[key], list.code, cost);
+      }),
     );
     return hasParentPrice || hasVariantPrice;
   };
@@ -793,6 +941,12 @@ export function AddProductsModal({ open, onOpenChange, categories, warehouses, b
   };
 
   const persistProducts = async (listToSave: any[]) => {
+    try {
+      listToSave = listToSave.map(materializePriceSettings);
+    } catch (error: any) {
+      toast.error(error?.message || 'Revisa el costo y los márgenes configurados.');
+      return;
+    }
     setIsSaving(true);
     let successCount = 0;
     const actionToken = beginNotificationAction();
@@ -836,6 +990,8 @@ export function AddProductsModal({ open, onOpenChange, categories, warehouses, b
           priceCurrency: product.priceCurrency || baseCurrency,
           priceExchangeRate: Number(product.priceCurrency === baseCurrency ? 1 : exchangeRate),
           prices,
+          priceSettings: Object.fromEntries(Object.entries(product.priceSettings || {})
+            .filter(([code]) => Object.prototype.hasOwnProperty.call(prices, code))),
           taxRate: Number(product.taxRate ?? 0),
           trackSerialNumbers: Boolean(product.trackSerialNumbers),
           isActive: product.isActive !== false,
@@ -862,6 +1018,8 @@ export function AddProductsModal({ open, onOpenChange, categories, warehouses, b
                   .map((list) => [list.code, product.variantPrices?.[variantCombinationKey(combination)]?.[list.code]] as const)
                   .filter(([, value]) => value !== undefined && value !== null && value !== '' && Number.isFinite(Number(value)) && Number(value) >= 0),
               ),
+              priceSettings: Object.fromEntries(Object.entries(product.variantPriceSettings?.[variantCombinationKey(combination)] || {})
+                .filter(([code]) => Object.prototype.hasOwnProperty.call(product.variantPrices?.[variantCombinationKey(combination)] || {}, code))),
               costPrice: (() => {
                 const rawCost = product.variantCostPrices?.[variantCombinationKey(combination)];
                 return rawCost === undefined || rawCost === '' ? null : Number(rawCost) * rate;
@@ -1360,17 +1518,20 @@ export function AddProductsModal({ open, onOpenChange, categories, warehouses, b
               </div>}
               {catalogItemType === 'SERVICE' && effectivePriceLists.map((list) => (
                 <div key={list.code} className="col-span-1 min-w-0 lg:col-span-2">
-                  <label className="text-[10px] uppercase font-bold text-muted-foreground">{list.name}</label>
-                  <Input
-                    data-testid={`inventory-service-price-${list.code}`}
-                    type="number"
-                    min={0}
-                    step="any"
-                    value={draftProduct.prices?.[list.code] ?? ''}
-                    onChange={e => updatePrice(list.code, e.target.value)}
-                    className="mt-1 h-8 w-full text-right text-xs tabular-nums"
-                    placeholder="0.00"
-                    currencyPrecision
+                  <PriceListPricingEditor
+                    listName={list.name}
+                    price={draftProduct.prices?.[list.code] ?? ''}
+                    pricingMode={draftProduct.priceSettings?.[list.code]?.pricingMode || 'FIXED'}
+                    marginPercent={draftProduct.priceSettings?.[list.code]?.marginPercent ?? ''}
+                    cost={draftProduct.costPrice}
+                    currency={draftProduct.priceCurrency || baseCurrency}
+                    allowMargin={canViewInventoryCost}
+                    disabled={isSaving}
+                    inputTestId={`inventory-service-price-${list.code}`}
+                    onPriceChange={(value) => updatePrice(list.code, value)}
+                    onPricingModeChange={(mode) => updatePricingMode(list.code, mode)}
+                    onMarginPercentChange={(value) => updateMargin(list.code, value)}
+                    onApplyMargin={(price) => applyListMargin(list.code, price)}
                   />
                 </div>
               ))}
@@ -1388,19 +1549,24 @@ export function AddProductsModal({ open, onOpenChange, categories, warehouses, b
               )}
               {catalogItemType !== 'SERVICE' && effectivePriceLists.map((list) => (
                 <div key={list.code} className={isPagePresentation ? 'col-span-1 md:row-start-4 md:col-span-2' : 'col-span-1'}>
-                  <label className="text-[10px] uppercase font-bold text-muted-foreground">{list.name}</label>
-                  <Input
-                    data-testid={`inventory-product-price-${list.code}`}
-                    type="number"
-                    min={0}
-                    step="any"
-                    value={draftProduct.prices?.[list.code] ?? ''}
-                    onChange={e => updatePrice(list.code, e.target.value)}
-                    className="h-8 text-xs text-right mt-1 tabular-nums"
-                    placeholder="0.00" currencyPrecision />
+                  <PriceListPricingEditor
+                    listName={list.name}
+                    price={draftProduct.prices?.[list.code] ?? ''}
+                    pricingMode={draftProduct.priceSettings?.[list.code]?.pricingMode || 'FIXED'}
+                    marginPercent={draftProduct.priceSettings?.[list.code]?.marginPercent ?? ''}
+                    cost={draftProduct.costPrice}
+                    currency={draftProduct.priceCurrency || baseCurrency}
+                    allowMargin={canViewInventoryCost}
+                    disabled={isSaving}
+                    inputTestId={`inventory-product-price-${list.code}`}
+                    onPriceChange={(value) => updatePrice(list.code, value)}
+                    onPricingModeChange={(mode) => updatePricingMode(list.code, mode)}
+                    onMarginPercentChange={(value) => updateMargin(list.code, value)}
+                    onApplyMargin={(price) => applyListMargin(list.code, price)}
+                  />
                 </div>
               ))}
-              {canViewInventoryCost && <MarginPriceSuggestion cost={draftProduct.costPrice} onApply={applySuggestedPrice} compact />}
+              {catalogItemType !== 'SERVICE' && canViewInventoryCost && <MarginPriceSuggestion cost={draftProduct.costPrice} onApply={applySuggestedPrice} compact />}
                {catalogItemType !== 'SERVICE' && <div className={isPagePresentation ? 'col-span-1 md:row-start-4 md:col-span-2' : 'col-span-1'}>
                  <label className="text-[10px] uppercase font-bold text-muted-foreground">Serie/IMEI</label>
                 <Button
@@ -1730,10 +1896,21 @@ export function AddProductsModal({ open, onOpenChange, categories, warehouses, b
                                   <span className="mb-1 block text-[9px] font-bold uppercase tracking-wide text-muted-foreground">Costo propio</span>
                                   <Input type="number" min={0} step="any" value={draftProduct.variantCostPrices?.[key] ?? ''} onChange={(e) => updateVariantCostPrice(combination, e.target.value)} className="h-8 w-full text-right text-xs tabular-nums" placeholder="Hereda base" aria-label={`Costo propio para ${combinationLabel}`} currencyPrecision />
                                 </div>}
-                                {effectivePriceLists.map((list) => <div key={list.code} className="min-w-0">
-                                  <span className="mb-1 block text-[9px] font-bold uppercase tracking-wide text-muted-foreground">{list.name}</span>
-                                  <Input type="number" min={0} step="any" value={draftProduct.variantPrices?.[key]?.[list.code] ?? ''} onChange={(e) => updateVariantPrice(combination, list.code, e.target.value)} className="h-8 w-full text-right text-xs tabular-nums" placeholder="Hereda base" aria-label={`Precio ${list.name} para ${combinationLabel}`} currencyPrecision />
-                                </div>)}
+                                {effectivePriceLists.map((list) => <PriceListPricingEditor
+                                  key={list.code}
+                                  listName={list.name}
+                                  price={draftProduct.variantPrices?.[key]?.[list.code] ?? ''}
+                                  pricingMode={draftProduct.variantPriceSettings?.[key]?.[list.code]?.pricingMode || 'FIXED'}
+                                  marginPercent={draftProduct.variantPriceSettings?.[key]?.[list.code]?.marginPercent ?? ''}
+                                  cost={draftProduct.variantCostPrices?.[key] ?? draftProduct.costPrice}
+                                  currency={draftProduct.priceCurrency || baseCurrency}
+                                  allowMargin={canViewInventoryCost}
+                                  disabled={isSaving}
+                                  onPriceChange={(value) => updateVariantPrice(combination, list.code, value)}
+                                  onPricingModeChange={(mode) => updateVariantPricingMode(combination, list.code, mode)}
+                                  onMarginPercentChange={(value) => updateVariantMargin(combination, list.code, value)}
+                                  onApplyMargin={(price) => applyVariantMargin(combination, list.code, price)}
+                                />)}
                               </div>
                             </div>
                           );

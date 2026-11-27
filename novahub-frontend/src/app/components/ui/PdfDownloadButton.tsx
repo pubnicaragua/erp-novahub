@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { ChevronDown, Download, FileSpreadsheet, Image as ImageIcon, ReceiptText } from 'lucide-react';
+import { ChevronDown, Download, FileSpreadsheet, Image as ImageIcon, Printer, ReceiptText } from 'lucide-react';
 import { Button } from './button';
 import { cn } from './utils';
 import {
@@ -31,6 +31,7 @@ interface PdfDownloadButtonProps {
   hasImages?: boolean;
   imagesCount?: number;
   label?: string;
+  action?: 'download' | 'print';
   scopeSelector?: {
     defaultScope?: PdfExportScope;
     pageCount?: number;
@@ -45,7 +46,7 @@ interface PdfDownloadButtonProps {
 }
 
 /** Menú único para previsualizar una transacción sin ofrecer reportes de la tabla. */
-export function PdfDownloadButton({ onDownload, onExcel, className, disabled = false, size = 'sm', hasImages = false, imagesCount = 0, label = 'Descargar', scopeSelector, filterSelector, ariaLabel }: PdfDownloadButtonProps) {
+export function PdfDownloadButton({ onDownload, onExcel, className, disabled = false, size = 'sm', hasImages = false, imagesCount = 0, label = 'Descargar', action = 'download', scopeSelector, filterSelector, ariaLabel }: PdfDownloadButtonProps) {
   const [scope, setScope] = useState<PdfExportScope>(scopeSelector?.defaultScope || 'page');
   const [filter, setFilter] = useState(filterSelector?.defaultValue || filterSelector?.options[0]?.value || '');
   const [includeAttachedImages, setIncludeAttachedImages] = useState(true);
@@ -65,8 +66,10 @@ export function PdfDownloadButton({ onDownload, onExcel, className, disabled = f
   return (
     <DropdownMenu>
       <DropdownMenuTrigger asChild>
-        <Button type="button" variant="outline" size={size} disabled={disabled} aria-label={ariaLabel || label || 'Descargar PDF'} title={ariaLabel || label || 'Descargar PDF'} className={cn('group gap-1.5 rounded-xl', className)}>
-          <Download className="size-4 shrink-0 text-primary transition-colors group-hover:text-foreground" />
+        <Button type="button" variant="outline" size={size} disabled={disabled} aria-label={ariaLabel || label || (action === 'print' ? 'Imprimir PDF' : 'Descargar PDF')} className={cn('group gap-1.5 rounded-xl', className)}>
+          {action === 'print'
+            ? <Printer className="size-4 shrink-0 text-primary transition-colors group-hover:text-foreground" />
+            : <Download className="size-4 shrink-0 text-primary transition-colors group-hover:text-foreground" />}
           {Boolean(label) && <span>{label}</span>}
           <ChevronDown className="size-3.5 opacity-60" />
         </Button>

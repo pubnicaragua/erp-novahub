@@ -88,7 +88,7 @@ function CustomerCreditPaymentDialogForm({ target, open, onOpenChange, onPaid }:
 
   return <Dialog open={open} onOpenChange={(next) => !saving && onOpenChange(next)}>
     <DialogContent className="max-h-[90dvh] w-[calc(100%-1rem)] overflow-y-auto rounded-2xl sm:max-w-xl">
-      <DialogHeader><DialogTitle className="flex items-center gap-2"><CircleDollarSign className="size-5 text-primary" /> {target?.kind === 'CUSTOMER_LOAN' ? 'Registrar abono del préstamo' : 'Registrar pago del crédito'}</DialogTitle><DialogDescription>El registro conserva el flujo contable y el historial del contrato.</DialogDescription></DialogHeader>
+      <DialogHeader><DialogTitle className="flex items-center gap-2"><CircleDollarSign className="size-5 text-primary" /> {target?.kind === 'CUSTOMER_LOAN' ? 'Abonar préstamo' : 'Pagar crédito'}</DialogTitle><DialogDescription>El registro conserva el flujo contable y el historial del contrato.</DialogDescription></DialogHeader>
       {target && <div className="space-y-4">
         <div className="flex items-start justify-between gap-3 rounded-xl border border-primary/20 bg-primary/5 p-4"><div className="min-w-0"><p className="break-words text-xs font-bold text-muted-foreground">{target.number || target.invoice?.number || 'Contrato'} · {target.customer?.name || 'Cliente'}</p><p className="mt-1 text-xl font-black text-primary">Saldo {formatCurrencyAmount(balance, currency)}</p>{target.nextInstallment && <p className="mt-1 text-xs text-muted-foreground">Próxima cuota #{target.nextInstallment.installmentNumber || '—'} · {formatCurrencyAmount(installmentBalance, currency)}</p>}</div><Badge variant="outline">{target.kind === 'CUSTOMER_LOAN' ? 'Préstamo' : 'Crédito'}</Badge></div>
         <div className="grid gap-3 sm:grid-cols-2">
@@ -98,7 +98,7 @@ function CustomerCreditPaymentDialogForm({ target, open, onOpenChange, onPaid }:
         {(accountingRequired || financeEnabled) && isBankMethod && <BankAccountSelect currency={currency} allowUnlinked={!accountingRequired && financeEnabled} required={accountingRequired} endpoint="/bank-accounts/payment-options" value={bankAccountId} onChange={setBankAccountId} label={accountingRequired ? 'Banco global de destino' : 'Banco de destino (opcional)'} />}
         {hasReference && <div className="space-y-1.5"><Label htmlFor="visit-payment-reference" required>Referencia</Label><Input id="visit-payment-reference" value={reference} onChange={(event) => setReference(event.target.value)} placeholder="Transferencia, voucher o cheque" /></div>}
       </div>}
-      <DialogFooter><Button type="button" variant="outline" onClick={() => onOpenChange(false)} disabled={saving}>Cancelar</Button><Button type="button" onClick={() => void submit()} disabled={saving || !target || (accountingRequired && isBankMethod && !bankAccountId) || (hasReference && !reference.trim())}>{saving ? 'Registrando…' : 'Confirmar abono'}</Button></DialogFooter>
+      <DialogFooter><Button type="button" variant="outline" onClick={() => onOpenChange(false)} disabled={saving}>Cancelar</Button><Button type="button" onClick={() => void submit()} disabled={saving || !target || (accountingRequired && isBankMethod && !bankAccountId) || (hasReference && !reference.trim())}>{saving ? 'Registrando…' : 'Abonar'}</Button></DialogFooter>
     </DialogContent>
   </Dialog>;
 }

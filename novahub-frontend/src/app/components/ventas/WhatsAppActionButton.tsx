@@ -3,11 +3,13 @@ import type { Customer } from '../../types';
 import { toast } from '@/app/services/toast';
 import { Button } from '../ui/button';
 import { cn } from '../ui/utils';
+import { SalesActionTooltip } from './SalesActionTooltip';
 
 interface WhatsAppActionButtonProps {
   phone?: string | null;
   documentLabel: string;
   onSend: () => Promise<void> | void;
+  showLabel?: boolean;
 }
 
 export function resolveCustomerPhone(
@@ -74,22 +76,21 @@ export function buildCustomerWhatsAppUrl(phone: string | null | undefined, messa
   return `https://wa.me/${normalized}${message ? `?text=${encodeURIComponent(message)}` : ''}`;
 }
 
-export function WhatsAppActionButton({ phone, documentLabel, onSend }: WhatsAppActionButtonProps) {
+export function WhatsAppActionButton({ phone, documentLabel, onSend, showLabel = false }: WhatsAppActionButtonProps) {
   const hasPhone = Boolean(String(phone || '').trim());
-  const actionLabel = hasPhone
-    ? `Enviar ${documentLabel} por WhatsApp`
-    : `Cliente sin número asociado para enviar ${documentLabel} por WhatsApp`;
+  const actionLabel = hasPhone ? 'WhatsApp' : 'Sin teléfono';
 
   return (
+    <SalesActionTooltip label={actionLabel}>
     <Button
       type="button"
-      title={actionLabel}
-      aria-label={actionLabel}
+      aria-label={hasPhone ? `Enviar ${documentLabel} por WhatsApp` : `Cliente sin teléfono para ${documentLabel}`}
       data-whatsapp-action="true"
-      variant="ghost"
-      size="icon"
+      variant={showLabel ? 'outline' : 'ghost'}
+      size={showLabel ? 'default' : 'icon'}
       className={cn(
-        'relative z-20 size-8 shrink-0 rounded-lg transition-colors',
+        'relative z-20 shrink-0 rounded-lg transition-colors',
+        showLabel ? 'gap-2 px-3 text-xs' : 'size-8',
         hasPhone
           ? 'text-emerald-600/70 hover:bg-emerald-500/10 hover:text-emerald-600 dark:text-emerald-400/70 dark:hover:text-emerald-300'
           : 'text-muted-foreground/35 hover:bg-muted/40 hover:text-muted-foreground/60',
@@ -111,6 +112,8 @@ export function WhatsAppActionButton({ phone, documentLabel, onSend }: WhatsAppA
         style={{ width: '1rem', height: '1rem', fontSize: '1rem' }}
         aria-hidden="true"
       />
+      {showLabel && <span>WhatsApp</span>}
     </Button>
+    </SalesActionTooltip>
   );
 }
