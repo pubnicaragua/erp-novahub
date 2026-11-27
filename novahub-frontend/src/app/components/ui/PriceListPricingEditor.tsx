@@ -29,7 +29,7 @@ export function PriceListPricingModeSelect({
         </SelectTrigger>
         <SelectContent>
           <SelectItem value="FIXED">Monto fijo</SelectItem>
-          <SelectItem value="MARGIN" disabled={!allowMargin}>% margen bruto</SelectItem>
+          <SelectItem value="MARGIN" disabled={!allowMargin}>% ganancia sobre costo</SelectItem>
         </SelectContent>
       </Select>
       {!allowMargin && <p className="mt-1 text-[10px] leading-4 text-muted-foreground">El porcentaje requiere permiso para consultar costos.</p>}
@@ -70,7 +70,7 @@ export function PriceListPricingEditor({
 }: PriceListPricingEditorProps) {
   const activeMode: PriceListPricingMode = allowMargin ? pricingMode : 'FIXED';
   const calculatedPrice = activeMode === 'MARGIN' && marginPercent !== ''
-    ? priceFromCost(Number(cost), Number(marginPercent), 'margin')
+    ? priceFromCost(Number(cost), Number(marginPercent), 'markup')
     : null;
 
   const commitMargin = () => {
@@ -84,7 +84,6 @@ export function PriceListPricingEditor({
         data-testid={inputTestId}
         type="number"
         min={0}
-        max={activeMode === 'MARGIN' ? 99.99 : undefined}
         step={activeMode === 'MARGIN' ? '0.01' : 'any'}
         value={activeMode === 'MARGIN' ? marginPercent : price}
         onChange={(event) => activeMode === 'MARGIN' ? onMarginPercentChange(event.target.value) : onPriceChange(event.target.value)}
@@ -96,7 +95,7 @@ export function PriceListPricingEditor({
         }}
         className="h-8 w-full text-right text-xs tabular-nums"
         placeholder={activeMode === 'MARGIN' ? 'Ej. 30' : '0.00'}
-        aria-label={activeMode === 'MARGIN' ? `Margen bruto para ${listName}, porcentaje` : `Precio ${listName}`}
+        aria-label={activeMode === 'MARGIN' ? `Porcentaje de ganancia sobre costo para ${listName}` : `Precio ${listName}`}
         aria-invalid={activeMode === 'MARGIN' && marginPercent !== '' && calculatedPrice === null}
         disabled={disabled}
         currencyPrecision={activeMode === 'FIXED'}
@@ -104,7 +103,7 @@ export function PriceListPricingEditor({
       {activeMode === 'MARGIN' && (
         <p className="text-[10px] leading-4 text-muted-foreground" role="status">
           {calculatedPrice === null
-            ? 'Ingresa un costo y un margen menor a 100%.'
+            ? 'Ingresa un costo y un porcentaje de ganancia válido (0 o mayor).'
             : <>Presiona Enter para aplicar · Precio de venta: <strong className="text-foreground">{formatMoney(calculatedPrice, currency)}</strong></>}
         </p>
       )}

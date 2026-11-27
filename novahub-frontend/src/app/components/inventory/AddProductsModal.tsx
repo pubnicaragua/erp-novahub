@@ -589,9 +589,9 @@ export function AddProductsModal({ open, onOpenChange, categories, warehouses, b
           continue;
         }
         const marginPercent = Number(setting.marginPercent);
-        const calculated = priceFromCost(Number(product.costPrice), marginPercent, 'margin');
+        const calculated = priceFromCost(Number(product.costPrice), marginPercent, 'markup');
         if (calculated === null) {
-          throw new Error(`${product.name || (catalogItemType === 'SERVICE' ? 'Servicio' : 'Producto')} · ${list.name}: ingresa un costo mayor que cero y un margen entre 0% y 99.99%.`);
+          throw new Error(`${product.name || (catalogItemType === 'SERVICE' ? 'Servicio' : 'Producto')} · ${list.name}: ingresa un costo mayor que cero y un porcentaje de ganancia válido.`);
         }
         prices[list.code] = calculated;
         priceSettings[list.code] = { pricingMode: 'MARGIN', marginPercent };
@@ -621,10 +621,10 @@ export function AddProductsModal({ open, onOpenChange, categories, warehouses, b
               continue;
             }
             const marginPercent = Number(setting.marginPercent);
-            const calculated = priceFromCost(variantCost, marginPercent, 'margin');
+            const calculated = priceFromCost(variantCost, marginPercent, 'markup');
             if (calculated === null) {
               const label = combination.map((attribute) => attribute.value).join(' / ');
-              throw new Error(`${product.name || 'Producto'} · ${label} · ${list.name}: ingresa un costo mayor que cero y un margen entre 0% y 99.99%.`);
+              throw new Error(`${product.name || 'Producto'} · ${label} · ${list.name}: ingresa un costo mayor que cero y un porcentaje de ganancia válido.`);
             }
             variantPrices[key][list.code] = calculated;
             variantPriceSettings[key][list.code] = { pricingMode: 'MARGIN', marginPercent };
@@ -662,7 +662,7 @@ export function AddProductsModal({ open, onOpenChange, categories, warehouses, b
     const pricingMode: PriceListPricingMode = canViewInventoryCost && product.pricingMode === 'MARGIN' ? 'MARGIN' : 'FIXED';
     const hasPrice = (prices: Record<string, any>, settings: Record<string, any>, listCode: string, cost: number) => {
       const setting = settings?.[listCode];
-      if (pricingMode === 'MARGIN') return priceFromCost(cost, Number(setting?.marginPercent), 'margin') !== null;
+      if (pricingMode === 'MARGIN') return priceFromCost(cost, Number(setting?.marginPercent), 'markup') !== null;
       const value = prices?.[listCode];
       return value !== undefined && value !== '' && Number.isFinite(Number(value)) && Number(value) >= 0;
     };

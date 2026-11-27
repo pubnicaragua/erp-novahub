@@ -543,7 +543,7 @@ export function PriceListsView({ products = [], onRefresh, isSidebarCollapsed = 
     const invalidList = visibleLists.find((list) => {
       const rawValue = String(values[list.id] ?? '').trim();
       const marginPercent = String(editingVariantPricing[variantId]?.[list.id]?.marginPercent ?? '').trim();
-      if (pricingMode === 'MARGIN') return marginPercent !== '' && priceFromCost(cost, Number(marginPercent), 'margin') === null;
+      if (pricingMode === 'MARGIN') return marginPercent !== '' && priceFromCost(cost, Number(marginPercent), 'markup') === null;
       return rawValue !== '' && (!Number.isFinite(Number(rawValue)) || Number(rawValue) < 0);
     });
     if (invalidList) return toast.error(`El precio de ${invalidList.name} debe ser mayor o igual a cero`);
@@ -554,7 +554,7 @@ export function PriceListsView({ products = [], onRefresh, isSidebarCollapsed = 
       if (pricingMode === 'FIXED' && rawValue === '') return null;
       const setting = { pricingMode, marginPercent };
       const price = pricingMode === 'MARGIN'
-        ? priceFromCost(cost, Number(marginPercent), 'margin')
+        ? priceFromCost(cost, Number(marginPercent), 'markup')
         : Number(rawValue);
       if (price === null) return null;
       const variantItem = matrixItems.find(
@@ -684,7 +684,7 @@ export function PriceListsView({ products = [], onRefresh, isSidebarCollapsed = 
     const invalidList = visibleLists.find((list) => {
       const rawValue = String(values[list.id] ?? '').trim();
       const marginPercent = String(settings[list.id]?.marginPercent ?? '').trim();
-      if (pricingMode === 'MARGIN') return marginPercent !== '' && priceFromCost(cost, Number(marginPercent), 'margin') === null;
+      if (pricingMode === 'MARGIN') return marginPercent !== '' && priceFromCost(cost, Number(marginPercent), 'markup') === null;
       return rawValue !== '' && (!Number.isFinite(Number(rawValue)) || Number(rawValue) < 0);
     });
     if (invalidList) return toast.error(`El precio de ${invalidList.name} debe ser mayor o igual a cero`);
@@ -695,7 +695,7 @@ export function PriceListsView({ products = [], onRefresh, isSidebarCollapsed = 
       if (pricingMode === 'FIXED' && rawValue === '') return null;
       const setting = { pricingMode, marginPercent };
       const price = pricingMode === 'MARGIN'
-        ? priceFromCost(cost, Number(marginPercent), 'margin')
+        ? priceFromCost(cost, Number(marginPercent), 'markup')
         : Number(rawValue);
       if (price === null) return null;
       const existing = byList?.get(list.id);

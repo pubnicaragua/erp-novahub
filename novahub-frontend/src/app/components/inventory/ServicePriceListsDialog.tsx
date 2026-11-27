@@ -105,9 +105,9 @@ export function ServicePriceListsDialog({ open, onOpenChange, service, onSaved }
     mutationFn: async ({ list, draft, serviceId: targetServiceId, pricingMode: selectedPricingMode }: { list: PriceList; draft: ServicePriceDraft; serviceId: string; pricingMode: PriceListPricingMode }) => {
       const cost = convertBaseCostToCurrency(Number(serviceRecord?.costPrice || 0), draft.currency, baseCurrency, draft.exchangeRate || Number(exchangeRate || 1));
       const price = selectedPricingMode === 'MARGIN'
-        ? priceFromCost(cost, Number(draft.marginPercent), 'margin')
+        ? priceFromCost(cost, Number(draft.marginPercent), 'markup')
         : Number(draft.price);
-      if (price === null) throw new Error('Ingresa un costo mayor que cero y un margen entre 0% y 99.99%.');
+      if (price === null) throw new Error('Ingresa un costo mayor que cero y un porcentaje de ganancia válido.');
       if (!Number.isFinite(price) || price < 0) throw new Error('Ingresa un precio válido mayor o igual a cero.');
       return priceListsService.updateServiceItem(list.id, targetServiceId, {
         price,
