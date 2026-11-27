@@ -301,6 +301,7 @@ export const purchaseRequestsService = {
   getSummary: (filters?: ApiFilters, signal?: AbortSignal) => api.get<PurchaseRequestSummary>('/purchases/requests/summary', { params: filters as any, signal }),
   getById: (id: string) => api.get<PurchaseRequest>(`/purchases/requests/${id}`),
   create: (data: Partial<PurchaseRequest>) => api.post<PurchaseRequest>('/purchases/requests', data),
+  setSupplierOrderCode: (id: string, supplierOrderCode: string) => api.patch<{ id: string; supplierOrderCode: string | null }>(`/purchases/requests/${id}/supplier-order-code`, { supplierOrderCode }),
   update: (id: string, data: Partial<PurchaseRequest>) => api.patch<PurchaseRequest>(`/purchases/requests/${id}`, data),
   delete: (id: string) => api.delete<void>(`/purchases/requests/${id}`),
   changeStatus: (id: string, status: string, reason?: string, supplierId?: string) => api.post<PurchaseRequest>(`/purchases/requests/${id}/status`, { status, reason, supplierId }),

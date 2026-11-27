@@ -157,6 +157,7 @@ export const flotaService = {
   removeTrip: (sourceType: TripSourceType, sourceId: string, lineId = '') => api.delete<{ deleted: number }>(`/fleet/trips/${sourceType}/${sourceId}?lineId=${encodeURIComponent(lineId)}`),
   /** Compras con código de pedido del proveedor (sin precios) y reporte de ventas con su compra. */
   supplierOrders: (signal?: AbortSignal) => api.get<SupplierOrderOption[]>('/fleet/supplier-orders', { signal }),
+  linkedSales: (purchaseOrderId: string, signal?: AbortSignal) => api.get<{ code: string | null; sales: LinkedSale[] }>(`/fleet/supplier-orders/${purchaseOrderId}/linked-sales`, { signal }),
   fuelTrace: (params: { dateFrom?: string; dateTo?: string; search?: string }, signal?: AbortSignal) => api.get<FuelTraceReportData>('/fleet/reports/fuel-trace', { params, signal }),
   /** Camiones y rutas sin costos ni tarifas: para capturar la remisión de una orden de venta. */
   remissionOptions: (signal?: AbortSignal) => api.get<RemissionOptions>('/fleet/remission/options', { signal }),
@@ -225,6 +226,12 @@ export function parseRateSheet(matrix: unknown[][]): { rows: RateImportRow[]; wa
 }
 
 export interface SupplierOrderOption { id: string; code: string; purchaseOrderNumber: string; date: string; supplierName: string | null }
+
+export interface LinkedSale {
+  id: string; date: string; customer: string | null; salesOrderNumber: string | null; salesOrderStatus: string | null;
+  lines: Array<{ description: string; quantity: number }>;
+  invoices: Array<{ id: string; number: string; status: string }>;
+}
 
 export interface FuelTraceRow {
   id: string; invoiceId: string; invoiceNumber: string; invoiceDate: string; invoiceStatus: string; orderNumber: string | null;

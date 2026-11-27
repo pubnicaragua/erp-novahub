@@ -83,6 +83,8 @@ interface SalesDocumentDetailSheetProps {
   hasWhatsApp?: boolean;
   onDownloadPdf?: (format: PdfDownloadFormat, scope?: any, filter?: any, options?: PdfDownloadExtraOptions) => void;
   extraActions?: ReactNode;
+  /** Bloque propio del documento, debajo de las líneas y notas. */
+  extraContent?: ReactNode;
 }
 
 const statusLabels: Record<string, string> = {
@@ -137,6 +139,7 @@ export function SalesDocumentDetailSheet({
   hasWhatsApp = true,
   onDownloadPdf,
   extraActions,
+  extraContent,
 }: SalesDocumentDetailSheetProps) {
   const [activeTab, setActiveTab] = useState('general');
 
@@ -304,6 +307,7 @@ export function SalesDocumentDetailSheet({
                   <p className="mt-1 whitespace-pre-wrap break-words text-sm">{document.reason || document.notes}</p>
                 </section>
               )}
+              {extraContent}
             </TabsContent>
 
             <TabsContent value="historial" className="mt-0 outline-none">

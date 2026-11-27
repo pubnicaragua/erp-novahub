@@ -37,6 +37,7 @@ import { useCurrency } from '../../contexts/CurrencyContext';
 import { useAuth } from '../../contexts/AuthContext';
 import { useEnabledTenantFeatures } from '../../hooks/useEnabledTenantFeatures';
 import { SupplierOrderCodeField } from './SupplierOrderCodeField';
+import { LinkedSalesList } from './LinkedSalesList';
 import { generatePurchaseRecordPDF, generatePurchaseListPDF } from '../../utils/purchaseExports';
 import { PurchaseKpiCard } from './PurchaseKpiCard';
 import { KpiSummaryNotice } from '../ui/KpiSummaryNotice';
@@ -1060,6 +1061,7 @@ export function OrdenesCompraView({ data, summarySearch, loading, onRefresh, sup
   const { canPerform, user } = useAuth();
   // Función por empresa: amarra la compra con las ventas mediante el código de pedido que da el proveedor.
   const fuelTrace = useEnabledTenantFeatures().has('SALES_FUEL_TRACE_REPORT');
+  const [savedCodeVersion, setSavedCodeVersion] = useState(0);
   const { exchangeRate: globalRate, displayCurrency, displayCurrencyLabel, displayMode, formatConvertedAmount, convertDisplayAmount, convertBetweenCurrencies } = useCurrency();
   const [searchTerm, setSearchTerm] = useState('');
   const [layoutMode, setLayoutMode] = useState<'table' | 'cards'>('table');
@@ -2437,6 +2439,7 @@ export function OrdenesCompraView({ data, summarySearch, loading, onRefresh, sup
     ],
     metadata: [
       { label: 'Proveedor', value: order.supplier?.name || 'No disponible' },
+      ...(fuelTrace ? [{ label: 'Pedido del proveedor Nº', value: (order as any).supplierOrderCode || 'Sin código' }] : []),
       { label: 'Fecha', value: order.date ? formatDateEs(order.date) : 'No disponible' },
       { label: 'Dirección', value: order.address || 'No disponible' },
     ],
@@ -2463,6 +2466,7 @@ export function OrdenesCompraView({ data, summarySearch, loading, onRefresh, sup
         setPreviewOrder(null);
         setEditingId(String(previewOrder.id));
       }}
+      extraContent={fuelTrace && previewOrder ? <LinkedSalesList purchaseOrderId={String(previewOrder.id)} version={String((previewOrder as any).supplierOrderCode || '')} /> : undefined}
       extraActions={previewOrder ? <>
         {canPerform('PURCHASES_ORDERS', 'read') && canPerform('PURCHASES_ORDERS', 'submit') && normalizePurchaseOrderStatus(previewOrder.status) === 'DRAFT' && <Button type="button" variant="outline" className="rounded-xl" disabled={submittingOrderId === previewOrder.id} onClick={() => void handleSubmitOrder(String(previewOrder.id))}><ArrowRight className="mr-2 size-4" />Enviar a proceso</Button>}
         {canPerform('PURCHASES_ORDERS', 'read') && canPerform('PURCHASES_ORDERS', 'approve') && isPurchaseOrderInProcess(previewOrder.status) && <Button type="button" className="rounded-xl bg-emerald-600 text-white hover:bg-emerald-700" onClick={() => { setPreviewOrder(null); setPendingApproveOrder(previewOrder); }}><CheckCircle2 className="mr-2 size-4" />Aprobar</Button>}
@@ -2951,7 +2955,7 @@ export function OrdenesCompraView({ data, summarySearch, loading, onRefresh, sup
                     value={(localDoc as any).supplierOrderCode || ''}
                     disabled={!canPerform('PURCHASES_ORDERS', isNew ? 'create' : 'edit')}
                     onChange={(supplierOrderCode) => setLocalDoc((current: any) => (current ? { ...current, supplierOrderCode } : current))}
-                    onSaved={onRefresh}
+                    onSaved={() => { setSavedCodeVersion((version) => version + 1); onRefresh(); }}
                   />
                 )}
                 <div className={(isNew && !localDoc?.purchaseRequestNumber) ? 'col-span-2' : ''}>
@@ -3127,6 +3131,8 @@ export function OrdenesCompraView({ data, summarySearch, loading, onRefresh, sup
             </CardContent>
           </Card>
         </div>
+
+        {fuelTrace && !isNew && <LinkedSalesList purchaseOrderId={String(localDoc.id)} version={`edit-${savedCodeVersion}`} />}
 
         <Card className="rounded-2xl border-border/50" data-tour="purchases-form-items">
           <CardContent className="p-6">

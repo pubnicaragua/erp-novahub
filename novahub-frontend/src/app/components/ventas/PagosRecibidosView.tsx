@@ -1,3 +1,4 @@
+import { useEnabledTenantFeatures } from '../../hooks/useEnabledTenantFeatures';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import {
@@ -165,6 +166,7 @@ function groupReceivedPayments(
 }
 
 export function PagosRecibidosView({ data, summaryData, summaryLoading, summaryError, loading, onRefresh, customers = [], invoices = [], credits = [], pagination, onSearchChange, dateFrom = '', dateTo = '', selectedBranchId, onDateRangeChange, salesAlert }: PagosRecibidosViewProps) {
+  const customerAdvances = useEnabledTenantFeatures().has('SALES_CUSTOMER_ADVANCES');
   const { exchangeRate: globalRate, displayCurrency, baseCurrency, displayMode, formatConvertedAmount, formatExplicitAmount, convertBetweenCurrencies, toBaseAmount } = useCurrency();
   const { user, canPerform } = useAuth();
   const salesIntegrationQuery = useSalesIntegrationPolicy();
@@ -1075,6 +1077,7 @@ export function PagosRecibidosView({ data, summaryData, summaryLoading, summaryE
                   ))}
                   {mixedPaymentEnabled && <Button type="button" variant="outline" className="w-full rounded-xl border-dashed text-[10px] font-black uppercase tracking-widest" onClick={() => setPaymentLines((current) => [...current, paymentLine('CASH')])}><Plus className="mr-2 size-4" /> Agregar pago mixto</Button>}
                   <div className="flex items-center justify-between border-t border-border/50 pt-3 text-xs"><span className="font-black uppercase tracking-widest text-muted-foreground">Total aplicado (base)</span><span className="font-black text-primary">{formatConvertedAmount(paymentTotalBase, baseCurrency)}</span></div>
+                  {customerAdvances && !linkedPaymentDocument && !isGeneralBalancePayment && localDoc.customerId && <p className="rounded-xl border border-emerald-500/20 bg-emerald-500/[0.05] p-3 text-xs" data-testid="payment-advance-note">Este cobro no tiene factura: quedará como <strong>anticipo</strong> del cliente. En sus próximas ventas se aplica eligiendo «Saldo a favor».</p>}
                   {isGeneralBalancePayment && <div className="flex items-center justify-between text-xs"><span className="font-black uppercase tracking-widest text-muted-foreground">Pendiente general después del abono</span><span className={cn('font-black tabular-nums', paymentGeneralBalanceExceeded ? 'text-rose-600' : 'text-amber-600')}>{formatConvertedAmount(paymentGeneralBalanceRemainingBase, baseCurrency)}</span></div>}
                   {linkedPaymentDocument && <div className="flex items-center justify-between text-xs"><span className="font-black uppercase tracking-widest text-muted-foreground">Aplicado en documento</span><span className="font-black text-primary">{formatExplicitAmount(paymentTotalInDocumentCurrency, linkedDocumentCurrency)}</span></div>}
                    {linkedPaymentDocument && <div className="flex items-center justify-between text-xs"><span className={cn("font-black uppercase tracking-widest", paymentSettlementLabel === 'Pendiente' ? 'text-amber-600' : 'text-muted-foreground')}>{paymentSettlementLabel}</span><span className={cn("font-black", paymentSettlementLabel === 'Pendiente' ? 'text-amber-600' : 'text-emerald-600 dark:text-emerald-400')}>{formatConvertedAmount(paymentSettlementLabel === 'Pendiente' ? paymentRemainingBase : paymentChangeBase, baseCurrency)}</span></div>}

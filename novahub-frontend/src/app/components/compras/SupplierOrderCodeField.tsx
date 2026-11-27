@@ -10,13 +10,16 @@ interface Props {
   disabled?: boolean;
   onChange: (value: string) => void;
   onSaved?: () => void;
+  /** Cómo se guarda en un documento ya existente; por defecto, en la orden de compra. */
+  saveCode?: (documentId: string, code: string) => Promise<unknown>;
+  testId?: string;
 }
 
 /**
  * Código de pedido que asigna el proveedor. En una orden ya guardada se guarda al salir del campo, incluso si ya está
  * aprobada: el proveedor suele darlo después y no cambia montos ni contabilidad.
  */
-export function SupplierOrderCodeField({ orderId, value, disabled, onChange, onSaved }: Props) {
+export function SupplierOrderCodeField({ orderId, value, disabled, onChange, onSaved, saveCode = purchaseOrdersService.setSupplierOrderCode, testId = 'purchase-order-supplier-code' }: Props) {
   const savedValue = useRef(value);
   const lastOrder = useRef(orderId);
   const [saving, setSaving] = useState(false);
@@ -31,7 +34,7 @@ export function SupplierOrderCodeField({ orderId, value, disabled, onChange, onS
     if (!persisted || disabled || next === savedValue.current.trim()) return;
     setSaving(true);
     try {
-      await purchaseOrdersService.setSupplierOrderCode(String(orderId), next);
+      await saveCode(String(orderId), next);
       savedValue.current = next;
       toast.success('Código de pedido del proveedor guardado.');
       onSaved?.();
@@ -45,7 +48,7 @@ export function SupplierOrderCodeField({ orderId, value, disabled, onChange, onS
   return (
     <div>
       <p className="mb-1 text-[10px] text-foreground">Pedido del proveedor Nº</p>
-      <Input value={value} maxLength={40} disabled={disabled || saving} onChange={(event) => onChange(event.target.value)} onBlur={() => void save()} placeholder="Código que da el proveedor" className="h-8 text-xs font-bold" data-testid="purchase-order-supplier-code" />
+      <Input value={value} maxLength={40} disabled={disabled || saving} onChange={(event) => onChange(event.target.value)} onBlur={() => void save()} placeholder="Código que da el proveedor" className="h-8 text-xs font-bold" data-testid={testId} />
     </div>
   );
 }

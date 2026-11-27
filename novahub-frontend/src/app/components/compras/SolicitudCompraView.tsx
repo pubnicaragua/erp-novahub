@@ -14,6 +14,8 @@ import { Combobox } from '../ui/Combobox';
 import { toast } from '@/app/services/toast';
 import { purchaseRequestsService, purchaseManagementService } from '../../services/compras.service';
 import type { PurchaseRequestSummary } from '../../services/compras.service';
+import { useEnabledTenantFeatures } from '../../hooks/useEnabledTenantFeatures';
+import { SupplierOrderCodeField } from './SupplierOrderCodeField';
 import type { Product, PurchaseRequest, PurchaseManagement, Warehouse, Supplier } from '../../types';
 import type { SalesPaginationControls } from '../../types';
 import { cn } from '../ui/utils';
@@ -142,6 +144,7 @@ export function SolicitudCompraView({ data, summaryData, summaryLoading, summary
     return () => window.clearTimeout(timeout);
   }, [highlightedAlertId]);
   const [detailOpen, setDetailOpen] = useState<PurchaseRequest | null>(null);
+  const fuelTrace = useEnabledTenantFeatures().has('SALES_FUEL_TRACE_REPORT');
   const [actionLoading, setActionLoading] = useState<string | null>(null);
   const [pendingApproveManagement, setPendingApproveManagement] = useState<PurchaseManagement | null>(null);
   const [pendingSubmitManagement, setPendingSubmitManagement] = useState<PurchaseManagement | null>(null);
@@ -735,6 +738,20 @@ export function SolicitudCompraView({ data, summaryData, summaryLoading, summary
         entity="PURCHASE_REQUEST"
         open={Boolean(detailOpen)}
         onClose={() => setDetailOpen(null)}
+        extraContent={fuelTrace && detailOpen ? (
+          <section className="rounded-2xl border border-border/50 bg-muted/10 p-4">
+            <SupplierOrderCodeField
+              orderId={detailOpen.id}
+              value={String((detailOpen as any).supplierOrderCode || '')}
+              disabled={!canPerform('PURCHASES_REQUESTS', 'edit') || ['CANCELLED', 'REJECTED'].includes(normalizeRequestStatus(detailOpen.status))}
+              onChange={(supplierOrderCode) => setDetailOpen((current) => (current ? { ...current, supplierOrderCode } as PurchaseRequest : current))}
+              saveCode={purchaseRequestsService.setSupplierOrderCode}
+              onSaved={onRefresh}
+              testId="purchase-request-supplier-code"
+            />
+            <p className="mt-1 text-[11px] text-muted-foreground">Al convertir la solicitud en orden de compra, el código pasa a la orden.</p>
+          </section>
+        ) : undefined}
         extraActions={detailOpen && (() => {
           const management = getActiveManagement(detailOpen);
           const requestStatus = normalizeRequestStatus(detailOpen.status);

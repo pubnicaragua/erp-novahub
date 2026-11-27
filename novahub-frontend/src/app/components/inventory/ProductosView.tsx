@@ -25,6 +25,7 @@ import { getKpiSummaryRows } from '../../utils/kpiSummary';
 import { inventoryService, type SimilarProductGroup, type SimilarityResolution, type SimilarProductMatch } from '../../services/inventario.service';
 import { getApiErrorMessage } from '../../services/api';
 import { purchaseRequestsService } from '../../services/compras.service';
+import { useEnabledTenantFeatures } from '../../hooks/useEnabledTenantFeatures';
 import { employeesService } from '../../services/rh.service';
 import { useCurrency } from '../../contexts/CurrencyContext';
 import { useAuth } from '../../contexts/AuthContext';
@@ -1439,6 +1440,8 @@ export function ProductosView({ products, summaryProducts, summaryProductsLoaded
   const [solicitudWarehouseId, setSolicitudWarehouseId] = useState('');
   const [solicitudJustification, setSolicitudJustification] = useState('');
   const [solicitudRequiredDate, setSolicitudRequiredDate] = useState('');
+  const [solicitudSupplierOrderCode, setSolicitudSupplierOrderCode] = useState('');
+  const solicitudFuelTrace = useEnabledTenantFeatures().has('SALES_FUEL_TRACE_REPORT');
   const [solicitudPriority, setSolicitudPriority] = useState('NORMAL');
   const [solicitudCreating, setSolicitudCreating] = useState(false);
   const [solicitudRequesterMode, setSolicitudRequesterMode] = useState<'EMPLOYEE' | 'SALES_SELLER' | null>(null);
@@ -1907,6 +1910,7 @@ export function ProductosView({ products, summaryProducts, summaryProductsLoaded
         status: 'PENDING_APPROVAL',
         priority: normalizePurchasePriority(solicitudPriority),
         justification: solicitudJustification || 'Solicitud generada desde inventario',
+        ...(solicitudFuelTrace && solicitudSupplierOrderCode.trim() ? { supplierOrderCode: solicitudSupplierOrderCode.trim() } : {}),
         warehouseId: solicitudWarehouseId,
         requiredDate: solicitudRequiredDate || undefined,
         requestedById: solicitudRequesterMode === 'EMPLOYEE' ? solicitudEmployeeId : undefined,
@@ -1917,6 +1921,7 @@ export function ProductosView({ products, summaryProducts, summaryProductsLoaded
       toast.success(`Solicitud creada con ${items.length} producto(s). Revisa Compras > Solicitudes.`);
       completeNotificationAction(actionToken);
       setSolicitudOpen(false);
+      setSolicitudSupplierOrderCode('');
       clearSelectedProducts();
       onRefresh();
     } catch (e: any) {
@@ -5853,6 +5858,12 @@ export function ProductosView({ products, summaryProducts, summaryProductsLoaded
                   </SelectContent>
                 </Select>
               </div>
+              {solicitudFuelTrace && (
+                <div className="space-y-1.5">
+                  <label className="text-xs font-bold" htmlFor="request-supplier-order-code">Pedido del proveedor Nº</label>
+                  <Input id="request-supplier-order-code" className="h-9" maxLength={40} value={solicitudSupplierOrderCode} disabled={solicitudCreating} onChange={(e) => setSolicitudSupplierOrderCode(e.target.value)} placeholder="Si el proveedor ya lo dio" data-testid="new-request-supplier-code" />
+                </div>
+              )}
               <div className="space-y-1.5">
                 <label className="text-xs font-bold">Justificación</label>
                 <Input className="h-9" value={solicitudJustification} onChange={(e) => setSolicitudJustification(e.target.value)} placeholder="Motivo de la solicitud..." />
