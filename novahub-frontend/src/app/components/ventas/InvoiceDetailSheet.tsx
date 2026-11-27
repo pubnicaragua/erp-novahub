@@ -257,7 +257,7 @@ export function InvoiceDetailSheet({
                               <span className="font-black">{payment.number}</span>
                               <span className="font-black tabular-nums text-emerald-600 dark:text-emerald-400">{formatAmount(Number(payment.amount || 0), payment.currency, payment.exchangeRate)}</span>
                             </div>
-                            <p className="mt-1 break-words text-[10px] text-muted-foreground">{formatDate(payment.date)} · {paymentMethodLabels[String(payment.method || '').toUpperCase()] || 'Sin especificar'}{payment.reference ? ` · Ref. ${payment.reference}` : ''}</p>
+                            <p className="mt-1 break-words text-[10px] text-muted-foreground">{(formatDateTime || formatDate)(payment.date)} · {paymentMethodLabels[String(payment.method || '').toUpperCase()] || 'Sin especificar'}{payment.reference ? ` · Ref. ${payment.reference}` : ''}</p>
                             <div className="mt-2 flex flex-wrap items-center gap-x-4 gap-y-1 text-[10px] text-muted-foreground">
                               <span>Abonado acumulado: <strong className="text-foreground">{formatAmount(paidAfterPayment, invoice.currency, invoice.exchangeRate)}</strong></span>
                               <span>Saldo después: <strong className={remainingAfterPayment > 0.01 ? 'text-orange-500' : 'text-emerald-600 dark:text-emerald-400'}>{formatAmount(remainingAfterPayment, invoice.currency, invoice.exchangeRate)}</strong></span>

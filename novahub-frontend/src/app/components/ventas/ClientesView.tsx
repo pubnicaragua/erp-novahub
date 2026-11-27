@@ -149,8 +149,11 @@ const customerCodeNumber = (customer: Customer) => {
   return match ? Number(match[1]) : Number.NEGATIVE_INFINITY;
 };
 
-const compareCustomerCodes = (left: Customer, right: Customer) =>
-  customerCodeNumber(right) - customerCodeNumber(left) || compareCustomerNames(left, right);
+const compareCustomerRecency = (left: Customer, right: Customer) => {
+  const leftCreatedAt = left.createdAt ? new Date(left.createdAt).getTime() : 0;
+  const rightCreatedAt = right.createdAt ? new Date(right.createdAt).getTime() : 0;
+  return rightCreatedAt - leftCreatedAt || customerCodeNumber(right) - customerCodeNumber(left) || compareCustomerNames(left, right);
+};
 
 const customerToDraft = (customer: Customer, fallbackCurrency: SupportedCurrency = 'NIO'): CustomerDraft => ({
   name: customer.name || '',
@@ -826,10 +829,8 @@ export function ClientesView({ data, loading, error, onRefresh, pagination, onSe
   });
 
   const colFilters = useColumnFilters();
-  // El código identifica la antigüedad/secuencia del cliente y debe ser el
-  // orden inicial del listado. Así el cliente recién creado aparece primero
-  // después de refrescar, sin depender del orden alfabético del nombre.
-  const filteredAndSorted = [...filtered].sort(compareCustomerCodes);
+  // La fecha real de creación define el orden inicial; el código solo desempata.
+  const filteredAndSorted = [...filtered].sort(compareCustomerRecency);
   const filterGetters = {
     code: (row: Customer) => customerCodeNumber(row),
     name: (row: Customer) => {
@@ -872,7 +873,7 @@ export function ClientesView({ data, loading, error, onRefresh, pagination, onSe
         const loans = customer.customerLoansSummary;
         return loans?.totalCount ? `${loans.activeCount} vigente(s) · ${formatCurrentAmount(Number(loans.outstandingBalance || 0), normalizeCurrency(loans.currency, baseCurrency))}` : 'Sin préstamos';
       }
-      case 'createdAt': return customer.createdAt ? formatDateEs(customer.createdAt) : '—';
+      case 'createdAt': return customer.createdAt ? formatDateEs(customer.createdAt, true) : '—';
       case 'status': return String(customer.status || '').toUpperCase() === 'INACTIVE' ? 'Inactivo' : 'Activo';
       default: return '—';
     }
@@ -911,7 +912,7 @@ export function ClientesView({ data, loading, error, onRefresh, pagination, onSe
         return matchesSearch
           && (statusFilter === 'ALL' || customerStatus === statusFilter)
           && (customerTypeFilter === 'ALL' || customerType === customerTypeFilter);
-      }).sort(compareCustomerCodes);
+      }).sort(compareCustomerRecency);
       const customers = colFilters.applyTo(matchingRows, filterGetters);
       const activeCount = customers.filter((customer) => String(customer.status || '').toUpperCase() !== 'INACTIVE').length;
       const inactiveCount = customers.length - activeCount;
@@ -994,13 +995,13 @@ export function ClientesView({ data, loading, error, onRefresh, pagination, onSe
   const summaryRowsWithoutTypeFilter = colFilters.applyTo(summarySearchRows.filter((customer) => {
     const customerStatus = String(customer.status || 'ACTIVE').toUpperCase() === 'INACTIVE' ? 'INACTIVE' : 'ACTIVE';
     return statusFilter === 'ALL' || customerStatus === statusFilter;
-  }).sort(compareCustomerCodes), filterGetters);
-  const summaryRowsWithoutQuickFilters = colFilters.applyTo([...summarySearchRows].sort(compareCustomerCodes), filterGetters);
+  }).sort(compareCustomerRecency), filterGetters);
+  const summaryRowsWithoutQuickFilters = colFilters.applyTo([...summarySearchRows].sort(compareCustomerRecency), filterGetters);
   const summaryFilteredData = colFilters.applyTo(summarySearchRows.filter((customer) => {
     const customerStatus = String(customer.status || 'ACTIVE').toUpperCase() === 'INACTIVE' ? 'INACTIVE' : 'ACTIVE';
     return (statusFilter === 'ALL' || customerStatus === statusFilter)
       && (customerTypeFilter === 'ALL' || String(customer.type || '').toUpperCase() === customerTypeFilter);
-  }).sort(compareCustomerCodes), filterGetters);
+  }).sort(compareCustomerRecency), filterGetters);
   const isKpiSummaryLoading = hasColumnValueFilters
     ? columnFilterSummaryQuery.isPending || columnFilterSummaryQuery.isFetching
     : summaryLoading;
@@ -1435,7 +1436,7 @@ export function ClientesView({ data, loading, error, onRefresh, pagination, onSe
         return <div className="min-w-0 space-y-1"><p className="text-[11px] font-bold text-foreground">{loans.activeCount} vigente{loans.activeCount === 1 ? '' : 's'}</p><p className="break-words text-xs font-black tabular-nums text-rose-600 dark:text-rose-400">{formatConvertedAmount(Number(loans.outstandingBalance || 0), normalizeCurrency(loans.currency, baseCurrency))}</p></div>;
       },
     } as ColumnDef<Customer>] : []),
-    { key: 'createdAt', header: 'Fecha de ingreso', width: '140px', render: (value) => <span className="text-xs font-medium text-muted-foreground">{formatDateEs(value)}</span> },
+    { key: 'createdAt', header: 'Fecha de ingreso', width: '165px', render: (value) => <span className="text-xs font-medium text-muted-foreground">{formatDateEs(value, true)}</span> },
     { 
       key: 'status', 
       header: 'Estado', 
@@ -1676,20 +1677,14 @@ export function ClientesView({ data, loading, error, onRefresh, pagination, onSe
               isLoading={loading}
               pagination={pagination}
               showClearSelection={false}
-              actionsWidth="w-36"
+              actionsWidth="w-28"
               fitContent
               layoutMode={layoutMode}
               showHorizontalControls
               verticalScroll
               actions={(row) => (
                 <div className="flex items-center gap-1">
-                   <Button variant="ghost" size="icon" title="Ver detalle" className="size-8 rounded-lg hover:bg-primary/10 hover:text-primary transition-colors" onClick={() => setSelectedCustomerDetail(row)}><Eye className="size-4" /></Button>
-                   {canPerform('SALES_CLIENTS', 'edit') && (
-                     <Button variant="ghost" size="icon" title="Editar cliente" aria-label="Editar cliente" className="size-8 rounded-lg hover:bg-primary/10 hover:text-primary transition-colors" onClick={() => openEditCustomer(row)}><Pencil className="size-4" /></Button>
-                   )}
-                   {canPerform('SALES_CLIENTS', 'deactivate') && (
-                   <Button variant="ghost" size="icon" title={String(row.status || 'ACTIVE').toUpperCase() === 'INACTIVE' ? 'Activar cliente' : 'Inactivar cliente'} className="size-8 rounded-lg hover:bg-primary/10 hover:text-primary transition-colors" onClick={() => setPendingStatusChange(row)}><Ban className="size-4" /></Button>
-                   )}
+                   <Button type="button" variant="ghost" size="icon" title="Ver detalle del cliente" aria-label={`Ver detalle del cliente ${row.name || row.code || ''}`} className="size-8 rounded-lg hover:bg-primary/10 hover:text-primary transition-colors" onClick={() => setSelectedCustomerDetail(row)}><Eye className="size-4" /></Button>
                 </div>
               )}
               bulkActions={canPerform('SALES_CLIENTS', 'deactivate') ? (selectedIds) => (

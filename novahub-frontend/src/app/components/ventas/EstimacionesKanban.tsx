@@ -398,7 +398,7 @@ function KanbanCard({ estimate, column, formatConvertedAmount, onViewDetail, onD
       <div className="flex items-center gap-2 text-[10px] text-muted-foreground mb-2.5">
         <span className="flex items-center gap-1">
           <Clock className="size-3" />
-          {formatDateEs(estimate.date)}
+          {formatDateEs(estimate.date, true)}
         </span>
         {expiryDate && (
           <span className={cn(

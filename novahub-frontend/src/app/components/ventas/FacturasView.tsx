@@ -2111,7 +2111,7 @@ export function FacturasView({ data, summaryData, summaryLoading, summaryError, 
       key: 'date',
       header: 'Fecha Emisión',
       headerExtra: <ColumnFilterMenu label="Fecha Emisión" sort={colFilters.state.date?.sort || null} onSort={(sort) => colFilters.setSort('date', sort)} sortOptions={[{ value: 'desc', label: 'Más recientes' }, { value: 'asc', label: 'Más antiguas' }]} />,
-      render: (val) => <span className="text-xs font-medium text-muted-foreground">{formatDateSafe(val)}</span>
+      render: (val) => <span className="text-xs font-medium text-muted-foreground">{formatDateTimeSafe(val)}</span>
     },
     {
       key: 'dueDate',
@@ -3021,7 +3021,7 @@ export function FacturasView({ data, summaryData, summaryLoading, summaryError, 
           pagination={pagination}
         columns={columns}
         showHorizontalControls
-        actionsWidth="w-52"
+        actionsWidth="w-32"
         fitContent
           layoutMode={layoutMode}
           verticalScroll
@@ -3055,69 +3055,12 @@ export function FacturasView({ data, summaryData, summaryLoading, summaryError, 
                 documentLabel="factura"
                 onSend={() => handleWhatsApp(row)}
               />
-              {canSendInvoiceToCash(row) && (
-                <Button type="button" title={hasOpenCash ? 'Enviar factura a Caja' : 'No hay una caja abierta en esta sucursal'} aria-label={`Enviar factura ${row.number} a Caja`} variant="ghost" size="icon" disabled={sendToCashLoadingId === row.id || !hasOpenCash || cashAvailabilityQuery.isLoading} className={cn('size-8 shrink-0 rounded-lg text-emerald-600 transition-colors hover:bg-emerald-500/10 dark:text-emerald-400', (!hasOpenCash || cashAvailabilityQuery.isLoading) && 'cursor-not-allowed opacity-40')} onClick={(event) => { event.preventDefault(); event.stopPropagation(); void handleSendInvoiceToCash(row); }}>
-                  <Inbox className={cn('size-4', sendToCashLoadingId === row.id && 'animate-pulse')} />
-                </Button>
-              )}
-              {canPerform('SALES_INVOICES', 'sendToCredit') &&
-                !['PAID', 'CANCELLED', 'CREDIT'].includes(String(row.status).toUpperCase()) &&
-                !row.creditNotes?.some((credit) => ['ACTIVE', 'ISSUED', 'PARTIAL', 'APPLIED'].includes(String(credit.status).toUpperCase())) &&
-                getInvoiceBalance(row) > 0.01 && (() => {
-                  const creditFits = invoiceFitsAvailableCredit(row);
-                  const creditTitle = creditFits
-                    ? 'Enviar saldo a crédito'
-                    : 'Crédito no disponible: el límite o saldo disponible no cubre esta factura';
-                  return (
-                    <span
-                      title={creditTitle}
-                      data-row-click-exempt="true"
-                      className="inline-flex"
-                      onClick={(event) => {
-                        event.preventDefault();
-                        event.stopPropagation();
-                        if (!creditFits) toast.error(creditTitle);
-                      }}
-                    >
-                      <Button
-                        type="button"
-                        aria-label={`${creditTitle} de ${row.number}`}
-                        variant="ghost"
-                        size="icon"
-                        disabled={!creditFits}
-                        className={cn('size-8 shrink-0 rounded-lg text-primary transition-colors hover:bg-primary/10', !creditFits && 'cursor-not-allowed text-muted-foreground opacity-60 hover:bg-transparent')}
-                        onClick={(event) => {
-                          event.preventDefault();
-                          event.stopPropagation();
-                          openInvoiceCredit(row);
-                        }}
-                      >
-                        <span className="relative inline-flex size-4 items-center justify-center">
-                          <Send className="size-4" />
-                          {!creditFits && <span aria-hidden="true" className="pointer-events-none absolute left-[-2px] top-1/2 h-px w-5 -rotate-45 bg-current" />}
-                        </span>
-                      </Button>
-                    </span>
-                  );
-                })()}
-              {canPerform('SALES_INVOICES', 'pay') && (String(row.status).toUpperCase() !== 'DRAFT' || canPerform('SALES_INVOICES', 'submit')) &&
-                !['PAID', 'CANCELLED'].includes(String(row.status).toUpperCase()) &&
-                getInvoicePaymentBalance(row, getInvoiceBalance(row)) > 0 && (
-                <Button type="button" title="Registrar pago parcial o total" aria-label={`Registrar pago de ${row.number}`} variant="ghost" size="icon" disabled={paymentLoading && paymentInvoice?.id === row.id} className="size-8 shrink-0 rounded-lg text-muted-foreground hover:bg-muted/40 hover:text-muted-foreground transition-colors" onClick={() => openInvoicePayment(row)}>
-                  {paymentLoading && paymentInvoice?.id === row.id ? <CreditCard className="size-4 animate-pulse text-primary" /> : <CreditCard className="size-4" />}
-                </Button>
-              )}
               {canPerform('SALES_INVOICES', 'cancel') && isInvoiceCancellableFromList(row) && (
                 <Button type="button" title="Solicitar anulación a Contabilidad" aria-label={`Solicitar anulación de ${row.number}`} variant="ghost" size="icon" className="size-8 shrink-0 rounded-lg text-rose-500 hover:bg-rose-500/10 transition-colors" onClick={() => { setPendingCancelIds([row.id]); setCancelReason(''); setCancelReasonAttempted(false); }}>
                   <Ban className="size-4" />
                 </Button>
               )}
-              {canPerform('SALES_INVOICES', 'read') && canPerform('SALES_INVOICES', 'delete') && String(row.status).toUpperCase() === 'DRAFT' && (
-                <Button type="button" title="Eliminar factura en borrador" aria-label={`Eliminar factura en borrador ${row.number}`} variant="ghost" size="icon" className="size-8 shrink-0 rounded-lg text-destructive hover:bg-destructive/10 transition-colors" onClick={(event) => { event.preventDefault(); event.stopPropagation(); setPendingDeleteInvoiceId(row.id); }}>
-                  <Trash2 className="size-4" />
-                </Button>
-              )}
-              <Button type="button" title="Ver factura completa" aria-label={`Ver factura completa ${row.number}`} variant="ghost" size="icon" className="size-8 shrink-0 rounded-lg text-muted-foreground hover:bg-primary/10 hover:text-primary transition-colors" onClick={(event) => { event.preventDefault(); event.stopPropagation(); setDetailInvoice(null); setEditingId(row.id); }}>
+              <Button type="button" title="Ver detalle de factura" aria-label={`Ver detalle de factura ${row.number}`} variant="ghost" size="icon" className="size-8 shrink-0 rounded-lg text-muted-foreground hover:bg-primary/10 hover:text-primary transition-colors" onClick={(event) => { event.preventDefault(); event.stopPropagation(); void openInvoiceDetail(row); }}>
                 <Eye className="size-4" />
               </Button>
             </div>

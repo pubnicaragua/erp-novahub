@@ -272,7 +272,7 @@ export function CustomerDetailsModal({ customer, open, onOpenChange }: CustomerD
                         </div>
                         <div className="flex flex-wrap items-center gap-x-3 gap-y-1 mt-1.5">
                           <span className="text-[11px] font-bold text-muted-foreground/70 flex items-center gap-1.5 whitespace-nowrap">
-                            <Calendar className="size-3.5" /> {new Date(it.date).toLocaleDateString()}
+                            <Calendar className="size-3.5" /> {new Date(it.date).toLocaleString('es-NI')}
                           </span>
                           <span className="text-[10px] uppercase font-black tracking-widest text-muted-foreground/30 flex items-center gap-1 whitespace-nowrap">
                             • {pdfStatusLabel(it.status)}

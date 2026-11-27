@@ -510,7 +510,7 @@ export function DevolucionesView({ data, summaryData, summaryLoading, summaryErr
     },
     { key: 'customer', header: 'Cliente', headerExtra: <ColumnFilterMenu label="Cliente" options={distinctCustomers} selected={colFilters.state.customer?.values || []} onSelect={(values) => colFilters.setValues('customer', values)} sort={colFilters.state.customer?.sort || null} onSort={(sort) => colFilters.setSort('customer', sort)} />, render: (_, row) => <span className="text-[13px] font-bold text-foreground">{row.customer?.name || 'Cliente'}</span> },
     { key: 'invoice', header: 'Factura Origen', render: (_, row) => <span className="text-xs font-bold text-primary">{row.invoice?.number || 'N/A'}</span> },
-    { key: 'date', header: 'Fecha', headerExtra: <ColumnFilterMenu label="Fecha" sort={colFilters.state.date?.sort || null} onSort={(sort) => colFilters.setSort('date', sort)} sortOptions={[{ value: 'desc', label: 'Más recientes' }, { value: 'asc', label: 'Más antiguas' }]} />, render: (val) => <span className="text-xs font-medium text-muted-foreground">{formatDateEs(val)}</span> },
+    { key: 'date', header: 'Fecha', headerExtra: <ColumnFilterMenu label="Fecha" sort={colFilters.state.date?.sort || null} onSort={(sort) => colFilters.setSort('date', sort)} sortOptions={[{ value: 'desc', label: 'Más recientes' }, { value: 'asc', label: 'Más antiguas' }]} />, render: (val) => <span className="text-xs font-medium text-muted-foreground">{formatDateEs(val, true)}</span> },
     { key: 'total', header: 'Total', width: '130px', headerExtra: <ColumnFilterMenu label="Total" sort={colFilters.state.total?.sort || null} onSort={(sort) => colFilters.setSort('total', sort)} />, render: (val, row) => <span className="text-[13px] font-black tabular-nums text-rose-500">{formatConvertedAmount(Number(val||0), (row as any).currency, (row as any).exchangeRate)}</span> },
     { key: 'status', header: 'Estado', width: '110px', headerExtra: <ColumnFilterMenu label="Estado" options={statusOptionsForFilter} selected={colFilters.state.status?.values || []} onSelect={(values) => colFilters.setValues('status', values)} sort={colFilters.state.status?.sort || null} onSort={(sort) => colFilters.setSort('status', sort)} />, render: (val) => {
       const opt = statusOptions.find(o => o.value === (val||'').toUpperCase());
@@ -744,16 +744,7 @@ export function DevolucionesView({ data, summaryData, summaryLoading, summaryErr
           highlightedRowId={highlightedAlertId}
           actions={(row) => (
             <div className="flex items-center gap-1" onPointerDown={(event) => event.stopPropagation()} onClick={(event) => event.stopPropagation()}>
-               {canPerform('SALES_RETURNS', 'approve') && (row.status||'').toUpperCase() === 'DRAFT' && (
-                 <Button title="Aprobar Nota de Crédito" variant="ghost" size="icon" className="size-8 rounded-lg text-emerald-500 hover:bg-emerald-500/10 transition-colors" onClick={() => handleApprove(row.id)}><ShieldCheck className="size-4" /></Button>
-               )}
-               {canPerform('SALES_RETURNS', 'process') && (row.status||'').toUpperCase() === 'APPROVED' && (
-                 <Button title="Aplicar saldo y actualizar inventario" variant="ghost" size="icon" className="size-8 rounded-lg text-blue-500 hover:bg-blue-500/10 transition-colors" onClick={() => handleProcess(row.id)}><CheckCircle2 className="size-4" /></Button>
-               )}
-                <Button title="Ver nota de crédito completa" aria-label="Ver nota de crédito completa" variant="ghost" size="icon" className="size-8 rounded-lg text-muted-foreground hover:bg-primary/10 hover:text-primary transition-colors" onClick={() => { setDetailReturn(null); startEdit(row.id); }}><Eye className="size-4" /></Button>
-               {canPerform('SALES_RETURNS', 'reject') && (row.status||'').toUpperCase() === 'DRAFT' && (
-                 <Button title="Rechazar nota de crédito" aria-label="Rechazar nota de crédito" variant="ghost" size="icon" className="size-8 rounded-lg text-muted-foreground hover:bg-rose-500/10 hover:text-rose-500 transition-colors" onClick={() => setPendingDeleteId(row.id)}><XCircle className="size-4" /></Button>
-               )}
+                <Button type="button" title="Ver detalle de devolución" aria-label={`Ver detalle de devolución ${row.number}`} variant="ghost" size="icon" className="size-8 rounded-lg text-muted-foreground hover:bg-primary/10 hover:text-primary transition-colors" onClick={() => setDetailReturn(row)}><Eye className="size-4" /></Button>
             </div>
           )}
         />

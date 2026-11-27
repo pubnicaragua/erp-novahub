@@ -682,11 +682,6 @@ export function OrdenesVentaView({ data, summaryData, summaryLoading, summaryErr
     }
   };
 
-  const handleSaveCurrentOrder = () => {
-    const currentStatus = normalizeOrderStatus(localDoc?.status);
-    return handleSaveOrder(currentStatus === 'DRAFT' ? 'DRAFT' : 'APPROVED');
-  };
-
   const calculateRates = (doc: any) => {
     const sub = Number(doc?.subtotal || 0);
     if (sub === 0) return { dRate: 0, tRate: 0 };
@@ -878,7 +873,7 @@ export function OrdenesVentaView({ data, summaryData, summaryLoading, summaryErr
       render: (val) => (
         <div className="flex items-center gap-1.5 text-[10px] font-medium text-muted-foreground">
            <Clock className="size-3" />
-           {formatDateEs(val)}
+           {formatDateEs(val, true)}
         </div>
       )
     },
@@ -904,10 +899,10 @@ export function OrdenesVentaView({ data, summaryData, summaryLoading, summaryErr
       }
     },
     { key: 'invoiceNumber', header: 'Factura relacionada', render: (val, row) => <span className="text-xs font-mono font-bold text-primary">{val || row.invoiceId || '—'}</span> },
-    { key: 'invoicedAt', header: 'Fecha facturación', headerExtra: <ColumnFilterMenu label="Fecha facturación" sort={colFilters.state.invoicedAt?.sort || null} onSort={(sort) => colFilters.setSort('invoicedAt', sort)} sortOptions={[{ value: 'desc', label: 'Más recientes' }, { value: 'asc', label: 'Más antiguas' }]} />, render: (val) => <span className="text-xs text-muted-foreground">{val ? formatDateEs(val) : '—'}</span> },
+    { key: 'invoicedAt', header: 'Fecha facturación', headerExtra: <ColumnFilterMenu label="Fecha facturación" sort={colFilters.state.invoicedAt?.sort || null} onSort={(sort) => colFilters.setSort('invoicedAt', sort)} sortOptions={[{ value: 'desc', label: 'Más recientes' }, { value: 'asc', label: 'Más antiguas' }]} />, render: (val) => <span className="text-xs text-muted-foreground">{val ? formatDateEs(val, true) : '—'}</span> },
     { key: 'invoicedBy', header: 'Facturado por', render: (_val, row) => <span className="text-xs text-muted-foreground">{row.invoicedBy?.name || '—'}</span> },
     { key: 'paymentNumber', header: 'Pago relacionado', render: (val, row) => <span className="text-xs font-mono font-bold text-emerald-500">{val || (row.invoiceId ? 'Pendiente' : '—')}</span> },
-    { key: 'paymentDate', header: 'Fecha pago', render: (val) => <span className="text-xs text-muted-foreground">{val ? formatDateEs(val) : '—'}</span> },
+    { key: 'paymentDate', header: 'Fecha pago', render: (val) => <span className="text-xs text-muted-foreground">{val ? formatDateEs(val, true) : '—'}</span> },
     {
       key: 'paymentStatus',
       header: 'Estado pago',
@@ -1637,7 +1632,7 @@ export function OrdenesVentaView({ data, summaryData, summaryLoading, summaryErr
             data={filteredData}
             pagination={pagination}
             showHorizontalControls
-            actionsWidth="w-40"
+            actionsWidth="w-32"
             fitContent
             columns={visibleColumns}
             layoutMode={layoutMode}
@@ -1653,37 +1648,7 @@ export function OrdenesVentaView({ data, summaryData, summaryLoading, summaryErr
                   documentLabel="orden de venta"
                   onSend={() => handleWhatsApp(row)}
                 />
-                {canPerform('SALES_ORDERS', 'convert') && ['DRAFT', 'APPROVED'].includes(normalizeOrderStatus(row.status)) && !row.invoiceId && !row.invoiceNumber && (
-                  <Button 
-                    type="button"
-                    title={normalizeOrderStatus(row.status) === 'DRAFT' ? 'Aprobar y enviar a Factura' : 'Enviar a Factura'}
-                    aria-label={normalizeOrderStatus(row.status) === 'DRAFT' ? 'Aprobar y enviar a Factura' : 'Enviar a Factura'}
-                    onClick={() => void handleInvoiceOrder(row)}
-                    disabled={invoicingOrderId === row.id}
-                    variant="ghost" 
-                    size="icon" 
-                    className="size-8 shrink-0 rounded-lg text-primary hover:bg-primary/10 hover:text-primary transition-colors"
-                    style={{ color: themeConfig?.colors?.primary || undefined }}
-                  >
-                    <ArrowRightCircle className={cn('size-4', invoicingOrderId === row.id && 'animate-pulse')} />
-                  </Button>
-                )}
-                {canPerform('SALES_ORDERS', 'convert') && ['DRAFT', 'APPROVED'].includes(normalizeOrderStatus(row.status)) && !row.invoiceId && !row.invoiceNumber && (
-                  <Button
-                    type="button"
-                    title={hasOpenCash ? 'Aprobar, facturar y enviar a Caja' : 'No hay una caja abierta en esta sucursal'}
-                    aria-label="Aprobar, facturar y enviar a Caja"
-                    onClick={() => void handleInvoiceOrder(row, true)}
-                    disabled={invoicingOrderId === row.id || !hasOpenCash}
-                    variant="ghost"
-                    size="icon"
-                    className={cn('size-8 shrink-0 rounded-lg text-primary hover:bg-primary/10 hover:text-primary transition-colors', !hasOpenCash && 'cursor-not-allowed opacity-40')}
-                    style={{ color: hasOpenCash ? themeConfig?.colors?.primary || undefined : undefined }}
-                  >
-                    <Inbox className={cn('size-4', invoicingOrderId === row.id && 'animate-pulse')} />
-                  </Button>
-                )}
-                <Button type="button" title="Ver orden completa" aria-label="Ver orden completa" variant="ghost" size="icon" className="size-8 shrink-0 rounded-lg text-muted-foreground hover:bg-muted/40 hover:text-muted-foreground transition-colors" onClick={() => { setDetailOrder(null); setEditingId(row.id); }}><Eye className="size-4 text-muted-foreground" /></Button>
+                <Button type="button" title="Ver detalle de orden" aria-label={`Ver detalle de orden ${row.number}`} variant="ghost" size="icon" className="size-8 shrink-0 rounded-lg text-muted-foreground hover:bg-muted/40 hover:text-muted-foreground transition-colors" onClick={() => setDetailOrder(row)}><Eye className="size-4 text-muted-foreground" /></Button>
                 {canPerform('SALES_ORDERS', 'cancel') &&
                   normalizeOrderStatus(row.status) === 'DRAFT' &&
                   !row.invoiceId && !row.invoiceNumber && (

@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import { 
-  RotateCcw, Plus, Search, TrendingUp, Clock, Calendar, Play, Pause, Pencil, Trash2, ChevronLeft, Ban
+  RotateCcw, Plus, Search, TrendingUp, Clock, Calendar, Play, Pause, Trash2, ChevronLeft, Ban, Eye
 } from 'lucide-react';
 import { Card, CardContent } from '../ui/card';
 import { Button } from '../ui/button';
@@ -963,14 +963,7 @@ export function FacturasRecurrentesView({ data, summaryData, summaryLoading, sum
           highlightedRowId={highlightedAlertId}
           actions={(row) => (
             <div className="flex items-center gap-1" onPointerDown={(event) => event.stopPropagation()} onClick={(event) => event.stopPropagation()}>
-               {canPerform('SALES_RECURRING', (row.status || '').toUpperCase() === 'ACTIVE' ? 'pause' : 'resume') && ['ACTIVE', 'PAUSED'].includes((row.status||'').toUpperCase()) && (
-                 (row.status||'').toUpperCase() === 'ACTIVE' ? (
-                   <Button title="Pausar" onClick={() => toggleStatus(row)} variant="ghost" size="icon" className="size-8 rounded-lg text-amber-500 hover:bg-amber-500/10 transition-colors"><Pause className="size-4" /></Button>
-                 ) : (
-                   <Button title="Reanudar" onClick={() => toggleStatus(row)} variant="ghost" size="icon" className="size-8 rounded-lg text-emerald-500 hover:bg-emerald-500/10 transition-colors"><Play className="size-4" /></Button>
-                 )
-               )}
-               {canPerform('SALES_RECURRING', 'edit') && <Button title="Editar factura recurrente" aria-label="Editar factura recurrente" variant="ghost" size="icon" className="size-8 rounded-lg text-muted-foreground hover:bg-primary/10 hover:text-primary transition-colors" onClick={() => { setDetailRecurring(null); setEditingId(row.id); }}><Pencil className="size-4" /></Button>}
+               <Button type="button" title="Ver detalle de factura recurrente" aria-label={`Ver detalle de factura recurrente ${row.number || ''}`} variant="ghost" size="icon" className="size-8 rounded-lg text-muted-foreground hover:bg-primary/10 hover:text-primary transition-colors" onClick={() => setDetailRecurring(row)}><Eye className="size-4" /></Button>
                {canPerform('SALES_RECURRING', 'cancel') && ['ACTIVE', 'PAUSED'].includes((row.status||'').toUpperCase()) && (
                  <Button title="Cancelar factura recurrente" aria-label="Cancelar factura recurrente" variant="ghost" size="icon" className="size-8 rounded-lg text-muted-foreground hover:bg-rose-500/10 hover:text-rose-500 transition-colors" onClick={() => { setCancelReason(''); setCancelReasonAttempted(false); setPendingDeleteIds([row.id]); }}><Ban className="size-4" /></Button>
                )}

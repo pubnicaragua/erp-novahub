@@ -851,9 +851,7 @@ export function PagosRecibidosView({ data, summaryData, summaryLoading, summaryE
     },
     { key: 'date', header: 'Fecha', headerExtra: <ColumnFilterMenu label="Fecha" sort={colFilters.state.date?.sort || null} onSort={(sort) => colFilters.setSort('date', sort)} sortOptions={[{ value: 'desc', label: 'Más recientes' }, { value: 'asc', label: 'Más antiguas' }]} />, render: (val) => {
       if (!val) return <span className="text-xs text-muted-foreground">Sin fecha</span>;
-      const clean = String(val).includes('T') ? String(val).split('T')[0] : String(val);
-      const [y, m, d] = clean.split('-').map(Number);
-      return <span className="text-xs font-medium text-muted-foreground">{(!y||!m||!d) ? val : formatDateEs(new Date(y, m-1, d))}</span>;
+      return <span className="text-xs font-medium text-muted-foreground">{formatDateEs(val, true)}</span>;
     } },
     {
       key: 'amount', header: 'Monto', width: '150px', headerExtra: <ColumnFilterMenu label="Monto" sort={colFilters.state.amount?.sort || null} onSort={(sort) => colFilters.setSort('amount', sort)} />, render: (val, row) => (

@@ -885,7 +885,7 @@ export function EstimacionesView({ data, summaryData, summaryLoading, summaryErr
       key: 'date', 
       header: 'Fecha Emisión', 
       headerExtra: <ColumnFilterMenu label="Fecha Emisión" sort={colFilters.state.date?.sort || null} onSort={(sort) => colFilters.setSort('date', sort)} sortOptions={[{ value: 'desc', label: 'Más recientes' }, { value: 'asc', label: 'Más antiguas' }]} />,
-      render: (val) => <span className="text-xs font-medium text-muted-foreground">{formatDateEs(val)}</span>
+      render: (val) => <span className="text-xs font-medium text-muted-foreground">{formatDateEs(val, true)}</span>
     },
     { 
       key: 'total', 
@@ -1640,7 +1640,7 @@ export function EstimacionesView({ data, summaryData, summaryLoading, summaryErr
           onRowUpdate={handleUpdate}
           onRowClick={(row) => setDetailEstimate(row)}
           highlightedRowId={highlightedAlertId}
-          actionsWidth="w-48"
+          actionsWidth="w-32"
           fitContent
           layoutMode={layoutMode}
           showHorizontalControls
@@ -1652,29 +1652,7 @@ export function EstimacionesView({ data, summaryData, summaryLoading, summaryErr
                 documentLabel="cotización"
                 onSend={() => handleWhatsApp(row)}
               />
-              {canPerform('SALES_QUOTES', 'convert') &&
-                ['DRAFT', 'APPROVED'].includes(normalizeEstimateStatus(row.status)) && (
-                <Button
-                  variant="ghost"
-                  title="Aprobar y enviar a Orden de Venta"
-                  aria-label="Aprobar y enviar a Orden de Venta"
-                  size="icon"
-                  disabled={convertingId === row.id}
-                  onClick={(e) => { e.stopPropagation(); void handleConvertToOrder(row); }}
-                  className={actionButtonClass}
-                >
-                  <ArrowRightCircle className={cn(actionIconClass, convertingId === row.id && 'animate-pulse')} />
-                </Button>
-              )}
-              {canPerform('SALES_QUOTES', 'convert') && ['DRAFT', 'APPROVED'].includes(normalizeEstimateStatus(row.status)) && <>
-                <Button type="button" variant="ghost" title="Enviar directamente a Facturas" aria-label="Enviar directamente a Facturas" size="icon" disabled={convertingId === row.id} onClick={(event) => { event.stopPropagation(); void handleConvertEstimateDirect(row, false); }} className={actionButtonClass}>
-                  <FileText className={cn(actionIconClass, convertingId === row.id && 'animate-pulse')} />
-                </Button>
-                <Button type="button" variant="ghost" title={hasOpenCash ? 'Enviar directamente a Caja' : 'No hay una caja abierta en esta sucursal'} aria-label="Enviar directamente a Caja" size="icon" disabled={convertingId === row.id || !hasOpenCash} onClick={(event) => { event.stopPropagation(); void handleConvertEstimateDirect(row, true); }} className={cn(actionButtonClass, !hasOpenCash && 'cursor-not-allowed opacity-40')}>
-                  <Inbox className={actionIconClass} />
-                </Button>
-              </>}
-              <Button variant="ghost" title="Ver cotización completa" aria-label="Ver cotización completa" size="icon" className={actionButtonClass} onClick={() => { setDetailEstimate(null); setEditingId(row.id); }}>
+              <Button type="button" variant="ghost" title="Ver detalle de cotización" aria-label={`Ver detalle de cotización ${row.number}`} size="icon" className={actionButtonClass} onClick={() => setDetailEstimate(row)}>
                 <Eye className={actionIconClass} />
               </Button>
               {canPerform('SALES_QUOTES', 'cancel') && normalizeEstimateStatus(row.status) === 'DRAFT' && (

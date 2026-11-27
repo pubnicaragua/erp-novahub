@@ -19,6 +19,7 @@ import { useCurrency } from '../../contexts/CurrencyContext';
 import { useTenantQuery } from '../../hooks/useTenantQuery';
 import { useDebouncedValue } from '../../hooks/useDebouncedValue';
 import { formatCurrencyAmount } from '../../utils/currency';
+import { formatDateEs } from '../../utils/dateFormat';
 import type { Customer, CustomerLoan } from '../../types';
 import { toast } from '@/app/services/toast';
 
@@ -233,7 +234,7 @@ export function CustomerLoansView({ enabled, selectedBranchId, onRefresh }: { en
             return <TableRow key={loan.id} className="cursor-pointer" onClick={() => openDetail(loan)} tabIndex={0} onKeyDown={(event) => { if (event.key === 'Enter' || event.key === ' ') { event.preventDefault(); openDetail(loan); } }}>
               <TableCell className="font-semibold text-primary">{loan.invoice?.number || loan.number || '—'}</TableCell>
               <TableCell className="max-w-[240px] whitespace-normal break-words">{loan.customer?.name || 'Cliente'}</TableCell>
-              <TableCell>{localDate(loan.invoice?.date || loan.disbursedAt || loan.createdAt)}</TableCell>
+              <TableCell>{formatDateEs(loan.invoice?.date || loan.disbursedAt || loan.createdAt, true)}</TableCell>
               <TableCell>{loan.nextInstallment ? `${localDate(loan.nextInstallment.dueDate)} · ${formatCurrencyAmount(loan.nextInstallment.remainingAmount, loan.currency || baseCurrency)}` : '—'}</TableCell>
               <TableCell className="font-semibold text-rose-600 dark:text-rose-400">{formatCurrencyAmount(loan.overdueBalance || 0, loan.currency || baseCurrency)}</TableCell>
               <TableCell className="font-black tabular-nums">{formatCurrencyAmount(balance, loan.currency || baseCurrency)}</TableCell>

@@ -334,7 +334,7 @@ function getTodayInputDate() {
 }
 
 function formatInvoiceDate(date: string) {
-  return new Date(date).toLocaleDateString('es-NI');
+  return new Date(date).toLocaleString('es-NI');
 }
 
 function getErrorMessage(error: unknown, fallback: string) {

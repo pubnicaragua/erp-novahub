@@ -15,8 +15,9 @@ import { useAuth } from '../../contexts/AuthContext';
 import { salesSellersService, type SalesSellerCommissionRule, type SalesSellerSale } from '../../services/sales-sellers.service';
 import { hrService } from '../../services/hr.service';
 import { areCommissionScaleRulesConsecutive } from '../../utils/commission-scale';
+import { formatDateEs } from '../../utils/dateFormat';
 import { DateField } from '../ui/DateField';
-import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from '../ui/dialog';
+import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '../ui/dialog';
 import { Sheet, SheetContent, SheetDescription, SheetHeader, SheetTitle } from '../ui/sheet';
 
 type Section = 'vendedores' | 'comisiones' | 'metas' | 'pagos';
@@ -71,7 +72,7 @@ function InvoiceDetailContent({ invoice }: { invoice?: SalesSellerSale | null })
   return <div className="min-w-0 space-y-4">
     <div className="grid min-w-0 gap-3 sm:grid-cols-2 lg:grid-cols-4">
       <div className="rounded-xl border border-border p-3"><p className="text-xs text-muted-foreground">Factura</p><p className="font-semibold">{invoice.number}</p></div>
-      <div className="rounded-xl border border-border p-3"><p className="text-xs text-muted-foreground">Fecha</p><p className="font-semibold">{new Date(invoice.date).toLocaleDateString('es-NI')}</p></div>
+      <div className="rounded-xl border border-border p-3"><p className="text-xs text-muted-foreground">Fecha</p><p className="font-semibold">{formatDateEs(invoice.date, true)}</p></div>
       <div className="rounded-xl border border-border p-3"><p className="text-xs text-muted-foreground">Cliente</p><p className="break-words font-semibold">{customer}</p></div>
       <div className="rounded-xl border border-border p-3"><p className="text-xs text-muted-foreground">Estado</p><p className="font-semibold">{documentStatus(invoice.status)}</p></div>
       <div className="rounded-xl border border-border p-3"><p className="text-xs text-muted-foreground">Total</p><p className="font-semibold">{money(Number(invoice.total), invoice.currency)}</p></div>
@@ -90,7 +91,7 @@ function InvoiceDetailContent({ invoice }: { invoice?: SalesSellerSale | null })
     <div className="min-w-0 space-y-2">
       <h3 className="font-semibold">Pagos recibidos</h3>
       {invoice.payments.length === 0 ? <p className="rounded-xl border border-border p-3 text-sm text-muted-foreground">Sin pagos registrados.</p> : <div className="max-h-48 overflow-auto rounded-xl border border-border"><table className="w-full min-w-[480px] text-sm"><thead><tr><th className={stickyHeaderCell}>Fecha</th><th className={stickyHeaderCell}>Referencia</th><th className={stickyHeaderCell}>Método</th><th className={`${stickyHeaderCell} text-right`}>Importe</th></tr></thead><tbody>
-        {invoice.payments.map((payment) => <tr key={payment.id} className="border-t border-border/60"><td className="px-3 py-2">{new Date(payment.date).toLocaleDateString('es-NI')}</td><td className="px-3 py-2">{payment.reference || payment.number}</td><td className="px-3 py-2">{paymentMethod(payment.method)}</td><td className="px-3 py-2 text-right font-medium">{money(Number(payment.amount), payment.currency)}</td></tr>)}
+        {invoice.payments.map((payment) => <tr key={payment.id} className="border-t border-border/60"><td className="px-3 py-2">{formatDateEs(payment.date, true)}</td><td className="px-3 py-2">{payment.reference || payment.number}</td><td className="px-3 py-2">{paymentMethod(payment.method)}</td><td className="px-3 py-2 text-right font-medium">{money(Number(payment.amount), payment.currency)}</td></tr>)}
       </tbody></table></div>}
     </div>
   </div>;
@@ -524,12 +525,12 @@ export function VendedoresView({ historicalOnly = false, employeeMode = false, o
         <Card className="min-w-0 rounded-2xl border-border bg-card shadow-sm">
           <CardHeader className="flex flex-wrap items-center justify-between gap-3"><CardTitle>Historial de liquidaciones</CardTitle><div className="flex flex-wrap items-center gap-2 text-xs"><span className="text-muted-foreground">Pagado neto histórico:</span>{Object.keys(paidByCurrency).length ? Object.entries(paidByCurrency).map(([currency, amount]) => <Badge key={currency} variant="secondary">{money(amount, currency)}</Badge>) : <Badge variant="secondary">{money(0, baseCurrency || 'NIO')}</Badge>}</div></CardHeader>
           <CardContent>
-            <div className="max-h-[440px] overflow-auto rounded-xl border border-border"><table className="w-full min-w-[760px] text-sm"><thead><tr><th className={stickyHeaderCell}>Fecha</th><th className={stickyHeaderCell}>{employeeMode ? 'Empleado' : 'Vendedor'}</th><th className={stickyHeaderCell}>Método / referencia</th><th className={stickyHeaderCell}>Estado</th><th className={`${stickyHeaderCell} text-right`}>Importe</th><th className={stickyHeaderCell}>Detalle</th><th className={stickyHeaderCell}>Acción</th></tr></thead>
+            <div className="max-h-[440px] overflow-auto rounded-xl border border-border"><table className="w-full min-w-[760px] text-sm"><thead><tr><th className={stickyHeaderCell}>Fecha</th><th className={stickyHeaderCell}>{employeeMode ? 'Empleado' : 'Vendedor'}</th><th className={stickyHeaderCell}>Método / referencia</th><th className={stickyHeaderCell}>Estado</th><th className={`${stickyHeaderCell} text-right`}>Importe</th><th className={stickyHeaderCell}>Acciones</th></tr></thead>
               <tbody>{(payoutsQuery.data || []).map((payout) => <tr key={payout.id} className="border-t border-border/60">
-                <td className="whitespace-nowrap px-3 py-2">{new Date(payout.paidAt).toLocaleString('es-NI')}</td><td className="px-3 py-2">{payout.seller?.name || (employeeMode ? 'Empleado vendedor' : 'Vendedor')}</td><td className="max-w-xs whitespace-normal break-words px-3 py-2">{paymentMethod(payout.method)}{payout.reference ? ` · ${payout.reference}` : ''}</td><td className="px-3 py-2">{payoutStatus(payout.status)}</td><td className="px-3 py-2 text-right font-semibold">{money(Number(payout.amount), payout.currency)}</td>
-                <td className="px-3 py-2"><Button size="sm" variant="outline" onClick={() => setSelectedPayoutDetailId(payout.id)}><Eye className="mr-2 size-4" />Ver detalle</Button></td><td className="px-3 py-2">{payout.status === 'PAID' && canReverseEmployeePayouts && <Button size="sm" variant="outline" onClick={() => reversePayout.mutate(payout.id)} disabled={reversePayout.isPending}>Revertir</Button>}</td>
+                <td className="whitespace-nowrap px-3 py-2">{formatDateEs(payout.paidAt, true)}</td><td className="px-3 py-2">{payout.seller?.name || (employeeMode ? 'Empleado vendedor' : 'Vendedor')}</td><td className="max-w-xs whitespace-normal break-words px-3 py-2">{paymentMethod(payout.method)}{payout.reference ? ` · ${payout.reference}` : ''}</td><td className="px-3 py-2">{payoutStatus(payout.status)}</td><td className="px-3 py-2 text-right font-semibold">{money(Number(payout.amount), payout.currency)}</td>
+                <td className="px-3 py-2"><Button type="button" size="icon" variant="ghost" aria-label={`Ver detalle de liquidación ${payout.id}`} onClick={() => setSelectedPayoutDetailId(payout.id)}><Eye className="size-4" /></Button></td>
               </tr>)}
-                {(payoutsQuery.data || []).length === 0 && <tr><td colSpan={7} className="px-3 py-5 text-center text-muted-foreground">No hay pagos registrados.</td></tr>}
+                {(payoutsQuery.data || []).length === 0 && <tr><td colSpan={6} className="px-3 py-5 text-center text-muted-foreground">No hay pagos registrados.</td></tr>}
               </tbody>
             </table></div>
           </CardContent>
@@ -540,7 +541,7 @@ export function VendedoresView({ historicalOnly = false, employeeMode = false, o
             {commissionsHistoryQuery.isPending ? <p className="mb-3 text-sm text-muted-foreground">Cargando comisiones…</p> : commissionsHistoryQuery.isError ? <p className="mb-3 text-sm text-destructive">No se pudo cargar el historial de comisiones.</p> : null}
             <div className="max-h-[440px] overflow-auto rounded-xl border border-border"><table className="w-full min-w-[720px] text-sm"><thead><tr><th className={stickyHeaderCell}>{employeeMode ? 'Empleado' : 'Vendedor'}</th><th className={stickyHeaderCell}>Documento</th><th className={stickyHeaderCell}>Generada</th><th className={stickyHeaderCell}>Estado</th><th className={`${stickyHeaderCell} text-right`}>Comisión</th><th className={stickyHeaderCell}>Detalle</th></tr></thead>
               <tbody>{(commissionsHistoryQuery.data || []).map((commission) => <tr key={commission.id} className="border-t border-border/60">
-                <td className="px-3 py-2">{commission.seller?.name || (employeeMode ? 'Empleado vendedor' : 'Vendedor')}</td><td className="px-3 py-2">{commission.invoice?.number || commission.creditNote?.number || 'Venta'}</td><td className="whitespace-nowrap px-3 py-2">{commission.earnedAt ? new Date(commission.earnedAt).toLocaleDateString('es-NI') : '—'}</td><td className="px-3 py-2">{commissionStatus(commission.status)}</td><td className="px-3 py-2 text-right font-semibold">{money(Number(commission.amount), commission.currency)}</td>
+                <td className="px-3 py-2">{commission.seller?.name || (employeeMode ? 'Empleado vendedor' : 'Vendedor')}</td><td className="px-3 py-2">{commission.invoice?.number || commission.creditNote?.number || 'Venta'}</td><td className="whitespace-nowrap px-3 py-2">{commission.earnedAt ? formatDateEs(commission.earnedAt, true) : '—'}</td><td className="px-3 py-2">{commissionStatus(commission.status)}</td><td className="px-3 py-2 text-right font-semibold">{money(Number(commission.amount), commission.currency)}</td>
                 <td className="px-3 py-2"><Button size="sm" variant="outline" onClick={() => setSelectedCommissionDetailId(commission.id)}><Eye className="mr-2 size-4" />Ver detalle</Button></td>
               </tr>)}
                 {!commissionsHistoryQuery.isPending && !commissionsHistoryQuery.isError && !(commissionsHistoryQuery.data || []).length && <tr><td colSpan={6} className="px-3 py-5 text-center text-muted-foreground">Todavía no hay comisiones registradas.</td></tr>}
@@ -566,7 +567,7 @@ export function VendedoresView({ historicalOnly = false, employeeMode = false, o
             {sellerSalesQuery.isPending ? <div className="rounded-xl border border-border p-6 text-center text-sm text-muted-foreground">Cargando ventas…</div>
               : sellerSalesQuery.isError ? <div className="rounded-xl border border-destructive/40 p-4 text-sm text-destructive">No se pudieron cargar las ventas del vendedor.</div>
               : <div className="max-h-[calc(100dvh-19rem)] overflow-auto rounded-xl border border-border"><table className="w-full min-w-[820px] text-sm"><thead><tr><th className={stickyHeaderCell}>Fecha</th><th className={stickyHeaderCell}>Factura</th><th className={stickyHeaderCell}>Cliente</th><th className={stickyHeaderCell}>Estado</th><th className={`${stickyHeaderCell} text-right`}>Total</th><th className={`${stickyHeaderCell} text-right`}>Abonado</th><th className={`${stickyHeaderCell} text-right`}>Saldo</th></tr></thead>
-                  <tbody>{(sellerSalesQuery.data || []).map((sale) => <tr key={sale.id} className="border-t border-border/60"><td className="whitespace-nowrap px-3 py-2">{new Date(sale.date).toLocaleDateString('es-NI')}</td><td className="px-3 py-2 font-medium">{sale.number}</td><td className="max-w-xs whitespace-normal break-words px-3 py-2">{sale.customer?.name || sale.customCustomerName || 'Cliente general'}</td><td className="px-3 py-2">{documentStatus(sale.status)}</td><td className="px-3 py-2 text-right">{money(Number(sale.total), sale.currency)}</td><td className="px-3 py-2 text-right">{money(Number(sale.amountPaid), sale.currency)}</td><td className="px-3 py-2 text-right">{money(Number(sale.balance), sale.currency)}</td></tr>)}
+                  <tbody>{(sellerSalesQuery.data || []).map((sale) => <tr key={sale.id} className="border-t border-border/60"><td className="whitespace-nowrap px-3 py-2">{formatDateEs(sale.date, true)}</td><td className="px-3 py-2 font-medium">{sale.number}</td><td className="max-w-xs whitespace-normal break-words px-3 py-2">{sale.customer?.name || sale.customCustomerName || 'Cliente general'}</td><td className="px-3 py-2">{documentStatus(sale.status)}</td><td className="px-3 py-2 text-right">{money(Number(sale.total), sale.currency)}</td><td className="px-3 py-2 text-right">{money(Number(sale.amountPaid), sale.currency)}</td><td className="px-3 py-2 text-right">{money(Number(sale.balance), sale.currency)}</td></tr>)}
                     {!(sellerSalesQuery.data || []).length && <tr><td colSpan={7} className="px-3 py-6 text-center text-muted-foreground">No se encontraron ventas para las fechas seleccionadas.</td></tr>}
                   </tbody>
                 </table></div>}
@@ -588,7 +589,7 @@ export function VendedoresView({ historicalOnly = false, employeeMode = false, o
                   <div className="rounded-xl border border-border p-3"><p className="text-xs text-muted-foreground">Comisión</p><p className="font-semibold">{money(Number(commissionDetailsQuery.data.amount), commissionDetailsQuery.data.currency)}</p></div>
                 </div>
                 {commissionDetailsQuery.data.invoice ? <InvoiceDetailContent invoice={commissionDetailsQuery.data.invoice} />
-                  : commissionDetailsQuery.data.creditNote ? <div className="grid gap-3 rounded-xl border border-border p-4 sm:grid-cols-2 lg:grid-cols-4"><div><p className="text-xs text-muted-foreground">Nota de crédito</p><p className="font-semibold">{commissionDetailsQuery.data.creditNote.number}</p></div><div><p className="text-xs text-muted-foreground">Fecha</p><p className="font-semibold">{new Date(commissionDetailsQuery.data.creditNote.date).toLocaleDateString('es-NI')}</p></div><div><p className="text-xs text-muted-foreground">Estado</p><p className="font-semibold">{documentStatus(commissionDetailsQuery.data.creditNote.status)}</p></div><div><p className="text-xs text-muted-foreground">Importe</p><p className="font-semibold">{money(Number(commissionDetailsQuery.data.creditNote.total), commissionDetailsQuery.data.creditNote.currency)}</p></div></div>
+                  : commissionDetailsQuery.data.creditNote ? <div className="grid gap-3 rounded-xl border border-border p-4 sm:grid-cols-2 lg:grid-cols-4"><div><p className="text-xs text-muted-foreground">Nota de crédito</p><p className="font-semibold">{commissionDetailsQuery.data.creditNote.number}</p></div><div><p className="text-xs text-muted-foreground">Fecha</p><p className="font-semibold">{formatDateEs(commissionDetailsQuery.data.creditNote.date, true)}</p></div><div><p className="text-xs text-muted-foreground">Estado</p><p className="font-semibold">{documentStatus(commissionDetailsQuery.data.creditNote.status)}</p></div><div><p className="text-xs text-muted-foreground">Importe</p><p className="font-semibold">{money(Number(commissionDetailsQuery.data.creditNote.total), commissionDetailsQuery.data.creditNote.currency)}</p></div></div>
                     : <p className="rounded-xl border border-border p-4 text-sm text-muted-foreground">No hay factura ni nota de crédito vinculada.</p>}
               </div>}
           </div>
@@ -601,7 +602,7 @@ export function VendedoresView({ historicalOnly = false, employeeMode = false, o
           {!payoutForDetail ? <p className="py-8 text-center text-sm text-muted-foreground">No se encontró el pago seleccionado.</p> : <div className="min-w-0 space-y-4">
             <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
               <div className="rounded-xl border border-border p-3"><p className="text-xs text-muted-foreground">Vendedor</p><p className="font-semibold">{payoutForDetail.seller?.name || (employeeMode ? 'Empleado vendedor' : 'Vendedor')}</p></div>
-              <div className="rounded-xl border border-border p-3"><p className="text-xs text-muted-foreground">Fecha</p><p className="font-semibold">{new Date(payoutForDetail.paidAt).toLocaleString('es-NI')}</p></div>
+              <div className="rounded-xl border border-border p-3"><p className="text-xs text-muted-foreground">Fecha</p><p className="font-semibold">{formatDateEs(payoutForDetail.paidAt, true)}</p></div>
               <div className="rounded-xl border border-border p-3"><p className="text-xs text-muted-foreground">Estado</p><p className="font-semibold">{payoutStatus(payoutForDetail.status)}</p></div>
               <div className="rounded-xl border border-border p-3"><p className="text-xs text-muted-foreground">Método</p><p className="font-semibold">{paymentMethod(payoutForDetail.method)}</p></div>
               <div className="rounded-xl border border-border p-3"><p className="text-xs text-muted-foreground">Referencia</p><p className="break-words font-semibold">{payoutForDetail.reference || '—'}</p></div>
@@ -616,11 +617,15 @@ export function VendedoresView({ historicalOnly = false, employeeMode = false, o
                 const source = invoice?.number || creditNote?.number || goal?.title || 'Incentivo';
                 const date = invoice?.date || creditNote?.date;
                 const type = goal ? `Recompensa · ${goalLevel(line.goalAward.level || '')}` : 'Comisión';
-                return <tr key={line.id} className="border-t border-border/60"><td className="px-3 py-2">{type}</td><td className="px-3 py-2">{source}</td><td className="px-3 py-2">{date ? new Date(date).toLocaleDateString('es-NI') : '—'}</td><td className="px-3 py-2 text-right font-semibold">{money(Number(line.amount), line.currency || payoutForDetail.currency)}</td></tr>;
+                return <tr key={line.id} className="border-t border-border/60"><td className="px-3 py-2">{type}</td><td className="px-3 py-2">{source}</td><td className="px-3 py-2">{date ? formatDateEs(date, true) : '—'}</td><td className="px-3 py-2 text-right font-semibold">{money(Number(line.amount), line.currency || payoutForDetail.currency)}</td></tr>;
               })}
               {!(payoutForDetail.lines || []).length && <tr><td colSpan={4} className="px-3 py-5 text-center text-muted-foreground">Este pago no tiene líneas de detalle disponibles.</td></tr>}
             </tbody></table></div></div>
           </div>}
+          <DialogFooter className="flex-row flex-wrap justify-end gap-2">
+            <Button type="button" variant="outline" onClick={() => setSelectedPayoutDetailId('')}>Cerrar</Button>
+            {payoutForDetail?.status === 'PAID' && canReverseEmployeePayouts && <Button type="button" variant="destructive" onClick={() => reversePayout.mutate(payoutForDetail.id)} disabled={reversePayout.isPending}>{reversePayout.isPending && <Loader2 className="mr-2 size-4 animate-spin" />}Revertir liquidación</Button>}
+          </DialogFooter>
         </DialogContent>
       </Dialog>
     </div>
