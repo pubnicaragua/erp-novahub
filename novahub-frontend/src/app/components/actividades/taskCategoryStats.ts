@@ -3,12 +3,17 @@
  *
  * Definiciones (se muestran igual en pantalla):
  *  - abierta: no está completada ni cancelada (una tarea «Por aprobar» sigue abierta).
- *  - vencida: abierta con fecha de vencimiento anterior a ahora.
+ *  - vencida: abierta con fecha de vencimiento anterior a ahora y sin una pausa aprobada.
+ *  - en pausa: detenida con un motivo; no cuenta como «en progreso» ni como «sin tomar».
  *  - sin asignar: abierta y nadie la tiene a cargo.
  *  - sin tomar: abierta, con responsable, que sigue en «Pendiente» (nadie la ha empezado).
  */
 
+import { isDeadlineStopped, isPausedTask, type PauseLike } from './taskCompliance.ts';
+
 export interface StatsTask {
+  pausedAt?: string | null;
+  pauses?: PauseLike[] | null;
   id: string | number;
   status?: string | null;
   dueDate?: string | null;
@@ -24,6 +29,7 @@ export interface CountSet {
   unassigned: number;
   notStarted: number;
   done: number;
+  paused: number;
 }
 
 export interface PersonStat {
@@ -33,6 +39,7 @@ export interface PersonStat {
   inProgress: number;
   notStarted: number;
   overdue: number;
+  paused: number;
 }
 
 export const NO_CATEGORY_KEY = '__none__';
@@ -44,7 +51,7 @@ export function isOpenTask(task: { status?: string | null }): boolean {
 }
 
 export function isOverdueTask(task: StatsTask, now: Date): boolean {
-  if (!isOpenTask(task)) return false;
+  if (!isOpenTask(task) || isDeadlineStopped(task)) return false;
   if (String(task.status || '').toUpperCase() === 'OVERDUE') return true;
   if (!task.dueDate) return false;
   const due = new Date(task.dueDate);
@@ -70,7 +77,7 @@ export function categoryKeyOf(task: StatsTask): string {
   return key || NO_CATEGORY_KEY;
 }
 
-const emptyCounts = (): CountSet => ({ total: 0, open: 0, overdue: 0, unassigned: 0, notStarted: 0, done: 0 });
+const emptyCounts = (): CountSet => ({ total: 0, open: 0, overdue: 0, unassigned: 0, notStarted: 0, done: 0, paused: 0 });
 
 function addTask(counts: CountSet, task: StatsTask, now: Date) {
   counts.total += 1;
@@ -79,9 +86,11 @@ function addTask(counts: CountSet, task: StatsTask, now: Date) {
   if (!isOpenTask(task)) return;
   counts.open += 1;
   if (isOverdueTask(task, now)) counts.overdue += 1;
+  const paused = isPausedTask(task);
+  if (paused) counts.paused += 1;
   const assignees = taskAssignees(task);
   if (assignees.length === 0) counts.unassigned += 1;
-  else if (status === 'PENDING') counts.notStarted += 1;
+  else if (status === 'PENDING' && !paused) counts.notStarted += 1;
 }
 
 export function countTasks(tasks: StatsTask[], now: Date = new Date()): CountSet {
@@ -116,7 +125,7 @@ export function countByPerson(
       if (current.name === 'Usuario' && name !== 'Usuario') current.name = name;
       return current;
     }
-    const created: PersonStat = { id, name, open: 0, inProgress: 0, notStarted: 0, overdue: 0 };
+    const created: PersonStat = { id, name, open: 0, inProgress: 0, notStarted: 0, overdue: 0, paused: 0 };
     map.set(id, created);
     return created;
   };
@@ -128,8 +137,10 @@ export function countByPerson(
     for (const assignee of taskAssignees(task)) {
       const stat = ensure(assignee.id, assignee.name);
       stat.open += 1;
-      if (status === 'PENDING') stat.notStarted += 1;
-      if (status === 'IN_PROGRESS') stat.inProgress += 1;
+      const paused = isPausedTask(task);
+      if (paused) stat.paused += 1;
+      if (status === 'PENDING' && !paused) stat.notStarted += 1;
+      if (status === 'IN_PROGRESS' && !paused) stat.inProgress += 1;
       if (overdue) stat.overdue += 1;
     }
   }

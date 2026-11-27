@@ -36,6 +36,10 @@ import {
   Pencil,
   ArrowUp,
   ArrowDown,
+  PauseCircle,
+  PlayCircle,
+  Layers,
+  List as ListIcon,
 } from 'lucide-react';
 import { activityCategoriesService, activityFavoritesService, tasksService } from '../../services/actividades.service';
 import { usersService } from '../../services/users.service';
@@ -59,6 +63,17 @@ import { TaskEditDialog, type TaskEditPatch } from './TaskEditDialog';
 import { canEditTaskContent, localDayKey, sortOverdueFirst, truncateText } from './taskTrace';
 import { NO_CATEGORY_KEY } from './taskCategoryStats';
 import { TaskTraceLine } from './TaskTraceLine';
+import { ComplianceChips } from './ComplianceChips';
+import { PauseTaskDialog, type PausePayload } from './PauseTaskDialog';
+import {
+  REBOUND_CATEGORY_OPTIONS,
+  canPauseTaskAs,
+  displayStatusOf,
+  isDeadlineStopped,
+  isPausedTask,
+  matchesStatusFilter,
+  type ReboundCategory,
+} from './taskCompliance';
 import { groupTasksByCategory } from './taskCategoryGroups';
 import { CategoryManagerDialog } from './CategoryManagerDialog';
 import { useActivityCategories } from './useActivityCategories';
@@ -80,8 +95,10 @@ import { TaskSavedViews, type TaskViewFilters } from './TaskSavedViews';
 import { TaskProgressCell } from './TaskProgressCell';
 import { getTaskProgress } from './actividades.progress';
 import {
+  readTaskGroupByCategoryPreference,
   readTaskKanbanGroupByCategoryPreference,
   readTaskLayoutPreference,
+  writeTaskGroupByCategoryPreference,
   writeTaskKanbanGroupByCategoryPreference,
   writeTaskLayoutPreference,
 } from './taskViewPreferences';
@@ -105,13 +122,8 @@ type TaskLike = Pick<Task, 'id' | 'status' | 'assignedToId' | 'categoryId'> & {
   assignments?: Array<{ userId?: string | null }>;
 };
 
-const getTaskDisplayStatus = (task: any) => {
-  const status = String(task?.status || 'PENDING').toUpperCase();
-  const dueTime = task?.dueDate ? new Date(task.dueDate).getTime() : Number.NaN;
-  return ['PENDING', 'IN_PROGRESS'].includes(status) && Number.isFinite(dueTime) && dueTime < Date.now()
-    ? 'OVERDUE'
-    : status;
-};
+/** «En pausa», «Vencida» o el estado guardado. */
+const getTaskDisplayStatus = (task: any) => displayStatusOf(task || {}, Date.now());
 
 /** Estados finales: el SLA se apaga (§5) y no tiene sentido reasignar ni tomar. */
 const isClosedTaskStatus = (task?: TaskLike | null) => {
@@ -158,6 +170,16 @@ export const TareasView: React.FC<TareasViewProps> = ({ data, loading, summaryEr
   const setKanbanGroupByCategory = (groupByCategory: boolean) => {
     setKanbanGroupingState({ userId: currentUserId, groupByCategory });
     writeTaskKanbanGroupByCategoryPreference(currentUserId, groupByCategory);
+  };
+  const listLayoutKey = viewLayout === 'cards' ? 'cards' as const : 'table' as const;
+  const [listGroupingVersion, setListGroupingVersion] = useState<{ key: string; value: boolean } | null>(null);
+  const listGroupingKey = `${currentUserId}:${listLayoutKey}`;
+  const listGroupByCategory = listGroupingVersion?.key === listGroupingKey
+    ? listGroupingVersion.value
+    : readTaskGroupByCategoryPreference(currentUserId, listLayoutKey);
+  const setListGroupByCategory = (groupByCategory: boolean) => {
+    setListGroupingVersion({ key: listGroupingKey, value: groupByCategory });
+    writeTaskGroupByCategoryPreference(currentUserId, listLayoutKey, groupByCategory);
   };
   const [kanbanCreatedAtOrder, setKanbanCreatedAtOrder] = useLocalStorageState<'newest' | 'oldest'>(
     'activities-task-kanban-created-at-order',
@@ -227,6 +249,9 @@ export const TareasView: React.FC<TareasViewProps> = ({ data, loading, summaryEr
   const [completeNotes, setCompleteNotes] = useState('');
   const [approvalNotes, setApprovalNotes] = useState('');
   const [rejectReason, setRejectReason] = useState('');
+  const [rejectCategory, setRejectCategory] = useState<ReboundCategory | ''>('');
+  const [pauseTarget, setPauseTarget] = useState<Task | null>(null);
+  const [pauseSaving, setPauseSaving] = useState(false);
 
   const [currentTime, setCurrentTime] = useState(() => Date.now());
   const queryClient = useQueryClient();
@@ -359,6 +384,35 @@ export const TareasView: React.FC<TareasViewProps> = ({ data, loading, summaryEr
     return false;
   };
 
+  const pauseViewer = { id: currentUserId || '', isAdmin: viewerIsAdmin, canApprove: canPerform('ACTIVITIES_TASKS', 'approve') };
+  const canPauseTask = (task?: Task | null): boolean =>
+    Boolean(task) && ['PENDING', 'IN_PROGRESS'].includes(String(task?.status || '').toUpperCase()) && canPauseTaskAs(task as never, pauseViewer);
+
+  const handlePauseTask = async (task: Task, payload: PausePayload) => {
+    try {
+      setPauseSaving(true);
+      await tasksService.pause(String(task.id), payload);
+      toast.success('Tarea en pausa. El plazo sigue corriendo hasta que se apruebe.');
+      setPauseTarget(null);
+      refreshTasks();
+    } catch (e: any) {
+      toast.error(e?.response?.data?.message || e?.message || 'No se pudo pausar la tarea');
+    } finally {
+      setPauseSaving(false);
+    }
+  };
+
+  const handleResumeTask = async (task: Task) => {
+    if (!canPauseTask(task)) return;
+    try {
+      await tasksService.resume(String(task.id));
+      toast.success('Tarea reanudada');
+      refreshTasks();
+    } catch (e: any) {
+      toast.error(e?.response?.data?.message || e?.message || 'No se pudo reanudar la tarea');
+    }
+  };
+
   const handleClaimTask = async (task: Task) => {
     if (!task?.id || !canPerform('ACTIVITIES_TASKS', 'claim')) return;
     try {
@@ -447,6 +501,7 @@ export const TareasView: React.FC<TareasViewProps> = ({ data, loading, summaryEr
     layout: viewLayout,
     kanbanGroupByCategory,
     kanbanCreatedAtOrder,
+    listGroupByCategory,
   };
   const applyFilters = (filters: TaskViewFilters) => {
     setStatusFilter(filters.status);
@@ -460,11 +515,19 @@ export const TareasView: React.FC<TareasViewProps> = ({ data, loading, summaryEr
     if (filters.layout) setViewLayout(filters.layout);
     if (typeof filters.kanbanGroupByCategory === 'boolean') setKanbanGroupByCategory(filters.kanbanGroupByCategory);
     if (filters.kanbanCreatedAtOrder) setKanbanCreatedAtOrder(filters.kanbanCreatedAtOrder);
+    if (typeof filters.listGroupByCategory === 'boolean') {
+      // La distribución recién aplicada todavía no está en el estado: se guarda para la que trae la vista.
+      const target = (filters.layout ?? viewLayout) === 'cards' ? 'cards' as const : 'table' as const;
+      setListGroupingVersion({ key: `${currentUserId}:${target}`, value: filters.listGroupByCategory });
+      writeTaskGroupByCategoryPreference(currentUserId, target, filters.listGroupByCategory);
+    }
   };
 
   const statusOpts = [
     { value: 'PENDING', label: 'Pendiente', color: 'bg-blue-500/10 text-blue-600 dark:text-blue-400' },
     { value: 'IN_PROGRESS', label: 'En Progreso', color: 'bg-blue-500/10 text-blue-600 dark:text-blue-400' },
+    // Solo para mostrarla: la pausa no es un estado que se elija en la celda.
+    { value: 'PAUSED', label: 'En pausa', color: 'border-violet-500/30 bg-violet-500/10 text-violet-700 dark:text-violet-300' },
     { value: 'WAITING_APPROVAL', label: 'Por Aprobar', color: 'bg-primary/10 text-primary border-primary/20' },
     { value: 'COMPLETED', label: 'Completada', color: 'bg-emerald-500/10 text-emerald-600 dark:text-emerald-400' },
     { value: 'CANCELLED', label: 'Cancelada', color: 'bg-rose-500/10 text-rose-600 dark:text-rose-400' },
@@ -686,16 +749,21 @@ export const TareasView: React.FC<TareasViewProps> = ({ data, loading, summaryEr
 
   const handleRejectTask = async () => {
     if (!selectedTask || !canPerform('ACTIVITIES_TASKS', 'reject')) return;
+    if (!rejectCategory) {
+      toast.error('Indica por qué se devuelve');
+      return;
+    }
     if (!rejectReason.trim()) {
       toast.error('Indica el motivo del rechazo');
       return;
     }
     try {
       setActionLoading(true);
-      await tasksService.reject(selectedTask.id, rejectReason.trim());
+      await tasksService.reject(selectedTask.id, rejectReason.trim(), rejectCategory);
       toast.warning('Tarea rechazada y devuelta a "En Progreso"');
       setIsRejectOpen(false);
       setRejectReason('');
+      setRejectCategory('');
       setSelectedTask(null);
       onRefresh();
       if (detailTask?.id === selectedTask.id) setDetailTask(null);
@@ -722,10 +790,13 @@ export const TareasView: React.FC<TareasViewProps> = ({ data, loading, summaryEr
       header: 'Título',
       width: '380px',
       editable: (row: Task) => canEditTask(row) && !isClosedTaskStatus(row),
-      render: (value: unknown) => (
-        <span className="block min-w-0 max-w-full whitespace-normal break-words leading-5 [overflow-wrap:anywhere]" title={String(value || '')}>
-          {truncateText(value, 100) || '—'}
-        </span>
+      render: (value: unknown, row: any) => (
+        <div className="min-w-0 max-w-full space-y-1">
+          <span className="block min-w-0 max-w-full whitespace-normal break-words leading-5 [overflow-wrap:anywhere]" title={String(value || '')}>
+            {truncateText(value, 100) || '—'}
+          </span>
+          {row && <ComplianceChips task={row} showPauseReason hidePauseBadge />}
+        </div>
       ),
     },
     {
@@ -793,7 +864,7 @@ export const TareasView: React.FC<TareasViewProps> = ({ data, loading, summaryEr
       editable: false,
       render: (val: string | null | undefined, row: Task) => (
         <div className="flex min-w-0 flex-wrap gap-1">
-          <SlaBadge slaDueAt={val ?? row?.dueDate ?? null} status={row?.status} showRemaining now={slaNow} />
+          <SlaBadge slaDueAt={val ?? row?.dueDate ?? null} status={row?.status} showRemaining now={slaNow} deadlineStopped={isDeadlineStopped(row)} />
         </div>
       ),
     },
@@ -851,11 +922,12 @@ export const TareasView: React.FC<TareasViewProps> = ({ data, loading, summaryEr
       (t.assignments || []).some((a: any) => String(a?.user?.name || '').toLowerCase().includes(term));
 
     // Status filter
-    const displayStatus = getTaskDisplayStatus(t);
+    // «Pendientes» y «En progreso» van sin las vencidas ni las pausadas, que tienen su propia tarjeta arriba.
+    // Una pausa sin aprobar sigue contando en «Vencidas» si la fecha ya pasó.
     const matchesStatus = !includeStatusFilter ||
-      statusFilter === 'ALL' ||
-      // Pendientes y En progreso cuentan sin las vencidas (esas están en «Vencidas»), igual que sus tarjetas de arriba.
-      (['OVERDUE', 'PENDING', 'IN_PROGRESS'].includes(statusFilter) ? displayStatus === statusFilter : (t.status || '').toUpperCase() === statusFilter);
+      (['PENDING', 'IN_PROGRESS'].includes(statusFilter)
+        ? getTaskDisplayStatus(t) === statusFilter
+        : matchesStatusFilter(t as never, statusFilter, Date.now()));
 
     // Priority filter
     const matchesPriority = priorityFilter === 'ALL' || (t.priority || '').toUpperCase() === priorityFilter;
@@ -901,7 +973,9 @@ export const TareasView: React.FC<TareasViewProps> = ({ data, loading, summaryEr
   const filtered = sortOverdueFirst(filterTasks(true), currentTime);
 
   // «Todas las categorías» significa mostrar todas, no mezclarlas: cada categoría con su encabezado y sus tareas.
-  const groupByCategory = categoryFilter === 'ALL' && filtered.length > 0;
+  // El tablero y las listas tienen su propio interruptor; «Por categoría» siempre va agrupada.
+  const wantsGrouping = viewLayout === 'kanban' ? kanbanGroupByCategory : viewLayout === 'categories' || listGroupByCategory;
+  const groupByCategory = categoryFilter === 'ALL' && filtered.length > 0 && wantsGrouping;
   const categoryGroups = groupByCategory ? groupTasksByCategory(filtered, categoriesApi.categories) : [];
   const updateCollapsedGroups = (next: Set<string>) => {
     setCollapsedGroups(next);
@@ -933,6 +1007,9 @@ export const TareasView: React.FC<TareasViewProps> = ({ data, loading, summaryEr
       canEditTask={canEditTask}
       onViewDetail={(task) => setDetailTask(task)}
       canMoveToStatus={canMoveTaskToStatus}
+      canPauseTask={canPauseTask}
+      onPause={(task) => setPauseTarget(task)}
+      onResume={(task) => void handleResumeTask(task)}
       onStatusChange={async (taskId, status) => {
         await handleUpdate(taskId, { status: status as any });
       }}
@@ -950,11 +1027,12 @@ export const TareasView: React.FC<TareasViewProps> = ({ data, loading, summaryEr
   );
   const kpiTasks = filteredWithoutStatus.filter((t) => String(t.status || '').toUpperCase() !== 'CANCELLED');
   const averageProgress = kpiTasks.length ? Math.round(kpiTasks.reduce((sum, t) => sum + getTaskProgress(t).percent, 0) / kpiTasks.length) : 0;
-  const overdueCount = filteredWithoutStatus.filter((t) => getTaskDisplayStatus(t) === 'OVERDUE').length;
+  const overdueCount = filteredWithoutStatus.filter((t) => matchesStatusFilter(t as never, 'OVERDUE', Date.now())).length;
   const kpis = [
     { id: 'ALL', title: 'Total Tareas', value: filteredWithoutStatus.length, icon: ListTodo },
     { id: 'PENDING', title: 'Pendientes', value: filteredWithoutStatus.filter((t) => getTaskDisplayStatus(t) === 'PENDING').length, icon: Clock },
     { id: 'IN_PROGRESS', title: 'En progreso', value: filteredWithoutStatus.filter((t) => getTaskDisplayStatus(t) === 'IN_PROGRESS').length, icon: Play },
+    { id: 'PAUSED', title: 'En pausa', value: filteredWithoutStatus.filter((t) => isPausedTask(t as never)).length, icon: PauseCircle },
     { id: 'WAITING_APPROVAL', title: 'Por Aprobar', value: filteredWithoutStatus.filter((t) => String(t.status || '').toUpperCase() === 'WAITING_APPROVAL').length, icon: Send },
     { id: 'OVERDUE', title: 'Vencidas', value: overdueCount, icon: AlertTriangle },
     { id: 'COMPLETED', title: 'Completadas', value: filteredWithoutStatus.filter((t) => (t.status || '').toUpperCase() === 'COMPLETED').length, icon: CheckCircle2 },
@@ -988,7 +1066,8 @@ export const TareasView: React.FC<TareasViewProps> = ({ data, loading, summaryEr
 
       <div className="space-y-2" data-tour="tareas-tutorial-data" aria-busy={loading}>
         <KpiSummaryNotice loading={loading} error={summaryError} />
-        <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-7">
+        <div className="@container min-w-0">
+        <div className="grid grid-cols-2 gap-2 sm:grid-cols-3 lg:grid-cols-4 @min-[1280px]:grid-cols-8">
           {kpis.map((kpi) => (
             <SalesKpiCard
               key={kpi.id}
@@ -1002,6 +1081,7 @@ export const TareasView: React.FC<TareasViewProps> = ({ data, loading, summaryEr
             />
           ))}
           <SalesKpiCard title="Avance promedio" value={loading || summaryError ? '—' : `${averageProgress}%`} icon={Gauge} kind="indicator" hint="Promedio de avance sin contar las canceladas" />
+        </div>
         </div>
       </div>
 
@@ -1058,6 +1138,30 @@ export const TareasView: React.FC<TareasViewProps> = ({ data, loading, summaryEr
             showKanban={true}
             showCategories={true}
           />
+          {(viewLayout === 'table' || viewLayout === 'cards') && categoryFilter === 'ALL' && (
+            <div role="group" aria-label="Agrupar la lista" data-toolbar-role="layout" className="flex shrink-0 items-center gap-1 rounded-xl border border-border/50 bg-background/50 p-1">
+              <Button
+                type="button"
+                variant={listGroupByCategory ? 'default' : 'ghost'}
+                aria-pressed={listGroupByCategory}
+                data-testid="activities-list-grouping-category"
+                onClick={() => setListGroupByCategory(true)}
+                className="h-8 gap-1.5 rounded-lg px-2.5 text-[10px] font-bold sm:px-3 sm:text-xs"
+              >
+                <Layers className="size-3.5" /> Por categoría
+              </Button>
+              <Button
+                type="button"
+                variant={!listGroupByCategory ? 'default' : 'ghost'}
+                aria-pressed={!listGroupByCategory}
+                data-testid="activities-list-grouping-flat"
+                onClick={() => setListGroupByCategory(false)}
+                className="h-8 gap-1.5 rounded-lg px-2.5 text-[10px] font-bold sm:px-3 sm:text-xs"
+              >
+                <ListIcon className="size-3.5" /> Todas juntas
+              </Button>
+            </div>
+          )}
           {viewLayout === 'kanban' && (
             <div className="flex shrink-0 flex-wrap items-center gap-2" data-toolbar-role="layout">
               {categoryFilter === 'ALL' && (
@@ -1301,6 +1405,9 @@ export const TareasView: React.FC<TareasViewProps> = ({ data, loading, summaryEr
             onEdit={(task) => setEditingTask(task)}
             canEditAction={canPerform('ACTIVITIES_TASKS', 'edit')}
             canEditTask={canEditTask}
+            canPauseTask={canPauseTask}
+            onPause={(task) => setPauseTarget(task)}
+            onResume={(task) => void handleResumeTask(task)}
           />)
         ) : (
           renderGrouped((rows) => <div className="min-w-0" data-activities-task-table="true">
@@ -1408,6 +1515,21 @@ export const TareasView: React.FC<TareasViewProps> = ({ data, loading, summaryEr
                       onClick={() => handleOpenReassign(row as Task)}
                     >
                       <UserCog className="size-4" />
+                    </Button>
+                  )}
+
+                  {canPauseTask(row as Task) && (
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      size="icon"
+                      data-testid={`activities-${isPausedTask(row) ? 'resume' : 'pause'}-${row.id}`}
+                      title={isPausedTask(row) ? 'Reanudar tarea' : 'Poner en pausa'}
+                      aria-label={isPausedTask(row) ? 'Reanudar tarea' : 'Poner en pausa'}
+                      className="size-8 rounded-lg text-violet-600 hover:bg-violet-500/10 dark:text-violet-300"
+                      onClick={() => { if (isPausedTask(row)) void handleResumeTask(row as Task); else setPauseTarget(row as Task); }}
+                    >
+                      {isPausedTask(row) ? <PlayCircle className="size-4" /> : <PauseCircle className="size-4" />}
                     </Button>
                   )}
 
@@ -1543,6 +1665,24 @@ export const TareasView: React.FC<TareasViewProps> = ({ data, loading, summaryEr
                   <Pencil className="mr-1.5 size-4" /> Editar
                 </Button>
               )}
+              {canPauseTask(liveDetailTask as Task) && (
+                <Button
+                  type="button"
+                  variant="outline"
+                  className="rounded-xl border-violet-500/30 bg-violet-500/5 text-violet-700 hover:bg-violet-500/10 dark:text-violet-300"
+                  data-testid="activities-detail-pause"
+                  onClick={() => {
+                    const task = liveDetailTask as Task;
+                    if (isPausedTask(task as never)) void handleResumeTask(task);
+                    else setPauseTarget(task);
+                  }}
+                >
+                  {isPausedTask(liveDetailTask as never)
+                    ? <><PlayCircle className="mr-1.5 size-4" /> Reanudar</>
+                    : <><PauseCircle className="mr-1.5 size-4" /> Pausar</>}
+                </Button>
+              )}
+
               {canClaimTask(detailTask) && canPerform('ACTIVITIES_TASKS', 'claim') && (
                 <Button
                   type="button"
@@ -2077,8 +2217,16 @@ export const TareasView: React.FC<TareasViewProps> = ({ data, loading, summaryEr
         </DialogContent>
       </Dialog>
 
+      <PauseTaskDialog
+        task={pauseTarget}
+        openTasks={data.filter((task) => ['PENDING', 'IN_PROGRESS'].includes(String(task.status || '').toUpperCase()))}
+        saving={pauseSaving}
+        onClose={() => setPauseTarget(null)}
+        onConfirm={(task, payload) => void handlePauseTask(task, payload)}
+      />
+
       {/* Dialog: Reject Task */}
-      <Dialog open={isRejectOpen} onOpenChange={setIsRejectOpen}>
+      <Dialog open={isRejectOpen} onOpenChange={(open) => { setIsRejectOpen(open); if (!open) { setRejectReason(''); setRejectCategory(''); } }}>
         <DialogContent className="w-[calc(100%-2rem)] max-h-[85vh] overflow-y-auto rounded-3xl border-border/60 bg-background/95 p-0 shadow-2xl sm:max-w-[440px]">
           <DialogHeader className="border-b border-border/50 bg-gradient-to-br from-rose-500/10 via-background to-background px-6 py-5 sm:px-8">
             <div className="flex items-start gap-3 pr-6">
@@ -2097,6 +2245,18 @@ export const TareasView: React.FC<TareasViewProps> = ({ data, loading, summaryEr
             <p className="text-xs text-muted-foreground">
               La tarea regresará a <strong className="text-foreground">En Progreso</strong> para que el responsable realice las correcciones solicitadas.
             </p>
+            <fieldset className="grid gap-2">
+              <legend className="mb-1 text-xs font-bold text-foreground">¿Por qué se devuelve? <span className="text-destructive">*</span></legend>
+              {REBOUND_CATEGORY_OPTIONS.map((option) => (
+                <label key={option.value} className={cn('flex cursor-pointer items-start gap-3 rounded-xl border px-3 py-2', rejectCategory === option.value ? 'border-primary/60 bg-primary/[0.06]' : 'border-border/60 hover:bg-muted/40')}>
+                  <input type="radio" name="rebound-category" className="mt-0.5 size-4 accent-[var(--primary)]" checked={rejectCategory === option.value} onChange={() => setRejectCategory(option.value)} data-testid={`activities-reject-category-${option.value}`} />
+                  <span className="min-w-0">
+                    <span className="block text-xs font-bold text-foreground">{option.label}</span>
+                    <span className="block text-[11px] text-muted-foreground">{option.hint}</span>
+                  </span>
+                </label>
+              ))}
+            </fieldset>
             <div className="space-y-1.5">
               <Label className="text-xs font-bold">
                 Motivo del rechazo <span className="text-destructive">*</span>
@@ -2117,7 +2277,8 @@ export const TareasView: React.FC<TareasViewProps> = ({ data, loading, summaryEr
             {canPerform('ACTIVITIES_TASKS', 'reject') && <Button
               variant="destructive"
               onClick={handleRejectTask}
-              disabled={actionLoading || !rejectReason.trim()}
+              disabled={actionLoading || !rejectReason.trim() || !rejectCategory}
+              data-testid="activities-reject-confirm"
               className="rounded-xl px-5"
             >
               {actionLoading ? <Loader2 className="size-4 animate-spin mr-2" /> : null}

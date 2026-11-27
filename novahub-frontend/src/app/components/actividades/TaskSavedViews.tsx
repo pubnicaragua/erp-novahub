@@ -19,6 +19,8 @@ export interface TaskViewFilters {
   layout?: ViewLayoutMode;
   kanbanGroupByCategory?: boolean;
   kanbanCreatedAtOrder?: 'newest' | 'oldest';
+  /** Lista y Tarjetas: agrupadas por categoría o todas juntas. */
+  listGroupByCategory?: boolean;
 }
 
 export const EMPTY_TASK_FILTERS: TaskViewFilters = { status: 'ALL', priority: 'ALL', assigned: 'ALL', category: 'ALL', dateFrom: '', dateTo: '', search: '', mine: false };
@@ -29,6 +31,7 @@ interface SavedView { id: string; name: string; filters: TaskViewFilters }
 const PRESET_VIEWS: SavedView[] = [
   { id: 'preset-mine', name: 'Mis tareas', filters: { ...EMPTY_TASK_FILTERS, mine: true } },
   { id: 'preset-overdue', name: 'Vencidas', filters: { ...EMPTY_TASK_FILTERS, status: 'OVERDUE' } },
+  { id: 'preset-paused', name: 'En pausa', filters: { ...EMPTY_TASK_FILTERS, status: 'PAUSED' } },
   { id: 'preset-approval', name: 'Por aprobar', filters: { ...EMPTY_TASK_FILTERS, status: 'WAITING_APPROVAL' } },
   { id: 'preset-urgent', name: 'Urgentes sin cerrar', filters: { ...EMPTY_TASK_FILTERS, priority: 'URGENT' } },
 ];
@@ -54,6 +57,7 @@ export function readSavedTaskViews(userId: string | null): SavedView[] {
           delete filters.layout;
         }
         if (typeof view.filters.kanbanGroupByCategory !== 'boolean') delete filters.kanbanGroupByCategory;
+        if (typeof view.filters.listGroupByCategory !== 'boolean') delete filters.listGroupByCategory;
         if (view.filters.kanbanCreatedAtOrder !== 'newest' && view.filters.kanbanCreatedAtOrder !== 'oldest') {
           delete filters.kanbanCreatedAtOrder;
         }

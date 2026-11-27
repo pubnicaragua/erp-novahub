@@ -2006,6 +2006,45 @@ export interface ActivityCustomField {
 
 export type SlaStatus = 'NONE' | 'ON_TIME' | 'AT_RISK' | 'BREACHED';
 
+export interface ActivityPause {
+  id: string;
+  reason: 'PRIORITY' | 'WAITING_THIRD_PARTY' | 'BLOCKER';
+  note?: string | null;
+  displacedByActivityId?: string | null;
+  displacedBy?: { id: string; title: string } | null;
+  pausedAt: string;
+  pausedBy?: { id: string; name: string } | null;
+  resumedAt?: string | null;
+  resumedBy?: { id: string; name: string } | null;
+  /** Si el plazo se detiene mientras dure la pausa. */
+  approval: 'PENDING' | 'APPROVED' | 'REJECTED';
+  reviewedAt?: string | null;
+  reviewedBy?: { id: string; name: string } | null;
+  reviewNote?: string | null;
+  extendedMinutes?: number | null;
+  dueDateBefore?: string | null;
+  dueDateAfter?: string | null;
+}
+
+export interface ActivityRebound {
+  id: string;
+  category: 'ERROR' | 'SCOPE_CHANGE' | 'BLOCKER' | 'UNCLASSIFIED';
+  reason: string;
+  rejectedAt: string;
+  rejectedBy?: { id: string; name: string } | null;
+  assigneeIds?: string[];
+  source?: 'APP' | 'HISTORY';
+  reviewedAt?: string | null;
+  reviewedBy?: { id: string; name: string } | null;
+}
+
+/** Cuánto vale cada entrega según sus rebotes por error (0–100), por empresa. */
+export interface ActivityScoringConfig {
+  creditFirstPass: number;
+  creditOneRebound: number;
+  creditManyRebounds: number;
+}
+
 export interface Task {
   id: string;
   title: string;
@@ -2031,6 +2070,10 @@ export interface Task {
   estimatedMinutes?: number | null;
   /** Cuándo pasó a completada (null en tareas anteriores a este registro). */
   completedAt?: string | null;
+  /** Desde cuándo está en pausa (null si no lo está), con el historial de pausas y de rebotes. */
+  pausedAt?: string | null;
+  pauses?: ActivityPause[];
+  rebounds?: ActivityRebound[];
   /** Quién creó la tarea (null en tareas anteriores que no se pudieron reconstruir). */
   createdById?: string | null;
   createdBy?: { id: string; name: string } | null;

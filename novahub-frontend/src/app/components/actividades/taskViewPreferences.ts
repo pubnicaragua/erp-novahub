@@ -72,6 +72,29 @@ export function readTaskKanbanGroupByCategoryPreference(userId: string | null, s
   }
 }
 
+export type GroupableLayout = 'table' | 'cards';
+
+const listGroupingKey = (userId: string, layout: GroupableLayout) => `nh:activities:task-${layout}-grouping:${userId}`;
+
+/** Lista y Tarjetas agrupan por categoría salvo que la persona elija verlas juntas. */
+export function readTaskGroupByCategoryPreference(userId: string | null, layout: GroupableLayout, storage?: TaskLayoutStorage): boolean {
+  if (!userId) return true;
+  try {
+    return getStorage(storage)?.getItem(listGroupingKey(userId, layout)) !== 'false';
+  } catch {
+    return true;
+  }
+}
+
+export function writeTaskGroupByCategoryPreference(userId: string | null, layout: GroupableLayout, groupByCategory: boolean, storage?: TaskLayoutStorage): void {
+  if (!userId || typeof groupByCategory !== 'boolean') return;
+  try {
+    getStorage(storage)?.setItem(listGroupingKey(userId, layout), String(groupByCategory));
+  } catch {
+    // Si el navegador bloquea localStorage, el estado en memoria sigue funcionando.
+  }
+}
+
 /** Guarda el agrupamiento del Kanban por cuenta y fuera del conjunto de cachés descartables. */
 export function writeTaskKanbanGroupByCategoryPreference(userId: string | null, groupByCategory: boolean, storage?: TaskLayoutStorage): void {
   if (!userId || typeof groupByCategory !== 'boolean') return;

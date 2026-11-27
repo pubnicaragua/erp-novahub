@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from 'react';
 import { useQueryClient } from '@tanstack/react-query';
-import { AlertTriangle, ChevronDown, ChevronRight, ClipboardCheck, Download, FileText, Filter, ListTree, RefreshCw, Rows3, Search, UsersRound, ListTodo, RotateCcw } from 'lucide-react';
+import { AlertTriangle, ChevronDown, ChevronRight, ClipboardCheck, Download, FileText, Filter, ListTree, RefreshCw, Rows3, Search, UsersRound, ListTodo, RotateCcw, Scale } from 'lucide-react';
 import { toast } from '@/app/services/toast';
 import { Badge } from '../ui/badge';
 import { Button } from '../ui/button';
@@ -12,6 +12,7 @@ import { KpiSummaryNotice } from '../ui/KpiSummaryNotice';
 import { SalesKpiCard } from '../ventas/SalesKpiCard';
 import { cn } from '../ui/utils';
 import { ActivityViewHeader } from './ActivityViewHeader';
+import { ScoringRulesDialog } from './ScoringRulesDialog';
 import { ReportEntry, REPORT_KIND_LABEL } from './ReportEntry';
 import { resolvePeriod, type PeriodPreset } from './reportPeriod';
 import { activityReportsService } from '../../services/actividades.service';
@@ -39,7 +40,10 @@ interface TaskGroup {
 }
 
 export function ReportesActividadesView() {
-  const { canPerform } = useAuth();
+  const { canPerform, user } = useAuth();
+  // Cambiar las reglas afecta los bonos de todos: solo un administrador (el backend lo exige igual).
+  const isAdmin = Boolean(user?.isTenantAdmin || user?.isPlatformAdmin);
+  const [showScoringRules, setShowScoringRules] = useState(false);
   const queryClient = useQueryClient();
   const canReview = canPerform('ACTIVITIES_TASKS', 'approve');
   const canExport = canPerform('ACTIVITIES_TASKS', 'export');
@@ -179,6 +183,11 @@ export function ReportesActividadesView() {
             <Button type="button" size="sm" variant={grouping === 'TIME' ? 'default' : 'ghost'} className="h-8 gap-1.5 rounded-lg px-3 text-xs" aria-pressed={grouping === 'TIME'} onClick={() => setGrouping('TIME')}><Rows3 className="size-3.5" /> Cronológico</Button>
           </div>
           <Button type="button" variant="ghost" size="icon" data-toolbar-role="alerts" title="Actualizar" aria-label="Actualizar" className="size-9 rounded-lg text-muted-foreground" onClick={refresh}><RefreshCw className={cn('size-4', reportsQuery.isFetching && 'animate-spin')} /></Button>
+          {isAdmin && (
+            <Button type="button" variant="outline" data-toolbar-role="filters" onClick={() => setShowScoringRules(true)} className="h-10 shrink-0 gap-2 rounded-xl px-3 text-xs font-bold" data-testid="activities-scoring-open">
+              <Scale className="size-3.5 text-primary" /> Reglas de cumplimiento
+            </Button>
+          )}
           {canExport && (
             <Button type="button" data-toolbar-role="primary" onClick={exportExcel} className="h-10 shrink-0 gap-2 rounded-xl px-4 text-[10px] font-black uppercase tracking-widest">
               <Download className="size-4" /> Exportar Excel
@@ -281,6 +290,7 @@ export function ReportesActividadesView() {
       {reportsQuery.data?.truncated && (
         <p className="text-xs text-muted-foreground" role="status">Se muestran los 500 reportes más recientes. Acota por persona o fecha para ver los demás.</p>
       )}
+      <ScoringRulesDialog open={showScoringRules} onOpenChange={setShowScoringRules} />
     </div>
   );
 }

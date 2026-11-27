@@ -7,6 +7,8 @@ import { cn } from '../ui/utils';
 import type { ActivityCategoryItem, Task } from '../../types';
 import { TaskProgressCell } from './TaskProgressCell';
 import { TaskTraceLine } from './TaskTraceLine';
+import { ComplianceChips } from './ComplianceChips';
+import { isPausedTask } from './taskCompliance';
 import { truncateText } from './taskTrace';
 import { getCategoryColor, getCategoryIcon } from './categoryStyle';
 import {
@@ -21,6 +23,7 @@ const STATUS_LABEL: Record<string, { label: string; className: string }> = {
   COMPLETED: { label: 'Completada', className: 'bg-emerald-500/10 text-emerald-600 dark:text-emerald-400' },
   CANCELLED: { label: 'Cancelada', className: 'bg-muted text-muted-foreground' },
   OVERDUE: { label: 'Vencida', className: 'bg-rose-500/10 text-rose-600 dark:text-rose-400' },
+  PAUSED: { label: 'En pausa', className: 'bg-violet-500/10 text-violet-700 dark:text-violet-300' },
 };
 
 const PRIORITY_LABEL: Record<string, string> = { LOW: 'Baja', MEDIUM: 'Media', HIGH: 'Alta', URGENT: 'Urgente' };
@@ -85,7 +88,8 @@ function TaskCard({ task, layout, favorite, toggling, onToggleFavorite, onOpen, 
 }) {
   const overdue = isOverdueTask(task as never, now);
   const rawStatus = String(task.status || 'PENDING').toUpperCase();
-  const status = STATUS_LABEL[overdue && rawStatus !== 'WAITING_APPROVAL' ? 'OVERDUE' : rawStatus] || STATUS_LABEL.PENDING;
+  const statusKey = isPausedTask(task) ? 'PAUSED' : overdue && rawStatus !== 'WAITING_APPROVAL' ? 'OVERDUE' : rawStatus;
+  const status = STATUS_LABEL[statusKey] || STATUS_LABEL.PENDING;
   const priority = PRIORITY_LABEL[String(task.priority || '').toUpperCase()];
   const star = (
     <button
@@ -112,7 +116,10 @@ function TaskCard({ task, layout, favorite, toggling, onToggleFavorite, onOpen, 
           className="flex min-w-0 cursor-pointer flex-wrap items-center gap-x-4 gap-y-1.5 rounded-xl border border-border/40 bg-card px-3 py-2.5 transition-colors hover:border-primary/40 hover:bg-primary/[0.03]"
         >
           {star}
-          <p className="min-w-0 flex-1 basis-56 break-words text-sm font-bold leading-5 text-foreground [overflow-wrap:anywhere]" title={task.title}>{truncateText(task.title, 90)}</p>
+          <div className="min-w-0 flex-1 basis-56 space-y-1">
+            <p className="min-w-0 break-words text-sm font-bold leading-5 text-foreground [overflow-wrap:anywhere]" title={task.title}>{truncateText(task.title, 90)}</p>
+            <ComplianceChips task={task} showPauseReason hidePauseBadge />
+          </div>
           <Badge variant="outline" className={cn('shrink-0 border-transparent px-2 py-0.5 text-[9px] font-black uppercase', status.className)}>{status.label}</Badge>
           <div className="min-w-0 basis-40"><AssigneesText task={task} /></div>
           <TaskTraceLine task={task as never} className="basis-52" />
@@ -140,6 +147,7 @@ function TaskCard({ task, layout, favorite, toggling, onToggleFavorite, onOpen, 
           <Badge variant="outline" className={cn('border-transparent px-2 py-0.5 text-[9px] font-black uppercase', status.className)}>{status.label}</Badge>
           {priority && <Badge variant="outline" className="px-2 py-0.5 text-[9px] font-black uppercase">{priority}</Badge>}
         </div>
+        <ComplianceChips task={task} showPauseReason hidePauseBadge />
         <TaskProgressCell task={task} />
         <TaskTraceLine task={task as never} />
         <div className="mt-auto flex min-w-0 flex-wrap items-center justify-between gap-x-3 gap-y-1">
@@ -275,10 +283,11 @@ export function TareasCategoriasView({
           </div>
         </div>
 
-        <div className="grid grid-cols-2 gap-2 sm:grid-cols-3 xl:grid-cols-5" aria-label={`Resumen de ${scopeTitle}`}>
+        <div className="grid grid-cols-2 gap-2 sm:grid-cols-3 xl:grid-cols-6" aria-label={`Resumen de ${scopeTitle}`}>
           <CountPill value={scoped.total} label="Tareas" />
           <CountPill value={scoped.open} label="Abiertas" />
           <CountPill value={scoped.overdue} label="Vencidas" tone="alert" />
+          <CountPill value={scoped.paused} label="En pausa" />
           <CountPill value={scoped.unassigned} label="Sin asignar" tone="alert" />
           <CountPill value={scoped.notStarted} label="Sin tomar" tone="alert" />
         </div>
@@ -306,12 +315,13 @@ export function TareasCategoriasView({
                 <div
                   key={person.id}
                   className="inline-flex min-w-0 max-w-full items-center gap-2 rounded-xl border border-border/50 bg-card px-2.5 py-1.5 text-xs"
-                  title={`${person.name}: ${person.open} abiertas, ${person.inProgress} en progreso, ${person.notStarted} sin tomar, ${person.overdue} vencidas`}
+                  title={`${person.name}: ${person.open} abiertas, ${person.inProgress} en progreso, ${person.paused} en pausa, ${person.notStarted} sin tomar, ${person.overdue} vencidas`}
                   data-testid="activities-team-kpi"
                 >
                   <span className="min-w-0 max-w-[10rem] truncate font-bold text-foreground">{person.name}</span>
                   <span className="rounded-md bg-primary/10 px-1.5 font-black tabular-nums text-primary" aria-label={`${person.open} abiertas`}>{person.open}</span>
                   {person.inProgress > 0 && <span className="text-[10px] text-muted-foreground">{person.inProgress} en progreso</span>}
+                  {person.paused > 0 && <span className="text-[10px] font-bold text-violet-700 dark:text-violet-300">{person.paused} en pausa</span>}
                   {person.notStarted > 0 && <span className="text-[10px] font-bold text-amber-700 dark:text-amber-400">{person.notStarted} sin tomar</span>}
                   {person.overdue > 0 && <span className="text-[10px] font-bold text-rose-600 dark:text-rose-400">{person.overdue} vencidas</span>}
                 </div>

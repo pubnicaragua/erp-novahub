@@ -1,6 +1,6 @@
 import { api, getAuthHeaders, getApiUrl, normalizeApiErrorMessage } from './api';
 import { resolveStorageReferences } from './storage.service';
-import type { ActivityCategoryItem, ActivityComment, ActivityReport, ActivityReportsResponse, ActivitySubtask, ActivityTimeEntry, Task, Event, Reminder, ActivityLog } from '../types';
+import type { ActivityCategoryItem, ActivityScoringConfig, ActivityComment, ActivityReport, ActivityReportsResponse, ActivitySubtask, ActivityTimeEntry, Task, Event, Reminder, ActivityLog } from '../types';
 
 const createCrudService = <T>(endpoint: string) => ({
   getAll: async (signal?: AbortSignal, params?: Record<string, unknown>) => {
@@ -38,9 +38,20 @@ export const tasksService = {
   approve: async (id: string) => {
     return await api.post(`/activities/tasks/${id}/approve`, {});
   },
-  reject: async (id: string, reason: string) => {
-    return await api.post(`/activities/tasks/${id}/reject`, { reason });
+  /** `category` dice si el rebote baja el cumplimiento: solo «ERROR». */
+  reject: async (id: string, reason: string, category?: string) => {
+    return await api.post(`/activities/tasks/${id}/reject`, { reason, category });
   },
+  pause: async (id: string, payload: { reason: string; note?: string; displacedByActivityId?: string }) =>
+    await api.post(`/activities/tasks/${id}/pause`, payload) as Task,
+  resume: async (id: string) => await api.post(`/activities/tasks/${id}/resume`, {}) as Task,
+  reviewPause: async (id: string, pauseId: string, payload: { approve: boolean; note?: string }) =>
+    await api.patch(`/activities/tasks/${id}/pauses/${pauseId}`, payload) as Task,
+  classifyRebound: async (id: string, reboundId: string, category: string) =>
+    await api.patch(`/activities/tasks/${id}/rebounds/${reboundId}`, { category }) as Task,
+  getScoringConfig: async () => await api.get('/activities/scoring-config') as ActivityScoringConfig,
+  updateScoringConfig: async (payload: ActivityScoringConfig) =>
+    await api.patch('/activities/scoring-config', payload) as ActivityScoringConfig,
   /** Califica (1–5) una tarea completada y deja retroalimentación; con 2 o menos la retroalimentación es obligatoria. */
   rate: async (id: string, payload: { rating: number; comment?: string }) => {
     return await api.post(`/activities/tasks/${id}/rate`, payload);

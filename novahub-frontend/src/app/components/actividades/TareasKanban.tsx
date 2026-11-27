@@ -1,12 +1,14 @@
 import React, { useState, useCallback, useMemo } from 'react';
 import { motion } from 'motion/react';
-import { GripVertical, Eye, Clock, AlertTriangle, Pencil, Users } from 'lucide-react';
+import { GripVertical, Eye, Clock, AlertTriangle, Pencil, Users, PauseCircle, PlayCircle } from 'lucide-react';
 import { cn } from '../ui/utils';
 import { Badge } from '../ui/badge';
 import { Button } from '../ui/button';
 import type { Task } from '../../types';
 import { format } from 'date-fns';
 import { TaskTraceLine } from './TaskTraceLine';
+import { ComplianceChips } from './ComplianceChips';
+import { isDeadlineStopped, isPausedTask } from './taskCompliance';
 import { assigneeNames, truncateText } from './taskTrace';
 
 export interface TaskKanbanColumn {
@@ -20,6 +22,8 @@ export interface TaskKanbanColumn {
 const KANBAN_COLUMNS: TaskKanbanColumn[] = [
   { id: 'col_pending', label: 'Pendiente', status: 'PENDING', color: '#3b82f6', bgBadge: 'bg-blue-500/10 text-blue-600 dark:text-blue-400' },
   { id: 'col_in_progress', label: 'En Progreso', status: 'IN_PROGRESS', color: '#3b82f6', bgBadge: 'bg-blue-500/10 text-blue-600 dark:text-blue-400' },
+  // No es un estado guardado: aquí van las tareas pendientes o en progreso que están detenidas con un motivo.
+  { id: 'col_paused', label: 'En pausa', status: 'PAUSED', color: '#8b5cf6', bgBadge: 'bg-violet-500/10 text-violet-700 dark:text-violet-300' },
   { id: 'col_waiting_approval', label: 'Por Aprobar', status: 'WAITING_APPROVAL', color: 'var(--primary)', bgBadge: 'bg-primary/10 text-primary' },
   { id: 'col_completed', label: 'Completada', status: 'COMPLETED', color: '#10b981', bgBadge: 'bg-emerald-500/10 text-emerald-600 dark:text-emerald-400' },
 ];
@@ -43,6 +47,10 @@ interface TareasKanbanProps {
   onEdit?: (task: Task) => void;
   /** Por tarea: solo quien la creó o un administrador puede editarla. */
   canEditTask?: (task: Task) => boolean;
+  /** Quién puede pausar o reanudar cada tarea. */
+  canPauseTask?: (task: Task) => boolean;
+  onPause?: (task: Task) => void;
+  onResume?: (task: Task) => void;
 }
 
 export const TareasKanban: React.FC<TareasKanbanProps> = ({
@@ -57,6 +65,9 @@ export const TareasKanban: React.FC<TareasKanbanProps> = ({
   createdAtOrder = 'newest',
   onEdit,
   canEditTask,
+  canPauseTask,
+  onPause,
+  onResume,
 }) => {
   const [draggedTaskId, setDraggedTaskId] = useState<string | null>(null);
   const [dragOverColId, setDragOverColId] = useState<string | null>(null);
@@ -96,7 +107,17 @@ export const TareasKanban: React.FC<TareasKanbanProps> = ({
       const currentStatus = String(task.status || 'PENDING').toUpperCase();
       const targetStatus = targetColumn.status;
 
-      if (currentStatus === targetStatus) return;
+      const paused = isPausedTask(task);
+      // Soltar en «En pausa» pide el motivo antes de mover nada.
+      if (targetStatus === 'PAUSED') {
+        if (!paused && onPause && canPauseTask?.(task)) onPause(task);
+        return;
+      }
+      // Sacarla de la pausa hacia su mismo estado es reanudarla. Hacia otro estado, el servidor cierra la pausa solo.
+      if (currentStatus === targetStatus) {
+        if (paused && onResume && canPauseTask?.(task)) onResume(task);
+        return;
+      }
 
       // Special transitions:
       // 1. Dropping into WAITING_APPROVAL triggers approval submission modal
@@ -122,20 +143,21 @@ export const TareasKanban: React.FC<TareasKanbanProps> = ({
         await onStatusChange(taskId, targetStatus);
       }
     },
-    [data, canMoveToStatus, onStatusChange, onSubmitApproval, onApprove, onComplete]
+    [data, canMoveToStatus, onStatusChange, onSubmitApproval, onApprove, onComplete, canPauseTask, onPause, onResume]
   );
 
   const columnTasks = useMemo(() => {
     const grouped: Record<string, Task[]> = {
       PENDING: [],
       IN_PROGRESS: [],
+      PAUSED: [],
       WAITING_APPROVAL: [],
       COMPLETED: [],
       CANCELLED: [],
     };
 
     data.forEach((task) => {
-      const status = String(task.status || 'PENDING').toUpperCase();
+      const status = isPausedTask(task) ? 'PAUSED' : String(task.status || 'PENDING').toUpperCase();
       if (grouped[status]) {
         grouped[status].push(task);
       } else {
@@ -168,7 +190,7 @@ export const TareasKanban: React.FC<TareasKanbanProps> = ({
     <div className={cn(
       'grid min-w-0 grid-flow-col auto-cols-[minmax(16rem,85vw)] grid-rows-1 gap-4 overflow-x-auto p-4 snap-x snap-proximity',
       'md:grid-flow-row md:auto-cols-auto md:grid-cols-2 md:grid-rows-none md:overflow-x-visible md:snap-none',
-      columns.length > 4 ? 'lg:grid-cols-3 2xl:grid-cols-5' : 'lg:grid-cols-4',
+      columns.length > 5 ? 'lg:grid-cols-3 2xl:grid-cols-6' : 'lg:grid-cols-3 xl:grid-cols-5',
     )}>
       {columns.map((col) => {
         const tasks = columnTasks[col.status] || [];
@@ -219,7 +241,11 @@ export const TareasKanban: React.FC<TareasKanbanProps> = ({
                 const isDragging = draggedTaskId === String(task.id);
                 const subtasks = task.subtasks || [];
                 const completedSubtasks = subtasks.filter((s: any) => s.isCompleted).length;
+                const isPaused = isPausedTask(task);
+                const deadlineStopped = isDeadlineStopped(task);
+                const mayPause = Boolean(canPauseTask?.(task));
                 const isOverdue =
+                  !deadlineStopped &&
                   task.dueDate &&
                   new Date(task.dueDate).getTime() < Date.now() &&
                   !['COMPLETED', 'CANCELLED'].includes(String(task.status).toUpperCase());
@@ -232,7 +258,7 @@ export const TareasKanban: React.FC<TareasKanbanProps> = ({
                     animate={{ opacity: isDragging ? 0.4 : 1, scale: 1 }}
                     exit={{ opacity: 0, scale: 0.96 }}
                     transition={{ duration: 0.15 }}
-                    draggable={[
+                    draggable={mayPause || [
                       'PENDING', 'IN_PROGRESS', 'WAITING_APPROVAL', 'COMPLETED',
                     ].some((targetStatus) => targetStatus !== String(task.status || 'PENDING').toUpperCase() && canMoveToStatus(task, targetStatus))}
                     onDragStart={(e) => handleDragStart(e as any, String(task.id))}
@@ -247,42 +273,13 @@ export const TareasKanban: React.FC<TareasKanbanProps> = ({
                     <div className="flex items-start justify-between gap-2 mb-2">
                       <div className="flex items-center gap-1.5 min-w-0 flex-1">
                         <GripVertical className="size-3 text-muted-foreground/40 group-hover:text-muted-foreground transition-colors shrink-0" />
-                        <h4 className="text-xs font-bold truncate text-foreground" title={task.title}>
+                        <p role="heading" aria-level={4} className="line-clamp-2 min-w-0 break-words text-[13px] font-bold leading-[1.15rem] text-foreground" title={task.title}>
                           {truncateText(task.title, 70)}
-                        </h4>
-                      </div>
-                      <div className="flex shrink-0 items-center gap-0.5">
-                        {onEdit && (canEditTask ? canEditTask(task) : true) && !['COMPLETED', 'CANCELLED'].includes(String(task.status || '').toUpperCase()) && (
-                          <Button
-                            variant="ghost"
-                            size="icon"
-                            title="Editar tarea"
-                            aria-label="Editar tarea"
-                            data-testid={`activities-kanban-edit-${task.id}`}
-                            className="size-5 opacity-0 group-hover:opacity-100 focus-visible:opacity-100 transition-opacity rounded-md text-muted-foreground hover:text-primary shrink-0"
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              onEdit(task);
-                            }}
-                          >
-                            <Pencil className="size-3.5" />
-                          </Button>
-                        )}
-                        <Button
-                          variant="ghost"
-                          size="icon"
-                          title="Ver detalle"
-                          aria-label="Ver detalle"
-                          className="size-5 opacity-0 group-hover:opacity-100 focus-visible:opacity-100 transition-opacity rounded-md text-muted-foreground hover:text-primary shrink-0"
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            onViewDetail(task);
-                          }}
-                        >
-                          <Eye className="size-3.5" />
-                        </Button>
+                        </p>
                       </div>
                     </div>
+
+                    <ComplianceChips task={task} showPauseReason hidePauseBadge className="mb-2" />
 
                     {task.description && (
                       <p className="text-[11px] text-muted-foreground line-clamp-2 mb-2.5" title={String(task.description)}>
@@ -327,7 +324,7 @@ export const TareasKanban: React.FC<TareasKanbanProps> = ({
                     </div>
 
                     {/* Footer */}
-                    <div className="flex items-center justify-between pt-2 border-t border-border/40 text-[10px]">
+                    <div className="flex flex-wrap items-center justify-between gap-x-2 gap-y-1 pt-2 border-t border-border/40 text-[10px]">
                       <span
                         className={cn(
                           'flex items-center gap-1 text-muted-foreground',
@@ -335,10 +332,59 @@ export const TareasKanban: React.FC<TareasKanbanProps> = ({
                         )}
                       >
                         <Clock className="size-3" />
-                        {task.dueDate ? format(new Date(task.dueDate), 'dd/MM HH:mm') : 'Sin fecha'}
+                        {deadlineStopped
+                          ? <span className="whitespace-nowrap font-bold text-violet-700 dark:text-violet-300" title={task.dueDate ? `Vencía ${format(new Date(task.dueDate), 'dd/MM HH:mm')}` : undefined}>Plazo detenido</span>
+                          : task.dueDate ? format(new Date(task.dueDate), 'dd/MM HH:mm') : 'Sin fecha'}
                       </span>
 
-                      <div className="flex items-center gap-1.5">
+                      <div className="ml-auto flex items-center gap-1.5">
+                        <div className="flex shrink-0 items-center gap-0.5">
+                          {mayPause && (isPaused ? onResume : onPause) && (
+                            <Button
+                              variant="ghost"
+                              size="icon"
+                              title={isPaused ? 'Reanudar tarea' : 'Poner en pausa'}
+                              aria-label={isPaused ? 'Reanudar tarea' : 'Poner en pausa'}
+                              data-testid={`activities-kanban-${isPaused ? 'resume' : 'pause'}-${task.id}`}
+                              className={cn('size-5 shrink-0 rounded-md text-violet-600 transition-opacity hover:text-violet-700 dark:text-violet-300', !isPaused && 'opacity-0 group-hover:opacity-100 focus-visible:opacity-100')}
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                if (isPaused) onResume?.(task); else onPause?.(task);
+                              }}
+                            >
+                              {isPaused ? <PlayCircle className="size-3.5" /> : <PauseCircle className="size-3.5" />}
+                            </Button>
+                          )}
+                          {onEdit && (canEditTask ? canEditTask(task) : true) && !['COMPLETED', 'CANCELLED'].includes(String(task.status || '').toUpperCase()) && (
+                            <Button
+                              variant="ghost"
+                              size="icon"
+                              title="Editar tarea"
+                              aria-label="Editar tarea"
+                              data-testid={`activities-kanban-edit-${task.id}`}
+                              className="size-5 opacity-0 group-hover:opacity-100 focus-visible:opacity-100 transition-opacity rounded-md text-muted-foreground hover:text-primary shrink-0"
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                onEdit(task);
+                              }}
+                            >
+                              <Pencil className="size-3.5" />
+                            </Button>
+                          )}
+                          <Button
+                            variant="ghost"
+                            size="icon"
+                            title="Ver detalle"
+                            aria-label="Ver detalle"
+                            className="size-5 opacity-0 group-hover:opacity-100 focus-visible:opacity-100 transition-opacity rounded-md text-muted-foreground hover:text-primary shrink-0"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              onViewDetail(task);
+                            }}
+                          >
+                            <Eye className="size-3.5" />
+                          </Button>
+                        </div>
                         {task.priority && (
                           <span
                             className={cn(

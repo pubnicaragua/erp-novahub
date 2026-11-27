@@ -125,7 +125,10 @@ export type SupervisionSource = SupervisionScope | 'DEPARTMENT_HEAD' | 'REPORTS_
 export interface TeamMember {
   id: string; name: string; email: string; department: string | null; role: string | null;
   sources: SupervisionSource[]; pending: number; overdue: number; completedRecently: number;
-  quality: { inReview: number; delivered: number; rejected: number; firstPassRate: number | null; withEstimate: number; overEstimate: number };
+  /** Tareas detenidas con un motivo. Las de pausa aprobada no cuentan en «vencidas». */
+  paused?: number;
+  /** `rejected` son las entregas con al menos un rebote por error; `qualityPct` pondera cada completada según sus rebotes. */
+  quality: { inReview: number; delivered: number; rejected: number; rebounds?: number; firstPassRate: number | null; qualityPct?: number | null; withEstimate: number; overEstimate: number };
   /** Entregas a tiempo/tardías y calificación promedio de los últimos 30 días; `noDeadline` son las completadas sin plazo real, que no entran al porcentaje. */
   compliance: { onTime: number; late: number; onTimeRate: number | null; noDeadline: number; rated: number; averageRating: number | null };
 }

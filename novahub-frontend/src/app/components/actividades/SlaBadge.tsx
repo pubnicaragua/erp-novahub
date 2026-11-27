@@ -16,6 +16,8 @@ export interface SlaBadgeProps {
   title?: string;
   /** Reloj controlado por el padre; por defecto se usa el reloj actual. */
   now?: Date;
+  /** Hay una pausa aprobada: el plazo no corre y no se muestra atraso. */
+  deadlineStopped?: boolean;
 }
 
 const TONE_BY_STATUS: Record<SlaStatus, { dot: string; badge: string }> = {
@@ -62,12 +64,27 @@ export const SlaBadge: React.FC<SlaBadgeProps> = ({
   className,
   title,
   now,
+  deadlineStopped = false,
 }) => {
   const evaluation = evaluateActivitySla({ slaDueAt, status }, now);
   const slaStatus = evaluation?.status ?? 'NONE';
 
   // §5: sin SLA (o tarea completada/cancelada) no hay semáforo que mostrar.
   if (slaStatus === 'NONE') return null;
+
+  if (deadlineStopped) {
+    return (
+      <Badge
+        variant="outline"
+        data-testid="sla-badge-stopped"
+        title="Plazo detenido: la pausa está aprobada"
+        className={cn('min-w-0 max-w-full gap-1.5 border-violet-500/30 bg-violet-500/10 px-2 py-0.5 text-[10px] font-black uppercase text-violet-700 dark:text-violet-300', className)}
+      >
+        <span aria-hidden="true" className="size-1.5 shrink-0 rounded-full bg-violet-500" />
+        <span className="min-w-0 truncate">Plazo detenido</span>
+      </Badge>
+    );
+  }
 
   const tone = TONE_BY_STATUS[slaStatus];
   const label = evaluation.label || FALLBACK_LABELS[slaStatus];

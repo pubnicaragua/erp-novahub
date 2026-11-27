@@ -35,13 +35,13 @@ test('una tarea cerrada nunca está vencida; una abierta con fecha pasada sí', 
 
 test('los conteos globales separan abiertas, vencidas, sin asignar y sin tomar', () => {
   const counts = countTasks(tasks, now);
-  assert.deepEqual(counts, { total: 6, open: 4, overdue: 1, unassigned: 1, notStarted: 1, done: 1 });
+  assert.deepEqual(counts, { total: 6, open: 4, overdue: 1, unassigned: 1, notStarted: 1, done: 1, paused: 0 });
 });
 
 test('los conteos por categoría agrupan las tareas sin categoría aparte', () => {
   const map = countByCategory(tasks, now);
-  assert.deepEqual(map.get('SISTEMAS'), { total: 4, open: 3, overdue: 1, unassigned: 1, notStarted: 1, done: 1 });
-  assert.deepEqual(map.get(NO_CATEGORY_KEY), { total: 2, open: 1, overdue: 0, unassigned: 0, notStarted: 0, done: 0 });
+  assert.deepEqual(map.get('SISTEMAS'), { total: 4, open: 3, overdue: 1, unassigned: 1, notStarted: 1, done: 1, paused: 0 });
+  assert.deepEqual(map.get(NO_CATEGORY_KEY), { total: 2, open: 1, overdue: 0, unassigned: 0, notStarted: 0, done: 0, paused: 0 });
   assert.equal(map.get('INFRAESTRUCTURA'), undefined);
 });
 
@@ -54,7 +54,7 @@ test('la carga por persona cuenta solo tareas abiertas y ordena de mayor a menor
   const people = countByPerson(tasks, [{ id: 'luis', name: 'Luis' }], now);
   assert.deepEqual(people.map((p) => [p.id, p.open]), [['ana', 2], ['sergio', 2], ['luis', 0]]);
   const sergioStat = people.find((p) => p.id === 'sergio');
-  assert.deepEqual(sergioStat, { id: 'sergio', name: 'Sergio', open: 2, inProgress: 1, notStarted: 1, overdue: 1 });
+  assert.deepEqual(sergioStat, { id: 'sergio', name: 'Sergio', open: 2, inProgress: 1, notStarted: 1, overdue: 1, paused: 0 });
   assert.equal(people.find((p) => p.id === 'luis')?.open, 0);
 });
 

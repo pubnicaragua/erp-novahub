@@ -1,6 +1,6 @@
 import React from 'react';
 import { motion } from 'motion/react';
-import { Clock, Eye, CheckCircle2, Send, Undo2, Paperclip, Users, Flag, HandHelping, UserCog, Loader2, RotateCcw, Pencil } from 'lucide-react';
+import { Clock, Eye, CheckCircle2, Send, Undo2, Paperclip, Users, Flag, HandHelping, UserCog, Loader2, RotateCcw, Pencil, PauseCircle, PlayCircle } from 'lucide-react';
 import { cn } from '../ui/utils';
 import { Badge } from '../ui/badge';
 import { Button } from '../ui/button';
@@ -8,6 +8,8 @@ import { Card, CardContent } from '../ui/card';
 import type { Task } from '../../types';
 import { SlaBadge } from './SlaBadge';
 import { TaskTraceLine } from './TaskTraceLine';
+import { ComplianceChips } from './ComplianceChips';
+import { isDeadlineStopped, isPausedTask } from './taskCompliance';
 import { assigneeNames, truncateText } from './taskTrace';
 import { useActivityCategories } from './useActivityCategories';
 import { format } from 'date-fns';
@@ -44,11 +46,15 @@ interface TareasCardsViewProps {
   canEditAction?: boolean;
   /** Por tarea: solo quien la creó o un administrador puede editarla. */
   canEditTask?: (task: Task) => boolean;
+  canPauseTask?: (task: Task) => boolean;
+  onPause?: (task: Task) => void;
+  onResume?: (task: Task) => void;
 }
 
 const statusOpts = [
   { value: 'PENDING', label: 'Pendiente', color: 'bg-blue-500/10 text-blue-600 border-blue-500/20 dark:text-blue-400' },
   { value: 'IN_PROGRESS', label: 'En Progreso', color: 'bg-blue-500/10 text-blue-600 border-blue-500/20 dark:text-blue-400' },
+  { value: 'PAUSED', label: 'En pausa', color: 'bg-violet-500/10 text-violet-700 border-violet-500/30 dark:text-violet-300' },
   { value: 'WAITING_APPROVAL', label: 'Por Aprobar', color: 'bg-primary/10 text-primary border-primary/20' },
   { value: 'COMPLETED', label: 'Completada', color: 'bg-emerald-500/10 text-emerald-600 border-emerald-500/20 dark:text-emerald-400' },
   { value: 'CANCELLED', label: 'Cancelada', color: 'bg-rose-500/10 text-rose-600 border-rose-500/20 dark:text-rose-400' },
@@ -88,6 +94,9 @@ export const TareasCardsView: React.FC<TareasCardsViewProps> = ({
   onEdit,
   canEditAction = false,
   canEditTask,
+  canPauseTask,
+  onPause,
+  onResume,
 }) => {
   const { labelOf: categoryLabelOf } = useActivityCategories();
   if (data.length === 0) {
@@ -128,6 +137,8 @@ export const TareasCardsView: React.FC<TareasCardsViewProps> = ({
         const showReassign = canReassignAction && Boolean(onReassignTask) && !isClosed;
         const showEdit = (canEditTask ? canEditTask(task) : canEditAction) && Boolean(onEdit) && !isClosed;
         const people = assigneeNames(task as never);
+        const isPaused = isPausedTask(task);
+        const showPause = Boolean(canPauseTask?.(task)) && Boolean(isPaused ? onResume : onPause);
 
         return (
           <motion.div
@@ -163,6 +174,7 @@ export const TareasCardsView: React.FC<TareasCardsViewProps> = ({
                       status={task.status}
                       showRemaining
                       now={now}
+                      deadlineStopped={isDeadlineStopped(task)}
                       className="max-w-full"
                     />
                     {categoryId && (
@@ -186,6 +198,8 @@ export const TareasCardsView: React.FC<TareasCardsViewProps> = ({
                   >
                     {truncateText(task.title, 90)}
                   </h3>
+
+                  <ComplianceChips task={task} showPauseReason hidePauseBadge className="mt-2" />
 
                   {task.description && (
                     <p className="mt-1.5 min-w-0 max-w-full whitespace-normal break-words text-xs leading-5 text-muted-foreground [overflow-wrap:anywhere]" title={String(task.description)}>
@@ -302,7 +316,22 @@ export const TareasCardsView: React.FC<TareasCardsViewProps> = ({
                         </Button>
                       )}
 
-                      {['PENDING', 'IN_PROGRESS'].includes(displayStatus) && canSubmitApproval && onSubmitApproval && (
+                      {showPause && (
+                        <Button
+                          type="button"
+                          variant="ghost"
+                          size="icon"
+                          title={isPaused ? 'Reanudar tarea' : 'Poner en pausa'}
+                          aria-label={isPaused ? 'Reanudar tarea' : 'Poner en pausa'}
+                          data-testid={`activities-card-${isPaused ? 'resume' : 'pause'}-${task.id}`}
+                          className="size-8 rounded-lg text-violet-600 hover:bg-violet-500/10 dark:text-violet-300"
+                          onClick={() => (isPaused ? onResume?.(task) : onPause?.(task))}
+                        >
+                          {isPaused ? <PlayCircle className="size-4" /> : <PauseCircle className="size-4" />}
+                        </Button>
+                      )}
+
+                      {['PENDING', 'IN_PROGRESS'].includes(rawStatus) && canSubmitApproval && onSubmitApproval && (
                         <Button
                           type="button"
                           variant="ghost"

@@ -83,10 +83,12 @@ function Resumen({ members, loading, error, onRetry, onOpen, canManage, onManage
                 <span className="rounded-full bg-slate-100 px-2 py-0.5 text-slate-800">{m.pending} pendientes</span>
                 <span className={cn('rounded-full px-2 py-0.5', m.overdue ? 'bg-red-100 text-red-900' : 'bg-slate-100 text-slate-800')}>{m.overdue} vencidas</span>
                 <span className="rounded-full bg-emerald-100 px-2 py-0.5 text-emerald-900">{m.completedRecently} completadas</span>
+                {Boolean(m.paused) && <span className="rounded-full bg-violet-100 px-2 py-0.5 text-violet-900">{m.paused} en pausa</span>}
               </div>
               <p className="text-[11px] text-muted-foreground">
                 Calidad: {m.quality.firstPassRate === null ? 'sin entregas evaluadas' : `${m.quality.firstPassRate}% aprobadas a la primera`}
-                {m.quality.rejected > 0 && ` · ${m.quality.rejected} rechazada${m.quality.rejected === 1 ? '' : 's'}`}
+                {m.quality.qualityPct != null && ` · Cumplimiento por rebotes ${m.quality.qualityPct}%`}
+                {Boolean(m.quality.rebounds) && ` · ${m.quality.rebounds} rebote${m.quality.rebounds === 1 ? '' : 's'} por error`}
                 {m.quality.inReview > 0 && ` · ${m.quality.inReview} en revisión`}
                 {m.quality.overEstimate > 0 && ` · ${m.quality.overEstimate} sobre lo estimado`}
               </p>
@@ -100,7 +102,7 @@ function Resumen({ members, loading, error, onRetry, onOpen, canManage, onManage
           </li>
         ))}
       </ul>
-      <p className="text-[11px] text-muted-foreground">Cada consulta al historial de una persona queda registrada en la auditoría. «Completadas», «a tiempo» y la calificación cuentan los últimos 30 días por fecha de cierre; las tareas anteriores al control de cierre se cuentan por su fecha límite y no entran en «a tiempo». Tampoco entran las tareas sin plazo definido (cuando se deja el vencimiento vacío se guarda la hora de creación): se indican como «sin plazo».</p>
+      <p className="text-[11px] text-muted-foreground">Cada consulta al historial de una persona queda registrada en la auditoría. «Completadas», «a tiempo» y la calificación cuentan los últimos 30 días por fecha de cierre; las tareas anteriores al control de cierre se cuentan por su fecha límite y no entran en «a tiempo». Tampoco entran las tareas sin plazo definido (cuando se deja el vencimiento vacío se guarda la hora de creación): se indican como «sin plazo». En los rebotes solo cuentan las devoluciones marcadas como error o entrega incompleta; cuánto vale cada una lo definen las reglas de cumplimiento (Actividades → Reportes).</p>
     </div>
   );
 }

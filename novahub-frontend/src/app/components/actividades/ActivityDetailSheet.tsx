@@ -30,6 +30,8 @@ import type { ActivityCustomField, ActivityReassignmentEntry, Task } from '../..
 import { getCurrencyDecimalPlaces } from '../../utils/currency';
 import { firstReadable } from '../../utils/displayText';
 import { ReportFileChip } from './ReportEntry';
+import { canReviewTask, displayStatusOf, isDeadlineStopped } from './taskCompliance';
+import { PauseBanner, PauseHistory, ReboundHistory } from './TaskComplianceSections';
 
 export type ActivityDetailKind = 'task' | 'event' | 'meeting' | 'reminder' | 'log';
 
@@ -72,17 +74,12 @@ const formatDate = (value: any) => {
   return new Intl.DateTimeFormat('es-NI', { dateStyle: 'medium', timeStyle: 'short' }).format(date);
 };
 
-const getTaskDisplayStatus = (item: any) => {
-  const status = String(item?.status || 'PENDING').toUpperCase();
-  const dueTime = item?.dueDate ? new Date(item.dueDate).getTime() : Number.NaN;
-  return ['PENDING', 'IN_PROGRESS'].includes(status) && Number.isFinite(dueTime) && dueTime < Date.now()
-    ? 'OVERDUE'
-    : status;
-};
+/** «En pausa», «Vencida» o el estado guardado. */
+const getTaskDisplayStatus = (item: any) => displayStatusOf(item || {}, Date.now());
 
 const translatedLabels: Record<string, string> = {
   LOW: 'Baja', MEDIUM: 'Media', HIGH: 'Alta', URGENT: 'Urgente',
-  PENDING: 'Pendiente', IN_PROGRESS: 'En progreso', WAITING_APPROVAL: 'Por aprobar', COMPLETED: 'Completada', CANCELLED: 'Cancelada', OVERDUE: 'Vencida',
+  PENDING: 'Pendiente', IN_PROGRESS: 'En progreso', WAITING_APPROVAL: 'Por aprobar', COMPLETED: 'Completada', CANCELLED: 'Cancelada', OVERDUE: 'Vencida', PAUSED: 'En pausa',
   SENT: 'Enviado', SNOOZED: 'Pospuesto',
   CREATE: 'Creación', UPDATE: 'Actualización', DELETE: 'Eliminación', ARCHIVE: 'Archivado', UPLOAD: 'Carga de archivo', READ: 'Consulta', LOGIN: 'Inicio de sesión', EXPORT: 'Exportación', APPROVE: 'Aprobación', COMPLETE: 'Cierre',
   TASK: 'Tarea', EVENT: 'Evento', CALL: 'Llamada', MEETING: 'Reunión', EMAIL: 'Correo', DEADLINE: 'Fecha límite',
@@ -128,7 +125,9 @@ function StatusBadge({ value, kind }: { value: any; kind: ActivityDetailKind }) 
       ? 'border-rose-500/20 bg-rose-500/10 text-rose-600 dark:text-rose-400'
       : normalized === 'PENDING' || normalized === 'IN_PROGRESS' || normalized === 'SNOOZED' || normalized === 'UPDATE'
         ? 'border-blue-500/20 bg-blue-500/10 text-blue-600 dark:text-blue-400'
-        : normalized === 'WAITING_APPROVAL'
+        : normalized === 'PAUSED'
+          ? 'border-violet-500/30 bg-violet-500/10 text-violet-700 dark:text-violet-300'
+          : normalized === 'WAITING_APPROVAL'
           ? 'border-purple-500/20 bg-purple-500/10 text-purple-600 dark:text-purple-400'
           : (kind === 'event' || kind === 'meeting') ? 'border-emerald-500/20 bg-emerald-500/10 text-emerald-600 dark:text-emerald-400' : 'border-primary/20 bg-primary/10 text-primary';
   return <Badge variant="outline" className={cn('border px-2.5 py-1 text-[10px] font-black uppercase tracking-widest', tone)}>{kind === 'log' ? translateAuditAction(String(value || '')) : formatLabel(value)}</Badge>;
@@ -141,7 +140,7 @@ function formatHistoryDate(value: string | null | undefined): string {
   return format(date, "dd/MM/yyyy HH:mm");
 }
 
-function TaskSlaCard({ task, now }: { task: Pick<Task, 'slaDueAt' | 'dueDate' | 'status' | 'createdAt'>; now: Date }) {
+function TaskSlaCard({ task, now, deadlineStopped = false }: { task: Pick<Task, 'slaDueAt' | 'dueDate' | 'status' | 'createdAt'>; now: Date; deadlineStopped?: boolean }) {
   const slaDueAt = task?.slaDueAt ?? task?.dueDate ?? null;
   const evaluation = evaluateActivitySla({ slaDueAt, status: task?.status }, now);
   const consumedRatio = computeActivitySlaConsumedRatio({ createdAt: task?.createdAt ?? null, slaDueAt }, now);
@@ -160,6 +159,15 @@ function TaskSlaCard({ task, now }: { task: Pick<Task, 'slaDueAt' | 'dueDate' | 
     : evaluation.status === 'AT_RISK'
       ? 'bg-amber-500'
       : 'bg-success';
+
+  if (deadlineStopped) {
+    return (
+      <DetailSection title="Acuerdo de Nivel de Servicio (SLA)" icon={Timer}>
+        <SlaBadge slaDueAt={slaDueAt} status={task?.status} deadlineStopped />
+        <p className="text-sm text-muted-foreground">El plazo está detenido mientras dure la pausa aprobada. Al reanudar, la fecha límite se corre el tiempo que estuvo en pausa.</p>
+      </DetailSection>
+    );
+  }
 
   return (
     <DetailSection title="Acuerdo de Nivel de Servicio (SLA)" icon={Timer}>
@@ -433,7 +441,7 @@ function TaskTraceSection({ task }: { task: any }) {
   );
 }
 
-function TaskDetails({ item, onUpdate, canEdit, canReassign, canManageSubtasks, canStartTimeTracking, canStopTimeTracking, canAddManualTimeEntry, canRate, canReport, canReview, onReassign }: {
+function TaskDetails({ item, onUpdate, canEdit, canReassign, canManageSubtasks, canStartTimeTracking, canStopTimeTracking, canAddManualTimeEntry, canRate, canReport, canReview, canReviewCompliance, onReassign }: {
   item: any;
   onUpdate?: () => void;
   canEdit: boolean;
@@ -441,6 +449,8 @@ function TaskDetails({ item, onUpdate, canEdit, canReassign, canManageSubtasks, 
   canReport: boolean;
   /** Puede revisar reportes de otros (aprobar tareas). */
   canReview: boolean;
+  /** Puede aprobar pausas y reclasificar rebotes: permiso de aprobar y no ser quien tiene la tarea (salvo administrador). */
+  canReviewCompliance: boolean;
   canReassign: boolean;
   canManageSubtasks: boolean;
   canStartTimeTracking: boolean;
@@ -457,8 +467,12 @@ function TaskDetails({ item, onUpdate, canEdit, canReassign, canManageSubtasks, 
   const timeEntries = item.timeEntries || [];
   const displayStatus = getTaskDisplayStatus(item);
   const isOverdue = displayStatus === 'OVERDUE';
+  const deadlineStopped = isDeadlineStopped(item);
+  const changed = () => onUpdate?.();
   return (
     <>
+      <PauseBanner task={item} canReview={canReviewCompliance} onChanged={changed} />
+
       <DetailSection title="Descripción de la tarea" icon={FileText}>
         <p
           className="break-words whitespace-pre-wrap text-sm leading-6 text-muted-foreground [overflow-wrap:anywhere]"
@@ -471,7 +485,7 @@ function TaskDetails({ item, onUpdate, canEdit, canReassign, canManageSubtasks, 
       <div className="grid grid-cols-2 gap-3">
         <DetailItem label="Estado" value={<StatusBadge value={displayStatus} kind="task" />} icon={CheckCircle2} />
         <DetailItem label="Prioridad" value={formatLabel(item.priority)} icon={Flag} />
-        <DetailItem label="Vencimiento" value={<span className={isOverdue ? 'text-rose-600 dark:text-rose-400' : undefined}>{formatDate(item.dueDate)}{isOverdue && ' · Vencida'}</span>} icon={Clock3} />
+        <DetailItem label="Vencimiento" value={<span className={isOverdue ? 'text-rose-600 dark:text-rose-400' : undefined}>{formatDate(item.dueDate)}{isOverdue && ' · Vencida'}{deadlineStopped && ' · plazo detenido'}</span>} icon={Clock3} />
         <DetailItem label="Creada" value={formatDate(item.createdAt)} icon={CalendarDays} />
       </div>
 
@@ -493,6 +507,19 @@ function TaskDetails({ item, onUpdate, canEdit, canReassign, canManageSubtasks, 
       <TaskProgressSummary task={item} />
 
       <TaskTraceSection task={item} />
+
+      <ReboundHistory
+        task={item}
+        canReview={canReviewCompliance}
+        onChanged={changed}
+        wrap={(children) => <DetailSection title="Devoluciones" icon={History}>{children}</DetailSection>}
+      />
+      <PauseHistory
+        task={item}
+        canReview={canReviewCompliance}
+        onChanged={changed}
+        wrap={(children) => <DetailSection title="Pausas anteriores" icon={Timer}>{children}</DetailSection>}
+      />
 
       <DetailSection title="Reportes de avance" icon={FileText}>
         <TaskReportsPanel taskId={String(item.id)} canReport={canReport} canReview={canReview} onChanged={() => onUpdate?.()} />
@@ -528,7 +555,7 @@ function TaskDetails({ item, onUpdate, canEdit, canReassign, canManageSubtasks, 
         />
       </DetailSection>
 
-      <TaskSlaCard task={item} now={now} />
+      <TaskSlaCard task={item} now={now} deadlineStopped={deadlineStopped} />
 
       {displayStatus === 'COMPLETED' && (
         <DetailSection title="Cumplimiento y calificación" icon={ShieldCheck}>
@@ -938,7 +965,11 @@ export function ActivityDetailSheet({ kind, item, users, accounts, linkedExpense
   const canAddManualTimeEntry = isTask && canPerform('ACTIVITIES_TASKS', 'addManualTimeEntry');
   const canReassignTask = isTask && canPerform('ACTIVITIES_TASKS', 'reassign');
   const canReportTask = isTask && canPerform('ACTIVITIES_TASKS', 'submit');
-  const canReviewTask = isTask && canPerform('ACTIVITIES_TASKS', 'approve');
+  const canApproveTasks = isTask && canPerform('ACTIVITIES_TASKS', 'approve');
+  const canReviewCompliance = isTask && canReviewTask(
+    [item?.assignedToId, ...((item?.assignments || []) as Array<{ userId?: string; user?: { id?: string } }>).map((assignment) => assignment.userId || assignment.user?.id)],
+    { id: String(user?.id || ''), isAdmin: Boolean(user?.isTenantAdmin || user?.isPlatformAdmin), canApprove: canApproveTasks },
+  );
   const config = labels[kind];
   const title = item?.title || (kind === 'log' ? formatLabel(item?.entity) : item?.entity) || config.singular;
   const displayStatus = kind === 'task' ? getTaskDisplayStatus(item) : item?.status;
@@ -959,7 +990,7 @@ export function ActivityDetailSheet({ kind, item, users, accounts, linkedExpense
           <div className="flex flex-wrap items-center gap-2"><Badge variant="outline" className="rounded-lg border-border/50 text-[10px] font-bold uppercase tracking-wider">ID {item?.id || '—'}</Badge>{displayStatus && <StatusBadge value={displayStatus} kind={kind} />}</div>
           {extraActions && <div className="flex flex-wrap gap-2" data-tour="activity-detail-actions">{extraActions}</div>}
         </SheetHeader>
-        <ScrollArea className="min-h-0 flex-1"><div className="space-y-5 p-5 sm:p-6">{item && kind === 'task' && <TaskDetails item={item} onUpdate={onUpdate} canEdit={canEditTask} canReassign={canReassignTask} canManageSubtasks={canManageSubtasks} canStartTimeTracking={canStartTimeTracking} canStopTimeTracking={canStopTimeTracking} canAddManualTimeEntry={canAddManualTimeEntry} canRate={canRateTask} canReport={canReportTask} canReview={canReviewTask} onReassign={() => setReassignOpen(true)} />}{item && (kind === 'event' || kind === 'meeting') && <EventDetails item={item} accounts={accounts} linkedExpense={linkedExpense} linkedIncome={linkedIncome} linkedExpenseAccount={linkedExpenseAccount} linkedIncomeAccount={linkedIncomeAccount} linkedExpenseJournal={linkedExpenseJournal} linkedIncomeJournal={linkedIncomeJournal} />}{item && kind === 'reminder' && <ReminderDetails item={item} users={users} />}{item && kind === 'log' && <LogDetails item={item} />}{item && <AuditHistoryDisclosure entity={auditEntityByKind[kind]} entityId={String(item.id)} createdAt={item.createdAt} />}</div></ScrollArea>
+        <ScrollArea className="min-h-0 flex-1"><div className="space-y-5 p-5 sm:p-6">{item && kind === 'task' && <TaskDetails item={item} onUpdate={onUpdate} canEdit={canEditTask} canReassign={canReassignTask} canManageSubtasks={canManageSubtasks} canStartTimeTracking={canStartTimeTracking} canStopTimeTracking={canStopTimeTracking} canAddManualTimeEntry={canAddManualTimeEntry} canRate={canRateTask} canReport={canReportTask} canReview={canApproveTasks} canReviewCompliance={canReviewCompliance} onReassign={() => setReassignOpen(true)} />}{item && (kind === 'event' || kind === 'meeting') && <EventDetails item={item} accounts={accounts} linkedExpense={linkedExpense} linkedIncome={linkedIncome} linkedExpenseAccount={linkedExpenseAccount} linkedIncomeAccount={linkedIncomeAccount} linkedExpenseJournal={linkedExpenseJournal} linkedIncomeJournal={linkedIncomeJournal} />}{item && kind === 'reminder' && <ReminderDetails item={item} users={users} />}{item && kind === 'log' && <LogDetails item={item} />}{item && <AuditHistoryDisclosure entity={auditEntityByKind[kind]} entityId={String(item.id)} createdAt={item.createdAt} />}</div></ScrollArea>
         <SheetFooter className="border-t border-border/50 px-5 py-3 sm:px-6"><Button type="button" variant="outline" className="min-w-24 rounded-xl" onClick={() => onOpenChange(false)}><XCircle className="mr-2 size-4" />Cerrar</Button></SheetFooter>
       </SheetContent>
     </Sheet>
