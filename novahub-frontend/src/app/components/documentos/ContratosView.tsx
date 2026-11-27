@@ -99,12 +99,12 @@ export const ContratosView: React.FC<ContratosViewProps> = ({ data, loading, err
             )}
           </div>
         </div>
-        <EditableDataTable 
-          data={filtered} 
-          columns={columns} 
-          onRowUpdate={canPerform('DOCUMENTS_CONTRACTS', 'edit') ? handleUpdate : undefined} 
-          isLoading={loading} 
-          onRowDelete={canPerform('DOCUMENTS_CONTRACTS', 'delete') ? async (id) => { try { await contractsService.delete(id as string); toast.success('Eliminado'); onRefresh(); } catch (e: any) { toast.error(e?.response?.data?.message || e?.message || 'Error al eliminar contrato'); } } : undefined} 
+        <EditableDataTable preferenceKey="documents.contracts" showViewLayoutControl
+          data={filtered}
+          columns={columns}
+          onRowUpdate={canPerform('DOCUMENTS_CONTRACTS', 'edit') ? handleUpdate : undefined}
+          isLoading={loading}
+          onRowDelete={canPerform('DOCUMENTS_CONTRACTS', 'delete') ? async (id) => { try { await contractsService.delete(id as string); toast.success('Eliminado'); onRefresh(); } catch (e: any) { toast.error(e?.response?.data?.message || e?.message || 'Error al eliminar contrato'); } } : undefined}
         />
       </Card>
     </div>

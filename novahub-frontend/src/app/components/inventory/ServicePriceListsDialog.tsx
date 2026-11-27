@@ -9,7 +9,7 @@ import { toast } from '@/app/services/toast';
 import { useAuth } from '../../contexts/AuthContext';
 import { useCurrency } from '../../contexts/CurrencyContext';
 import { priceListsService, type PriceList } from '../../services/price-lists.service';
-import { PriceListPricingEditor, type PriceListPricingMode } from '../ui/PriceListPricingEditor';
+import { PriceListPricingEditor, PriceListPricingModeSelect, type PriceListPricingMode } from '../ui/PriceListPricingEditor';
 import { priceFromCost } from '../../utils/marginPricing';
 
 interface ServicePriceListsDialogProps {
@@ -23,7 +23,6 @@ interface ServicePriceDraft {
   price: string;
   currency: string;
   exchangeRate: number;
-  pricingMode: PriceListPricingMode;
   marginPercent: string;
 }
 
@@ -76,23 +75,36 @@ export function ServicePriceListsDialog({ open, onOpenChange, service, onSaved }
     });
   }, [payload, serviceRecord, service, baseCurrency, exchangeRate]);
 
-  const [draftState, setDraftState] = useState<{ serviceId: string | null; values: Record<string, ServicePriceDraft> }>({ serviceId: null, values: {} });
+  const [draftState, setDraftState] = useState<{ serviceId: string | null; pricingMode: PriceListPricingMode; values: Record<string, ServicePriceDraft> }>({ serviceId: null, pricingMode: 'FIXED', values: {} });
   const serviceId = service?.id || null;
   const drafts = draftState.serviceId === serviceId ? draftState.values : {};
+  const configuredRows = rows.filter((row) => row.configured);
+  const initialPricingMode: PriceListPricingMode = configuredRows.length > 0 && configuredRows.every((row) => row.pricingMode === 'MARGIN') ? 'MARGIN' : 'FIXED';
+  const pricingMode = canViewCost
+    ? draftState.serviceId === serviceId ? draftState.pricingMode : initialPricingMode
+    : 'FIXED';
   const updateDraft = (listId: string, draft: ServicePriceDraft) => {
     setDraftState((current) => ({
       serviceId,
+      pricingMode: current.serviceId === serviceId ? current.pricingMode : pricingMode,
       values: {
         ...(current.serviceId === serviceId ? current.values : {}),
         [listId]: draft,
       },
     }));
   };
+  const updatePricingMode = (mode: PriceListPricingMode) => {
+    setDraftState((current) => ({
+      serviceId,
+      pricingMode: mode,
+      values: current.serviceId === serviceId ? current.values : {},
+    }));
+  };
 
   const savePrice = useMutation({
-    mutationFn: async ({ list, draft, serviceId: targetServiceId }: { list: PriceList; draft: ServicePriceDraft; serviceId: string }) => {
+    mutationFn: async ({ list, draft, serviceId: targetServiceId, pricingMode: selectedPricingMode }: { list: PriceList; draft: ServicePriceDraft; serviceId: string; pricingMode: PriceListPricingMode }) => {
       const cost = convertBaseCostToCurrency(Number(serviceRecord?.costPrice || 0), draft.currency, baseCurrency, draft.exchangeRate || Number(exchangeRate || 1));
-      const price = draft.pricingMode === 'MARGIN'
+      const price = selectedPricingMode === 'MARGIN'
         ? priceFromCost(cost, Number(draft.marginPercent), 'margin')
         : Number(draft.price);
       if (price === null) throw new Error('Ingresa un costo mayor que cero y un margen entre 0% y 99.99%.');
@@ -101,8 +113,8 @@ export function ServicePriceListsDialog({ open, onOpenChange, service, onSaved }
         price,
         currency: draft.currency,
         exchangeRate: draft.exchangeRate,
-        pricingMode: draft.pricingMode,
-        marginPercent: draft.pricingMode === 'MARGIN' ? Number(draft.marginPercent) : null,
+        pricingMode: selectedPricingMode,
+        marginPercent: selectedPricingMode === 'MARGIN' ? Number(draft.marginPercent) : null,
       });
     },
     onSuccess: async (_item, variables) => {
@@ -119,7 +131,7 @@ export function ServicePriceListsDialog({ open, onOpenChange, service, onSaved }
 
   return (
     <Dialog open={open} onOpenChange={(nextOpen) => {
-      if (!nextOpen) setDraftState({ serviceId: null, values: {} });
+      if (!nextOpen) setDraftState({ serviceId: null, pricingMode: 'FIXED', values: {} });
       onOpenChange(nextOpen);
     }}>
       <DialogContent className="max-h-[85vh] w-[calc(100%-1rem)] max-w-2xl overflow-y-auto">
@@ -143,12 +155,23 @@ export function ServicePriceListsDialog({ open, onOpenChange, service, onSaved }
           </div>
         ) : (
           <div className="space-y-3 py-2">
-            {rows.map(({ list, configured, price, currency, exchangeRate, pricingMode, marginPercent, costPrice }) => {
+            <div className="flex min-w-0 flex-col gap-2 rounded-xl border border-border/60 bg-muted/20 p-3 sm:flex-row sm:items-center sm:justify-between">
+              <div className="min-w-0">
+                <p className="text-xs font-bold text-foreground">Modo para todas las listas</p>
+                <p className="mt-0.5 text-[10px] text-muted-foreground">Configura por separado el precio o margen de cada una.</p>
+              </div>
+              <PriceListPricingModeSelect
+                value={pricingMode}
+                onValueChange={updatePricingMode}
+                allowMargin={canViewCost}
+                disabled={savePrice.isPending || !canPerform('SALES_PRICE_LISTS', 'edit')}
+              />
+            </div>
+            {rows.map(({ list, configured, price, currency, exchangeRate, marginPercent, costPrice }) => {
               const draft = drafts[list.id] || {
                 price,
                 currency,
                 exchangeRate,
-                pricingMode,
                 marginPercent,
               };
               const cost = convertBaseCostToCurrency(costPrice, draft.currency, baseCurrency, draft.exchangeRate || Number(exchangeRate || 1));
@@ -164,15 +187,14 @@ export function ServicePriceListsDialog({ open, onOpenChange, service, onSaved }
                       <PriceListPricingEditor
                         listName={list.name}
                         price={draft.price}
-                        pricingMode={draft.pricingMode}
+                        pricingMode={pricingMode}
                         marginPercent={draft.marginPercent}
                         cost={cost}
                         currency={draft.currency}
                         allowMargin={canViewCost}
                         disabled={isSaving}
-                        onPriceChange={(value) => updateDraft(list.id, { ...draft, price: value, pricingMode: 'FIXED', marginPercent: '' })}
-                        onPricingModeChange={(mode) => updateDraft(list.id, { ...draft, pricingMode: mode, ...(mode === 'FIXED' ? { marginPercent: '' } : {}) })}
-                        onMarginPercentChange={(value) => updateDraft(list.id, { ...draft, pricingMode: 'MARGIN', marginPercent: value })}
+                        onPriceChange={(value) => updateDraft(list.id, { ...draft, price: value })}
+                        onMarginPercentChange={(value) => updateDraft(list.id, { ...draft, marginPercent: value })}
                         onApplyMargin={(value) => updateDraft(list.id, { ...draft, price: String(value) })}
                       />
                     </div>
@@ -192,8 +214,8 @@ export function ServicePriceListsDialog({ open, onOpenChange, service, onSaved }
                     type="button"
                     size="sm"
                     className="w-full shrink-0 sm:w-auto"
-                    disabled={isSaving || (draft.pricingMode === 'MARGIN' ? draft.marginPercent === '' : draft.price === '') || !canPerform('SALES_PRICE_LISTS', 'edit')}
-                    onClick={() => serviceId && savePrice.mutate({ list, draft, serviceId })}
+                    disabled={isSaving || (pricingMode === 'MARGIN' ? draft.marginPercent === '' : draft.price === '') || !canPerform('SALES_PRICE_LISTS', 'edit')}
+                    onClick={() => serviceId && savePrice.mutate({ list, draft, serviceId, pricingMode })}
                   >
                     {isSaving ? <Loader2 className="mr-2 size-4 animate-spin" /> : <Save className="mr-2 size-4" />}
                     Guardar
@@ -206,7 +228,7 @@ export function ServicePriceListsDialog({ open, onOpenChange, service, onSaved }
 
         <DialogFooter>
           <Button type="button" variant="outline" onClick={() => {
-            setDraftState({ serviceId: null, values: {} });
+            setDraftState({ serviceId: null, pricingMode: 'FIXED', values: {} });
             onOpenChange(false);
           }}>Cerrar</Button>
         </DialogFooter>

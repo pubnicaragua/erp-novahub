@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { useLocalStorageState } from '../../hooks/useLocalStorageState';
+import { useUserViewPreferences } from '../../hooks/useUserViewPreferences';
 import * as XLSX from 'xlsx';
 import { 
   Users, UserPlus, Search, CreditCard, CheckCircle2, Eye, Pencil, Upload, Download, Ban, CircleX, Settings2, Check, CircleHelp, X, CalendarDays, ChevronDown
@@ -266,24 +267,22 @@ export function ClientesView({ data, loading, error, onRefresh, pagination, onSe
   const [portalPassword, setPortalPassword] = useState('');
   const [portalEnabled, setPortalEnabled] = useState(true);
   const [columnConfigOpen, setColumnConfigOpen] = useState(false);
-  const [columnPreferences, setColumnPreferences] = useLocalStorageState<CustomerColumnPreferences>(`sales-clients-columns-${tenantKey}`, { version: 2, keys: DEFAULT_CUSTOMER_COLUMN_KEYS }, 24 * 365);
-  const visibleColumnKeys = migrateCustomerColumnKeys(columnPreferences);
-  // Store the migration with the selection so later hiding survives reloads.
-  useEffect(() => {
-    if (Array.isArray(columnPreferences)) {
-      setColumnPreferences({ version: 2, keys: migrateCustomerColumnKeys(columnPreferences) });
-    } else if (customerLoansEnabled && columnPreferences.version < 2) {
-      setColumnPreferences({ version: 2, keys: [...new Set([...migrateCustomerColumnKeys(columnPreferences), 'customerLoans'])] });
-    }
-  }, [columnPreferences, customerLoansEnabled, setColumnPreferences]);
+  const tablePreferences = useUserViewPreferences('sales.customers');
+  const defaultCustomerColumnKeys = customerLoansEnabled
+    ? DEFAULT_CUSTOMER_COLUMN_KEYS
+    : DEFAULT_CUSTOMER_COLUMN_KEYS.filter((key) => key !== 'customerLoans');
+  const configuredCustomerColumns = migrateCustomerColumnKeys({
+    version: 2,
+    keys: tablePreferences.preferences.visibleColumnKeys || defaultCustomerColumnKeys,
+  });
+  const visibleColumnKeys = configuredCustomerColumns.includes('code') ? configuredCustomerColumns : ['code', ...configuredCustomerColumns];
   const setVisibleColumnKeys = (next: string[] | ((current: string[]) => string[])) => {
-    setColumnPreferences((current) => {
-      const keys = migrateCustomerColumnKeys(current);
-      return { version: 2, keys: typeof next === 'function' ? next(keys) : next };
-    });
+    const requestedKeys = typeof next === 'function' ? next(visibleColumnKeys) : next;
+    const keys = requestedKeys.includes('code') ? requestedKeys : ['code', ...requestedKeys];
+    void tablePreferences.save({ visibleColumnKeys: [...new Set(keys)] });
   };
   const [creating, setCreating] = useState(false);
-  const [layoutMode, setLayoutMode] = useLocalStorageState<'table' | 'cards'>('sales-clients-layout', 'table', 24 * 365);
+  const [layoutMode, setLayoutMode] = useState<'table' | 'cards'>('table');
   const [newCustomer, setNewCustomer] = useState<CustomerDraft>(() => emptyCustomerDraft(displayCurrency, defaultCountryCode, countryNameForForm(defaultCountryCode, countries)));
   const [pendingCustomers, setPendingCustomers] = useState<Array<CustomerDraft & { id: string }>>([]);
   const [showTutorial, setShowTutorial] = useState(false);
@@ -1620,7 +1619,7 @@ export function ClientesView({ data, loading, error, onRefresh, pagination, onSe
             >
               <Settings2 className="mr-2 size-4" /> Columnas <span className="ml-1 text-muted-foreground">{visibleColumns.length}</span>
             </Button>
-            <ViewLayoutSelect value={layoutMode} onChange={(value) => setLayoutMode(value === 'kanban' ? 'table' : value)} ariaLabel="Elegir distribución" dataTour="customers-layout" />
+            <ViewLayoutSelect preferenceKey="sales.customers" value={layoutMode} onChange={(value) => setLayoutMode(value === 'kanban' ? 'table' : value)} ariaLabel="Elegir distribución" dataTour="customers-layout" />
             {canPerform('SALES_CLIENTS', 'export') && (
               <ExportMenu
                 label={exportingCustomers ? 'Preparando exportación…' : 'Exportar'}
@@ -1668,7 +1667,7 @@ export function ClientesView({ data, loading, error, onRefresh, pagination, onSe
 
         <Card className="min-w-0 overflow-hidden rounded-2xl border-border/50 bg-card/40 shadow-sm" data-tour="customers-table">
           <CardContent className="min-w-0 p-1.5 sm:p-3">
-            <EditableDataTable
+            <EditableDataTable preferenceKey="sales.customers" showColumnVisibility={false}
               data={filteredData}
               columns={visibleColumns}
               onRowUpdate={handleUpdate}

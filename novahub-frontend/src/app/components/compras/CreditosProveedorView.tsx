@@ -142,7 +142,7 @@ export function CreditosProveedorView({ data, loading, onRefresh, supplierCatalo
   const { canPerform, user } = useAuth();
   const { displayCurrency, displayCurrencyLabel, baseCurrency, displayMode, valuationMode, valuationModeSuffix, toBaseAmount, formatConvertedAmount, formatCurrentAmount, formatExplicitAmount, convertAmount, convertCurrentAmount, convertDisplayAmount, exchangeRate } = useCurrency();
   const [searchTerm, setSearchTerm] = useState('');
-  const [layoutMode, setLayoutMode] = useLocalStorageState<'table' | 'cards'>('purchases-credits-layout', 'table', 24 * 365);
+  const [layoutMode, setLayoutMode] = useState<'table' | 'cards'>('table');
   const [statusFilter, setStatusFilter] = useState<'ALL' | 'ISSUED' | 'APPLIED'>('ALL');
   
   const [suppliers, setSuppliers] = useState<Supplier[]>([]);
@@ -1232,7 +1232,7 @@ export function CreditosProveedorView({ data, loading, onRefresh, supplierCatalo
           <div><div className="flex min-w-0 items-center gap-2"><h2 className="nh-module-title" data-tour="purchases-list-title">Créditos del proveedor</h2><PurchaseViewTutorial view="credits" /></div></div>
           <div className="erp-list-toolbar flex flex-wrap items-center justify-end gap-3" data-tour="purchases-list-actions">
             {canPerform('PURCHASES_RETURNS', 'export') && <PdfDownloadButton label="Exportar" includePageSizes includeRoll={false} scopeSelector={{ pageCount: filteredData.length, totalCount: pagination?.total || filteredData.length }} onDownload={(format, scope) => void handleExportListPdf(format, scope)} onExcel={() => void handleExportExcel()} />}
-            <ViewLayoutSelect value={layoutMode} onChange={(value) => setLayoutMode(value === 'kanban' ? 'table' : value)} ariaLabel="Elegir distribución de créditos del proveedor" />
+            <ViewLayoutSelect preferenceKey="purchases.supplier-credits" value={layoutMode} onChange={(value) => setLayoutMode(value === 'kanban' ? 'table' : value)} ariaLabel="Elegir distribución de créditos del proveedor" />
             <div className="max-w-md rounded-xl border border-primary/20 bg-primary/5 px-3 py-2 text-[10px] font-semibold text-muted-foreground">
               Los créditos se crean desde una recepción recibida, con sus artículos y cantidades verificadas.
             </div>
@@ -1241,7 +1241,7 @@ export function CreditosProveedorView({ data, loading, onRefresh, supplierCatalo
         <div className="flex items-center gap-3">
           <div className="relative flex-1 max-w-md"><Search className="absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground/40" /><Input placeholder="Buscar por número, proveedor o factura..." className="pl-9 h-10 bg-background/50 border-border/50 rounded-xl text-xs" value={searchTerm} onChange={e => { setSearchTerm(e.target.value); onSearchChange?.(e.target.value); }} /></div>
         </div>
-        <EditableDataTable data={filteredData} columns={columns} onRowUpdate={handleUpdate} onRowClick={(row) => setDetailCredit(row)} isLoading={loading} pagination={pagination} showSelection={false} layoutMode={layoutMode === 'cards' ? 'cards' : 'responsive'}
+        <EditableDataTable preferenceKey="purchases.supplier-credits" data={filteredData} columns={columns} onRowUpdate={handleUpdate} onRowClick={(row) => setDetailCredit(row)} isLoading={loading} pagination={pagination} showSelection={false} layoutMode={layoutMode === 'cards' ? 'cards' : 'responsive'}
           onRowDelete={canPerform('PURCHASES_RETURNS', 'read') && canPerform('PURCHASES_RETURNS', 'delete') ? async (id) => {
             if (!canPerform('PURCHASES_RETURNS', 'read') || !canPerform('PURCHASES_RETURNS', 'delete')) return;
             const credit = filteredData.find((row) => String(row.id) === String(id));

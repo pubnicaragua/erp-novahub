@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
 import { useQuery } from '@tanstack/react-query';
-import { useLocalStorageState } from '../../hooks/useLocalStorageState';
+import { useUserViewPreferences } from '../../hooks/useUserViewPreferences';
 import { 
   Plus, Search, TrendingUp, Clock, ArrowRightCircle, Eye, Ban, ChevronLeft, Trash2, Settings2, Check, Inbox, Save
 } from 'lucide-react';
@@ -157,11 +157,19 @@ export function OrdenesVentaView({ data, summaryData, summaryLoading, summaryErr
   const [detailOrder, setDetailOrder] = useState<SalesOrder | null>(null);
   const [highlightedAlertId, setHighlightedAlertId] = useState<string | null>(null);
   const [columnConfigOpen, setColumnConfigOpen] = useState(false);
-  const [visibleColumnKeys, setVisibleColumnKeys] = useLocalStorageState<string[]>(`sales-orders-columns-${tenantKey}`, [
+  const tablePreferences = useUserViewPreferences('sales.orders');
+  const defaultOrderColumnKeys = [
     'number', 'customer', 'itemCount', 'total', 'status', 'date',
     'paymentMethod', 'invoiceNumber', 'invoicedAt', 'invoicedBy',
-  ],24 * 365);
-  const [layoutMode, setLayoutMode] = useLocalStorageState<'table' | 'cards'>('sales-orders-layout', 'table', 24 * 365);
+  ];
+  const configuredOrderColumns = tablePreferences.preferences.visibleColumnKeys || defaultOrderColumnKeys;
+  const visibleColumnKeys = configuredOrderColumns.includes('number') ? configuredOrderColumns : ['number', ...configuredOrderColumns];
+  const setVisibleColumnKeys = (next: string[] | ((current: string[]) => string[])) => {
+    const requestedKeys = typeof next === 'function' ? next(visibleColumnKeys) : next;
+    const keys = requestedKeys.includes('number') ? requestedKeys : ['number', ...requestedKeys];
+    void tablePreferences.save({ visibleColumnKeys: [...new Set(keys)] });
+  };
+  const [layoutMode, setLayoutMode] = useState<'table' | 'cards'>('table');
   const productCatalog = products.filter((p) => p.itemType !== 'SERVICE');
   const serviceCatalog = products.filter((p) => p.itemType === 'SERVICE');
   const resolveItemType = (item: any) => item.itemType || (products.find((p) => p.id === item.productId)?.itemType === 'SERVICE' ? 'SERVICE' : 'PRODUCT');
@@ -1619,7 +1627,7 @@ export function OrdenesVentaView({ data, summaryData, summaryLoading, summaryErr
             >
               <Settings2 className="mr-2 size-4" /> Columnas <span className="ml-1 text-muted-foreground">{visibleColumns.length}</span>
             </Button>
-            <ViewLayoutSelect value={layoutMode} onChange={(value) => setLayoutMode(value === 'kanban' ? 'table' : value)} ariaLabel="Elegir distribución de órdenes" />
+            <ViewLayoutSelect preferenceKey="sales.orders" value={layoutMode} onChange={(value) => setLayoutMode(value === 'kanban' ? 'table' : value)} ariaLabel="Elegir distribución de órdenes" />
             {salesAlert && <PurchaseAlertsButton alert={salesAlert} sectionLabel="ventas" storageNamespace="erp-sales-alerts" onItemSelect={setHighlightedAlertId} />}
             {canPerform('SALES_ORDERS', 'create') && (
               <Button onClick={handleAddOrder} data-toolbar-role="primary" className="bg-primary hover:bg-primary/90 text-primary-foreground font-black uppercase text-[10px] tracking-widest px-4 h-10 rounded-xl gap-2 shadow-xl shadow-primary/20 border border-primary/20">
@@ -1629,7 +1637,7 @@ export function OrdenesVentaView({ data, summaryData, summaryLoading, summaryErr
           </div>
         </div>
         <div className="sales-orders-table min-w-0">
-          <EditableDataTable
+          <EditableDataTable preferenceKey="sales.orders" showColumnVisibility={false}
             data={filteredData}
             pagination={pagination}
             showHorizontalControls

@@ -755,7 +755,7 @@ export const TicketsView: React.FC<TicketsViewProps> = ({ data, customerCatalog 
             )}
           </div>
 
-          <EditableDataTable
+          <EditableDataTable preferenceKey="support.tickets" showViewLayoutControl
             showRowEditAction={false}
             data={filtered}
             columns={columns}

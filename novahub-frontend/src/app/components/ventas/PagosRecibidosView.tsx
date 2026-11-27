@@ -173,7 +173,7 @@ export function PagosRecibidosView({ data, summaryData, summaryLoading, summaryE
   const { themeConfig } = useTheme();
   const salesDraftStorageKey = getSalesEditorDraftKey('payment', user?.tenantId, user?.id);
   const [searchTerm, setSearchTerm] = useState('');
-  const [layoutMode, setLayoutMode] = useLocalStorageState<'table' | 'cards'>('sales-payments-layout', 'table', 24 * 365);
+  const [layoutMode, setLayoutMode] = useState<'table' | 'cards'>('table');
   const [invoiceFilter, setInvoiceFilter] = useState<'ALL' | 'WITH_INVOICE'>('ALL');
   const [isCreating, setIsCreating] = useState(false);
   const [localDoc, setLocalDoc] = useState<any>(null);
@@ -1123,7 +1123,7 @@ export function PagosRecibidosView({ data, summaryData, summaryLoading, summaryE
       <div className="flex flex-col gap-4">
         <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4 py-2">
           <div className="erp-list-toolbar flex flex-wrap items-center justify-end gap-3" data-tour="sales-list-actions">
-            <ViewLayoutSelect value={layoutMode} onChange={(value) => setLayoutMode(value === 'kanban' ? 'table' : value)} ariaLabel="Elegir distribución de pagos recibidos" />
+            <ViewLayoutSelect preferenceKey="sales.received-payments" value={layoutMode} onChange={(value) => setLayoutMode(value === 'kanban' ? 'table' : value)} ariaLabel="Elegir distribución de pagos recibidos" />
             <SalesDateRangeFilter dateFrom={dateFrom} dateTo={dateTo} onChange={onDateRangeChange || (() => undefined)} />
             <div className="relative"><Search className="absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground/40" />
               <Input placeholder="Buscar pago..." className="pl-9 h-10 bg-background/50 border-border/50 rounded-xl text-xs font-bold tracking-widest w-full sm:w-80" value={searchTerm} onChange={(e) => { setSearchTerm(e.target.value); onSearchChange?.(e.target.value); }} /></div>
@@ -1134,7 +1134,7 @@ export function PagosRecibidosView({ data, summaryData, summaryLoading, summaryE
             )}
           </div>
         </div>
-        <EditableDataTable data={filteredData}
+        <EditableDataTable preferenceKey="sales.received-payments" data={filteredData}
           pagination={pagination}
           columns={columns} onRowUpdate={handleUpdate} onRowClick={(row) => setDetailPayment(row)} isLoading={loading} actionsWidth="w-28" fitContent showHorizontalControls
           showSelection={false}

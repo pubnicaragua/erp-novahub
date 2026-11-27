@@ -132,7 +132,7 @@ export function SolicitudCompraView({ data, summaryData, summaryLoading, summary
   const supplierDependencyMessages = WORKFLOW_DEPENDENCIES.PURCHASE_REQUEST_APPROVAL_SUPPLIER.messages;
   const { exchangeRate: globalRate, displayCurrency, displayCurrencyLabel, displayMode, convertDisplayAmount, convertBetweenCurrencies, formatConvertedAmount } = useCurrency();
   const [search, setSearch] = useState('');
-  const [layoutMode, setLayoutMode] = useLocalStorageState<'table' | 'cards'>('purchases-requests-layout', 'table', 24 * 365);
+  const [layoutMode, setLayoutMode] = useState<'table' | 'cards'>('table');
   const [statusFilter, setStatusFilter] = useState<string>('all');
   const [highlightedAlertId, setHighlightedAlertId] = useState<string | null>(null);
 
@@ -661,13 +661,13 @@ export function SolicitudCompraView({ data, summaryData, summaryLoading, summary
           onDownload={(format, scope, filter) => void handleExportListPdf(format, scope, filter)}
           onExcel={(scope, filter) => void handleExportListExcel(scope, filter)}
         />
-        <ViewLayoutSelect value={layoutMode} onChange={(value) => setLayoutMode(value === 'kanban' ? 'table' : value)} ariaLabel="Elegir distribución de solicitudes de compra" />
+        <ViewLayoutSelect preferenceKey="purchases.requests" value={layoutMode} onChange={(value) => setLayoutMode(value === 'kanban' ? 'table' : value)} ariaLabel="Elegir distribución de solicitudes de compra" />
       </div>
 
       {loading ? (
         <Card><CardContent className="p-8 text-center text-muted-foreground">Cargando...</CardContent></Card>
       ) : layoutMode !== 'cards' ? (
-        <EditableDataTable
+        <EditableDataTable preferenceKey="purchases.requests"
           data={filtered}
           columns={columns}
           isLoading={loading}

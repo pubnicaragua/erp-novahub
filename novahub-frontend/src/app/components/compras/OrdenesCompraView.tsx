@@ -1062,7 +1062,7 @@ export function OrdenesCompraView({ data, summarySearch, loading, onRefresh, sup
   const fuelTrace = useEnabledTenantFeatures().has('SALES_FUEL_TRACE_REPORT');
   const { exchangeRate: globalRate, displayCurrency, displayCurrencyLabel, displayMode, formatConvertedAmount, convertDisplayAmount, convertBetweenCurrencies } = useCurrency();
   const [searchTerm, setSearchTerm] = useState('');
-  const [layoutMode, setLayoutMode] = useLocalStorageState<'table' | 'cards'>('purchases-orders-layout', 'table', 24 * 365);
+  const [layoutMode, setLayoutMode] = useState<'table' | 'cards'>('table');
   const [highlightedAlertId, setHighlightedAlertId] = useState<string | null>(null);
 
   useEffect(() => {
@@ -3549,7 +3549,7 @@ export function OrdenesCompraView({ data, summarySearch, loading, onRefresh, sup
               onDownload={(format, scope, filter) => void handleExportListPdf(format, scope, filter)}
               onExcel={(scope, filter) => void handleExportListExcel(scope, filter)}
             />}
-            <ViewLayoutSelect value={layoutMode} onChange={(value) => setLayoutMode(value === 'kanban' ? 'table' : value)} ariaLabel="Elegir distribución de órdenes de compra" />
+            <ViewLayoutSelect preferenceKey="purchases.orders" value={layoutMode} onChange={(value) => setLayoutMode(value === 'kanban' ? 'table' : value)} ariaLabel="Elegir distribución de órdenes de compra" />
             <div className="relative flex-1 min-w-0"><Search className="absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground/40" /><Input placeholder="Buscar..." className="pl-9 h-10 w-full bg-background/50 border-border/50 rounded-xl text-xs sm:w-80" value={searchTerm} onChange={e => { setSearchTerm(e.target.value); onSearchChange?.(e.target.value); }} /></div>
             {purchaseAlert && <PurchaseAlertsButton alert={purchaseAlert} onItemSelect={setHighlightedAlertId} />}
             {canPerform('PURCHASES_ORDERS', 'create') && (
@@ -3557,7 +3557,7 @@ export function OrdenesCompraView({ data, summarySearch, loading, onRefresh, sup
             )}
           </div>
         </div>
-        <EditableDataTable data={filteredData} columns={columns} onRowUpdate={handleUpdate} onRowClick={(row) => setPreviewOrder(row)} isLoading={loading} pagination={pagination} showSelection={canPerform('PURCHASES_ORDERS', 'reject')} layoutMode={layoutMode === 'cards' ? 'cards' : 'responsive'} highlightedRowId={highlightedAlertId} bulkAction="cancel" showHorizontalControls actionsWidth="w-56" fitContent
+        <EditableDataTable preferenceKey="purchases.orders" data={filteredData} columns={columns} onRowUpdate={handleUpdate} onRowClick={(row) => setPreviewOrder(row)} isLoading={loading} pagination={pagination} showSelection={canPerform('PURCHASES_ORDERS', 'reject')} layoutMode={layoutMode === 'cards' ? 'cards' : 'responsive'} highlightedRowId={highlightedAlertId} bulkAction="cancel" showHorizontalControls actionsWidth="w-56" fitContent
           onBulkDelete={canPerform('PURCHASES_ORDERS', 'reject') ? async (ids) => {
             const validIds = ids.map(String).filter((id) => {
               if (id.startsWith('new-')) return false;

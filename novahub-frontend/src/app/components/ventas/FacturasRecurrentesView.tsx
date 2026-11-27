@@ -142,7 +142,7 @@ export function FacturasRecurrentesView({ data, summaryData, summaryLoading, sum
   const { themeConfig } = useTheme();
   const salesDraftStorageKey = getSalesEditorDraftKey('recurring-invoice', user?.tenantId, user?.id);
   const [searchTerm, setSearchTerm] = useState('');
-  const [layoutMode, setLayoutMode] = useLocalStorageState<'table' | 'cards'>('sales-recurring-invoices-layout', 'table', 24 * 365);
+  const [layoutMode, setLayoutMode] = useState<'table' | 'cards'>('table');
   const [statusFilter, setStatusFilter] = useState<'ALL' | 'ACTIVE'>('ALL');
   const [pendingDeleteIds, setPendingDeleteIds] = useState<string[] | null>(null);
   const [deleteLoading, setDeleteLoading] = useState(false);
@@ -942,7 +942,7 @@ export function FacturasRecurrentesView({ data, summaryData, summaryLoading, sum
       <div className="flex flex-col gap-4">
         <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4 py-2">
           <div className="erp-list-toolbar flex flex-wrap items-center justify-end gap-3" data-tour="sales-list-actions">
-            <ViewLayoutSelect value={layoutMode} onChange={(value) => setLayoutMode(value === 'kanban' ? 'table' : value)} ariaLabel="Elegir distribución de facturas recurrentes" />
+            <ViewLayoutSelect preferenceKey="sales.recurring-invoices" value={layoutMode} onChange={(value) => setLayoutMode(value === 'kanban' ? 'table' : value)} ariaLabel="Elegir distribución de facturas recurrentes" />
             <SalesDateRangeFilter dateFrom={dateFrom} dateTo={dateTo} onChange={onDateRangeChange || (() => undefined)} />
             <div className="relative"><Search className="absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground/40" />
               <Input placeholder="Buscar suscripción..." className="pl-9 h-10 bg-background/50 border-border/50 rounded-xl text-xs font-bold tracking-widest w-full sm:w-80" value={searchTerm} onChange={(e) => { setSearchTerm(e.target.value); onSearchChange?.(e.target.value); }} /></div>
@@ -953,7 +953,7 @@ export function FacturasRecurrentesView({ data, summaryData, summaryLoading, sum
             )}
           </div>
         </div>
-        <EditableDataTable data={filtered}
+        <EditableDataTable preferenceKey="sales.recurring-invoices" data={filtered}
           pagination={pagination}
           bulkAction="cancel"
           showSelection={canPerform('SALES_RECURRING', 'cancel')}

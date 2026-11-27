@@ -238,7 +238,7 @@ export function FacturasView({ data, summaryData, summaryLoading, summaryError, 
       return '';
     }
   });
-  const [layoutMode, setLayoutMode] = useLocalStorageState<'table' | 'cards'>('sales-invoices-layout', 'table', 24 * 365);
+  const [layoutMode, setLayoutMode] = useState<'table' | 'cards'>('table');
   const [statusFilter, setStatusFilter] = useState<'ALL' | 'RECEIVABLE' | 'OVERDUE' | 'DRAFT' | 'PENDING' | 'CASH_QUEUE' | 'CREDIT' | 'PAID' | 'PAID_CREDIT' | 'CANCELLED'>('ALL');
   useEffect(() => { try { sessionStorage.removeItem('global-search-term') } catch {} }, [])
   const [pendingCancelIds, setPendingCancelIds] = useState<string[] | null>(null);
@@ -2979,7 +2979,7 @@ export function FacturasView({ data, summaryData, summaryLoading, summaryError, 
       <div className="flex flex-col gap-4">
         <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4 py-2">
           <div className="erp-list-toolbar flex flex-wrap items-center justify-end gap-3" data-tour="sales-list-actions">
-            <ViewLayoutSelect value={layoutMode} onChange={(value) => setLayoutMode(value === 'kanban' ? 'table' : value)} ariaLabel="Elegir distribución de facturas" />
+            <ViewLayoutSelect preferenceKey="sales.invoices" value={layoutMode} onChange={(value) => setLayoutMode(value === 'kanban' ? 'table' : value)} ariaLabel="Elegir distribución de facturas" />
             <SalesDateRangeFilter dateFrom={dateFrom} dateTo={dateTo} onChange={onDateRangeChange || (() => undefined)} />
             <Select value={statusFilter} onValueChange={(value) => setStatusFilter(value as typeof statusFilter)}>
               <SelectTrigger aria-label="Filtrar facturas por estado" className="h-10 w-full rounded-xl border-border/50 bg-background/50 text-xs sm:w-52"><SelectValue placeholder="Todos los estados" /></SelectTrigger>
@@ -3017,7 +3017,7 @@ export function FacturasView({ data, summaryData, summaryLoading, summaryError, 
             )}
           </div>
         </div>
-        <EditableDataTable
+        <EditableDataTable preferenceKey="sales.invoices"
           data={filteredData}
           pagination={pagination}
         columns={columns}

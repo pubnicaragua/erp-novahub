@@ -406,7 +406,7 @@ export const EventosView: React.FC<EventosViewProps> = ({ data, loading, summary
   ];
 
   const handleUpdate = async (id: string | number, updates: Partial<Event>) => {
-    try { 
+    try {
       const event = data.find(e => e.id === id);
       if (!event) return;
       if (!canPerformEventAction(event, 'edit')) return;
@@ -423,8 +423,8 @@ export const EventosView: React.FC<EventosViewProps> = ({ data, loading, summary
             toast.error('Necesitas permiso para ver y editar el gasto financiero vinculado.');
             return;
           }
-          await expensesService.update(event.expenseId, { 
-            amount: Number(updates.cost), 
+          await expensesService.update(event.expenseId, {
+            amount: Number(updates.cost),
             currency: (updates.currency || event.currency || 'USD') as Currency,
             source: 'Eventos',
             description: updates.title || event.title || 'Evento',
@@ -435,12 +435,12 @@ export const EventosView: React.FC<EventosViewProps> = ({ data, loading, summary
             return;
           }
           const existingExpenseAccountId = (event as any).expense?.accountId || (event as any).expenseAccountId;
-          const expense = await expensesService.create({ 
-            amount: Number(updates.cost), 
-            date: new Date().toISOString(), 
+          const expense = await expensesService.create({
+            amount: Number(updates.cost),
+            date: new Date().toISOString(),
             currency: (updates.currency || event.currency || 'USD') as Currency,
-            category: 'EVENTOS', 
-            description: updates.title || event.title || 'Evento', 
+            category: 'EVENTOS',
+            description: updates.title || event.title || 'Evento',
             source: 'Eventos',
             reference: String(event.id),
             notes: '',
@@ -460,8 +460,8 @@ export const EventosView: React.FC<EventosViewProps> = ({ data, loading, summary
             toast.error('Necesitas permiso para ver y editar el ingreso financiero vinculado.');
             return;
           }
-          await incomeService.update(event.incomeId, { 
-            amount: Number(updates.income), 
+          await incomeService.update(event.incomeId, {
+            amount: Number(updates.income),
             currency: (updates.currency || event.currency || 'USD') as Currency,
             source: 'Eventos',
             description: updates.title || event.title || 'Evento'
@@ -472,12 +472,12 @@ export const EventosView: React.FC<EventosViewProps> = ({ data, loading, summary
             return;
           }
           const existingIncomeAccountId = (event as any).income?.accountId || (event as any).incomeAccountId;
-          const inc = await incomeService.create({ 
-            amount: Number(updates.income), 
-            date: new Date().toISOString(), 
+          const inc = await incomeService.create({
+            amount: Number(updates.income),
+            date: new Date().toISOString(),
             currency: (updates.currency || event.currency || 'USD') as Currency,
-            category: 'EVENTOS', 
-            description: updates.title || event.title || 'Evento', 
+            category: 'EVENTOS',
+            description: updates.title || event.title || 'Evento',
             source: 'Eventos',
             reference: String(event.id),
             notes: '',
@@ -489,9 +489,9 @@ export const EventosView: React.FC<EventosViewProps> = ({ data, loading, summary
         }
       }
 
-      await eventsService.update(id as string, updates); 
-      toast.success('Evento actualizado en Base de Datos'); 
-      onRefresh(); 
+      await eventsService.update(id as string, updates);
+      toast.success('Evento actualizado en Base de Datos');
+      onRefresh();
     }
     catch (e: any) { toast.error(e?.response?.data?.message || e?.message || 'Error de integración con Finanzas'); console.error(e); }
   };
@@ -787,21 +787,21 @@ export const EventosView: React.FC<EventosViewProps> = ({ data, loading, summary
       </div>
 
       <Card className="min-w-0 overflow-hidden rounded-3xl border-border/50 bg-card/80 shadow-sm">
-        <EditableDataTable layoutMode="table" 
-          data={filtered} 
-          columns={columns} 
+        <EditableDataTable preferenceKey="activities.events" showViewLayoutControl layoutMode="table"
+          data={filtered}
+          columns={columns}
           onRowUpdate={filtered.some((row) => canPerformEventAction(row, 'edit')) ? handleUpdate : undefined}
           onRowClick={(row) => setSelectedEvent(row)}
-          isLoading={loading} 
+          isLoading={loading}
           actions={(row: Event) => {
             const isClosed = completedEventIds.has(String(row.id)) || ['COMPLETED', 'CANCELLED'].includes(String(row.status || '').toUpperCase());
             return (
               <div className="flex min-w-max items-center justify-end gap-1" onPointerDown={(event) => event.stopPropagation()} onClick={(event) => event.stopPropagation()}>
                 <Button type="button" variant="ghost" size="icon" title={isMeetingMode ? 'Ver detalle de la reunión' : 'Ver detalle del evento'} aria-label={isMeetingMode ? 'Ver detalle de la reunión' : 'Ver detalle del evento'} className="size-8 rounded-lg text-muted-foreground hover:bg-primary/10 hover:text-primary" onClick={() => setSelectedEvent(row)}><Eye className="size-4" /></Button>
-                
+
                 {/* Download .ics */}
                 {canPerformEventAction(row, 'export') && <Button type="button" variant="ghost" size="icon" title="Descargar .ics" aria-label="Descargar .ics" className="size-8 rounded-lg text-muted-foreground hover:bg-primary/10 hover:text-primary" onClick={() => handleDownloadIcs(row)}><Download className="size-4" /></Button>}
-                
+
                 {/* Share WhatsApp */}
                 {canPerformEventAction(row, 'sendInvitations') && <Button type="button" variant="ghost" size="icon" title="Compartir en WhatsApp" aria-label="Compartir en WhatsApp" className="size-8 rounded-lg text-emerald-600 hover:bg-emerald-500/10" onClick={() => handleShareWhatsapp(row)}><Phone className="size-4" /></Button>}
 

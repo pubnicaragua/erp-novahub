@@ -1,5 +1,6 @@
-import { useCallback, useMemo, useState, type DragEvent } from 'react';
+import { useCallback, useEffect, useMemo, useState, type DragEvent } from 'react';
 import { useAuth } from '../../contexts/AuthContext';
+import { useUserViewPreferences } from '../../hooks/useUserViewPreferences';
 
 type AccountOrderMap = Record<string, string[]>;
 let activeDraggedAccountId: string | null = null;
@@ -39,15 +40,25 @@ export function useAccountingAccountOrder(view: string) {
   const { user } = useAuth();
   const tenantId = user?.clientTenantId || user?.tenantId || 'current';
   const userId = user?.id || 'anonymous';
+  const viewPreferences = useUserViewPreferences(`accounting.account-order.${view}`, 'branch');
   const storageKey = useMemo(
     () => `novahub:accounting:account-order:v1:${encodeURIComponent(tenantId)}:${encodeURIComponent(userId)}:${view}`,
     [tenantId, userId, view],
   );
   const [saved, setSaved] = useState(() => ({ storageKey, orders: readOrder(storageKey) }));
   const currentOrders = useMemo(
-    () => saved.storageKey === storageKey ? saved.orders : readOrder(storageKey),
-    [saved, storageKey],
+    () => {
+      if (viewPreferences.preferences.accountOrders) return viewPreferences.preferences.accountOrders;
+      return saved.storageKey === storageKey ? saved.orders : readOrder(storageKey);
+    },
+    [saved, storageKey, viewPreferences.preferences.accountOrders],
   );
+
+  useEffect(() => {
+    if (viewPreferences.isLoading || viewPreferences.loadError || viewPreferences.hasSavedPreferences) return;
+    const legacy = readOrder(storageKey);
+    if (Object.keys(legacy).length > 0) void viewPreferences.importIfMissing({ accountOrders: legacy });
+  }, [storageKey, viewPreferences.hasSavedPreferences, viewPreferences.importIfMissing, viewPreferences.isLoading, viewPreferences.loadError]);
 
   const sort = useCallback(<T,>(section: string, items: T[], getId: (item: T) => string): T[] => {
     const saved = currentOrders[section] || [];
@@ -74,7 +85,8 @@ export function useAccountingAccountOrder(view: string) {
       // Keep the in-memory order if the browser blocks storage.
     }
     setSaved({ storageKey, orders: next });
-  }, [saved, storageKey]);
+    void viewPreferences.save({ accountOrders: { [section]: uniqueIds } });
+  }, [saved, storageKey, viewPreferences.save]);
 
   const moveToIndex = useCallback((section: string, ids: string[], fromIndex: number, toIndex: number) => {
     if (fromIndex < 0 || toIndex < 0 || fromIndex >= ids.length || toIndex >= ids.length || fromIndex === toIndex) return;

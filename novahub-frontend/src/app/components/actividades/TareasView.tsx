@@ -1052,7 +1052,7 @@ export const TareasView: React.FC<TareasViewProps> = ({ data, loading, summaryEr
             <Star className={favoritesOnly ? 'size-3.5 fill-current' : 'size-3.5'} /> Favoritas
           </Button>
           <TaskSavedViews userId={currentUserId} current={currentFilters} onApply={applyFilters} />
-          <ViewLayoutSelect
+          <ViewLayoutSelect preferenceKey="activities.tasks"
             value={viewLayout}
             onChange={(val) => setViewLayout(val)}
             showKanban={true}
@@ -1304,7 +1304,7 @@ export const TareasView: React.FC<TareasViewProps> = ({ data, loading, summaryEr
           />)
         ) : (
           renderGrouped((rows) => <div className="min-w-0" data-activities-task-table="true">
-          <EditableDataTable
+          <EditableDataTable preferenceKey="activities.tasks"
             data={rows}
             columns={columns}
             layoutMode={isCardsLayout ? 'cards' : 'table'}

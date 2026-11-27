@@ -940,7 +940,7 @@ export function TeamAccessPanel({ tenantId, tenantName, users, onBack, onRolesCh
           <CardHeader className="flex flex-col gap-3 border-b border-border/30 bg-muted/10 pb-4 sm:flex-row sm:items-center sm:justify-between">
             <div><CardTitle className="flex items-center gap-2 text-sm font-black uppercase tracking-wider"><UserCog className="size-4 text-primary" /> Catálogo de roles</CardTitle><CardDescription className="mt-1 text-xs">Define los permisos que tendrá cada grupo de usuarios.</CardDescription></div>
             <div className="flex w-full flex-wrap items-center gap-2 sm:w-auto sm:justify-end">
-              <ViewLayoutSelect value={effectiveRolesLayout} onChange={setRolesLayout} ariaLabel="Distribución de roles" className="h-8" />
+              <ViewLayoutSelect preferenceKey="settings.team-roles" value={rolesLayout} onChange={setRolesLayout} ariaLabel="Distribución de roles" className="h-8" />
               {canCreateRoles && <Button size="sm" onClick={openCreateRole} className="h-9 w-fit gap-1.5 text-xs"><Plus className="size-3.5" /> Nuevo rol</Button>}
             </div>
           </CardHeader>

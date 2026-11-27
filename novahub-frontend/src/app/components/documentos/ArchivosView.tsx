@@ -87,12 +87,12 @@ export const ArchivosView: React.FC<ArchivosViewProps> = ({ data, loading, error
             )}
           </div>
         </div>
-        <EditableDataTable 
-          data={filtered} 
-          columns={columns} 
-          onRowUpdate={canPerform('DOCUMENTS_FILES', 'edit') ? handleUpdate : undefined} 
-          isLoading={loading} 
-          onRowDelete={canPerform('DOCUMENTS_FILES', 'delete') ? async (id) => { try { await filesService.delete(id as string); toast.success('Eliminado'); onRefresh(); } catch (e: any) { toast.error(e?.response?.data?.message || e?.message || 'Error al eliminar archivo'); } } : undefined} 
+        <EditableDataTable preferenceKey="documents.files" showViewLayoutControl
+          data={filtered}
+          columns={columns}
+          onRowUpdate={canPerform('DOCUMENTS_FILES', 'edit') ? handleUpdate : undefined}
+          isLoading={loading}
+          onRowDelete={canPerform('DOCUMENTS_FILES', 'delete') ? async (id) => { try { await filesService.delete(id as string); toast.success('Eliminado'); onRefresh(); } catch (e: any) { toast.error(e?.response?.data?.message || e?.message || 'Error al eliminar archivo'); } } : undefined}
         />
       </Card>
     </div>

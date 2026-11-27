@@ -1,7 +1,7 @@
 import { useState, useEffect, useRef } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import WhatsAppIcon from '@mui/icons-material/WhatsApp';
-import { 
+import {
   FileSpreadsheet, Plus, Search, TrendingUp, Clock, CheckCircle2, ArrowRightCircle, Eye, Trash2, Ban, ChevronLeft, Upload, Image as ImageIcon, Loader2, X, FileText, Inbox, Save
 } from 'lucide-react';
 import { Card, CardContent } from '../ui/card';
@@ -117,8 +117,8 @@ export function EstimacionesView({ data, summaryData, summaryLoading, summaryErr
   const { exchangeRate: globalRate, displayCurrency, baseCurrency, displayMode, formatConvertedAmount, formatExplicitAmount, toBaseAmount } = useCurrency();
   const salesDraftStorageKey = getSalesEditorDraftKey('estimate', user?.tenantId, user?.id);
   const [searchTerm, setSearchTerm] = useState('');
-  const [layoutMode, setLayoutMode] = useLocalStorageState<ViewLayoutMode>('sales-estimates-layout', 'table', 24 * 365);
-  const [kanbanMode, setKanbanMode] = useLocalStorageState<boolean>('sales-estimates-kanban', false, 24 * 365);
+  const [layoutMode, setLayoutMode] = useState<ViewLayoutMode>('table');
+  const [kanbanMode, setKanbanMode] = useState<boolean>(false);
   const [statusFilter, setStatusFilter] = useState<'ALL' | EstimateWorkflowStatus>('ALL');
   const [pendingCancelId, setPendingCancelId] = useState<string | null>(null);
   const [cancelLoading, setCancelLoading] = useState(false);
@@ -860,12 +860,12 @@ export function EstimacionesView({ data, summaryData, summaryLoading, summaryErr
   }, [draftHydrated, editingId, data]);
 
   const columns: ColumnDef<Estimate>[] = [
-    { 
-      key: 'number', 
+    {
+      key: 'number',
       header: 'N° Cotización',
       width: '140px',
       render: (val, row) => (
-        <span 
+        <span
           className={cn(
             "text-xs font-black font-mono text-primary",
             canPerform('SALES_QUOTES', 'edit') ? "cursor-pointer hover:underline" : "cursor-default"
@@ -876,21 +876,21 @@ export function EstimacionesView({ data, summaryData, summaryLoading, summaryErr
         </span>
       )
     },
-    { 
-      key: 'customerId', 
-      header: 'Cliente', 
+    {
+      key: 'customerId',
+      header: 'Cliente',
       headerExtra: <ColumnFilterMenu label="Cliente" options={distinctCustomers} selected={colFilters.state.customerId?.values || []} onSelect={(values) => colFilters.setValues('customerId', values)} sort={colFilters.state.customerId?.sort || null} onSort={(sort) => colFilters.setSort('customerId', sort)} />,
       render: (_val, row) => <span className="text-[13px] font-bold text-foreground">{row.customer?.name || 'Varios'}</span>
     },
-    { 
-      key: 'date', 
-      header: 'Fecha Emisión', 
+    {
+      key: 'date',
+      header: 'Fecha Emisión',
       headerExtra: <ColumnFilterMenu label="Fecha Emisión" sort={colFilters.state.date?.sort || null} onSort={(sort) => colFilters.setSort('date', sort)} sortOptions={[{ value: 'desc', label: 'Más recientes' }, { value: 'asc', label: 'Más antiguas' }]} />,
       render: (val) => <span className="text-xs font-medium text-muted-foreground">{formatDateEs(val, true)}</span>
     },
-    { 
-      key: 'status', 
-      header: 'Estado', 
+    {
+      key: 'status',
+      header: 'Estado',
       width: '135px',
       editable: false,
       headerExtra: <ColumnFilterMenu label="Estado" options={statusOptionsForFilter} selected={colFilters.state.status?.values || []} onSelect={(values) => colFilters.setValues('status', values)} sort={colFilters.state.status?.sort || null} onSort={(sort) => colFilters.setSort('status', sort)} />,
@@ -917,8 +917,8 @@ export function EstimacionesView({ data, summaryData, summaryLoading, summaryErr
       )
     },
     {
-      key: 'expiryDate', 
-      header: 'Validez', 
+      key: 'expiryDate',
+      header: 'Validez',
       render: (val) => (
         <div className="flex items-center gap-1.5 text-[10px] font-medium text-muted-foreground">
            <Clock className="size-3" />
@@ -1005,7 +1005,7 @@ export function EstimacionesView({ data, summaryData, summaryLoading, summaryErr
               <div className="grid grid-cols-1 gap-3 text-sm sm:grid-cols-2">
                 <div>
                   <p className="text-[10px] text-muted-foreground mb-1">Cliente</p>
-                  <Combobox 
+                  <Combobox
                     options={(customers || [])
                       .filter(c => (c.status || '').toUpperCase() === 'ACTIVE' || c.id === localDoc?.customerId)
                       .map(c => ({ label: c.name, value: c.id, description: (c.code ? `[${c.code}] ` : '') + (c.phone || 'Sin teléfono') }))}
@@ -1358,10 +1358,10 @@ export function EstimacionesView({ data, summaryData, summaryLoading, summaryErr
                     </div>
                   )}
                   <div className="min-w-0 xl:col-span-1">
-                    <Input 
+                    <Input
                       type="number"
                       min="0"
-                      value={Number(item.quantity) || ''} 
+                      value={Number(item.quantity) || ''}
                       placeholder="0"
                       onChange={(e) => {
                         const newItems = [...(localDoc.items || [])] as any[];
@@ -1378,8 +1378,8 @@ export function EstimacionesView({ data, summaryData, summaryLoading, summaryErr
                     />
                   </div>
                   <div className={cn("col-span-2", pricingMode === 'individual' && "xl:col-span-1")}>
-                    <Input 
-                      type="text" 
+                    <Input
+                      type="text"
                       min="0"
                       value={item.unitPrice === undefined || item.unitPrice === null ? '' : formatSalesAmount(item.unitPrice)}
                       placeholder="0"
@@ -1607,12 +1607,12 @@ export function EstimacionesView({ data, summaryData, summaryLoading, summaryErr
       <div className="flex flex-col gap-4">
         <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4 py-2">
           <div className="erp-list-toolbar flex flex-wrap items-center justify-end gap-3" data-tour="sales-list-actions">
-            <ViewLayoutSelect value={kanbanMode ? 'kanban' : layoutMode} onChange={(mode) => { setLayoutMode(mode); setKanbanMode(mode === 'kanban'); }} showKanban ariaLabel="Elegir distribución de cotizaciones" />
+            <ViewLayoutSelect preferenceKey="sales.estimates" value={kanbanMode ? 'kanban' : layoutMode} onChange={(mode) => { setLayoutMode(mode); setKanbanMode(mode === 'kanban'); }} showKanban ariaLabel="Elegir distribución de cotizaciones" />
             <SalesDateRangeFilter dateFrom={dateFrom} dateTo={dateTo} onChange={onDateRangeChange || (() => undefined)} />
             <div className="relative">
               <Search className="absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground/40" />
-              <Input 
-                placeholder="Buscar cotización..." 
+              <Input
+                placeholder="Buscar cotización..."
                 className="pl-9 h-10 w-full bg-background/50 border-border/50 rounded-xl text-xs font-bold tracking-widest sm:w-80"
                 value={searchTerm}
                 onChange={(e) => { setSearchTerm(e.target.value); onSearchChange?.(e.target.value); }}
@@ -1633,7 +1633,7 @@ export function EstimacionesView({ data, summaryData, summaryLoading, summaryErr
             canEdit={canPerform('SALES_QUOTES', 'edit')}
           />
         ) : (
-        <EditableDataTable 
+        <EditableDataTable preferenceKey="sales.estimates"
           data={filteredData}
           pagination={pagination}
           columns={columns}

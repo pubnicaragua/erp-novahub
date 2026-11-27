@@ -43,7 +43,7 @@ import { beginNotificationAction, completeNotificationAction, failNotificationAc
 import { Combobox } from '../ui/Combobox';
 import { ColumnFilterMenu, useColumnFilters } from '../ui/ColumnFilterMenu';
 import { parseSpreadsheetInWorker } from '../../utils/import-spreadsheet';
-import { useLocalStorageState } from '../../hooks/useLocalStorageState';
+import { useUserViewPreferences } from '../../hooks/useUserViewPreferences';
 import { generateConfiguredReportTemplate } from '../../utils/pdfGenerator';
 import { ExportMenu } from '../ui/ExportMenu';
 import { Checkbox } from '../ui/checkbox';
@@ -255,7 +255,18 @@ export function PlanCuentasView({ isSidebarCollapsed = true, helpTrigger }: Plan
   const [transactionsPage, setTransactionsPage] = useState(1);
   const [transactionsPageSize, setTransactionsPageSize] = useState(50);
   const [selectedTransaction, setSelectedTransaction] = useState<AccountTransaction | null>(null);
-  const [visibleAccountColumnKeys, setVisibleAccountColumnKeys] = useLocalStorageState<AccountColumnKey[]>(`accounting-accounts-columns-${tenantKey}`, DEFAULT_ACCOUNT_COLUMN_KEYS, 24 * 365);
+  const tablePreferences = useUserViewPreferences('accounting.chart-of-accounts');
+  const persistedAccountKeys = tablePreferences.preferences.visibleColumnKeys as AccountColumnKey[] | undefined;
+  const visibleAccountColumnKeys = [...new Set([
+    'code', 'name',
+    ...(persistedAccountKeys || DEFAULT_ACCOUNT_COLUMN_KEYS).filter((key) => ACCOUNT_COLUMN_DEFS.some((column) => column.key === key) && !PERIOD_COLUMN_KEYS.includes(key)),
+  ])] as AccountColumnKey[];
+  const setVisibleAccountColumnKeys = (next: AccountColumnKey[] | ((current: AccountColumnKey[]) => AccountColumnKey[])) => {
+    if (tablePreferences.isLoading || tablePreferences.loadError) return;
+    const requested = typeof next === 'function' ? next(visibleAccountColumnKeys) : next;
+    const keys = [...new Set(['code', 'name', ...requested.filter((key) => !PERIOD_COLUMN_KEYS.includes(key))])];
+    void tablePreferences.save({ visibleColumnKeys: keys });
+  };
   const [columnConfigOpen, setColumnConfigOpen] = useState(false);
 
   const accountTransactionsQuery = useAccountingQuery<any>(

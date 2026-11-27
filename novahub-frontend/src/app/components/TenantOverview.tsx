@@ -25,6 +25,7 @@ import { DateField } from './ui/DateField';
 import { buildDatedDownloadFileName } from '../utils/exportFileNames';
 import { showPdfInBrowserPreview } from '../utils/pdfBrowserPreview';
 import { normalizeCurrency, summarizeAmountsByCurrency, type SupportedCurrency } from '../utils/currency';
+import { useUserViewPreferences } from '../hooks/useUserViewPreferences';
 
 interface TenantOverviewProps {
   onNavigate?: (module: Module) => void;
@@ -129,11 +130,11 @@ export function TenantOverview({ onNavigate }: TenantOverviewProps) {
   const { formatConvertedAmount, displayMode, displayCurrencyLabel, baseCurrency, formatExplicitAmount, valuationMode, valuationModeSuffix } = useCurrency();
   const { themeConfig } = useTheme();
   const { user, canPerform } = useAuth();
+  const dashboardPreferences = useUserViewPreferences('dashboard.kpis');
   const canViewDashboard = canPerform('DASHBOARD', 'view');
   const canViewPos = canPerform('RETAIL_POS', 'view');
   const kpiStorageScope = `${user?.clientTenantId || user?.tenantId || 'default'}:${user?.id || 'anonymous'}`;
   const kpiStorageKey = `novahub.dashboard.kpis.${kpiStorageScope}`;
-  const legacyKpiStorageKey = `novahub.dashboard.kpis.${user?.clientTenantId || user?.tenantId || user?.id || 'default'}`;
   useEffect(() => {
     if (!loading) return;
     const timer = setInterval(() => setLoadStep((s) => Math.min(s + 1, LOADING_STEPS.length - 1)), 2000);
@@ -141,23 +142,25 @@ export function TenantOverview({ onNavigate }: TenantOverviewProps) {
   }, [loading]);
 
   useEffect(() => {
+    if (dashboardPreferences.isLoading || dashboardPreferences.loadError) return;
+    const serverSelection = dashboardPreferences.preferences.visibleColumnKeys;
+    if (serverSelection) {
+      const valid = serverSelection.filter((id) => KPI_DEFINITIONS.some((definition) => definition.id === id && definition.available)).slice(0, 30);
+      setSelectedKpiIds(valid);
+      return;
+    }
     try {
-      const storedKey = window.localStorage.getItem(kpiStorageKey) !== null
-        ? kpiStorageKey
-        : legacyKpiStorageKey;
-      const stored = JSON.parse(window.localStorage.getItem(storedKey) || 'null');
+      const stored = JSON.parse(window.localStorage.getItem(kpiStorageKey) || 'null');
       if (!Array.isArray(stored)) return;
       const valid = stored.filter((id): id is string =>
         typeof id === 'string' && KPI_DEFINITIONS.some((definition) => definition.id === id && definition.available),
       ).slice(0, 30);
-      if (valid.length > 0) {
-        setSelectedKpiIds(valid);
-        if (storedKey !== kpiStorageKey) window.localStorage.setItem(kpiStorageKey, JSON.stringify(valid));
-      }
+      setSelectedKpiIds(valid);
+      void dashboardPreferences.importIfMissing({ visibleColumnKeys: valid });
     } catch {
       // La preferencia visual no debe impedir cargar el dashboard.
     }
-  }, [kpiStorageKey, legacyKpiStorageKey]);
+  }, [dashboardPreferences.isLoading, dashboardPreferences.loadError, dashboardPreferences.preferences.visibleColumnKeys, dashboardPreferences.importIfMissing, kpiStorageKey]);
 
   useEffect(() => {
     const syncKpis = (event: StorageEvent) => {
@@ -186,6 +189,7 @@ export function TenantOverview({ onNavigate }: TenantOverviewProps) {
   const saveKpiConfig = () => {
     setSelectedKpiIds(draftKpiIds);
     try { window.localStorage.setItem(kpiStorageKey, JSON.stringify(draftKpiIds)); } catch { /* preferencia opcional */ }
+    void dashboardPreferences.save({ visibleColumnKeys: draftKpiIds });
     setShowKpiConfig(false);
     toast.success(`${draftKpiIds.length} KPI${draftKpiIds.length === 1 ? '' : 's'} configurado${draftKpiIds.length === 1 ? '' : 's'}`);
   };

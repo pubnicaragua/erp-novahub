@@ -76,7 +76,7 @@ export function ProveedoresView({ data, loading, onRefresh, pagination, onSearch
   const { canPerform, user } = useAuth();
   const { baseCurrency, displayMode, valuationModeSuffix, formatConvertedAmount, formatExplicitAmount } = useCurrency();
   const [searchTerm, setSearchTerm] = useState('');
-  const [layoutMode, setLayoutMode] = useLocalStorageState<'table' | 'cards'>('purchases-suppliers-layout', 'table', 24 * 365);
+  const [layoutMode, setLayoutMode] = useState<'table' | 'cards'>('table');
   const [statusFilter, setStatusFilter] = useState<'ALL' | 'ACTIVE' | 'INACTIVE'>('ALL');
   const [pendingToggle, setPendingToggle] = useState<Supplier | null>(null);
   const [pendingDeleteSupplier, setPendingDeleteSupplier] = useState<Supplier | null>(null);
@@ -710,7 +710,7 @@ export function ProveedoresView({ data, loading, onRefresh, pagination, onSearch
               onDownload={(format, scope, filter) => void handleExportListPdf(format, scope, filter)}
               onExcel={(_scope, filter) => void handleExportListExcel(filter)}
             />}
-            <ViewLayoutSelect value={layoutMode} onChange={(value) => setLayoutMode(value === 'kanban' ? 'table' : value)} ariaLabel="Elegir distribución de proveedores" />
+            <ViewLayoutSelect preferenceKey="purchases.suppliers" value={layoutMode} onChange={(value) => setLayoutMode(value === 'kanban' ? 'table' : value)} ariaLabel="Elegir distribución de proveedores" />
             <div className="relative">
               <Search className="absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground/40" />
               <Input placeholder="Buscar proveedor..." className="pl-9 h-10 bg-background/50 border-border/50 rounded-xl text-xs w-full sm:w-80" value={searchTerm} onChange={e => { setSearchTerm(e.target.value); onSearchChange?.(e.target.value); }} />
@@ -731,7 +731,7 @@ export function ProveedoresView({ data, loading, onRefresh, pagination, onSearch
             )}
           </div>
         </div>
-        <EditableDataTable data={filteredData} columns={columns} onRowUpdate={handleUpdate} onRowClick={(row) => setSelectedSupplierDetail(row)} showRowEditAction={false} isLoading={loading} pagination={pagination} actionsWidth="w-40" fitContent showHorizontalControls showSelection={canPerform('PURCHASES_PROVIDERS', 'deactivate')} layoutMode={layoutMode === 'cards' ? 'cards' : 'responsive'}
+        <EditableDataTable preferenceKey="purchases.suppliers" data={filteredData} columns={columns} onRowUpdate={handleUpdate} onRowClick={(row) => setSelectedSupplierDetail(row)} showRowEditAction={false} isLoading={loading} pagination={pagination} actionsWidth="w-40" fitContent showHorizontalControls showSelection={canPerform('PURCHASES_PROVIDERS', 'deactivate')} layoutMode={layoutMode === 'cards' ? 'cards' : 'responsive'}
           onAddRow={canPerform('PURCHASES_PROVIDERS', 'create') ? handleAdd : undefined}
           bulkActions={canPerform('PURCHASES_PROVIDERS', 'deactivate') ? (ids) => (
             <Button variant="destructive" size="sm" className="h-8 text-[10px] font-black uppercase tracking-wider"

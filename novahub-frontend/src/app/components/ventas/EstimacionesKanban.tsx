@@ -11,6 +11,7 @@ import type { Estimate } from '../../types';
 import { useCurrency } from '../../contexts/CurrencyContext';
 import { useAuth } from '../../contexts/AuthContext';
 import { formatDateEs } from '../../utils/dateFormat';
+import { useUserViewPreferences } from '../../hooks/useUserViewPreferences';
 
 export interface KanbanColumn {
   id: string;
@@ -57,12 +58,6 @@ function loadKanbanPositions(storageKey: string): Record<string, string> {
   return {};
 }
 
-function saveKanbanPositions(storageKey: string, positions: Record<string, string>) {
-  try {
-    localStorage.setItem(storageKey, JSON.stringify(positions));
-  } catch { /* ignore */ }
-}
-
 function getInitialColumnId(status: unknown, columns: KanbanColumn[]): string {
   const normalizedStatus = String(status || '').toUpperCase();
   const visualValue = ['IN_PROCESS', 'IN_PROGRESS', 'SENT'].includes(normalizedStatus) ? 'DRAFT' : normalizedStatus === 'REJECTED' ? 'CANCELLED' : normalizedStatus;
@@ -86,12 +81,15 @@ export function EstimacionesKanban({ data, onViewDetail, canEdit }: Estimaciones
   const { formatConvertedAmount } = useCurrency();
   const { user } = useAuth();
   const positionStorageKey = `${POSITION_STORAGE_KEY}:${user?.tenantId || 'unknown'}:${user?.id || 'anonymous'}`;
+  const positionPreferences = useUserViewPreferences('sales.estimates.kanban-positions');
   const [columns, setColumns] = useState<KanbanColumn[]>(loadColumns);
   const [editingColumn, setEditingColumn] = useState<string | null>(null);
   const [editLabel, setEditLabel] = useState('');
   const [editColor, setEditColor] = useState('');
   const [showSettings, setShowSettings] = useState(false);
-  const [kanbanPositions, setKanbanPositions] = useState<Record<string, string>>(() => loadKanbanPositions(positionStorageKey));
+  const [kanbanPositions, setKanbanPositions] = useState<Record<string, string>>({});
+  const [positionsReady, setPositionsReady] = useState(false);
+  const [positionsDirty, setPositionsDirty] = useState(false);
   const [draggedItem, setDraggedItem] = useState<string | null>(null);
   const [dragOverColumn, setDragOverColumn] = useState<string | null>(null);
   const [newColumnLabel, setNewColumnLabel] = useState('');
@@ -99,14 +97,34 @@ export function EstimacionesKanban({ data, onViewDetail, canEdit }: Estimaciones
   const dragCounter = useRef<Record<string, number>>({});
 
   useEffect(() => {
-    setKanbanPositions(loadKanbanPositions(positionStorageKey));
-  }, [positionStorageKey]);
+    setPositionsReady(false);
+    setPositionsDirty(false);
+    if (positionPreferences.isLoading) return;
+    const savedPositions = positionPreferences.preferences.itemPositions;
+    if (savedPositions) {
+      setKanbanPositions(savedPositions);
+      setPositionsReady(true);
+      return;
+    }
+    const legacyPositions = loadKanbanPositions(positionStorageKey);
+    setKanbanPositions(legacyPositions);
+    setPositionsReady(true);
+    if (Object.keys(legacyPositions).length > 0 && !positionPreferences.loadError) {
+      void positionPreferences.importIfMissing({ itemPositions: legacyPositions });
+    }
+  }, [positionStorageKey, positionPreferences.isLoading, positionPreferences.loadError, positionPreferences.preferences.itemPositions, positionPreferences.importIfMissing]);
 
   useEffect(() => {
-    saveKanbanPositions(positionStorageKey, kanbanPositions);
-  }, [positionStorageKey, kanbanPositions]);
+    if (!positionsReady || !positionsDirty || positionPreferences.isLoading || positionPreferences.loadError) return undefined;
+    const timer = window.setTimeout(() => {
+      setPositionsDirty(false);
+      void positionPreferences.save({ itemPositions: kanbanPositions });
+    }, 200);
+    return () => window.clearTimeout(timer);
+  }, [kanbanPositions, positionsDirty, positionsReady, positionPreferences.isLoading, positionPreferences.loadError, positionPreferences.save]);
 
   useEffect(() => {
+    if (!positionsReady) return;
     setKanbanPositions((previous) => {
       const next = { ...previous };
       let changed = false;
@@ -121,7 +139,7 @@ export function EstimacionesKanban({ data, onViewDetail, canEdit }: Estimaciones
       });
       return changed ? next : previous;
     });
-  }, [columns, data]);
+  }, [columns, data, positionsReady]);
 
   const handleDragStart = useCallback((event: React.DragEvent, estimateId: string) => {
     event.dataTransfer.setData('text/plain', estimateId);
@@ -153,12 +171,13 @@ export function EstimacionesKanban({ data, onViewDetail, canEdit }: Estimaciones
   const handleDrop = useCallback((event: React.DragEvent, targetColumn: KanbanColumn) => {
     event.preventDefault();
     const estimateId = event.dataTransfer.getData('text/plain');
-    if (!estimateId || !data.some((estimate) => estimate.id === estimateId)) return;
+    if (!positionsReady || !estimateId || !data.some((estimate) => estimate.id === estimateId)) return;
     setKanbanPositions((previous) => ({ ...previous, [estimateId]: targetColumn.id }));
+    setPositionsDirty(true);
     setDraggedItem(null);
     setDragOverColumn(null);
     dragCounter.current = {};
-  }, [data]);
+  }, [data, positionsReady]);
 
   const columnEstimates = useMemo(() => {
     const grouped: Record<string, Estimate[]> = {};
@@ -313,6 +332,7 @@ export function EstimacionesKanban({ data, onViewDetail, canEdit }: Estimaciones
                       onDragEnd={handleDragEnd}
                       isDragging={draggedItem === estimate.id}
                       canEdit={canEdit}
+                      canReorder={positionsReady}
                     />
                   ))}
                 </AnimatePresence>
@@ -342,9 +362,10 @@ interface KanbanCardProps {
   onDragEnd: () => void;
   isDragging: boolean;
   canEdit: boolean;
+  canReorder: boolean;
 }
 
-function KanbanCard({ estimate, column, formatConvertedAmount, onViewDetail, onDragStart, onDragEnd, isDragging, canEdit }: KanbanCardProps) {
+function KanbanCard({ estimate, column, formatConvertedAmount, onViewDetail, onDragStart, onDragEnd, isDragging, canEdit, canReorder }: KanbanCardProps) {
   const expiryDate = estimate.expiryDate ? new Date(estimate.expiryDate) : null;
   const now = new Date();
   const isExpiringSoon = expiryDate && expiryDate.getTime() - now.getTime() < 7 * 86400000 && expiryDate > now;
@@ -357,7 +378,7 @@ function KanbanCard({ estimate, column, formatConvertedAmount, onViewDetail, onD
       animate={{ opacity: isDragging ? 0.4 : 1, scale: 1, y: 0 }}
       exit={{ opacity: 0, scale: 0.96 }}
       transition={{ duration: 0.18, ease: 'easeOut' }}
-      draggable
+      draggable={canEdit && canReorder}
       onDragStart={(event) => onDragStart(event as any, estimate.id)}
       onDragEnd={onDragEnd}
       className={cn(

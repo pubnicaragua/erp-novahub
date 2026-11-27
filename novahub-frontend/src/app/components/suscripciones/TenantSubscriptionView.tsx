@@ -901,7 +901,7 @@ export function TenantSubscriptionView({ tenant, activeSubModule, onSubModuleCha
                   {canViewPortalAccess && portalAccessTotal > 0 && <Button variant="outline" size="sm" className="h-8 shrink-0 gap-1.5 rounded-xl border-primary/20 text-[10px] font-black uppercase tracking-wider text-primary hover:bg-primary/10" onClick={() => setIsPortalAccessDialogOpen(true)}>
                     <Globe className="size-3.5" aria-hidden="true" /> Accesos de clientes portal <Badge variant="secondary" className="ml-0.5 px-1.5 py-0 text-[9px]">{portalAccessTotal}</Badge>
                   </Button>}
-                  <ViewLayoutSelect value={effectiveTeamUsersLayout} onChange={setTeamUsersLayout} ariaLabel="Distribución de usuarios" className="h-8" />
+                  <ViewLayoutSelect preferenceKey="settings.team-users" value={teamUsersLayout} onChange={setTeamUsersLayout} ariaLabel="Distribución de usuarios" className="h-8" />
                   {canCreateUsers && <Button size="sm" className="h-8 shrink-0 gap-1.5 text-xs" onClick={handleOpenCreateUser}>
                     <Plus className="size-4" /> Crear usuario
                   </Button>}

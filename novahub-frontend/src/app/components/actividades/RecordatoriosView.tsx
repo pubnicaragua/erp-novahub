@@ -108,7 +108,7 @@ export const RecordatoriosView: React.FC<RecordatoriosViewProps> = ({ data, load
         toast.error('El título es requerido');
         return;
       }
-      
+
       let targetId = '';
       if (formData.scope === 'PERSONAL') {
         if (formData.selectedUsers.length === 0) { toast.error('Selecciona al menos un usuario'); return; }
@@ -126,15 +126,15 @@ export const RecordatoriosView: React.FC<RecordatoriosViewProps> = ({ data, load
         finalReminderDate = new Date(finalReminderDate.getTime() - advance * 60000);
       }
 
-      await remindersService.create({ 
+      await remindersService.create({
         title: formData.title.trim(),
         description: formData.description,
-        reminderDate: finalReminderDate.toISOString(), 
-        status: 'PENDING', 
+        reminderDate: finalReminderDate.toISOString(),
+        status: 'PENDING',
         scope: formData.scope,
         targetId
       });
-      toast.success('Recordatorio programado'); 
+      toast.success('Recordatorio programado');
       setIsAddOpen(false);
       setFormData({ title: '', description: '', reminderDate: '', advanceMinutes: '0', scope: 'PERSONAL', selectedUsers: [], selectedDept: '' });
       onRefresh();
@@ -182,12 +182,12 @@ export const RecordatoriosView: React.FC<RecordatoriosViewProps> = ({ data, load
       </div>
 
       <Card className="min-w-0 overflow-hidden rounded-3xl border-border/50 bg-card/80 shadow-sm">
-        <EditableDataTable layoutMode="table" 
-          data={filtered} 
-          columns={columns} 
+        <EditableDataTable preferenceKey="activities.reminders" showViewLayoutControl layoutMode="table"
+          data={filtered}
+          columns={columns}
           onRowUpdate={canPerform('ACTIVITIES_REMINDERS', 'edit') || canPerform('ACTIVITIES_REMINDERS', 'changeStatus') ? handleUpdate : undefined}
           onRowClick={(row) => setSelectedReminder(row)}
-          isLoading={loading} 
+          isLoading={loading}
           actions={(row: Reminder) => (
             <div className="flex min-w-max items-center justify-end gap-1" onPointerDown={(event) => event.stopPropagation()} onClick={(event) => event.stopPropagation()}>
               <Button type="button" variant="ghost" size="icon" title="Ver detalle del recordatorio" aria-label="Ver detalle del recordatorio" className="size-8 rounded-lg text-muted-foreground hover:bg-primary/10 hover:text-primary" onClick={() => setSelectedReminder(row)}><Eye className="size-4" /></Button>

@@ -103,7 +103,7 @@ export function FacturasProveedorView({ data, summaryData, summaryLoading, summa
   } = useCurrency();
   const [searchTerm, setSearchTerm] = useState('');
   const [exportingInvoiceList, setExportingInvoiceList] = useState(false);
-  const [layoutMode, setLayoutMode] = useLocalStorageState<'table' | 'cards'>('purchases-supplier-invoices-layout', 'table', 24 * 365);
+  const [layoutMode, setLayoutMode] = useState<'table' | 'cards'>('table');
   const [highlightedAlertId, setHighlightedAlertId] = useState<string | null>(null);
 
   useEffect(() => {
@@ -965,12 +965,12 @@ export function FacturasProveedorView({ data, summaryData, summaryLoading, summa
               onDownload={(format, scope) => void handleExportInvoiceListPdf(format, scope)}
               onExcel={(scope) => void handleExportInvoiceListExcel(scope || 'all')}
             />}
-            <ViewLayoutSelect value={layoutMode} onChange={(value) => setLayoutMode(value === 'kanban' ? 'table' : value)} ariaLabel="Elegir distribución de facturas de proveedor" />
+            <ViewLayoutSelect preferenceKey="purchases.invoices" value={layoutMode} onChange={(value) => setLayoutMode(value === 'kanban' ? 'table' : value)} ariaLabel="Elegir distribución de facturas de proveedor" />
             <div className="relative flex-1 min-w-0"><Search className="absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground/40" /><Input placeholder="Buscar..." className="pl-9 h-10 w-full bg-background/50 border-border/50 rounded-xl text-xs sm:w-80" value={searchTerm} onChange={e => { setSearchTerm(e.target.value); onSearchChange?.(e.target.value); }} /></div>
             {purchaseAlert && <PurchaseAlertsButton alert={purchaseAlert} onItemSelect={setHighlightedAlertId} />}
           </div>
         </div>
-        <EditableDataTable data={filtered} columns={columns} onRowUpdate={handleUpdate} isLoading={loading} pagination={pagination} actionsWidth="w-56" showSelection={canPerform('PURCHASES_RECEIPTS', 'read') && canPerform('PURCHASES_RECEIPTS', 'cancelInvoice')} layoutMode={layoutMode === 'cards' ? 'cards' : 'responsive'} showHorizontalControls highlightedRowId={highlightedAlertId} bulkAction="cancel"
+        <EditableDataTable preferenceKey="purchases.invoices" data={filtered} columns={columns} onRowUpdate={handleUpdate} isLoading={loading} pagination={pagination} actionsWidth="w-56" showSelection={canPerform('PURCHASES_RECEIPTS', 'read') && canPerform('PURCHASES_RECEIPTS', 'cancelInvoice')} layoutMode={layoutMode === 'cards' ? 'cards' : 'responsive'} showHorizontalControls highlightedRowId={highlightedAlertId} bulkAction="cancel"
           onBulkDelete={canPerform('PURCHASES_RECEIPTS', 'read') && canPerform('PURCHASES_RECEIPTS', 'cancelInvoice') ? async (ids) => {
             const validIds = ids.map(String).filter((id) => !id.startsWith('new-'));
             if (!validIds.length) return;

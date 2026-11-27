@@ -190,7 +190,7 @@ export function DevolucionesView({ data, summaryData, summaryLoading, summaryErr
   const { themeConfig } = useTheme();
   const salesDraftStorageKey = getSalesEditorDraftKey('sales-return', user?.tenantId, user?.id);
   const [searchTerm, setSearchTerm] = useState('');
-  const [layoutMode, setLayoutMode] = useLocalStorageState<'table' | 'cards'>('sales-returns-layout', 'table', 24 * 365);
+  const [layoutMode, setLayoutMode] = useState<'table' | 'cards'>('table');
   const [statusFilter, setStatusFilter] = useState<'ALL' | 'DRAFT' | 'APPROVED' | 'APPLIED' | 'REJECTED'>('ALL');
   const [pendingDeleteId, setPendingDeleteId] = useState<string | null>(null);
   const [deleteLoading, setDeleteLoading] = useState(false);
@@ -722,7 +722,7 @@ export function DevolucionesView({ data, summaryData, summaryLoading, summaryErr
       <div className="flex flex-col gap-4">
         <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4 py-2">
           <div className="erp-list-toolbar flex flex-wrap items-center justify-end gap-3" data-tour="sales-list-actions">
-            <ViewLayoutSelect value={layoutMode} onChange={(value) => setLayoutMode(value === 'kanban' ? 'table' : value)} ariaLabel="Elegir distribución de notas de crédito" />
+            <ViewLayoutSelect preferenceKey="sales.returns" value={layoutMode} onChange={(value) => setLayoutMode(value === 'kanban' ? 'table' : value)} ariaLabel="Elegir distribución de notas de crédito" />
             <SalesDateRangeFilter dateFrom={dateFrom} dateTo={dateTo} onChange={onDateRangeChange || (() => undefined)} />
             <div className="relative"><Search className="absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground/40" />
               <Input placeholder="Buscar nota..." className="pl-9 h-10 bg-background/50 border-border/50 rounded-xl text-xs font-bold tracking-widest w-full sm:w-80" value={searchTerm} onChange={(e) => { setSearchTerm(e.target.value); onSearchChange?.(e.target.value); }} /></div>
@@ -733,7 +733,7 @@ export function DevolucionesView({ data, summaryData, summaryLoading, summaryErr
             )}
           </div>
         </div>
-        <EditableDataTable data={filteredData}
+        <EditableDataTable preferenceKey="sales.returns" data={filteredData}
           pagination={pagination}
           bulkAction="reject"
           showSelection={canPerform('SALES_RETURNS', 'reject')}

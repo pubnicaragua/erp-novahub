@@ -70,12 +70,12 @@ export const ReportesView: React.FC<ReportesViewProps> = ({ data, loading, error
             )}
           </div>
         </div>
-        <EditableDataTable 
-          data={filtered} 
-          columns={columns} 
-          onRowUpdate={canPerform('DOCUMENTS_REPORTS', 'edit') ? handleUpdate : undefined} 
-          isLoading={loading} 
-          onRowDelete={canPerform('DOCUMENTS_REPORTS', 'delete') ? async (id) => { try { await reportsService.delete(id as string); toast.success('Eliminado'); onRefresh(); } catch (e: any) { toast.error(e?.response?.data?.message || e?.message || 'Error al eliminar reporte'); } } : undefined} 
+        <EditableDataTable preferenceKey="documents.reports" showViewLayoutControl
+          data={filtered}
+          columns={columns}
+          onRowUpdate={canPerform('DOCUMENTS_REPORTS', 'edit') ? handleUpdate : undefined}
+          isLoading={loading}
+          onRowDelete={canPerform('DOCUMENTS_REPORTS', 'delete') ? async (id) => { try { await reportsService.delete(id as string); toast.success('Eliminado'); onRefresh(); } catch (e: any) { toast.error(e?.response?.data?.message || e?.message || 'Error al eliminar reporte'); } } : undefined}
         />
       </Card>
     </div>

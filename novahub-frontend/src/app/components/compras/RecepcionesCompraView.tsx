@@ -623,7 +623,7 @@ export function RecepcionesCompraView({ data, summaryData, summaryLoading, summa
   const { baseCurrency, displayCurrency, displayCurrencyLabel, displayMode, convertDisplayAmount, formatConvertedAmount, toBaseAmount } = useCurrency();
   const queryClient = useQueryClient();
   const [searchTerm, setSearchTerm] = useState('');
-  const [layoutMode, setLayoutMode] = useLocalStorageState<'table' | 'cards'>('purchases-receipts-layout', 'table', 24 * 365);
+  const [layoutMode, setLayoutMode] = useState<'table' | 'cards'>('table');
   const [highlightedAlertId, setHighlightedAlertId] = useState<string | null>(null);
 
   useEffect(() => {
@@ -2183,7 +2183,7 @@ export function RecepcionesCompraView({ data, summaryData, summaryLoading, summa
         <div className="flex items-center justify-between flex-wrap gap-4">
           <div className="erp-list-toolbar flex flex-wrap items-center justify-end gap-3 w-full sm:w-auto" data-tour="purchases-list-actions">
             {canPerform('PURCHASES_RECEIPTS', 'export') && <PdfDownloadButton label="Exportar" includePageSizes includeRoll={false} scopeSelector={{ pageCount: filteredData.length, totalCount: pagination?.total || filteredData.length }} filterSelector={{ label: 'Estado de recepciones', defaultValue: 'all', options: [{ value: 'all', label: 'Todas las recepciones', description: 'Incluye todos los estados' }, { value: 'paid', label: 'Solo pagadas', description: 'Incluye únicamente estado Pagada' }] }} onDownload={(format, scope, filter) => void handleExportListPdf(format, scope, filter)} onExcel={() => void handleExportExcel()} />}
-            <ViewLayoutSelect value={layoutMode} onChange={(value) => setLayoutMode(value === 'kanban' ? 'table' : value)} ariaLabel="Elegir distribución de recepciones" />
+            <ViewLayoutSelect preferenceKey="purchases.receipts" value={layoutMode} onChange={(value) => setLayoutMode(value === 'kanban' ? 'table' : value)} ariaLabel="Elegir distribución de recepciones" />
             <div className="relative flex-1 min-w-0"><Search className="absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground/40" /><Input placeholder="Buscar..." className="pl-9 h-10 w-full bg-background/50 border-border/50 rounded-xl text-xs sm:w-80" value={searchTerm} onChange={e => { setSearchTerm(e.target.value); onSearchChange?.(e.target.value); }} /></div>
             {purchaseAlert && <PurchaseAlertsButton alert={purchaseAlert} onItemSelect={setHighlightedAlertId} />}
             {canPerform('PURCHASES_RECEIPTS', 'create') && (
@@ -2191,7 +2191,7 @@ export function RecepcionesCompraView({ data, summaryData, summaryLoading, summa
             )}
           </div>
         </div>
-        <EditableDataTable data={filteredData} columns={columns} onRowUpdate={handleUpdate} onRowClick={(row) => setDetailReceipt(row)} isLoading={loading} pagination={pagination} showSelection={canPerform('PURCHASES_RECEIPTS', 'read') && canPerform('PURCHASES_RECEIPTS', 'cancel')} layoutMode={layoutMode === 'cards' ? 'cards' : 'responsive'} highlightedRowId={highlightedAlertId} bulkAction="cancel"
+        <EditableDataTable preferenceKey="purchases.receipts" data={filteredData} columns={columns} onRowUpdate={handleUpdate} onRowClick={(row) => setDetailReceipt(row)} isLoading={loading} pagination={pagination} showSelection={canPerform('PURCHASES_RECEIPTS', 'read') && canPerform('PURCHASES_RECEIPTS', 'cancel')} layoutMode={layoutMode === 'cards' ? 'cards' : 'responsive'} highlightedRowId={highlightedAlertId} bulkAction="cancel"
           onBulkDelete={canPerform('PURCHASES_RECEIPTS', 'read') && canPerform('PURCHASES_RECEIPTS', 'cancel') ? async (ids) => {
             const validIds = ids.map(String).filter((id) => {
               const receipt = data.find((candidate) => candidate.id === id);

@@ -1,9 +1,10 @@
 import { useState } from 'react';
-import { TrendingDown, PackageX, BookOpenCheck } from 'lucide-react';
+import { TrendingDown, PackageX, BookOpenCheck, LayoutGrid, List, Settings2 } from 'lucide-react';
 import { Card, CardContent } from '../ui/card';
 import { Badge } from '../ui/badge';
 import { DateField } from '../ui/DateField';
 import { Button } from '../ui/button';
+import { DropdownMenu, DropdownMenuCheckboxItem, DropdownMenuContent, DropdownMenuLabel, DropdownMenuSeparator, DropdownMenuTrigger } from '../ui/dropdown-menu';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '../ui/table';
 import { toast } from '@/app/services/toast';
 import { inventoryService } from '../../services/inventario.service';
@@ -12,6 +13,19 @@ import { useAuth } from '../../contexts/AuthContext';
 import { useCurrency } from '../../contexts/CurrencyContext';
 import { normalizeCurrency, summarizeAmountsByCurrency, type SupportedCurrency } from '../../utils/currency';
 import { getCurrencyDecimalPlaces } from '../../utils/currency';
+import { useCardsOnlyBelowTableBreakpoint } from '../ui/ViewLayoutSelect';
+import { useUserViewLayoutMode } from '../../hooks/useUserViewLayoutMode';
+import { useUserViewPreferences } from '../../hooks/useUserViewPreferences';
+
+const LOSS_COLUMNS = [
+  { key: 'number', label: 'Ajuste' },
+  { key: 'date', label: 'Fecha' },
+  { key: 'reason', label: 'Razón' },
+  { key: 'warehouse', label: 'Almacén' },
+  { key: 'quantity', label: 'Unidades perdidas' },
+  { key: 'amount', label: 'Valor de pérdida' },
+  { key: 'account', label: 'Cuenta contable' },
+] as const;
 
 const REASON_LABELS: Record<string, string> = {
   DISCREPANCY: 'Discrepancia',
@@ -55,6 +69,19 @@ export function FinanceLossesView({ globalDateRange, onClearGlobalDateRange }: F
   const [dateFrom, setDateFrom] = useState(globalDateRange?.start || '');
   const [dateTo, setDateTo] = useState(globalDateRange?.end || '');
   const [page, setPage] = useState(1);
+  const viewLayout = useUserViewLayoutMode('finance.inventory-losses');
+  const savedView = useUserViewPreferences('finance.inventory-losses');
+  const compactViewport = useCardsOnlyBelowTableBreakpoint();
+  const effectiveLayout = compactViewport ? 'cards' : viewLayout.mode;
+  const visibleColumnKeys = savedView.preferences.visibleColumnKeys || LOSS_COLUMNS.map((column) => column.key);
+  const visibleColumns = LOSS_COLUMNS.filter((column) => column.key === 'number' || visibleColumnKeys.includes(column.key));
+
+  const toggleColumn = (key: string, checked: boolean | 'indeterminate') => {
+    const next = new Set(visibleColumnKeys);
+    if (checked) next.add(key);
+    else if (key !== 'number' && next.size > 1) next.delete(key);
+    void savedView.save({ visibleColumnKeys: [...next] });
+  };
 
   const lossesQuery = useQuery({
     queryKey: ['inventory', 'losses', 'finanzas', tenantKey, dateFrom, dateTo, page],
@@ -108,7 +135,7 @@ export function FinanceLossesView({ globalDateRange, onClearGlobalDateRange }: F
             </p>
           </div>
         </div>
-        <div className="flex items-center gap-2">
+        <div className="flex flex-wrap items-center justify-end gap-2">
           <DateField
             value={dateFrom}
             onChange={(value) => { setDateFrom(value); setPage(1); }}
@@ -128,6 +155,40 @@ export function FinanceLossesView({ globalDateRange, onClearGlobalDateRange }: F
           <Button variant="outline" size="sm" className="h-8 text-[10px] font-bold" onClick={() => { setDateFrom(''); setDateTo(''); setPage(1); if (globalDateRange?.start || globalDateRange?.end) onClearGlobalDateRange?.(); }}>
             Limpiar
           </Button>
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+              <Button variant="outline" size="sm" className="h-8 gap-1.5 text-[10px] font-bold" disabled={savedView.isLoading || savedView.loadError}>
+                <Settings2 className="size-3.5" /> Columnas
+              </Button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="end" className="w-56">
+              <DropdownMenuLabel>Columnas visibles</DropdownMenuLabel>
+              <DropdownMenuSeparator />
+              {LOSS_COLUMNS.map((column) => (
+                <DropdownMenuCheckboxItem
+                  key={column.key}
+                  checked={visibleColumns.some((visible) => visible.key === column.key)}
+                  disabled={column.key === 'number' || (visibleColumns.length <= 1 && visibleColumns.some((visible) => visible.key === column.key))}
+                  onSelect={(event) => event.preventDefault()}
+                  onCheckedChange={(checked) => toggleColumn(column.key, checked)}
+                >
+                  {column.label}
+                </DropdownMenuCheckboxItem>
+              ))}
+              <DropdownMenuSeparator />
+              <DropdownMenuCheckboxItem
+                checked={visibleColumns.length === LOSS_COLUMNS.length}
+                onSelect={(event) => event.preventDefault()}
+                onCheckedChange={(checked) => { if (checked) void savedView.save({ visibleColumnKeys: LOSS_COLUMNS.map((column) => column.key) }); }}
+              >
+                Restablecer columnas
+              </DropdownMenuCheckboxItem>
+            </DropdownMenuContent>
+          </DropdownMenu>
+          <div data-responsive-layout-toggle className="flex shrink-0 items-center gap-1 rounded-xl border border-border/60 bg-muted/20 p-1">
+            <Button type="button" variant={viewLayout.mode === 'table' ? 'secondary' : 'ghost'} size="icon" className="size-8 rounded-lg" onClick={() => viewLayout.setMode('table')} disabled={viewLayout.preferences.isLoading || viewLayout.preferences.loadError} aria-label="Vista tabla"><List className="size-4" /></Button>
+            <Button type="button" variant={viewLayout.mode === 'cards' ? 'secondary' : 'ghost'} size="icon" className="size-8 rounded-lg" onClick={() => viewLayout.setMode('cards')} disabled={viewLayout.preferences.isLoading || viewLayout.preferences.loadError} aria-label="Vista tarjetas"><LayoutGrid className="size-4" /></Button>
+          </div>
         </div>
       </div>
 
@@ -168,68 +229,62 @@ export function FinanceLossesView({ globalDateRange, onClearGlobalDateRange }: F
 
       <Card className="rounded-2xl border-border/50">
         <CardContent className="p-0 overflow-x-auto">
+          {effectiveLayout === 'cards' ? (
+            <div className="grid grid-cols-1 gap-3 p-4 sm:grid-cols-2 xl:grid-cols-3">
+              {loading ? <p className="col-span-full py-8 text-center text-xs text-muted-foreground">Cargando...</p>
+                : rows.length === 0 ? <p className="col-span-full py-8 text-center text-xs text-muted-foreground">No hay pérdidas en el período seleccionado.</p>
+                  : rows.map((row: any) => {
+                    const qty = (row.items || []).reduce((sum: number, item: any) => sum + Number(item.lossQuantity || 0), 0);
+                    const values: Record<string, React.ReactNode> = {
+                      number: <span className="font-mono font-bold">{row.number}</span>,
+                      date: row.date ? new Date(row.date).toLocaleDateString('es-NI') : 'N/A',
+                      reason: reasonLabel(row.reason),
+                      warehouse: row.warehouse?.name || '—',
+                      quantity: <span className="font-mono font-bold text-red-600">-{Number(qty).toLocaleString('es-NI', { maximumFractionDigits: 2 })}</span>,
+                      amount: <span className="font-mono font-bold text-red-600">{renderLossAmount(Number(row.totalLoss || 0), row.currency)}</span>,
+                      account: accountsForRow(row).map((account: any) => `${account.code} · ${account.name}`).join(', ') || 'Sin vínculo',
+                    };
+                    return <Card key={row.id} className="rounded-xl border-border/60 bg-background/40"><CardContent className="space-y-3 p-4">
+                      {visibleColumns.map((column) => <div key={column.key} className="flex items-start justify-between gap-4 border-b border-border/40 pb-2 last:border-0 last:pb-0"><span className="text-[10px] font-bold text-muted-foreground">{column.label}</span><span className="min-w-0 text-right text-xs">{values[column.key]}</span></div>)}
+                    </CardContent></Card>;
+                  })}
+            </div>
+          ) : (
           <Table>
             <TableHeader>
               <TableRow>
-                <TableHead className="text-[10px] font-black uppercase tracking-widest">Ajuste</TableHead>
-                <TableHead className="text-[10px] font-black uppercase tracking-widest">Fecha</TableHead>
-                <TableHead className="text-[10px] font-black uppercase tracking-widest">Razón</TableHead>
-                <TableHead className="text-[10px] font-black uppercase tracking-widest">Almacén</TableHead>
-                <TableHead className="text-[10px] font-black uppercase tracking-widest text-right">Unidades perdidas</TableHead>
-                <TableHead className="text-[10px] font-black uppercase tracking-widest text-right">Valor de pérdida</TableHead>
-                <TableHead className="text-[10px] font-black uppercase tracking-widest">Cuenta contable</TableHead>
+                {visibleColumns.map((column) => <TableHead key={column.key} className={`text-[10px] font-black uppercase tracking-widest ${column.key === 'amount' || column.key === 'quantity' ? 'text-right' : ''}`}>{column.label}</TableHead>)}
               </TableRow>
             </TableHeader>
             <TableBody>
               {loading ? (
-                <TableRow><TableCell colSpan={7} className="py-10 text-center text-xs text-muted-foreground">Cargando...</TableCell></TableRow>
+                <TableRow><TableCell colSpan={visibleColumns.length} className="py-10 text-center text-xs text-muted-foreground">Cargando...</TableCell></TableRow>
               ) : rows.length === 0 ? (
-                <TableRow><TableCell colSpan={7} className="py-10 text-center text-xs text-muted-foreground">
+                <TableRow><TableCell colSpan={visibleColumns.length} className="py-10 text-center text-xs text-muted-foreground">
                   No hay pérdidas en el período seleccionado.
                 </TableCell></TableRow>
               ) : rows.map((row: any) => {
                 const qty = (row.items || []).reduce((sum: number, item: any) => sum + Number(item.lossQuantity || 0), 0);
+                const cells: Record<string, React.ReactNode> = {
+                  number: <span className="font-mono text-xs font-bold">{row.number}</span>,
+                  date: <span className="text-xs text-muted-foreground">{row.date ? new Date(row.date).toLocaleDateString('es-NI') : 'N/A'}</span>,
+                  reason: <Badge variant="outline" className="border-red-500/20 bg-red-500/5 text-[9px] font-bold uppercase tracking-wider text-red-500">{reasonLabel(row.reason)}</Badge>,
+                  warehouse: <span className="text-xs">{row.warehouse?.name || '—'}</span>,
+                  quantity: <span className="font-mono text-xs font-bold text-red-600">-{Number(qty).toLocaleString('es-NI', { maximumFractionDigits: 2 })}</span>,
+                  amount: <span className="font-mono text-xs font-bold text-red-600">{displayMode === 'ORIGINAL' && Array.isArray(row.originalCurrencyBreakdown) && row.originalCurrencyBreakdown.length
+                    ? row.originalCurrencyBreakdown.map((item: any) => <span key={item.currency} className="ml-2 inline-block">{formatExplicitAmount(Number(item.amount || 0), normalizeCurrency(item.currency || baseCurrency))}</span>)
+                    : renderLossAmount(Number(row.totalLoss || 0), row.currency)}</span>,
+                  account: accountsForRow(row).length > 0 ? <div className="flex flex-wrap gap-1.5">{accountsForRow(row).map((account: any) => <button key={account.id || account.code} type="button" onClick={() => toast.info(`${account.code} · ${account.name}`, { description: 'Cuenta que recibe la contrapartida de la pérdida (vinculada por código).' })} className="flex items-center gap-1.5 rounded-lg border border-border/40 bg-muted/30 px-2 py-1 text-[10px] font-bold text-primary hover:bg-primary/10" title="Cuenta vinculada por código"><BookOpenCheck className="size-3.5" />{account.code} · {account.name}</button>)}</div> : <span className="text-[10px] text-muted-foreground/50">Sin vínculo</span>,
+                };
                 return (
                 <TableRow key={row.id}>
-                  <TableCell><span className="font-mono text-xs font-bold">{row.number}</span></TableCell>
-                  <TableCell className="text-xs text-muted-foreground">
-                    {row.date ? new Date(row.date).toLocaleDateString('es-NI') : 'N/A'}
-                  </TableCell>
-                  <TableCell>
-                    <Badge variant="outline" className="text-[9px] font-bold uppercase tracking-wider bg-red-500/5 text-red-500 border-red-500/20">
-                      {reasonLabel(row.reason)}
-                    </Badge>
-                  </TableCell>
-                  <TableCell className="text-xs">{row.warehouse?.name || '—'}</TableCell>
-                  <TableCell className="text-right font-mono text-xs font-bold text-red-600">-{Number(qty).toLocaleString('es-NI', { maximumFractionDigits: 2 })}</TableCell>
-                  <TableCell className="text-right font-mono text-xs font-bold text-red-600">
-                    {displayMode === 'ORIGINAL' && Array.isArray(row.originalCurrencyBreakdown) && row.originalCurrencyBreakdown.length
-                      ? row.originalCurrencyBreakdown.map((item: any) => <span key={item.currency} className="ml-2 inline-block">{formatExplicitAmount(Number(item.amount || 0), normalizeCurrency(item.currency || baseCurrency))}</span>)
-                      : renderLossAmount(Number(row.totalLoss || 0), row.currency)}
-                  </TableCell>
-                  <TableCell>
-                    {accountsForRow(row).length > 0 ? (
-                      <div className="flex flex-wrap gap-1.5">
-                        {accountsForRow(row).map((account: any) => (
-                          <button
-                            key={account.id || account.code}
-                            type="button"
-                            onClick={() => toast.info(`${account.code} · ${account.name}`, { description: 'Cuenta que recibe la contrapartida de la pérdida (vinculada por código).' })}
-                            className="flex items-center gap-1.5 rounded-lg border border-border/40 bg-muted/30 px-2 py-1 text-[10px] font-bold text-primary hover:bg-primary/10"
-                            title="Cuenta vinculada por código"
-                          >
-                            <BookOpenCheck className="size-3.5" />
-                            {account.code} · {account.name}
-                          </button>
-                        ))}
-                      </div>
-                    ) : <span className="text-[10px] text-muted-foreground/50">Sin vínculo</span>}
-                  </TableCell>
+                  {visibleColumns.map((column) => <TableCell key={column.key} className={column.key === 'amount' || column.key === 'quantity' ? 'text-right' : ''}>{cells[column.key]}</TableCell>)}
                 </TableRow>
                 );
               })}
             </TableBody>
           </Table>
+          )}
         </CardContent>
       </Card>
 

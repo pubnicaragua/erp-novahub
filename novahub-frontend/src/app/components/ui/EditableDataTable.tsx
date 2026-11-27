@@ -10,7 +10,7 @@ import {
 } from './table';
 import { Input } from './input';
 import { cn } from './utils';
-import { Pencil, Trash2, Ban, Copy, ChevronLeft, ChevronRight, ChevronsLeft, ChevronsRight, Loader2 } from 'lucide-react';
+import { Pencil, Trash2, Ban, Copy, ChevronLeft, ChevronRight, ChevronsLeft, ChevronsRight, Loader2, Settings2 } from 'lucide-react';
 import { Button } from './button';
 import { Checkbox } from './checkbox';
 import { motion, AnimatePresence } from 'motion/react';
@@ -24,6 +24,9 @@ import { TABLE_LAYOUT_BREAKPOINT, useCardsOnlyBelowTableBreakpoint } from './Vie
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from './select';
 import { cardHeading } from '../../utils/displayText';
 import { getCopyTextFromNode, normalizeCopyText } from '../../utils/table-copy';
+import { DropdownMenu, DropdownMenuCheckboxItem, DropdownMenuContent, DropdownMenuItem, DropdownMenuLabel, DropdownMenuSeparator, DropdownMenuTrigger } from './dropdown-menu';
+import { ViewLayoutSelect } from './ViewLayoutSelect';
+import { useUserViewPreferences } from '../../hooks/useUserViewPreferences';
 
 const EMPTY_SELECT_VALUE = '__erp_empty_select_value__';
 const toRadixSelectValue = (value: unknown) => value === '' || value === null || value === undefined ? EMPTY_SELECT_VALUE : String(value);
@@ -104,6 +107,12 @@ interface EditableDataTableProps<T> {
   canEditRow?: (row: T) => boolean;
   /** Optional row-level authorization for deletion controls. */
   canDeleteRow?: (row: T) => boolean;
+  /** Stable id for this record list's cross-device presentation preferences. */
+  preferenceKey?: string;
+  /** Add a list/cards selector inside the table when no outer selector exists. */
+  showViewLayoutControl?: boolean;
+  /** Set false when the parent already renders a column selector. */
+  showColumnVisibility?: boolean;
 }
 
 export function EditableDataTable<T extends { [key: string]: any }>({
@@ -134,7 +143,17 @@ export function EditableDataTable<T extends { [key: string]: any }>({
   showRowEditAction = true,
   canEditRow,
   canDeleteRow,
+  preferenceKey,
+  showViewLayoutControl = false,
+  showColumnVisibility = true,
 }: EditableDataTableProps<T>) {
+  const savedView = useUserViewPreferences(preferenceKey);
+  const [internalLayoutMode, setInternalLayoutMode] = useState<'table' | 'cards'>('table');
+  const primaryColumnKey = columns.length ? String(columns[0].key) : '';
+  const savedColumnKeys = savedView.preferences.visibleColumnKeys;
+  const displayColumns = showColumnVisibility && savedColumnKeys
+    ? columns.filter((column) => String(column.key) === primaryColumnKey || savedColumnKeys.includes(String(column.key)))
+    : columns;
   const isBulkCancel = bulkAction === 'cancel';
   const isBulkReject = bulkAction === 'reject';
   const bulkActionLabel = isBulkCancel ? 'Cancelar' : isBulkReject ? 'Rechazar' : 'Eliminar';
@@ -159,7 +178,10 @@ export function EditableDataTable<T extends { [key: string]: any }>({
     observer.observe(element);
     return () => observer.disconnect();
   }, [isLoading]);
-  const effectiveLayoutMode = isCompactTableViewport || (layoutMode === 'responsive' && isCompactTableContainer) ? 'cards' : layoutMode;
+  const explicitLayoutMode = showViewLayoutControl ? internalLayoutMode : layoutMode;
+  const effectiveLayoutMode = explicitLayoutMode === 'responsive'
+    ? (isCompactTableViewport || isCompactTableContainer ? 'cards' : 'responsive')
+    : explicitLayoutMode;
   const [data, setData] = useState<T[]>(initialData);
   const [selectedIds, setSelectedIds] = useState<Set<string | number>>(new Set());
   const [editingCell, setEditingCell] = useState<{ rowId: string | number; colKey: string } | null>(null);
@@ -189,6 +211,19 @@ export function EditableDataTable<T extends { [key: string]: any }>({
   const selectableRows = data.filter((row) => isRowSelectable?.(row) ?? true);
   const selectableIds = selectableRows.map((row) => row[idField]);
   const allSelectableRowsSelected = selectableIds.length > 0 && selectableIds.every((id) => selectedIds.has(id));
+
+  useEffect(() => {
+    if (!showViewLayoutControl || savedView.isLoading || savedView.loadError) return;
+    const preference = savedView.preferences.layoutMode;
+    setInternalLayoutMode(preference === 'cards' ? 'cards' : 'table');
+  }, [savedView.isLoading, savedView.loadError, savedView.preferences.layoutMode, showViewLayoutControl]);
+
+  const setVisibleColumn = (key: string, isVisible: boolean) => {
+    const visible = new Set(displayColumns.map((column) => String(column.key)));
+    if (isVisible) visible.add(key);
+    else if (key !== primaryColumnKey && visible.size > 1) visible.delete(key);
+    void savedView.save({ visibleColumnKeys: [...visible] });
+  };
 
   useEffect(() => {
     const selectableIdSet = new Set<string | number>(selectableIds as Array<string | number>);
@@ -472,7 +507,7 @@ export function EditableDataTable<T extends { [key: string]: any }>({
     rows.forEach((rowValues, rowIndex) => {
       if (rowIndex < newData.length) {
         if (!(canEditRow?.(newData[rowIndex]) ?? true)) return;
-        const editableColumns = columns.filter((col) =>
+        const editableColumns = displayColumns.filter((col) =>
           typeof col.editable === 'function' ? col.editable(newData[rowIndex]) : col.editable,
         );
         const itemUpdates: Partial<T> = {};
@@ -505,7 +540,7 @@ export function EditableDataTable<T extends { [key: string]: any }>({
   const renderTableColumnGroup = () => (
     <colgroup>
       {showSelection && <col style={{ width: '48px' }} />}
-      {columns.map((column) => <col key={column.key as string} style={{ width: column.width || '140px' }} />)}
+      {displayColumns.map((column) => <col key={column.key as string} style={{ width: column.width || '140px' }} />)}
       <col style={{ width: `${actionColumnWidth}px` }} />
     </colgroup>
   );
@@ -536,7 +571,7 @@ export function EditableDataTable<T extends { [key: string]: any }>({
             />
           </TableHead>
         )}
-        {columns.map((col) => (
+        {displayColumns.map((col) => (
           <TableHead
             key={col.key as string}
             style={{
@@ -581,6 +616,64 @@ export function EditableDataTable<T extends { [key: string]: any }>({
       )}
     >
     <div ref={tableRootRef} className="sales-data-table w-full min-w-0 max-w-full space-y-4" data-tour="sales-data-table" onPaste={handlePaste}>
+      {(preferenceKey && (showViewLayoutControl || (showColumnVisibility && columns.length > 1))) && (
+        <div className="flex min-w-0 flex-wrap items-center justify-end gap-2">
+          {showViewLayoutControl && (
+            <ViewLayoutSelect
+              value={internalLayoutMode}
+              defaultMode="table"
+              onChange={(mode) => {
+                const nextMode = mode === 'cards' ? 'cards' : 'table';
+                setInternalLayoutMode(nextMode);
+                void savedView.save({ layoutMode: nextMode });
+              }}
+              ariaLabel="Elegir distribución de registros"
+              preferenceKey={preferenceKey}
+            />
+          )}
+          {showColumnVisibility && columns.length > 1 && (
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild>
+                <Button type="button" variant="outline" size="sm" className="h-9 gap-2 rounded-lg" aria-label="Elegir columnas visibles">
+                  <Settings2 className="size-4" /> Columnas
+                </Button>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align="end" className="max-h-[min(70vh,32rem)] w-64">
+                <DropdownMenuLabel>Columnas visibles</DropdownMenuLabel>
+                <DropdownMenuSeparator />
+                {columns.map((column, index) => {
+                  const key = String(column.key);
+                  const checked = displayColumns.some((visibleColumn) => String(visibleColumn.key) === key);
+                  return (
+                    <DropdownMenuCheckboxItem
+                      key={key}
+                      checked={checked}
+                      disabled={index === 0 || (!checked && displayColumns.length === 1) || savedView.isLoading || savedView.loadError}
+                      onCheckedChange={(nextChecked) => setVisibleColumn(key, nextChecked)}
+                    >
+                      {column.header}
+                    </DropdownMenuCheckboxItem>
+                  );
+                })}
+                <DropdownMenuSeparator />
+                <DropdownMenuItem
+                  disabled={savedView.isLoading || savedView.loadError}
+                  onSelect={(event) => event.preventDefault()}
+                  onClick={() => void savedView.save({ visibleColumnKeys: columns.map((column) => String(column.key)) })}
+                  className="justify-center font-semibold text-primary"
+                >
+                  Restablecer por defecto
+                </DropdownMenuItem>
+              </DropdownMenuContent>
+            </DropdownMenu>
+          )}
+          {savedView.loadError && (
+            <Button type="button" variant="ghost" size="icon" className="size-8" aria-label="Reintentar cargar preferencias" title="Reintentar cargar preferencias" onClick={() => void savedView.retry()}>
+              <Loader2 className="size-4" />
+            </Button>
+          )}
+        </div>
+      )}
       {/* Bulk Actions Toolbar */}
       <AnimatePresence>
         {selectedIds.size > 0 && (
@@ -708,7 +801,7 @@ export function EditableDataTable<T extends { [key: string]: any }>({
                       />
                     </TableCell>
                   )}
-                  {columns.map((col, colIndex) => {
+                  {displayColumns.map((col, colIndex) => {
                     const colKey = col.key as string;
                     const value = row[colKey];
                     const isEditing = editingCell?.rowId === rowId && editingCell?.colKey === colKey;
@@ -841,7 +934,7 @@ export function EditableDataTable<T extends { [key: string]: any }>({
             {/* Empty State */}
             {data.length === 0 && !isLoading && (
               <TableRow>
-                <TableCell colSpan={columns.length + (showSelection ? 2 : 1)} className="h-32 text-center text-muted-foreground/50 text-sm">
+                <TableCell colSpan={displayColumns.length + (showSelection ? 2 : 1)} className="h-32 text-center text-muted-foreground/50 text-sm">
                    No hay registros disponibles.
                 </TableCell>
               </TableRow>
@@ -900,7 +993,7 @@ export function EditableDataTable<T extends { [key: string]: any }>({
                 </div>
               </div>
               <div className="grid grid-cols-1 gap-x-4 gap-y-3 p-4 sm:grid-cols-2">
-                {columns.map((col) => {
+                {displayColumns.map((col) => {
                   const colKey = col.key as string;
                   const value = row[col.key as string];
                   const isEditing = editingCell?.rowId === rowId && editingCell?.colKey === colKey;

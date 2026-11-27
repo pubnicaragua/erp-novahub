@@ -149,7 +149,7 @@ export function PagosRealizadosView({ data, summaryData, summaryLoading, summary
   const financeConnectionEnabled = integrationPolicyReady && integrationPolicyQuery.data?.financeEnabled === true;
   const { exchangeRate: globalRate, displayCurrency, displayCurrencyLabel, baseCurrency, displayMode, valuationMode, valuationModeSuffix, formatConvertedAmount, formatCurrentAmount, formatExplicitAmount, convertAmount, convertCurrentAmount, convertDisplayAmount, convertBetweenCurrencies, toBaseAmount } = useCurrency();
   const [searchTerm, setSearchTerm] = useState('');
-  const [layoutMode, setLayoutMode] = useLocalStorageState<'table' | 'cards'>('purchases-payments-layout', 'table', 24 * 365);
+  const [layoutMode, setLayoutMode] = useState<'table' | 'cards'>('table');
   const [highlightedTargetId, setHighlightedTargetId] = useState<string | null>(null);
   
   const [suppliers, setSuppliers] = useState<Supplier[]>([]);
@@ -1127,14 +1127,14 @@ export function PagosRealizadosView({ data, summaryData, summaryLoading, summary
               onDownload={(format, scope, filter) => void handleExportListPdf(format, scope, filter)}
               onExcel={() => void handleExportExcel()}
             />}
-            <ViewLayoutSelect value={layoutMode} onChange={(value) => setLayoutMode(value === 'kanban' ? 'table' : value)} ariaLabel="Elegir distribución de pagos a proveedores" />
+            <ViewLayoutSelect preferenceKey="purchases.payments" value={layoutMode} onChange={(value) => setLayoutMode(value === 'kanban' ? 'table' : value)} ariaLabel="Elegir distribución de pagos a proveedores" />
             <div className="relative"><Search className="absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground/40" /><Input placeholder="Buscar..." className="pl-9 h-10 bg-background/50 border-border/50 rounded-xl text-xs w-full sm:w-80" value={searchTerm} onChange={e => { setSearchTerm(e.target.value); onSearchChange?.(e.target.value); }} /></div>
              {canPerform('PURCHASES_PAYMENTS', 'read') && canPerform('PURCHASES_PAYMENTS', 'pay') && (
                <Button onClick={() => setEditingId('NEW')} className="bg-primary hover:bg-primary/90 text-primary-foreground font-black uppercase text-[10px] tracking-widest px-4 h-10 rounded-xl gap-2"><Plus className="size-4" /> Registrar Pago</Button>
              )}
           </div>
         </div>
-        <EditableDataTable data={filteredData} columns={columns} onRowUpdate={handleUpdate} onRowClick={(row) => setDetailPayment(row)} isLoading={loading} pagination={pagination} showSelection={canPerform('PURCHASES_PAYMENTS', 'read') && canPerform('PURCHASES_PAYMENTS', 'cancel')} layoutMode={layoutMode === 'cards' ? 'cards' : 'responsive'} highlightedRowId={highlightedTargetId} bulkAction="cancel"
+        <EditableDataTable preferenceKey="purchases.payments" data={filteredData} columns={columns} onRowUpdate={handleUpdate} onRowClick={(row) => setDetailPayment(row)} isLoading={loading} pagination={pagination} showSelection={canPerform('PURCHASES_PAYMENTS', 'read') && canPerform('PURCHASES_PAYMENTS', 'cancel')} layoutMode={layoutMode === 'cards' ? 'cards' : 'responsive'} highlightedRowId={highlightedTargetId} bulkAction="cancel"
           onBulkDelete={canPerform('PURCHASES_PAYMENTS', 'read') && canPerform('PURCHASES_PAYMENTS', 'cancel') ? async (ids) => {
             const paymentIds = new Set<string>();
             ids.forEach((id) => {

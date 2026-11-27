@@ -295,7 +295,7 @@ export function NotasCreditoView({ data, summaryData, summaryLoading, summaryErr
   const { themeConfig } = useTheme();
   const salesDraftStorageKey = getSalesEditorDraftKey('credit-note', user?.tenantId, user?.id);
   const [searchTerm, setSearchTerm] = useState('');
-  const [layoutMode, setLayoutMode] = useLocalStorageState<'table' | 'cards'>('sales-credits-layout', 'table', 24 * 365);
+  const [layoutMode, setLayoutMode] = useState<'table' | 'cards'>('table');
   const [statusFilter, setStatusFilter] = useState<'ALL' | 'DRAFT' | 'APPROVED' | 'ACTIVE' | 'PAID' | 'CANCELLED'>('ALL');
   const [pendingDeleteIds, setPendingDeleteIds] = useState<string[] | null>(null);
   const [deleteLoading, setDeleteLoading] = useState(false);
@@ -1774,7 +1774,7 @@ export function NotasCreditoView({ data, summaryData, summaryLoading, summaryErr
         <div className="flex flex-col justify-between gap-4 py-2 lg:flex-row lg:items-center">
           <div className="erp-list-toolbar flex flex-wrap items-center justify-end gap-3" data-tour="sales-list-actions">
             {(canPerform('SALES_CREDIT_NOTES', 'edit') || canPerform('SALES_CREDIT_NOTES', 'send')) && <Button type="button" variant="outline" onClick={() => setCreditConfigurationOpen(true)} className="h-10 rounded-xl px-4 text-[10px] font-black uppercase tracking-widest"><Settings2 className="mr-2 size-4" /> Configuración</Button>}
-            <ViewLayoutSelect value={layoutMode} onChange={(value) => setLayoutMode(value === 'kanban' ? 'table' : value)} ariaLabel="Elegir distribución de créditos" />
+            <ViewLayoutSelect preferenceKey="sales.credit-notes" value={layoutMode} onChange={(value) => setLayoutMode(value === 'kanban' ? 'table' : value)} ariaLabel="Elegir distribución de créditos" />
             <div className="w-full max-w-full shrink-0 sm:w-[11rem]">
               <Select value={statusFilter} onValueChange={(value) => setStatusFilter(value as typeof statusFilter)}>
                 <SelectTrigger aria-label="Filtrar créditos por estado" className="h-10 w-full rounded-xl border-border/50 bg-background/50 px-3 text-[10px] font-black uppercase tracking-widest">
@@ -1794,7 +1794,7 @@ export function NotasCreditoView({ data, summaryData, summaryLoading, summaryErr
             {canPerform('SALES_CREDIT_NOTES', 'create') && <Button data-toolbar-role="primary" onClick={startNew} className="h-10 rounded-xl bg-primary px-4 text-[10px] font-black uppercase tracking-widest text-primary-foreground"><Plus className="mr-2 size-4" /> Nuevo Crédito</Button>}
           </div>
         </div>
-        <EditableDataTable
+        <EditableDataTable preferenceKey="sales.credit-notes"
           data={filteredData}
           pagination={pagination}
           bulkAction="cancel"

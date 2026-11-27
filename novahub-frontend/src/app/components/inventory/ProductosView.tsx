@@ -53,7 +53,7 @@ import { normalizePurchasePriority, PURCHASE_PRIORITY_OPTIONS } from '../../util
 import { useDetailOpeningFeedback } from '../../hooks/useDetailOpeningFeedback';
 import { formatExchangeRate } from '../../utils/currency';
 import { priceListsService, type PriceList } from '../../services/price-lists.service';
-import { useLocalStorageState } from '../../hooks/useLocalStorageState';
+import { useUserViewPreferences } from '../../hooks/useUserViewPreferences';
 import { beginNotificationAction, completeNotificationAction, failNotificationAction } from '../../services/notification-action-coordinator';
 import { resolveInventoryValuation } from '../../utils/inventory-valuation';
 import { isEnterpriseModuleInFamily } from '../../constants/enterpriseModules';
@@ -1109,28 +1109,37 @@ export function ProductosView({ products, summaryProducts, summaryProductsLoaded
   const canConfigureServicePriceLists = isServiceView
     && canPerform('SALES_PRICE_LISTS', 'view')
     && canPerform('SALES_PRICE_LISTS', 'edit');
-  const [layoutMode, setLayoutMode] = useLocalStorageState<'table' | 'cards'>('inventory-products-layout', 'table', 24 * 365);
+  const tablePreferences = useUserViewPreferences('inventory.products');
+  const [layoutMode, setLayoutMode] = useState<'table' | 'cards'>('table');
   const isCompactTableViewport = useCardsOnlyBelowTableBreakpoint();
   const effectiveLayoutMode = isCompactTableViewport ? 'cards' : layoutMode;
 
-  const [visibleColumns, setVisibleColumns] = useState<Record<string, boolean>>(() => {
-    try {
-      const saved = localStorage.getItem('novahub_product_visible_columns');
-      return saved ? { ...DEFAULT_VISIBLE_COLUMNS, ...JSON.parse(saved) } : DEFAULT_VISIBLE_COLUMNS;
-    } catch {
-      return DEFAULT_VISIBLE_COLUMNS;
+  const [visibleColumns, setVisibleColumnsState] = useState<Record<string, boolean>>(DEFAULT_VISIBLE_COLUMNS);
+  useEffect(() => {
+    if (tablePreferences.isLoading || tablePreferences.loadError) return;
+    const keys = tablePreferences.preferences.visibleColumnKeys;
+    if (!keys) {
+      setVisibleColumnsState(DEFAULT_VISIBLE_COLUMNS);
+      return;
     }
-  });
+    const allowed = new Set<string>(COLUMN_DEFINITIONS.map((column) => column.key));
+    const visible = new Set(keys.filter((key) => allowed.has(key)));
+    visible.add('code');
+    visible.add('name');
+    setVisibleColumnsState(Object.fromEntries(COLUMN_DEFINITIONS.map((column) => [column.key, visible.has(column.key)])));
+  }, [tablePreferences.isLoading, tablePreferences.loadError, tablePreferences.preferences.visibleColumnKeys]);
+
+  const setVisibleColumns = (next: Record<string, boolean> | ((current: Record<string, boolean>) => Record<string, boolean>)) => {
+    const requested = typeof next === 'function' ? next(visibleColumns) : next;
+    const normalized = { ...requested, code: true, name: true };
+    setVisibleColumnsState(normalized);
+    void tablePreferences.save({ visibleColumnKeys: Object.keys(normalized).filter((key) => normalized[key]) });
+  };
 
   const toggleColumnVisibility = useCallback((key: string) => {
-    setVisibleColumns((prev) => {
-      const next = { ...prev, [key]: !prev[key] };
-      try {
-        localStorage.setItem('novahub_product_visible_columns', JSON.stringify(next));
-      } catch {}
-      return next;
-    });
-  }, []);
+    if (key === 'code' || key === 'name') return;
+    setVisibleColumns({ ...visibleColumns, [key]: visibleColumns[key] === false });
+  }, [visibleColumns, tablePreferences.save]);
 
   const catalogTableScrollRef = useRef<HTMLDivElement>(null);
   useEffect(() => {
@@ -4454,7 +4463,7 @@ export function ProductosView({ products, summaryProducts, summaryProductsLoaded
       {/* ─── Acciones secundarias y primarias ─── */}
       <div className="erp-list-toolbar mb-4 flex flex-wrap items-center justify-start gap-2" data-tour="inventory-products-actions">
 <div className="erp-toolbar-primary-group flex w-full min-w-0 flex-wrap items-center justify-start gap-2 sm:w-auto sm:justify-end">
-            <ViewLayoutSelect
+            <ViewLayoutSelect preferenceKey="inventory.products"
               value={layoutMode}
               onChange={setLayoutMode}
               ariaLabel={`Elegir distribución de ${isServiceView ? 'servicios' : 'productos'}`}
@@ -4541,10 +4550,7 @@ export function ProductosView({ products, summaryProducts, summaryProductsLoaded
                     onSelect={(e) => e.preventDefault()}
                     onClick={() => {
                       setVisibleColumns(DEFAULT_VISIBLE_COLUMNS);
-                      try {
-                        localStorage.removeItem('novahub_product_visible_columns');
-                      } catch {}
-                    }}
+}}
                   >
                     Restablecer por defecto
                   </DropdownMenuItem>

@@ -72,7 +72,7 @@ export function GastosRecurrentesView({ data, summaryData, summaryLoading, summa
   const queryClient = useQueryClient();
   const { exchangeRate: globalRate, displayCurrency, displayCurrencyLabel, baseCurrency, displayMode, valuationMode, valuationModeSuffix, formatConvertedAmount, formatCurrentAmount, formatExplicitAmount, convertAmount, convertCurrentAmount, convertDisplayAmount } = useCurrency();
   const [searchTerm, setSearchTerm] = useState('');
-  const [layoutMode, setLayoutMode] = useLocalStorageState<'table' | 'cards'>('purchases-recurring-expenses-layout', 'table', 24 * 365);
+  const [layoutMode, setLayoutMode] = useState<'table' | 'cards'>('table');
   const [statusFilter, setStatusFilter] = useState<'ALL' | 'ACTIVE' | 'PAUSED'>('ALL');
   const [pendingCancelId, setPendingCancelId] = useState<string | null>(null);
   const [cancelLoading, setCancelLoading] = useState(false);
@@ -729,14 +729,14 @@ export function GastosRecurrentesView({ data, summaryData, summaryLoading, summa
         <div className="flex items-center justify-between flex-wrap gap-4">
           <div className="erp-list-toolbar flex flex-wrap items-center justify-end gap-3" data-tour="purchases-list-actions">
             {canPerform('PURCHASES_EXPENSES_REC', 'export') && <PdfDownloadButton label="Exportar" includePageSizes includeRoll={false} scopeSelector={{ pageCount: filtered.length, totalCount: pagination?.total || filtered.length }} onDownload={(format, scope) => void handleExportListPdf(format, scope)} onExcel={() => void handleExportExcel()} />}
-            <ViewLayoutSelect value={layoutMode} onChange={(value) => setLayoutMode(value === 'kanban' ? 'table' : value)} ariaLabel="Elegir distribución de gastos recurrentes" />
+            <ViewLayoutSelect preferenceKey="purchases.recurring-expenses" value={layoutMode} onChange={(value) => setLayoutMode(value === 'kanban' ? 'table' : value)} ariaLabel="Elegir distribución de gastos recurrentes" />
             <div className="relative"><Search className="absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground/40" /><Input placeholder="Buscar..." className="pl-9 h-10 bg-background/50 border-border/50 rounded-xl text-xs w-full sm:w-80" value={searchTerm} onChange={e => { setSearchTerm(e.target.value); onSearchChange?.(e.target.value); }} /></div>
             {canPerform('PURCHASES_EXPENSES_REC', 'create') && (
               <Button onClick={() => openEditor('NEW')} className="bg-primary hover:bg-primary/90 text-primary-foreground font-black uppercase text-[10px] tracking-widest px-4 h-10 rounded-xl gap-2"><Plus className="size-4" /> Nuevo Recurrente</Button>
             )}
           </div>
         </div>
-        <EditableDataTable data={filtered} columns={columns} onRowUpdate={handleUpdate} onRowClick={(row) => setDetailExpense(row)} isLoading={loading} pagination={pagination} showSelection={canPerform('PURCHASES_EXPENSES_REC', 'delete')} layoutMode={layoutMode === 'cards' ? 'cards' : 'responsive'}
+        <EditableDataTable preferenceKey="purchases.recurring-expenses" data={filtered} columns={columns} onRowUpdate={handleUpdate} onRowClick={(row) => setDetailExpense(row)} isLoading={loading} pagination={pagination} showSelection={canPerform('PURCHASES_EXPENSES_REC', 'delete')} layoutMode={layoutMode === 'cards' ? 'cards' : 'responsive'}
           onBulkDelete={canPerform('PURCHASES_EXPENSES_REC', 'delete') ? async (ids) => {
             const deleteToastId = toast.loading(`Eliminando ${ids.length} gasto${ids.length === 1 ? '' : 's'} recurrentes...`);
             try {

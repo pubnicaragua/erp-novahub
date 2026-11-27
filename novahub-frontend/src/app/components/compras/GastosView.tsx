@@ -133,7 +133,7 @@ export function GastosView({ data, summaryData, summaryLoading, summaryError, lo
   const [expenseCategories, setExpenseCategories] = useState<any[]>([]);
   useEffect(() => { setExpenseCategories(expenseCategoryCatalog); }, [expenseCategoryCatalog]);
   const [searchTerm, setSearchTerm] = useState('');
-  const [layoutMode, setLayoutMode] = useLocalStorageState<'table' | 'cards'>('purchases-expenses-layout', 'table', 24 * 365);
+  const [layoutMode, setLayoutMode] = useState<'table' | 'cards'>('table');
   const [pendingDeleteId, setPendingDeleteId] = useState<string | null>(null);
   const [deleteLoading, setDeleteLoading] = useState(false);
   const [pendingCancelId, setPendingCancelId] = useState<string | null>(null);
@@ -1526,7 +1526,7 @@ export function GastosView({ data, summaryData, summaryLoading, summaryError, lo
         <div className="flex items-center justify-between flex-wrap gap-4">
           <div className="erp-list-toolbar grid w-full min-w-0 grid-cols-2 gap-2 sm:flex sm:w-auto sm:flex-wrap sm:items-center sm:justify-end sm:gap-3" data-tour="purchases-list-actions">
             {canExportExpenseList && <PdfDownloadButton label="Exportar" includePageSizes includeRoll={false} scopeSelector={{ pageCount: filteredData.length, totalCount: pagination?.total || filteredData.length }} onDownload={(format, scope) => void handleExportListPdf(format, scope)} onExcel={() => void handleExportExcel()} />}
-            <ViewLayoutSelect value={layoutMode} onChange={(value) => setLayoutMode(value === 'kanban' ? 'table' : value)} ariaLabel="Elegir distribución de gastos" className="w-full sm:w-32" />
+            <ViewLayoutSelect preferenceKey="purchases.expenses" value={layoutMode} onChange={(value) => setLayoutMode(value === 'kanban' ? 'table' : value)} ariaLabel="Elegir distribución de gastos" className="w-full sm:w-32" />
             {purchaseAlert && <PurchaseAlertsButton alert={purchaseAlert} onItemSelect={setHighlightedAlertId} />}
             <div className="col-span-1 min-w-0 w-full justify-self-stretch sm:col-span-1 sm:w-auto sm:justify-self-end">
               <Popover>
@@ -1628,7 +1628,7 @@ export function GastosView({ data, summaryData, summaryLoading, summaryError, lo
         </div>
         <div className="min-w-0">
           <div className="min-w-0">
-        <EditableDataTable data={filteredData} columns={columns} onRowUpdate={handleUpdate} showRowEditAction={false} isLoading={loading} pagination={pagination} layoutMode={layoutMode === 'cards' ? 'cards' : 'responsive'} highlightedRowId={highlightedAlertId} canEditRow={(row) => canExpensePerform(row, 'edit')} showSelection={filteredData.some((row) => canDeleteExpense(row))} isRowSelectable={(row) => canDeleteExpense(row)} onRowClick={(row) => setSelectedExpenseDetail(row)}
+        <EditableDataTable preferenceKey="purchases.expenses" data={filteredData} columns={columns} onRowUpdate={handleUpdate} showRowEditAction={false} isLoading={loading} pagination={pagination} layoutMode={layoutMode === 'cards' ? 'cards' : 'responsive'} highlightedRowId={highlightedAlertId} canEditRow={(row) => canExpensePerform(row, 'edit')} showSelection={filteredData.some((row) => canDeleteExpense(row))} isRowSelectable={(row) => canDeleteExpense(row)} onRowClick={(row) => setSelectedExpenseDetail(row)}
           onBulkDelete={filteredData.some((row) => canDeleteExpense(row)) ? async (ids) => {
             const deleteToastId = toast.loading(`Eliminando ${ids.length} borrador${ids.length === 1 ? '' : 'es'}...`);
             try {

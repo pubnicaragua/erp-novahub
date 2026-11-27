@@ -4,6 +4,39 @@ import { priceFromCost } from '../../utils/marginPricing';
 
 export type PriceListPricingMode = 'FIXED' | 'MARGIN';
 
+interface PriceListPricingModeSelectProps {
+  value: PriceListPricingMode;
+  onValueChange: (value: PriceListPricingMode) => void;
+  allowMargin: boolean;
+  disabled?: boolean;
+  ariaLabel?: string;
+  className?: string;
+}
+
+export function PriceListPricingModeSelect({
+  value,
+  onValueChange,
+  allowMargin,
+  disabled = false,
+  ariaLabel = 'Modo de precio para todas las listas',
+  className = '',
+}: PriceListPricingModeSelectProps) {
+  return (
+    <div className="w-full min-w-0 max-w-52">
+      <Select value={allowMargin ? value : 'FIXED'} onValueChange={(mode) => onValueChange(mode as PriceListPricingMode)} disabled={disabled || !allowMargin}>
+        <SelectTrigger className={`h-8 w-full px-2 text-xs ${className}`} aria-label={ariaLabel}>
+          <SelectValue />
+        </SelectTrigger>
+        <SelectContent>
+          <SelectItem value="FIXED">Monto fijo</SelectItem>
+          <SelectItem value="MARGIN" disabled={!allowMargin}>% margen bruto</SelectItem>
+        </SelectContent>
+      </Select>
+      {!allowMargin && <p className="mt-1 text-[10px] leading-4 text-muted-foreground">El porcentaje requiere permiso para consultar costos.</p>}
+    </div>
+  );
+}
+
 interface PriceListPricingEditorProps {
   listName: string;
   price: number | string;
@@ -15,7 +48,6 @@ interface PriceListPricingEditorProps {
   disabled?: boolean;
   inputTestId?: string;
   onPriceChange: (value: string) => void;
-  onPricingModeChange: (value: PriceListPricingMode) => void;
   onMarginPercentChange: (value: string) => void;
   onApplyMargin: (price: number) => void;
 }
@@ -33,7 +65,6 @@ export function PriceListPricingEditor({
   disabled = false,
   inputTestId,
   onPriceChange,
-  onPricingModeChange,
   onMarginPercentChange,
   onApplyMargin,
 }: PriceListPricingEditorProps) {
@@ -48,23 +79,8 @@ export function PriceListPricingEditor({
 
   return (
     <div className="min-w-0 space-y-1.5">
-      <div className="flex min-w-0 items-center justify-between gap-2">
-        <span className="min-w-0 truncate text-[10px] font-bold uppercase text-muted-foreground">{listName}</span>
-        <Select
-          value={activeMode}
-          onValueChange={(value) => onPricingModeChange(value as PriceListPricingMode)}
-          disabled={disabled || !allowMargin}
-        >
-          <SelectTrigger className="h-7 w-[6.6rem] shrink-0 px-2 text-[10px]" aria-label={`Modo de precio ${listName}`}>
-            <SelectValue />
-          </SelectTrigger>
-          <SelectContent>
-            <SelectItem value="FIXED">Monto fijo</SelectItem>
-            <SelectItem value="MARGIN" disabled={!allowMargin}>% margen bruto</SelectItem>
-          </SelectContent>
-        </Select>
-      </div>
-        <Input
+      <span className="block min-w-0 truncate text-[10px] font-bold uppercase text-muted-foreground">{listName}</span>
+      <Input
         data-testid={inputTestId}
         type="number"
         min={0}
@@ -92,7 +108,6 @@ export function PriceListPricingEditor({
             : <>Presiona Enter para aplicar · Precio de venta: <strong className="text-foreground">{formatMoney(calculatedPrice, currency)}</strong></>}
         </p>
       )}
-      {!allowMargin && <p className="text-[10px] text-muted-foreground">El margen requiere permiso para consultar costos.</p>}
     </div>
   );
 }

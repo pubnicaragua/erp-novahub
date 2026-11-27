@@ -98,12 +98,12 @@ export const FacturasLegalesView: React.FC<FacturasLegalesViewProps> = ({ data, 
             )}
           </div>
         </div>
-        <EditableDataTable 
-          data={filtered} 
-          columns={columns} 
-          onRowUpdate={canPerform('DOCUMENTS_INVOICES', 'edit') ? handleUpdate : undefined} 
-          isLoading={loading} 
-          onRowDelete={canPerform('DOCUMENTS_INVOICES', 'delete') ? async (id) => { try { await legalInvoicesService.delete(id as string); toast.success('Eliminada'); onRefresh(); } catch (e: any) { toast.error(e?.response?.data?.message || e?.message || 'Error al eliminar factura'); } } : undefined} 
+        <EditableDataTable preferenceKey="documents.legal-invoices" showViewLayoutControl
+          data={filtered}
+          columns={columns}
+          onRowUpdate={canPerform('DOCUMENTS_INVOICES', 'edit') ? handleUpdate : undefined}
+          isLoading={loading}
+          onRowDelete={canPerform('DOCUMENTS_INVOICES', 'delete') ? async (id) => { try { await legalInvoicesService.delete(id as string); toast.success('Eliminada'); onRefresh(); } catch (e: any) { toast.error(e?.response?.data?.message || e?.message || 'Error al eliminar factura'); } } : undefined}
         />
       </Card>
     </div>

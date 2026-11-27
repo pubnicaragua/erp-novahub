@@ -31,7 +31,7 @@ import { ImportProgressOverlay } from '../ui/ImportProgressOverlay';
 import { ColumnFilterMenu, useColumnFilters } from '../ui/ColumnFilterMenu';
 import { HRViewTutorial } from './HRViewTutorial';
 import { parseSpreadsheetInWorker } from '../../utils/import-spreadsheet';
-import { useLocalStorageState } from '../../hooks/useLocalStorageState';
+import { useUserViewPreferences } from '../../hooks/useUserViewPreferences';
 import { beginNotificationAction, completeNotificationAction, failNotificationAction } from '../../services/notification-action-coordinator';
 import { formatCurrencyNumber } from '../../utils/currency';
 import { translateAuditDetailKey, translateAuditDetailValue } from '../ui/AuditHistoryModal';
@@ -42,9 +42,21 @@ const NO_SELECTION = '__none__';
 export function EmpleadosView({ employees, departments, positions, onRefresh, isSidebarCollapsed = false }: any) {
   const { canPerform, user } = useAuth();
   const tenantKey = user?.tenantId || user?.clientTenantId || 'anonymous';
+  const tablePreferences = useUserViewPreferences('hr.employees');
   const [viewMode, setViewMode] = useState<'table' | 'cards'>('table');
   const [columnConfigOpen, setColumnConfigOpen] = useState(false);
-  const [visibleColumnKeys, setVisibleColumnKeys] = useLocalStorageState<string[]>(`hr-employees-columns-${tenantKey}`, ['number', 'name', 'email', 'phone', 'nationalId', 'department', 'position', 'salary', 'status', 'auth'], 24 * 365);
+  const defaultVisibleColumnKeys = ['number', 'name', 'email', 'phone', 'nationalId', 'department', 'position', 'salary', 'status', 'auth'];
+  const visibleColumnKeys = tablePreferences.preferences.visibleColumnKeys || defaultVisibleColumnKeys;
+  const setVisibleColumnKeys = (next: string[] | ((current: string[]) => string[])) => {
+    const requestedKeys = typeof next === 'function' ? next(visibleColumnKeys) : next;
+    const keys = [...new Set(requestedKeys.includes('number') ? requestedKeys : ['number', ...requestedKeys])];
+    void tablePreferences.save({ visibleColumnKeys: keys });
+  };
+  React.useEffect(() => {
+    if (tablePreferences.isLoading || tablePreferences.loadError) return;
+    const preferredMode = tablePreferences.preferences.layoutMode === 'cards' ? 'cards' : 'table';
+    setViewMode(preferredMode);
+  }, [tablePreferences.isLoading, tablePreferences.loadError, tablePreferences.preferences.layoutMode]);
   const [searchTerm, setSearchTerm] = useState('');
   const [filterDept, setFilterDept] = useState('all');
   const [filterStatus, setFilterStatus] = useState('all');
@@ -1033,7 +1045,11 @@ export function EmpleadosView({ employees, departments, positions, onRefresh, is
           </Button>
           <select
             value={viewMode}
-            onChange={(event) => setViewMode(event.target.value as 'table' | 'cards')}
+            onChange={(event) => {
+              const nextMode = event.target.value as 'table' | 'cards';
+              setViewMode(nextMode);
+              void tablePreferences.save({ layoutMode: nextMode });
+            }}
             aria-label="Elegir distribución"
             data-tour="empleados-layout"
             data-toolbar-role="layout"

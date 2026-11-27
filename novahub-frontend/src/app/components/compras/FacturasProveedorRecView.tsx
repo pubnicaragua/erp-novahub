@@ -134,7 +134,7 @@ export function FacturasProveedorRecView({ data, summaryData, summaryLoading, su
   const { canPerform, user } = useAuth();
   const { exchangeRate: globalRate, displayCurrency, displayCurrencyLabel, baseCurrency, displayMode, valuationMode, valuationModeSuffix, formatConvertedAmount, formatCurrentAmount, formatExplicitAmount, convertAmount, convertCurrentAmount, convertDisplayAmount } = useCurrency();
   const [searchTerm, setSearchTerm] = useState('');
-  const [layoutMode, setLayoutMode] = useLocalStorageState<'table' | 'cards'>('purchases-recurring-invoices-layout', 'table', 24 * 365);
+  const [layoutMode, setLayoutMode] = useState<'table' | 'cards'>('table');
   const [statusFilter, setStatusFilter] = useState<'ALL' | 'ACTIVE' | 'PAUSED' | 'EXPIRED' | 'CANCELLED'>('ALL');
   const [pendingRecurringAction, setPendingRecurringAction] = useState<{ action: 'cancel' | 'delete'; ids: string[] } | null>(null);
   const [recurringActionLoading, setRecurringActionLoading] = useState(false);
@@ -825,14 +825,14 @@ export function FacturasProveedorRecView({ data, summaryData, summaryLoading, su
         <div className="flex items-center justify-between flex-wrap gap-4">
           <div className="erp-list-toolbar flex flex-wrap items-center justify-end gap-3" data-tour="purchases-list-actions">
             {canPerform('PURCHASES_INVOICES_REC', 'export') && <PdfDownloadButton label="Exportar" includePageSizes includeRoll={false} scopeSelector={{ pageCount: filtered.length, totalCount: pagination?.total || filtered.length }} onDownload={(format, scope) => void handleExportListPdf(format, scope)} onExcel={() => void handleExportExcel()} />}
-            <ViewLayoutSelect value={layoutMode} onChange={(value) => setLayoutMode(value === 'kanban' ? 'table' : value)} ariaLabel="Elegir distribución de compras recurrentes" />
+            <ViewLayoutSelect preferenceKey="purchases.recurring-invoices" value={layoutMode} onChange={(value) => setLayoutMode(value === 'kanban' ? 'table' : value)} ariaLabel="Elegir distribución de compras recurrentes" />
             <div className="relative"><Search className="absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground/40" /><Input placeholder="Buscar..." className="pl-9 h-10 bg-background/50 border-border/50 rounded-xl text-xs w-full sm:w-80" value={searchTerm} onChange={e => { setSearchTerm(e.target.value); onSearchChange?.(e.target.value); }} /></div>
             {canPerform('PURCHASES_INVOICES_REC', 'create') && (
               <Button onClick={() => openEditor('NEW')} className="bg-primary hover:bg-primary/90 text-primary-foreground font-black uppercase text-[10px] tracking-widest px-4 h-10 rounded-xl gap-2"><Plus className="size-4" /> Agregar Compra Recurrente</Button>
             )}
           </div>
         </div>
-        <EditableDataTable data={filtered} columns={columns} onRowUpdate={handleUpdate} showRowEditAction={false} onRowClick={(row) => setDetailInvoice(row)} isLoading={loading} pagination={pagination} actionsWidth="w-40" showSelection={canPerform('PURCHASES_INVOICES_REC', 'read') && (canPerform('PURCHASES_INVOICES_REC', 'cancel') || canPerform('PURCHASES_INVOICES_REC', 'delete'))} layoutMode={layoutMode === 'cards' ? 'cards' : 'responsive'} bulkAction={canPerform('PURCHASES_INVOICES_REC', 'cancel') ? 'cancel' : 'delete'}
+        <EditableDataTable preferenceKey="purchases.recurring-invoices" data={filtered} columns={columns} onRowUpdate={handleUpdate} showRowEditAction={false} onRowClick={(row) => setDetailInvoice(row)} isLoading={loading} pagination={pagination} actionsWidth="w-40" showSelection={canPerform('PURCHASES_INVOICES_REC', 'read') && (canPerform('PURCHASES_INVOICES_REC', 'cancel') || canPerform('PURCHASES_INVOICES_REC', 'delete'))} layoutMode={layoutMode === 'cards' ? 'cards' : 'responsive'} bulkAction={canPerform('PURCHASES_INVOICES_REC', 'cancel') ? 'cancel' : 'delete'}
           isRowSelectable={(row) => canPerform('PURCHASES_INVOICES_REC', 'cancel')
             ? ['ACTIVE', 'PAUSED'].includes(String(row.status || '').toUpperCase())
             : canPerform('PURCHASES_INVOICES_REC', 'delete')}
