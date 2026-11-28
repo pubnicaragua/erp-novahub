@@ -39,7 +39,7 @@ export interface SalesSellerCommission {
   status: string;
   earnedAt?: string | null;
   invoice?: { id: string; number: string; date?: string } | null;
-  creditNote?: { id: string; number: string; date?: string } | null;
+  creditNote?: { id: string; number: string; date?: string; createdAt?: string } | null;
   seller: Pick<SalesSeller, 'id' | 'code' | 'name'>;
 }
 
@@ -47,6 +47,7 @@ export interface SalesSellerSale {
   id: string;
   number: string;
   date: string;
+  createdAt: string;
   status: string;
   total: number | string;
   amountPaid: number | string;
@@ -55,7 +56,7 @@ export interface SalesSellerSale {
   customer?: { id: string; code?: string | null; name: string } | null;
   customCustomerName?: string | null;
   items: Array<{ id: string; description: string; quantity: number | string; unitPrice: number | string; discount: number | string; total: number | string }>;
-  payments: Array<{ id: string; number: string; date: string; amount: number | string; currency: string; method: string; reference?: string | null }>;
+  payments: Array<{ id: string; number: string; date: string; createdAt: string; amount: number | string; currency: string; method: string; reference?: string | null }>;
 }
 
 export interface SalesSellerPayoutLine {
@@ -64,8 +65,8 @@ export interface SalesSellerPayoutLine {
   currency: string;
   commission?: {
     rate?: number | string;
-    invoice?: { id: string; number: string; date: string; total: number | string; currency: string } | null;
-    creditNote?: { id: string; number: string; date: string; total: number | string; currency: string } | null;
+    invoice?: { id: string; number: string; date: string; createdAt: string; total: number | string; currency: string } | null;
+    creditNote?: { id: string; number: string; date: string; createdAt: string; total: number | string; currency: string } | null;
   } | null;
   goalAward?: { level?: string; goal?: { title: string; targetAmount: number | string; currency: string } | null } | null;
 }
@@ -92,7 +93,7 @@ export interface SalesSellerCommissionDetails {
   seller?: Pick<SalesSeller, 'id' | 'code' | 'name'> | null;
   employee?: { id: string; employeeNumber: string; firstName: string; lastName: string } | null;
   invoice?: SalesSellerSale | null;
-  creditNote?: { id: string; number: string; date: string; status: string; total: number | string; amountPaid: number | string; balance: number | string; currency: string; reason: string } | null;
+  creditNote?: { id: string; number: string; date: string; createdAt: string; status: string; total: number | string; amountPaid: number | string; balance: number | string; currency: string; reason: string } | null;
 }
 
 export interface SalesSellerAward {

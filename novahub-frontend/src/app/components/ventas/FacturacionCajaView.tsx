@@ -23,7 +23,7 @@ import { useSalesIntegrationPolicy } from '../../hooks/useSalesIntegrationPolicy
 import { useQueryClient } from '@tanstack/react-query';
 import { cn } from '../ui/utils';
 import { buildSalesPdfFileName } from '../../utils/exportFileNames';
-import { formatDateOnly } from '../../utils/dateFormat';
+import { formatCivilDateTime, formatDateOnly } from '../../utils/dateFormat';
 import {
   cajaService,
   type CashRegister,
@@ -334,8 +334,8 @@ function getTodayInputDate() {
   return new Date().toISOString().split('T')[0];
 }
 
-function formatInvoiceDate(date: string) {
-  return formatDateOnly(date);
+function formatInvoiceDate(date: string, createdAt?: string | null) {
+  return formatCivilDateTime(date, createdAt);
 }
 
 function getErrorMessage(error: unknown, fallback: string) {
@@ -3278,7 +3278,7 @@ export function FacturacionCajaView({ onNavigateToControlCaja, branchId, employe
                               <Badge className={cn('border-none text-[9px]', getSalesInvoiceStatusColor(inv.status))}>{statusLabel}</Badge>
                             </div>
                             <p className="text-[10px] text-muted-foreground truncate">
-                              {getInvoiceCustomerName(inv)} &middot; {formatInvoiceDate(inv.date)}
+                              {getInvoiceCustomerName(inv)} &middot; {formatInvoiceDate(inv.date, inv.createdAt)}
                             </p>
                           </div>
                           <div className="flex items-center gap-2 shrink-0">
@@ -3310,7 +3310,7 @@ export function FacturacionCajaView({ onNavigateToControlCaja, branchId, employe
               <div className="min-w-0">
                 <p className="text-[10px] font-black uppercase tracking-[0.2em] text-emerald-600">{createdOperationLabel}</p>
                 <h2 id="invoice-result-title" className="mt-1 text-2xl font-black uppercase italic tracking-tight">{createdInvoice.number}</h2>
-                <p className="mt-1 text-xs text-muted-foreground">{formatInvoiceDate(createdInvoice.date)} · {getInvoiceCustomerName(createdInvoice)}{createdInvoice.customer?.phone ? ` · ${formatCustomerPhoneForDisplay(createdInvoice.customer.phone, createdInvoice.customer.countryCode || 'NI')}` : ''}</p>
+                <p className="mt-1 text-xs text-muted-foreground">{formatInvoiceDate(createdInvoice.date, createdInvoice.createdAt)} · {getInvoiceCustomerName(createdInvoice)}{createdInvoice.customer?.phone ? ` · ${formatCustomerPhoneForDisplay(createdInvoice.customer.phone, createdInvoice.customer.countryCode || 'NI')}` : ''}</p>
                 <p className="mt-1 text-xs font-bold text-primary">Caja: {createdInvoice.register?.code || 'N/D'}</p>
               </div>
               <Button type="button" variant="ghost" className="text-muted-foreground hover:bg-muted hover:text-foreground" onClick={() => setCreatedInvoice(null)} aria-label="Cerrar detalle de factura" title="Cerrar">✕</Button>

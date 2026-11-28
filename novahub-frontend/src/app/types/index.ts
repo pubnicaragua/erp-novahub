@@ -448,10 +448,14 @@ export interface SalesOrder {
   invoiceId?: string;
   invoiceNumber?: string;
   invoicedAt?: string;
+  invoiceCreatedAt?: string;
+  invoiceCreatedAt?: string;
   invoicedBy?: { id?: string; name?: string };
   paymentId?: string;
   paymentNumber?: string;
   paymentDate?: string;
+  paymentCreatedAt?: string;
+  paymentCreatedAt?: string;
   paymentStatus?: string;
   paymentAmount?: number;
   sellerEmployeeId?: string;

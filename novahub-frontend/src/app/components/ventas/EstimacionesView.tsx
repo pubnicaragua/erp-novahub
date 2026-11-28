@@ -40,7 +40,7 @@ import { fetchAllReportPages } from '../../hooks/useTenantQuery';
 import { buildCustomerWhatsAppUrl, resolveCustomerPhone, WhatsAppActionButton } from './WhatsAppActionButton';
 import { PurchaseAlertsButton, type PurchaseAlertDetail } from '../compras/PurchaseAlertsButton';
 import { ColumnFilterMenu, useColumnFilters } from '../ui/ColumnFilterMenu';
-import { formatDateEs, formatDateOnly, resolveDocumentDateAtSave } from '../../utils/dateFormat';
+import { formatCivilDateTime, formatDateEs, resolveDocumentDateAtSave } from '../../utils/dateFormat';
 import { SALES_WORKFLOW_STATUS_COLORS } from '../../utils/salesStatus';
 import { SalesDocumentDetailSheet, getSalesLineIdentifiers, type SalesDocumentPanelData } from './SalesDocumentDetailSheet';
 import type { PdfDownloadFormat } from '../../utils/pdfDownloadFormats';
@@ -702,7 +702,7 @@ export function EstimacionesView({ data, summaryData, summaryLoading, summaryErr
       ...(Number(estimate.deliveryAmount || 0) > 0 ? [{ label: estimate.deliveryDescription || 'Delivery', value: formatConvertedAmount(Number(estimate.deliveryAmount), estimate.currency, estimate.exchangeRate) }] : []),
     ],
     metadata: [
-      { label: 'Fecha de emisión', value: formatDateOnly(estimate.date) },
+      { label: 'Fecha de emisión', value: formatCivilDateTime(estimate.date, estimate.createdAt) },
       { label: 'Vigencia', value: formatDateEs(estimate.expiryDate) },
     ],
     lines: (estimate.items || []).map((item) => ({
@@ -891,7 +891,7 @@ export function EstimacionesView({ data, summaryData, summaryLoading, summaryErr
       key: 'date',
       header: 'Fecha Emisión',
       headerExtra: <ColumnFilterMenu label="Fecha Emisión" sort={colFilters.state.date?.sort || null} onSort={(sort) => colFilters.setSort('date', sort)} sortOptions={[{ value: 'desc', label: 'Más recientes' }, { value: 'asc', label: 'Más antiguas' }]} />,
-      render: (val) => <span className="text-xs font-medium text-muted-foreground">{formatDateOnly(val)}</span>
+      render: (val, row) => <span className="whitespace-nowrap text-xs font-medium text-muted-foreground">{formatCivilDateTime(val, row.createdAt)}</span>
     },
     {
       key: 'status',

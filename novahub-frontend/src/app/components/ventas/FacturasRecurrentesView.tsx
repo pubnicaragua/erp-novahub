@@ -52,7 +52,7 @@ interface FacturasRecurrentesViewProps {
   summaryLoading?: boolean;
   summaryError?: boolean;
   loading: boolean;
-  onRefresh: () => void;
+  onRefresh: () => Promise<void> | void;
   customers?: Customer[];
   products?: Product[];
   productsLoading?: boolean;
@@ -282,7 +282,7 @@ export function FacturasRecurrentesView({ data, summaryData, summaryLoading, sum
       const payload = { ...updates };
       if (String(updates.frequency || '').toUpperCase() === 'CUSTOM_DAYS' && !payload.intervalDays && !current?.intervalDays) payload.intervalDays = 7;
       await recurringInvoicesService.update(id.toString(), payload);
-      onRefresh();
+      await onRefresh();
     } catch (e: any) {
       toast.error(e?.response?.data?.message || e?.message || 'Error al actualizar');
       throw e;

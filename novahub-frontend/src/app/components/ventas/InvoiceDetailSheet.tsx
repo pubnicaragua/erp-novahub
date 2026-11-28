@@ -11,6 +11,7 @@ import type { PdfDownloadFormat } from '../../utils/pdfDownloadFormats';
 import { getSalesInvoiceStatusColor } from '../../utils/salesStatus';
 import { getSalesAdditionalCharges } from '../../utils/salesCharges';
 import { getInvoicePaymentPresentation } from '../../utils/paymentMethods';
+import { formatCivilDateTime } from '../../utils/dateFormat';
 import { CurrencyRateDetails } from '../ui/CurrencyValuation';
 import { getCurrencyDecimalPlaces } from '../../utils/currency';
 import { SalesActionTooltip, SalesActionTooltips } from './SalesActionTooltip';
@@ -172,7 +173,7 @@ export function InvoiceDetailSheet({
                 <p className="mb-3 text-[10px] font-black uppercase tracking-widest text-muted-foreground">Información general</p>
                 <div className="grid gap-3 text-sm sm:grid-cols-2">
                   <div className="flex min-w-0 gap-2"><UserRound className="mt-0.5 size-4 shrink-0 text-primary" /><div className="min-w-0"><p className="text-[10px] text-muted-foreground">Cliente</p><p className="mt-1 break-words font-semibold">{invoice.customer?.name || 'Varios'}</p></div></div>
-                  <div className="flex min-w-0 gap-2"><Clock3 className="mt-0.5 size-4 shrink-0 text-primary" /><div className="min-w-0"><p className="text-[10px] text-muted-foreground">Fecha de emisión</p><p className="mt-1 font-semibold">{formatDate(invoice.date)}</p></div></div>
+                  <div className="flex min-w-0 gap-2"><Clock3 className="mt-0.5 size-4 shrink-0 text-primary" /><div className="min-w-0"><p className="text-[10px] text-muted-foreground">Fecha de emisión</p><p className="mt-1 font-semibold">{formatCivilDateTime(invoice.date, invoice.createdAt)}</p></div></div>
                   <div><p className="text-[10px] text-muted-foreground">Vencimiento</p><p className="mt-1 font-semibold">{formatDate(invoice.dueDate)}</p></div>
                   <div><p className="text-[10px] text-muted-foreground">Modalidad / forma de pago</p><p className="mt-1 font-semibold">{paymentPresentation.modalityLabel}{paymentPresentation.methodLabel ? ` · ${paymentPresentation.methodLabel}` : ''}</p></div>
                   {invoice.sourceLabel && <div><p className="text-[10px] text-muted-foreground">Origen</p><p className="mt-1 break-words font-semibold">{invoice.sourceLabel}</p></div>}

@@ -50,7 +50,7 @@ import { buildCustomerWhatsAppUrl, resolveCustomerPhone, WhatsAppActionButton } 
 import { PurchaseAlertsButton, type PurchaseAlertDetail } from '../compras/PurchaseAlertsButton';
 import { cajaService, type CashRegister, type CashRegisterSession } from '../../services/caja.service';
 import { ColumnFilterMenu, useColumnFilters } from '../ui/ColumnFilterMenu';
-import { formatDateEs } from '../../utils/dateFormat';
+import { formatCivilDateTime, formatDateEs } from '../../utils/dateFormat';
 import { getCreditTermDeadline, getCreditTermExtensionDays } from '../../utils/creditTerms';
 import { SALES_STATUS_COLORS, SALES_WORKFLOW_STATUS_COLORS } from '../../utils/salesStatus';
 import { getInvoicePaymentPresentation, hasPaymentReferenceField, isBankPaymentMethod, requiresPaymentReference, isCardPaymentMethod, calculateCardCommission, formatCommissionPercent, paymentMethodLabel } from '../../utils/paymentMethods';
@@ -245,8 +245,10 @@ export function FacturasView({ data, summaryData, summaryLoading, summaryError, 
   const [cancelReason, setCancelReason] = useState('');
   const [cancelReasonAttempted, setCancelReasonAttempted] = useState(false);
   const [cancelLoading, setCancelLoading] = useState(false);
-  const [pendingDeleteInvoiceId, setPendingDeleteInvoiceId] = useState<string | null>(null);
-  const [invoiceDeleteLoading, setInvoiceDeleteLoading] = useState(false);
+  const [pendingDraftCancelInvoiceId, setPendingDraftCancelInvoiceId] = useState<string | null>(null);
+  const [draftCancelReason, setDraftCancelReason] = useState('');
+  const [draftCancelReasonAttempted, setDraftCancelReasonAttempted] = useState(false);
+  const [draftCancelLoading, setDraftCancelLoading] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [localDoc, setLocalDoc] = useState<any>(null);
   const [salesProductPickerItemId, setSalesProductPickerItemId] = useState<string | null>(null);
@@ -646,8 +648,7 @@ export function FacturasView({ data, summaryData, summaryLoading, summaryError, 
     if (targetInvoiceId) {
       const exists = data.find(x => x.id === targetInvoiceId);
       if (exists) {
-        setEditingId(targetInvoiceId);
-        setIsCreating(false);
+        setHighlightedAlertId(targetInvoiceId);
         onClearTargetInvoiceId?.();
       }
     }
@@ -2112,7 +2113,7 @@ export function FacturasView({ data, summaryData, summaryLoading, summaryError, 
       key: 'date',
       header: 'Fecha Emisión',
       headerExtra: <ColumnFilterMenu label="Fecha Emisión" sort={colFilters.state.date?.sort || null} onSort={(sort) => colFilters.setSort('date', sort)} sortOptions={[{ value: 'desc', label: 'Más recientes' }, { value: 'asc', label: 'Más antiguas' }]} />,
-      render: (val) => <span className="text-xs font-medium text-muted-foreground">{formatDateSafe(val)}</span>
+      render: (val, row) => <span className="whitespace-nowrap text-xs font-medium text-muted-foreground">{formatCivilDateTime(val, row.createdAt)}</span>
     },
     {
       key: 'status',
@@ -2255,8 +2256,422 @@ export function FacturasView({ data, summaryData, summaryLoading, summaryError, 
     baseCurrency,
   );
 
+  const invoiceActionDialogs = (
+    <>
+      <Dialog open={!!creditInvoice} onOpenChange={(open) => { if (!open && !creditLoading) { setCreditInvoice(null); setCreditInvoiceWasDraft(false); } }}>
+        <DialogContent className="!flex !flex-col !max-h-[calc(100dvh-1rem)] w-[calc(100%-1.5rem)] !max-w-6xl !overflow-hidden rounded-3xl p-4 sm:w-[calc(100%-3rem)] sm:p-6">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2 nh-module-title">
+              <Send className="size-5 text-primary" /> Enviar factura a crédito
+            </DialogTitle>
+            <DialogDescription>
+              Se trasladará únicamente el saldo pendiente a Créditos y se validará el límite disponible del cliente.
+            </DialogDescription>
+          </DialogHeader>
+          {creditInvoice && (
+            <div className="min-h-0 flex-1 space-y-4 overflow-y-auto overscroll-contain pr-3 [scrollbar-gutter:stable]">
+              <div className="rounded-2xl border border-primary/20 bg-primary/5 p-4">
+                <p className="text-[10px] font-black uppercase tracking-widest text-muted-foreground">{creditInvoice.number || 'Nueva factura'} · {creditInvoice.customer?.name || customers.find((customer) => customer.id === creditInvoice.customerId)?.name || 'Cliente'}</p>
+                <p className="mt-1 text-2xl font-black text-primary">Saldo a crédito: {formatInvoiceAmount(getInvoiceBalance(creditInvoice), creditInvoice.currency, creditInvoice.exchangeRate)}</p>
+                <p className="mt-1 text-xs text-muted-foreground">Interés estimado: {formatInvoiceAmount(creditInterestMode === 'NONE' ? 0 : creditInterestMode === 'PERCENTAGE' ? getInvoiceBalance(creditInvoice) * Number(creditInterestValue || 0) / 100 : Number(creditInterestValue || 0), creditInvoice.currency, creditInvoice.exchangeRate)} · Total pactado: {formatInvoiceAmount(getInvoiceBalance(creditInvoice) + (creditInterestMode === 'NONE' ? 0 : creditInterestMode === 'PERCENTAGE' ? getInvoiceBalance(creditInvoice) * Number(creditInterestValue || 0) / 100 : Number(creditInterestValue || 0)), creditInvoice.currency, creditInvoice.exchangeRate)}</p>
+                <p className="mt-2 text-[10px] font-bold text-muted-foreground">La factura conservará el estado A CRÉDITO y el registro aparecerá en la vista Créditos.</p>
+              </div>
+              <CreditTermDateField
+                issueDate={creditInvoice.date}
+                creditDays={creditInvoiceTerm?.customer?.creditDays}
+                savedDeadline={creditInvoice.creditTermDeadline}
+                value={creditPlanEnabled && (creditPlanCalculationMode === 'AMOUNT' || creditPlanCalculationMode === 'MANUAL') ? creditPlanEstimate?.finalDueDate || creditDueDate : creditDueDate}
+                onChange={(value) => {
+                  setCreditDueDate(value);
+                  setCreditTermOverrideConfirmed(false);
+                  if (creditPlanEnabled && creditPlanCalculationMode === 'AMOUNT') setCreditPlanCalculationMode('DEADLINE');
+                }}
+                overrideConfirmed={creditTermOverrideConfirmed}
+                onOverrideConfirmedChange={setCreditTermOverrideConfirmed}
+                label={creditPlanEnabled ? (creditPlanCalculationMode === 'AMOUNT' ? 'Vencimiento estimado' : creditPlanCalculationMode === 'MANUAL' ? 'Vencimiento final' : 'Fecha final de vencimiento *') : 'Fecha de pago *'}
+                minDate={new Date().toISOString().split('T')[0]}
+                readOnly={creditPlanEnabled}
+              />
+              <div className="space-y-3 rounded-2xl border border-border/50 p-4">
+                <p className="text-[10px] font-black uppercase tracking-widest text-muted-foreground">Interés opcional</p>
+                <div className="grid gap-3 sm:grid-cols-2">
+                  <div className="space-y-1.5">
+                    <Label className="flex items-end leading-tight sm:min-h-10">Interés del crédito</Label>
+                    <Select value={creditInterestMode} onValueChange={(value) => setCreditInterestMode(value as typeof creditInterestMode)}>
+                      <SelectTrigger className="h-9"><SelectValue /></SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="NONE">Sin interés</SelectItem>
+                        <SelectItem value="FIXED_AMOUNT">Monto fijo</SelectItem>
+                        <SelectItem value="PERCENTAGE">Porcentaje único</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
+                  {creditInterestMode !== 'NONE' && <div className="space-y-1.5">
+                    <Label htmlFor="invoice-credit-interest" className="flex items-end leading-tight sm:min-h-10">{creditInterestMode === 'PERCENTAGE' ? 'Porcentaje sobre el saldo (%)' : 'Interés fijo'}</Label>
+                    <Input id="invoice-credit-interest" type="number" min="0" step="0.01" max={creditInterestMode === 'PERCENTAGE' ? 100 : undefined} value={creditInterestValue} onChange={(event) => setCreditInterestValue(event.target.value)} />
+                  </div>}
+                </div>
+                <p className="text-[10px] text-muted-foreground">El interés se calcula una sola vez sobre el saldo trasladado. El saldo original de la factura no cambia.</p>
+              </div>
+              <CustomerCreditPlanEditor
+                idPrefix="invoice-credit"
+                enabled={creditPlanEnabled}
+                onEnabledChange={(enabled) => {
+                  setCreditPlanEnabled(enabled);
+                  setCreditTermOverrideConfirmed(false);
+                  if (enabled && !creditFirstInstallmentDate) setCreditFirstInstallmentDate(new Date().toISOString().split('T')[0]);
+                }}
+                calculationMode={creditPlanCalculationMode}
+                onCalculationModeChange={(mode) => {
+                  if (mode === 'DEADLINE') {
+                    const firstDate = creditFirstInstallmentDate || new Date().toISOString().split('T')[0];
+                    const requestedDate = creditPlanEstimate?.finalDueDate || creditDueDate || firstDate;
+                    setCreditDueDate(requestedDate >= firstDate ? requestedDate : firstDate);
+                  }
+                  if (mode === 'MANUAL') setCreditManualInstallments((rows) => rows.map((row, index) => index === 0 && !row.dueDate
+                    ? { ...row, dueDate: creditFirstInstallmentDate || new Date().toISOString().split('T')[0] }
+                    : row));
+                  setCreditPlanCalculationMode(mode);
+                  setCreditTermOverrideConfirmed(false);
+                }}
+                frequency={creditFrequency}
+                onFrequencyChange={(frequency) => { setCreditFrequency(frequency); setCreditTermOverrideConfirmed(false); }}
+                firstInstallmentDate={creditFirstInstallmentDate}
+                onFirstInstallmentDateChange={(date) => {
+                  setCreditFirstInstallmentDate(date);
+                  if (creditPlanCalculationMode === 'DEADLINE' && date && creditDueDate < date) setCreditDueDate(date);
+                  setCreditTermOverrideConfirmed(false);
+                }}
+                finalDueDate={creditDueDate}
+                onFinalDueDateChange={(date) => { setCreditDueDate(date); setCreditTermOverrideConfirmed(false); }}
+                installmentAmount={creditInstallmentAmount}
+                onInstallmentAmountChange={(amount) => { setCreditInstallmentAmount(amount); setCreditTermOverrideConfirmed(false); }}
+                estimate={creditPlanEstimate}
+                isEstimatePending={creditInstallmentAmount !== deferredCreditInstallmentAmount}
+                currency={creditInvoice.currency}
+                formatAmount={(amount) => formatInvoiceAmount(amount, creditInvoice.currency, creditInvoice.exchangeRate)}
+                manualInstallments={creditManualInstallments}
+                onManualInstallmentChange={(index, field, value) => {
+                  setCreditManualInstallments((rows) => rows.map((row, rowIndex) => rowIndex === index ? { ...row, [field]: value } : row));
+                  setCreditTermOverrideConfirmed(false);
+                }}
+                onAddManualInstallment={() => setCreditManualInstallments((rows) => [...rows, { dueDate: '', totalAmount: '', interestAmount: '' }])}
+                onRemoveManualInstallment={(index) => setCreditManualInstallments((rows) => rows.filter((_, rowIndex) => rowIndex !== index))}
+                onPrint={() => void printCreditInstallmentPlan()}
+              />
+              {creditPlanEnabled && creditPlanCalculationMode !== 'MANUAL' && <CustomerCreditCalendarSelector
+                excludedWeekdays={creditExcludedWeekdays}
+                holidayIds={creditHolidayIds}
+                onChange={(value) => {
+                  setCreditExcludedWeekdays(value.excludedWeekdays);
+                  setCreditHolidayIds(value.holidayIds);
+                  setCreditExcludedDates(value.excludedDates);
+                  setCreditTermOverrideConfirmed(false);
+                }}
+              />}
+            </div>
+          )}
+          <DialogFooter className="shrink-0">
+            <Button type="button" variant="outline" onClick={() => { setCreditInvoice(null); setCreditInvoiceWasDraft(false); }} disabled={creditLoading}>Cancelar</Button>
+            <Button type="button" onClick={() => void handleSendInvoiceToCredit()} disabled={creditLoading || !effectiveCreditDueDate || (creditTermOverrideRequired && !creditTermOverrideConfirmed) || (creditInterestMode !== 'NONE' && !Number.isFinite(Number(creditInterestValue))) || (creditPlanEnabled && (!creditPlanEstimate || !creditPlanEstimate.isValid || (creditPlanCalculationMode !== 'MANUAL' && !creditFirstInstallmentDate) || (creditPlanCalculationMode === 'AMOUNT' && creditInstallmentAmount !== deferredCreditInstallmentAmount)))} className="bg-primary font-black text-primary-foreground hover:bg-primary/90">
+              {creditLoading ? 'Enviando...' : 'Confirmar crédito'}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={paymentDialogOpen} onOpenChange={(open) => { if (!open) closeInvoicePayment(); }}>
+        <DialogContent className="!flex !flex-col !max-h-[calc(100dvh-1rem)] w-[calc(100%-1rem)] !max-w-xl !overflow-hidden rounded-3xl p-4 sm:w-[calc(100%-2rem)] sm:p-6">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2 nh-module-title">
+              <CreditCard className="size-5 text-primary" /> Pagar factura
+            </DialogTitle>
+          </DialogHeader>
+          {paymentInvoice && (
+            <div className="min-h-0 flex-1 space-y-3 overflow-y-auto overscroll-contain pr-3 [scrollbar-gutter:stable]">
+              <div className="rounded-2xl border border-primary/20 bg-primary/5 px-4 py-3">
+                <p className="text-[10px] font-black uppercase tracking-widest text-muted-foreground">{paymentInvoice.number} · {paymentInvoice.customer?.name || 'Cliente'}</p>
+                <div className="mt-2 grid gap-2 sm:grid-cols-3">
+                  <div>
+                    <p className="text-[9px] font-black uppercase tracking-widest text-muted-foreground">Total factura</p>
+                    <p className="mt-0.5 text-lg font-black text-foreground">{formatInvoiceAmount(paymentInvoiceTotal, paymentInvoice.currency, paymentInvoice.exchangeRate)}</p>
+                  </div>
+                  <div>
+                    <p className="text-[9px] font-black uppercase tracking-widest text-muted-foreground">Abonado</p>
+                    <p className="mt-0.5 text-lg font-black text-foreground">{formatInvoiceAmount(paymentInvoiceAlreadyPaid, paymentInvoice.currency, paymentInvoice.exchangeRate)}</p>
+                  </div>
+                  <div>
+                    <p className="text-[9px] font-black uppercase tracking-widest text-muted-foreground">Saldo actual</p>
+                    <p className="mt-0.5 text-lg font-black text-primary">{formatInvoiceAmount(paymentInvoiceCurrentBalance, paymentInvoice.currency, paymentInvoice.exchangeRate)}</p>
+                  </div>
+                </div>
+              </div>
+              {!paymentInvoice.registerId && !paymentInvoice.sessionId && (
+                <div className="space-y-2 rounded-xl border border-border/60 bg-muted/10 p-3">
+                  <div className="flex items-center justify-between gap-3">
+                    <p className="text-[10px] font-black uppercase tracking-widest text-muted-foreground">Caja (opcional)</p>
+                    {cashSession && <span className="text-[10px] font-black text-emerald-600">Abierta</span>}
+                  </div>
+                  {cashRegisters.length > 0 ? (
+                    <Select value={cashRegisterId || '__none__'} onValueChange={(value) => setCashRegisterId(value === '__none__' ? '' : value)} disabled={cashLoading || paymentLoading}>
+                      <SelectTrigger className="h-9 text-xs">
+                        <SelectValue placeholder="Selecciona la caja donde se recibió el pago" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="__none__">No asociar a una caja</SelectItem>
+                        {cashRegisters.map((register) => (
+                          <SelectItem key={register.id} value={register.id}>{register.name} ({register.code})</SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  ) : (
+                    <p className="text-[10px] font-medium text-muted-foreground">Sin caja abierta. El pago se registrará sin movimiento en Control de Caja.</p>
+                  )}
+                </div>
+              )}
+              <div className="space-y-3 rounded-2xl border border-border/60 bg-muted/10 p-3">
+                <div className="flex flex-wrap items-center justify-between gap-3">
+                  <p className="text-[10px] font-black uppercase tracking-widest text-muted-foreground">Forma de pago</p>
+                  <div className="flex flex-wrap items-center justify-end gap-x-4 gap-y-2">
+                    <label
+                      className={cn(
+                        'flex items-center gap-2 text-[10px] font-black uppercase tracking-widest',
+                        paymentPartialCreditFits ? 'cursor-pointer text-muted-foreground' : 'cursor-not-allowed text-muted-foreground/50',
+                      )}
+                      title={!paymentPartialCreditFits ? 'El saldo restante supera el crédito disponible del cliente' : undefined}
+                    >
+                      <Switch
+                        checked={paymentPartialActive}
+                        onCheckedChange={(checked) => setPartialPaymentEnabled(checked)}
+                        disabled={paymentLoading || !paymentPartialCreditFits}
+                        aria-label="Activar pago parcial"
+                      />
+                      Pago parcial
+                    </label>
+                    <label className="flex cursor-pointer items-center gap-2 text-[10px] font-black uppercase tracking-widest text-muted-foreground">
+                      <Switch
+                        checked={mixedPaymentEnabled}
+                        onCheckedChange={(checked) => {
+                          setMixedPaymentEnabled(checked);
+                          if (!checked) setPaymentLines((current) => current.slice(0, 1));
+                        }}
+                        disabled={paymentLoading}
+                        aria-label="Activar pago mixto"
+                      />
+                      Pago mixto
+                    </label>
+                  </div>
+                </div>
+                {paymentHasRemaining && !paymentPartialCreditFits && !paymentHasActiveCredit && (
+                  <p className="text-[10px] font-bold text-rose-600 dark:text-rose-400">
+                    El saldo restante supera el crédito disponible del cliente. Reduce el monto del pago para habilitar Pago parcial.
+                  </p>
+                )}
+                {paymentLines.map((line, index) => (
+                  <div key={`${index}-${line.method}`} className="rounded-xl border border-border/60 bg-background/70 p-3 space-y-2">
+                    <div className="flex items-end gap-2">
+                      <div className="flex-1 min-w-0">
+                        <p className="mb-1 text-[9px] font-black uppercase tracking-widest text-muted-foreground">Método</p>
+                        <Select value={line.method} onValueChange={(nextMethod) => handlePaymentMethodChange(index, nextMethod)}>
+                          <SelectTrigger size="sm" className="h-9 w-full rounded-lg border-input bg-background px-2 text-xs font-bold uppercase"><SelectValue /></SelectTrigger>
+                          <SelectContent>{paymentMethodOptions.filter((method) => method.value !== 'CUSTOMER_BALANCE' || paymentCustomerFavorBase > 0.01).map((method) => <SelectItem key={method.value} value={method.value}>{method.label}</SelectItem>)}</SelectContent>
+                        </Select>
+                      </div>
+                      <Button type="button" variant="ghost" size="icon" disabled={paymentLines.length === 1} onClick={() => setPaymentLines((current) => current.filter((_, itemIndex) => itemIndex !== index))} aria-label="Eliminar forma de pago" className="size-9 shrink-0 text-muted-foreground hover:text-rose-500"><Trash2 className="size-4" /></Button>
+                    </div>
+                    <div className="grid gap-2 sm:grid-cols-[minmax(0,1fr)_minmax(7rem,10rem)] sm:items-end">
+                      <CurrencySelector
+                        value={line.currency}
+                        baseCurrency={baseCurrency}
+                        exchangeRate={globalRate}
+                          label=""
+                          hideLabel
+                          rateDecimals={2}
+                          disabled={line.method === 'CUSTOMER_BALANCE' || paymentLoading}
+                        onChange={(nextCurrency) => setPaymentLines((current) => current.map((item, itemIndex) => {
+                          if (itemIndex !== index) return item;
+                          const previousRate = item.currency === baseCurrency ? 1 : Number(item.exchangeRate || globalRate);
+                          const nextRate = paymentLineRate(nextCurrency);
+                          return {
+                            ...item,
+                            amount: Number(convertBetweenCurrencies(item.amount, item.currency, nextCurrency, previousRate, nextRate).toFixed(getCurrencyDecimalPlaces())),
+                            currency: nextCurrency,
+                            exchangeRate: nextRate,
+                            bankAccountId: undefined,
+                            cardCommissionPercent: 0,
+                            cardCommissionAmount: 0,
+                            cardCommissionAccountId: undefined,
+                          };
+                        }))}
+                      />
+                      <div>
+                        <Input type="number" min="0.01" step="0.01" value={line.amount || ''} onChange={(event) => setPaymentLines((current) => current.map((item, itemIndex) => itemIndex === index ? { ...item, amount: Number(event.target.value) || 0, cardCommissionAmount: isCardPaymentMethod(item.method) ? calculateCardCommission(Number(event.target.value) || 0, Number(item.cardCommissionPercent || 0)) : item.cardCommissionAmount } : item))} autoFocus={index === 0} placeholder="Monto" className="h-9 text-xs tabular-nums" />
+                      </div>
+                    </div>
+                    {(salesAccountingRequired || salesFinanceEnabled) && isBankPaymentMethod(line.method, true) && <BankAccountSelect currency={line.currency} className="mt-2" allowUnlinked={!salesAccountingRequired && salesFinanceEnabled} required={salesAccountingRequired} endpoint="/bank-accounts/payment-options" value={line.bankAccountId} onChange={(bankAccountId) => setPaymentLines((current) => current.map((item, itemIndex) => itemIndex === index ? { ...item, bankAccountId } : item))} onAccountSelect={(account) => setPaymentLines((current) => current.map((item, itemIndex) => itemIndex === index ? { ...item, cardCommissionPercent: account?.cardCommissionPercent || 0, cardCommissionAmount: isCardPaymentMethod(item.method) ? calculateCardCommission(Number(item.amount || 0), account?.cardCommissionPercent || 0) : 0, cardCommissionAccountId: account?.cardCommissionAccountId || undefined } : item))} label={salesAccountingRequired ? 'Banco global de destino' : 'Banco destino (opcional)'} />}
+                    {isCardPaymentMethod(line.method) && !salesAccountingRequired && <label className="block max-w-40 text-[10px] font-bold text-muted-foreground">Comisión de tarjeta (%)<Input type="number" min="0" max="100" step="0.01" value={line.cardCommissionPercent || ''} onChange={(event) => setPaymentLines((current) => current.map((item, itemIndex) => itemIndex === index ? { ...item, cardCommissionPercent: Number(event.target.value) || 0, cardCommissionAmount: calculateCardCommission(Number(item.amount || 0), Number(event.target.value) || 0) } : item))} className="mt-1 h-9" /></label>}
+                    {paymentInvoice && line.currency !== paymentInvoiceCurrency && <p className="mt-1 text-[10px] font-bold text-muted-foreground">Equivalente factura: {formatInvoiceAmount(getPaymentLineDocumentAmount(line, paymentInvoiceCurrency, paymentInvoice.exchangeRate, baseCurrency, convertBetweenCurrencies), paymentInvoice.currency, paymentInvoice.exchangeRate)}</p>}
+                    {isCardPaymentMethod(line.method) && (line.bankAccountId || !salesAccountingRequired) && Number(line.cardCommissionPercent || 0) > 0 && (
+                      <div className="mt-2 flex items-center gap-3 rounded-lg border border-purple-500/20 bg-purple-500/5 px-3 py-2 text-[10px]">
+                        <span className="font-black uppercase tracking-widest text-purple-600">Comisión:</span>
+                        <span className="font-mono font-bold">{formatCommissionPercent(line.cardCommissionPercent)}</span>
+                        <span className="text-muted-foreground">|</span>
+                        <span className="font-black uppercase tracking-widest text-muted-foreground">Monto:</span>
+                        <span className="font-mono font-bold text-purple-600">{line.currency === 'USD' ? '$' : 'C$'} {formatSalesAmount(Number(line.cardCommissionAmount || calculateCardCommission(Number(line.amount || 0), Number(line.cardCommissionPercent || 0))))}</span>
+                      </div>
+                    )}
+                    {hasPaymentReferenceField(line.method) && <div className="mt-2">
+                      <Label htmlFor={`invoice-payment-reference-${index}`} required={requiresPaymentReference(line.method)} className="mb-1 text-[9px] font-black uppercase tracking-widest text-muted-foreground">Referencia</Label>
+                      <Input id={`invoice-payment-reference-${index}`} value={line.reference || ''} onChange={(event) => setPaymentLines((current) => current.map((item, itemIndex) => itemIndex === index ? { ...item, reference: event.target.value } : item))} placeholder="Transferencia, voucher, cheque..." required={requiresPaymentReference(line.method)} className="h-9 text-xs" />
+                    </div>}
+                    {line.method === 'CUSTOMER_BALANCE' && <p className="mt-2 text-[10px] font-bold text-emerald-600 dark:text-emerald-400">Disponible a favor: {formatConvertedAmount(paymentCustomerFavorBase, baseCurrency)}. Puedes aplicar solo una parte.</p>}
+                  </div>
+                ))}
+                {mixedPaymentEnabled && (
+                  <Button type="button" variant="outline" className="w-full border-dashed text-[10px] font-black uppercase tracking-widest" onClick={() => setPaymentLines((current) => [...current, paymentLine('CARD')])}>
+                    <Plus className="mr-2 size-4" /> Agregar pago mixto
+                  </Button>
+                )}
+              </div>
+              <div className="grid gap-3 sm:grid-cols-2">
+                <div>
+                  <p className="mb-1 text-[10px] font-black uppercase tracking-widest text-muted-foreground">Fecha del pago *</p>
+                  <Input type="date" value={paymentDate} onChange={(event) => setPaymentDate(event.target.value)} />
+                </div>
+                <div className="rounded-xl border border-border/50 bg-background/60 p-3">
+                  <p className="text-[9px] font-black uppercase tracking-widest text-muted-foreground">Este pago</p>
+                  <p className="mt-1 text-lg font-black text-foreground">{formatInvoiceAmount(paymentTotalInInvoiceCurrency, paymentInvoice.currency, paymentInvoice.exchangeRate)}</p>
+                  <p className="mt-1 text-[10px] font-bold text-muted-foreground">Equivalente base: {formatConvertedAmount(paymentTotalBase, baseCurrency)}</p>
+                </div>
+              </div>
+              <div className={cn('rounded-xl border p-3', paymentHasRemaining ? 'border-primary/25 bg-primary/5' : paymentChangeUnsupported ? 'border-rose-500/30 bg-rose-500/5' : paymentHasChange ? 'border-emerald-500/25 bg-emerald-500/5' : 'border-border/50 bg-muted/20')}>
+                <div className="flex items-center justify-between gap-3">
+                  <div>
+                    <p className="text-[9px] font-black uppercase tracking-widest text-muted-foreground">{paymentSettlementLabel}</p>
+                    <p className={cn('mt-1 text-xl font-black', paymentChangeUnsupported ? 'text-rose-600 dark:text-rose-400' : paymentHasChange ? 'text-emerald-600 dark:text-emerald-400' : 'text-primary')}>
+                      {formatInvoiceAmount(paymentSettlementAmount, paymentInvoice.currency, paymentInvoice.exchangeRate)}
+                    </p>
+                    <p className="mt-1 text-[10px] font-bold text-muted-foreground">Equivalente base: {formatConvertedAmount(paymentHasRemaining ? paymentRemainingBase : paymentChangeBase, baseCurrency)}</p>
+                  </div>
+                </div>
+                {paymentChangeUnsupported && (
+                  <p className="mt-2 border-t border-rose-500/15 pt-2 text-[10px] font-bold text-rose-600 dark:text-rose-400">No se puede dar vuelto de una tarjeta, transferencia o banco. Reduce esos montos o agrega suficiente efectivo para cubrir el excedente.</p>
+                )}
+                {paymentHasChange && !paymentChangeUnsupported && (
+                  <p className="mt-2 border-t border-emerald-500/15 pt-2 text-[10px] font-bold text-emerald-600 dark:text-emerald-400">El pago supera el saldo de la factura y el excedente se devolverá al cliente.</p>
+                )}
+                {paymentHasRemaining && (
+                  paymentHasActiveCredit ? (
+                    <p className="mt-2 border-t border-primary/15 pt-2 text-[10px] font-bold text-primary">El saldo restante ya pertenece al crédito activo de esta factura; el abono continuará sobre ese crédito.</p>
+                  ) : (
+                    <div className="mt-2 space-y-1 border-t border-primary/15 pt-2 text-[10px]">
+                      <div className="flex items-center justify-between gap-3">
+                        <span className="text-muted-foreground">Crédito disponible considerando deuda activa</span>
+                        <span className="font-black text-foreground">{formatConvertedAmount(paymentCreditAvailableBase, baseCurrency)}</span>
+                      </div>
+                      <div className="flex items-center justify-between gap-3">
+                        <span className="text-muted-foreground">Disponible después de este saldo</span>
+                        <span className={cn('font-black', paymentPartialCreditFits ? 'text-emerald-600' : 'text-rose-600')}>{formatConvertedAmount(paymentCreditAfterBase, baseCurrency)}</span>
+                      </div>
+                      <p className={cn('font-bold', paymentPartialCreditFits ? 'text-emerald-600' : 'text-rose-600')}>
+                        {paymentPartialCreditFits
+                          ? 'El saldo restante se enviará a crédito con la fecha indicada.'
+                          : 'El saldo restante supera el límite de crédito disponible.'}
+                      </p>
+                    </div>
+                  )
+                )}
+                {paymentCustomerFavorAppliedBase > 0.01 && <p className="mt-2 border-t border-emerald-500/15 pt-2 text-[10px] font-bold text-emerald-600 dark:text-emerald-400">Aplicado desde saldo a favor: {formatConvertedAmount(paymentCustomerFavorAppliedBase, baseCurrency)}{paymentCustomerFavorExceeded ? ' · supera el disponible' : ''}</p>}
+              </div>
+              {paymentRemainingInInvoiceCurrency > 0.01 && (
+                <CreditTermDateField
+                  issueDate={paymentInvoice.date}
+                  creditDays={paymentInvoiceTerm?.customer?.creditDays}
+                  savedDeadline={paymentInvoice.creditTermDeadline}
+                  value={paymentCreditPlanEnabled && (paymentCreditPlanCalculationMode === 'AMOUNT' || paymentCreditPlanCalculationMode === 'MANUAL')
+                    ? paymentCreditPlanEstimate?.finalDueDate || paymentDueDate
+                    : paymentDueDate}
+                  onChange={(value) => {
+                    setPaymentDueDate(value);
+                    setPaymentCreditTermOverrideConfirmed(false);
+                    if (paymentCreditPlanEnabled && paymentCreditPlanCalculationMode === 'AMOUNT') setPaymentCreditPlanCalculationMode('DEADLINE');
+                  }}
+                  overrideConfirmed={paymentCreditTermOverrideConfirmed}
+                  onOverrideConfirmedChange={setPaymentCreditTermOverrideConfirmed}
+                  label={paymentCreditPlanEnabled
+                    ? (paymentCreditPlanCalculationMode === 'AMOUNT' ? 'Vencimiento estimado' : paymentCreditPlanCalculationMode === 'MANUAL' ? 'Vencimiento final' : 'Fecha final de vencimiento *')
+                    : 'Fecha del saldo pendiente *'}
+                  minDate={new Date().toISOString().split('T')[0]}
+                  readOnly={paymentCreditPlanEnabled}
+                />
+              )}
+              {paymentHasRemaining && paymentPartialActive && !paymentHasActiveCredit && <CustomerCreditPlanEditor
+                idPrefix="invoice-partial-credit"
+                enabled={paymentCreditPlanEnabled}
+                onEnabledChange={(enabled) => {
+                  setPaymentCreditPlanEnabled(enabled);
+                  setPaymentCreditTermOverrideConfirmed(false);
+                  if (enabled && !paymentCreditFirstInstallmentDate) setPaymentCreditFirstInstallmentDate(new Date().toISOString().split('T')[0]);
+                  if (enabled) setPaymentCreditManualInstallments((rows) => rows.map((row, index) => index === 0 && !row.dueDate
+                    ? { ...row, dueDate: paymentCreditFirstInstallmentDate || new Date().toISOString().split('T')[0] }
+                    : row));
+                }}
+                calculationMode={paymentCreditPlanCalculationMode}
+                onCalculationModeChange={(mode) => {
+                  if (mode === 'DEADLINE') {
+                    const firstDate = paymentCreditFirstInstallmentDate || new Date().toISOString().split('T')[0];
+                    const requestedDate = paymentCreditPlanEstimate?.finalDueDate || paymentDueDate || firstDate;
+                    setPaymentDueDate(requestedDate >= firstDate ? requestedDate : firstDate);
+                  }
+                  if (mode === 'MANUAL') setPaymentCreditManualInstallments((rows) => rows.map((row, index) => index === 0 && !row.dueDate
+                    ? { ...row, dueDate: paymentCreditFirstInstallmentDate || new Date().toISOString().split('T')[0] }
+                    : row));
+                  setPaymentCreditPlanCalculationMode(mode);
+                  setPaymentCreditTermOverrideConfirmed(false);
+                }}
+                frequency={paymentCreditFrequency}
+                onFrequencyChange={(frequency) => { setPaymentCreditFrequency(frequency); setPaymentCreditTermOverrideConfirmed(false); }}
+                firstInstallmentDate={paymentCreditFirstInstallmentDate}
+                onFirstInstallmentDateChange={(date) => {
+                  setPaymentCreditFirstInstallmentDate(date);
+                  if (paymentCreditPlanCalculationMode === 'DEADLINE' && date && paymentDueDate < date) setPaymentDueDate(date);
+                  setPaymentCreditTermOverrideConfirmed(false);
+                }}
+                finalDueDate={paymentDueDate}
+                onFinalDueDateChange={(date) => { setPaymentDueDate(date); setPaymentCreditTermOverrideConfirmed(false); }}
+                installmentAmount={paymentCreditInstallmentAmount}
+                onInstallmentAmountChange={(amount) => { setPaymentCreditInstallmentAmount(amount); setPaymentCreditTermOverrideConfirmed(false); }}
+                estimate={paymentCreditPlanEstimate}
+                isEstimatePending={paymentCreditInstallmentAmount !== deferredPaymentCreditInstallmentAmount}
+                currency={paymentInvoice.currency || baseCurrency}
+                formatAmount={(amount) => formatInvoiceAmount(amount, paymentInvoice.currency, paymentInvoice.exchangeRate)}
+                manualInstallments={paymentCreditManualInstallments}
+                onManualInstallmentChange={(index, field, value) => {
+                  setPaymentCreditManualInstallments((rows) => rows.map((row, rowIndex) => rowIndex === index
+                    ? { ...row, [field]: field === 'interestAmount' ? '0' : value }
+                    : row));
+                  setPaymentCreditTermOverrideConfirmed(false);
+                }}
+                onAddManualInstallment={() => setPaymentCreditManualInstallments((rows) => [...rows, { dueDate: '', totalAmount: '', interestAmount: '0' }])}
+                onRemoveManualInstallment={(index) => setPaymentCreditManualInstallments((rows) => rows.filter((_, rowIndex) => rowIndex !== index))}
+                manualInterestEditable={false}
+                description="El plan distribuye el saldo pendiente entre fechas y abonos; no agrega intereses al crédito."
+              />}
+            </div>
+          )}
+          <DialogFooter className="shrink-0">
+            <Button type="button" variant="outline" onClick={closeInvoicePayment} disabled={paymentLoading}>Cancelar</Button>
+            <Button onClick={() => void handleInvoicePayment()} disabled={paymentLoading || cashLoading || paymentChangeUnsupported || paymentCustomerFavorExceeded || paymentCreditPlanInvalid || (paymentCreditPlanEnabled && paymentCreditPlanCalculationMode === 'AMOUNT' && paymentCreditInstallmentAmount !== deferredPaymentCreditInstallmentAmount) || (paymentTermOverrideRequired && !paymentCreditTermOverrideConfirmed) || (!paymentHasActiveCredit && paymentRemainingBase > paymentCreditAvailableBase + 0.01) || paymentLines.some((line) => requiresPaymentReference(line.method) && !line.reference?.trim()) || (salesAccountingRequired && paymentLines.some((line) => isBankPaymentMethod(line.method, true) && !line.bankAccountId))} className="bg-primary font-black">
+              {paymentLoading ? 'Registrando...' : 'Confirmar pago'}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+    </>
+  );
+
   // ─── INLINE EDITOR VIEW ────────────────────────────────────────────────
-  if ((editingId || isCreating) && localDoc && !paymentDialogOpen && !creditInvoice) {
+  if ((editingId || isCreating) && localDoc) {
     const isInvoiceLocked = !isCreating && ['PAID', 'CANCELLED'].includes(String(localDoc?.status || '').toUpperCase());
     const isDraftInvoice = isCreating || String(localDoc?.status || '').toUpperCase() === 'DRAFT';
     const newInvoiceCreditCandidate = { ...localDoc, status: 'PENDING' } as Invoice;
@@ -2268,6 +2683,7 @@ export function FacturasView({ data, summaryData, summaryLoading, summaryError, 
       && invoiceFitsAvailableCredit(newInvoiceCreditCandidate),
     );
     return (
+      <>
       <div className="sales-document-editor min-w-0 space-y-6 animate-in slide-in-from-right duration-300" data-tour="sales-form-title">
         <div className="sales-document-header flex min-w-0 flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
           <div className="flex min-w-0 items-start gap-3 sm:items-center sm:gap-4">
@@ -2367,7 +2783,7 @@ export function FacturasView({ data, summaryData, summaryLoading, summaryError, 
             <CardContent className="min-w-0 space-y-3 p-4 sm:p-6">
               <p className="text-xs font-black uppercase tracking-widest text-muted-foreground">Información General</p>
               <div className="grid min-w-0 grid-cols-1 gap-3 text-sm sm:grid-cols-2">
-                <div>
+                <div className="order-1">
                   <p className="text-[10px] text-muted-foreground mb-1">Cliente</p>
                   <Combobox
                     options={customers
@@ -2406,7 +2822,7 @@ export function FacturasView({ data, summaryData, summaryLoading, summaryError, 
                     El límite de crédito se valida únicamente al registrar un pago parcial o emitir una venta a crédito.
                   </p>
                 </div>
-                <div>
+                <div className="order-7">
                   <p className="text-[10px] text-muted-foreground mb-1">Bodega de salida</p>
                   <Select
                     value={localDoc?.warehouseId || ''}
@@ -2431,7 +2847,7 @@ export function FacturasView({ data, summaryData, summaryLoading, summaryError, 
                   </Select>
                   <p className="mt-1 text-[10px] text-muted-foreground/70">El stock y la salida se validan en esta bodega.</p>
                 </div>
-                <div>
+                <div className="order-3">
                   <p className="text-[10px] text-muted-foreground mb-1">Fecha Emisión</p>
                   <Input type="date" value={localDoc?.date ? (typeof localDoc.date === 'string' && localDoc.date.includes('T') ? localDoc.date.split('T')[0] : localDoc.date) : ''}
                     onChange={(e) => {
@@ -2441,6 +2857,7 @@ export function FacturasView({ data, summaryData, summaryLoading, summaryError, 
                       setLocalDoc({ ...localDoc, date, ...(suggestedDueDate ? { dueDate: suggestedDueDate } : {}), creditTermOverrideConfirmed: false });
                     }} className="h-8 text-xs" disabled={isInvoiceLocked} />
                 </div>
+                <div className="order-4">
                 {(() => {
                   const customer = customers.find((item) => item.id === localDoc?.customerId);
                   return <CreditTermDateField
@@ -2456,7 +2873,8 @@ export function FacturasView({ data, summaryData, summaryLoading, summaryError, 
                     disabled={isInvoiceLocked}
                   />;
                 })()}
-                <div>
+                </div>
+                <div className="order-6">
                   <p className="text-[10px] text-muted-foreground mb-1">Vendedor (Opcional)</p>
                   <Combobox
                     options={(employees || []).map(e => ({ label: `${e.firstName} ${e.lastName}`, value: e.id, description: e.position?.title }))}
@@ -2468,7 +2886,7 @@ export function FacturasView({ data, summaryData, summaryLoading, summaryError, 
                   />
                   {(employees || []).length === 0 && <p className="mt-1 text-[9px] text-amber-700">Solo pueden venderse a nombre de empleados activos de un departamento marcado como de vendedores.</p>}
                 </div>
-                <div className="space-y-2 md:col-span-2">
+                <div className="order-8 space-y-2 md:col-span-2">
                   <p className="text-[10px] text-muted-foreground mb-1">Comisión configurada</p>
                   <div className="grid grid-cols-2 gap-2">
                     <div><Label className="text-[9px] uppercase tracking-wider text-muted-foreground">Porcentaje</Label><Input readOnly tabIndex={-1} value={!localDoc?.sellerEmployeeId ? '—' : isCreating ? 'Se calcula al guardar' : `${Number(localDoc?.commissionRate || 0).toFixed(2)}%`} className="h-8 bg-muted/20 text-xs" /></div>
@@ -2476,7 +2894,7 @@ export function FacturasView({ data, summaryData, summaryLoading, summaryError, 
                   </div>
                   <p className="text-[9px] text-muted-foreground">Se toma del plan de comisiones del vendedor (Ventas → Comisiones) sobre el subtotal neto; si el vendedor no tiene plan ni regla global, queda en 0%.</p>
                 </div>
-                  <div>
+                  <div className="order-2">
                     <p className="text-[10px] text-muted-foreground mb-1">Moneda de la transacción</p>
                      <Select disabled={isInvoiceLocked} value={localDoc?.currency || 'NIO'} onValueChange={(currency) => {
                       const exchangeRate = currency === 'NIO' ? 1 : Number(globalRate || 1);
@@ -2488,8 +2906,8 @@ export function FacturasView({ data, summaryData, summaryLoading, summaryError, 
                     </Select>
                     <p className="mt-1 text-[10px] text-muted-foreground/70">Tasa configurada: <span className="font-bold">{localDoc?.currency === 'NIO' ? '1.00' : Number(localDoc?.exchangeRate || globalRate || 1).toFixed(2)}</span></p>
                   </div>
-                  <div>
-                    <p className="text-[10px] text-muted-foreground mb-1">Entrega estimada (opcional)</p>
+                  <div className="order-5" data-testid="sales-invoice-expected-delivery">
+                    <p className="text-[10px] text-muted-foreground mb-1">Entrega esperada (opcional)</p>
                     <Input type="date" value={localDoc?.expectedDelivery ? (typeof localDoc.expectedDelivery === 'string' && localDoc.expectedDelivery.includes('T') ? localDoc.expectedDelivery.split('T')[0] : localDoc.expectedDelivery) : ''}
                       onChange={(event) => setLocalDoc({ ...localDoc, expectedDelivery: event.target.value || null })} className="h-8 text-xs" disabled={isInvoiceLocked} />
                     <p className="mt-1 text-[10px] text-muted-foreground/70">Se usa para alertar si el pago queda parcial antes de la entrega.</p>
@@ -2950,6 +3368,8 @@ export function FacturasView({ data, summaryData, summaryLoading, summaryError, 
           </CardContent>
         </Card>
       </div>
+      {invoiceActionDialogs}
+      </>
     );
   }
 
@@ -3106,7 +3526,7 @@ export function FacturasView({ data, summaryData, summaryLoading, summaryError, 
           {(canPerform('SALES_INVOICES', 'createPaymentLink') || canPerform('SALES_INVOICES', 'reconcilePaymentLink') || canPerform('SALES_INVOICES', 'cancelPaymentLink')) && !['PAID', 'CANCELLED'].includes(String(detailInvoice.status).toUpperCase()) && getInvoiceBalance(detailInvoice) > 0.01 && <Button type="button" variant="outline" aria-label="Links de pago" className="rounded-xl border-primary/30 text-primary hover:bg-primary/10" onClick={() => setPaylinkInvoice(detailInvoice)}><Link2 className="mr-2 size-4" />Links</Button>}
           {(canPerform('SALES_INVOICES', 'createAppToAppPayment') || canPerform('SALES_INVOICES', 'reconcileAppToAppPayment')) && !['PAID', 'CANCELLED'].includes(String(detailInvoice.status).toUpperCase()) && getInvoiceBalance(detailInvoice) > 0.01 && <Button type="button" variant="outline" aria-label="Cobros con Poket" className="rounded-xl border-primary/30 text-primary hover:bg-primary/10" onClick={() => setPoketAppInvoice(detailInvoice)}><Smartphone className="mr-2 size-4" />Poket</Button>}
               {canPerform('SALES_INVOICES', 'cancel') && isInvoiceCancellableFromList(detailInvoice) && <SalesActionTooltip label="Solicitar anulación a Contabilidad"><Button type="button" variant="outline" aria-label="Solicitar anulación" className="rounded-xl border-rose-500/30 text-rose-600 hover:bg-rose-500/10 dark:text-rose-400" onClick={() => { setDetailInvoice(null); setPendingCancelIds([detailInvoice.id]); setCancelReason(''); setCancelReasonAttempted(false); }}><Ban className="mr-2 size-4" />Anular</Button></SalesActionTooltip>}
-          {canPerform('SALES_INVOICES', 'read') && canPerform('SALES_INVOICES', 'delete') && String(detailInvoice.status).toUpperCase() === 'DRAFT' && <Button type="button" variant="outline" aria-label="Eliminar borrador" className="rounded-xl border-destructive/30 text-destructive hover:bg-destructive/10" onClick={() => setPendingDeleteInvoiceId(detailInvoice.id)}><Trash2 className="mr-2 size-4" />Eliminar</Button>}
+          {canPerform('SALES_INVOICES', 'cancel') && String(detailInvoice.status).toUpperCase() === 'DRAFT' && <Button type="button" variant="outline" aria-label="Cancelar factura en borrador" className="rounded-xl border-destructive/30 text-destructive hover:bg-destructive/10" onClick={() => { setDetailInvoice(null); setPendingDraftCancelInvoiceId(detailInvoice.id); setDraftCancelReason(''); setDraftCancelReasonAttempted(false); }}><Ban className="mr-2 size-4" />Cancelar</Button>}
         </> : undefined}
       />
 
@@ -3160,448 +3580,48 @@ export function FacturasView({ data, summaryData, summaryLoading, summaryError, 
       </ConfirmDialog>
 
       <ConfirmDialog
-        open={pendingDeleteInvoiceId !== null}
-        onOpenChange={(open) => !open && setPendingDeleteInvoiceId(null)}
-        title="¿Eliminar factura en borrador?"
-        description="Si es la última factura de la serie se elimina y su número queda libre. Si ya hay facturas posteriores, queda anulada y conserva su número, porque la numeración debe ser continua. Las facturas emitidas deben pasar por la solicitud de anulación contable."
-        confirmLabel="Eliminar borrador"
+        open={pendingDraftCancelInvoiceId !== null}
+        onOpenChange={(open) => {
+          if (!open && !draftCancelLoading) {
+            setPendingDraftCancelInvoiceId(null);
+            setDraftCancelReason('');
+            setDraftCancelReasonAttempted(false);
+          }
+        }}
+        title="¿Cancelar factura en borrador?"
+        description="La factura quedará cancelada y su registro se conservará. Las facturas emitidas se envían a Contabilidad para solicitar su anulación."
+        confirmLabel="Cancelar factura"
         variant="destructive"
-        loading={invoiceDeleteLoading}
+        loading={draftCancelLoading}
         onConfirm={async () => {
-          if (!pendingDeleteInvoiceId || !canPerform('SALES_INVOICES', 'read') || !canPerform('SALES_INVOICES', 'delete')) return;
-          const deleteToastId = toast.loading('Eliminando factura en borrador...');
-          setInvoiceDeleteLoading(true);
+          if (!pendingDraftCancelInvoiceId || !canPerform('SALES_INVOICES', 'cancel')) return false;
+          if (!draftCancelReason.trim()) { setDraftCancelReasonAttempted(true); return false; }
+          const cancelToastId = toast.loading('Cancelando factura en borrador...');
+          setDraftCancelLoading(true);
           try {
-            const removal: any = await invoicesService.delete(pendingDeleteInvoiceId);
-            toast.success(
-              removal?.annulledInsteadOfDeleted
-                ? 'El borrador quedó anulado y conserva su número para mantener la numeración continua'
-                : 'Factura en borrador eliminada',
-              { id: deleteToastId },
-            );
-            setPendingDeleteInvoiceId(null);
+            await invoicesService.cancelDraft(pendingDraftCancelInvoiceId, draftCancelReason.trim(), globalThis.crypto?.randomUUID?.());
+            toast.success('Factura en borrador cancelada', { id: cancelToastId });
+            setPendingDraftCancelInvoiceId(null);
             setDetailInvoice(null);
             setEditingId(null);
             setIsCreating(false);
             setLocalDoc(null);
-            onRefresh();
+            await onRefresh?.();
+            return true;
           } catch (error: any) {
-            toast.error(error?.response?.data?.message || error?.message || 'No se pudo eliminar la factura', { id: deleteToastId });
+            toast.error(error?.response?.data?.message || error?.message || 'No se pudo cancelar la factura', { id: cancelToastId });
+            return false;
           } finally {
-            setInvoiceDeleteLoading(false);
+            setDraftCancelLoading(false);
           }
         }}
-      />
+      >
+        <RequiredReasonField id="invoice-draft-cancellation-reason" label="Motivo de cancelación" value={draftCancelReason} onChange={setDraftCancelReason} attempted={draftCancelReasonAttempted} disabled={draftCancelLoading} placeholder="Ej.: cliente desistió, captura duplicada…" />
+      </ConfirmDialog>
 
-      <Dialog open={!!creditInvoice} onOpenChange={(open) => { if (!open && !creditLoading) { setCreditInvoice(null); setCreditInvoiceWasDraft(false); } }}>
-        <DialogContent className="!flex !flex-col !max-h-[calc(100dvh-1rem)] w-[calc(100%-1.5rem)] !max-w-6xl !overflow-hidden rounded-3xl p-4 sm:w-[calc(100%-3rem)] sm:p-6">
-          <DialogHeader>
-            <DialogTitle className="flex items-center gap-2 nh-module-title">
-              <Send className="size-5 text-primary" /> Enviar factura a crédito
-            </DialogTitle>
-            <DialogDescription>
-              Se trasladará únicamente el saldo pendiente a Créditos y se validará el límite disponible del cliente.
-            </DialogDescription>
-          </DialogHeader>
-          {creditInvoice && (
-            <div className="min-h-0 flex-1 space-y-4 overflow-y-auto overscroll-contain pr-3 [scrollbar-gutter:stable]">
-              <div className="rounded-2xl border border-primary/20 bg-primary/5 p-4">
-                <p className="text-[10px] font-black uppercase tracking-widest text-muted-foreground">{creditInvoice.number || 'Nueva factura'} · {creditInvoice.customer?.name || customers.find((customer) => customer.id === creditInvoice.customerId)?.name || 'Cliente'}</p>
-                <p className="mt-1 text-2xl font-black text-primary">Saldo a crédito: {formatInvoiceAmount(getInvoiceBalance(creditInvoice), creditInvoice.currency, creditInvoice.exchangeRate)}</p>
-                <p className="mt-1 text-xs text-muted-foreground">Interés estimado: {formatInvoiceAmount(creditInterestMode === 'NONE' ? 0 : creditInterestMode === 'PERCENTAGE' ? getInvoiceBalance(creditInvoice) * Number(creditInterestValue || 0) / 100 : Number(creditInterestValue || 0), creditInvoice.currency, creditInvoice.exchangeRate)} · Total pactado: {formatInvoiceAmount(getInvoiceBalance(creditInvoice) + (creditInterestMode === 'NONE' ? 0 : creditInterestMode === 'PERCENTAGE' ? getInvoiceBalance(creditInvoice) * Number(creditInterestValue || 0) / 100 : Number(creditInterestValue || 0)), creditInvoice.currency, creditInvoice.exchangeRate)}</p>
-                <p className="mt-2 text-[10px] font-bold text-muted-foreground">La factura conservará el estado A CRÉDITO y el registro aparecerá en la vista Créditos.</p>
-              </div>
-              <CreditTermDateField
-                issueDate={creditInvoice.date}
-                creditDays={creditInvoiceTerm?.customer?.creditDays}
-                savedDeadline={creditInvoice.creditTermDeadline}
-                value={creditPlanEnabled && (creditPlanCalculationMode === 'AMOUNT' || creditPlanCalculationMode === 'MANUAL') ? creditPlanEstimate?.finalDueDate || creditDueDate : creditDueDate}
-                onChange={(value) => {
-                  setCreditDueDate(value);
-                  setCreditTermOverrideConfirmed(false);
-                  if (creditPlanEnabled && creditPlanCalculationMode === 'AMOUNT') setCreditPlanCalculationMode('DEADLINE');
-                }}
-                overrideConfirmed={creditTermOverrideConfirmed}
-                onOverrideConfirmedChange={setCreditTermOverrideConfirmed}
-                label={creditPlanEnabled ? (creditPlanCalculationMode === 'AMOUNT' ? 'Vencimiento estimado' : creditPlanCalculationMode === 'MANUAL' ? 'Vencimiento final' : 'Fecha final de vencimiento *') : 'Fecha de pago *'}
-                minDate={new Date().toISOString().split('T')[0]}
-                readOnly={creditPlanEnabled}
-              />
-              <div className="space-y-3 rounded-2xl border border-border/50 p-4">
-                <p className="text-[10px] font-black uppercase tracking-widest text-muted-foreground">Interés opcional</p>
-                <div className="grid gap-3 sm:grid-cols-2">
-                  <div className="space-y-1.5">
-                    <Label className="flex items-end leading-tight sm:min-h-10">Interés del crédito</Label>
-                    <Select value={creditInterestMode} onValueChange={(value) => setCreditInterestMode(value as typeof creditInterestMode)}>
-                      <SelectTrigger className="h-9"><SelectValue /></SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="NONE">Sin interés</SelectItem>
-                        <SelectItem value="FIXED_AMOUNT">Monto fijo</SelectItem>
-                        <SelectItem value="PERCENTAGE">Porcentaje único</SelectItem>
-                      </SelectContent>
-                    </Select>
-                  </div>
-                  {creditInterestMode !== 'NONE' && <div className="space-y-1.5">
-                    <Label htmlFor="invoice-credit-interest" className="flex items-end leading-tight sm:min-h-10">{creditInterestMode === 'PERCENTAGE' ? 'Porcentaje sobre el saldo (%)' : 'Interés fijo'}</Label>
-                    <Input id="invoice-credit-interest" type="number" min="0" step="0.01" max={creditInterestMode === 'PERCENTAGE' ? 100 : undefined} value={creditInterestValue} onChange={(event) => setCreditInterestValue(event.target.value)} />
-                  </div>}
-                </div>
-                <p className="text-[10px] text-muted-foreground">El interés se calcula una sola vez sobre el saldo trasladado. El saldo original de la factura no cambia.</p>
-              </div>
-              <CustomerCreditPlanEditor
-                idPrefix="invoice-credit"
-                enabled={creditPlanEnabled}
-                onEnabledChange={(enabled) => {
-                  setCreditPlanEnabled(enabled);
-                  setCreditTermOverrideConfirmed(false);
-                  if (enabled && !creditFirstInstallmentDate) setCreditFirstInstallmentDate(new Date().toISOString().split('T')[0]);
-                }}
-                calculationMode={creditPlanCalculationMode}
-                onCalculationModeChange={(mode) => {
-                  if (mode === 'DEADLINE') {
-                    const firstDate = creditFirstInstallmentDate || new Date().toISOString().split('T')[0];
-                    const requestedDate = creditPlanEstimate?.finalDueDate || creditDueDate || firstDate;
-                    setCreditDueDate(requestedDate >= firstDate ? requestedDate : firstDate);
-                  }
-                  if (mode === 'MANUAL') setCreditManualInstallments((rows) => rows.map((row, index) => index === 0 && !row.dueDate
-                    ? { ...row, dueDate: creditFirstInstallmentDate || new Date().toISOString().split('T')[0] }
-                    : row));
-                  setCreditPlanCalculationMode(mode);
-                  setCreditTermOverrideConfirmed(false);
-                }}
-                frequency={creditFrequency}
-                onFrequencyChange={(frequency) => { setCreditFrequency(frequency); setCreditTermOverrideConfirmed(false); }}
-                firstInstallmentDate={creditFirstInstallmentDate}
-                onFirstInstallmentDateChange={(date) => {
-                  setCreditFirstInstallmentDate(date);
-                  if (creditPlanCalculationMode === 'DEADLINE' && date && creditDueDate < date) setCreditDueDate(date);
-                  setCreditTermOverrideConfirmed(false);
-                }}
-                finalDueDate={creditDueDate}
-                onFinalDueDateChange={(date) => { setCreditDueDate(date); setCreditTermOverrideConfirmed(false); }}
-                installmentAmount={creditInstallmentAmount}
-                onInstallmentAmountChange={(amount) => { setCreditInstallmentAmount(amount); setCreditTermOverrideConfirmed(false); }}
-                estimate={creditPlanEstimate}
-                isEstimatePending={creditInstallmentAmount !== deferredCreditInstallmentAmount}
-                currency={creditInvoice.currency}
-                formatAmount={(amount) => formatInvoiceAmount(amount, creditInvoice.currency, creditInvoice.exchangeRate)}
-                manualInstallments={creditManualInstallments}
-                onManualInstallmentChange={(index, field, value) => {
-                  setCreditManualInstallments((rows) => rows.map((row, rowIndex) => rowIndex === index ? { ...row, [field]: value } : row));
-                  setCreditTermOverrideConfirmed(false);
-                }}
-                onAddManualInstallment={() => setCreditManualInstallments((rows) => [...rows, { dueDate: '', totalAmount: '', interestAmount: '' }])}
-                onRemoveManualInstallment={(index) => setCreditManualInstallments((rows) => rows.filter((_, rowIndex) => rowIndex !== index))}
-                onPrint={() => void printCreditInstallmentPlan()}
-              />
-              {creditPlanEnabled && creditPlanCalculationMode !== 'MANUAL' && <CustomerCreditCalendarSelector
-                excludedWeekdays={creditExcludedWeekdays}
-                holidayIds={creditHolidayIds}
-                onChange={(value) => {
-                  setCreditExcludedWeekdays(value.excludedWeekdays);
-                  setCreditHolidayIds(value.holidayIds);
-                  setCreditExcludedDates(value.excludedDates);
-                  setCreditTermOverrideConfirmed(false);
-                }}
-              />}
-            </div>
-          )}
-          <DialogFooter className="shrink-0">
-            <Button type="button" variant="outline" onClick={() => { setCreditInvoice(null); setCreditInvoiceWasDraft(false); }} disabled={creditLoading}>Cancelar</Button>
-            <Button type="button" onClick={() => void handleSendInvoiceToCredit()} disabled={creditLoading || !effectiveCreditDueDate || (creditTermOverrideRequired && !creditTermOverrideConfirmed) || (creditInterestMode !== 'NONE' && !Number.isFinite(Number(creditInterestValue))) || (creditPlanEnabled && (!creditPlanEstimate || !creditPlanEstimate.isValid || (creditPlanCalculationMode !== 'MANUAL' && !creditFirstInstallmentDate) || (creditPlanCalculationMode === 'AMOUNT' && creditInstallmentAmount !== deferredCreditInstallmentAmount)))} className="bg-primary font-black text-primary-foreground hover:bg-primary/90">
-              {creditLoading ? 'Enviando...' : 'Confirmar crédito'}
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
 
-      <Dialog open={paymentDialogOpen} onOpenChange={(open) => { if (!open) closeInvoicePayment(); }}>
-        <DialogContent className="!flex !flex-col !max-h-[calc(100dvh-1rem)] w-[calc(100%-1rem)] !max-w-xl !overflow-hidden rounded-3xl p-4 sm:w-[calc(100%-2rem)] sm:p-6">
-          <DialogHeader>
-            <DialogTitle className="flex items-center gap-2 nh-module-title">
-              <CreditCard className="size-5 text-primary" /> Pagar factura
-            </DialogTitle>
-          </DialogHeader>
-          {paymentInvoice && (
-            <div className="min-h-0 flex-1 space-y-3 overflow-y-auto overscroll-contain pr-3 [scrollbar-gutter:stable]">
-              <div className="rounded-2xl border border-primary/20 bg-primary/5 px-4 py-3">
-                <p className="text-[10px] font-black uppercase tracking-widest text-muted-foreground">{paymentInvoice.number} · {paymentInvoice.customer?.name || 'Cliente'}</p>
-                <div className="mt-2 grid gap-2 sm:grid-cols-3">
-                  <div>
-                    <p className="text-[9px] font-black uppercase tracking-widest text-muted-foreground">Total factura</p>
-                    <p className="mt-0.5 text-lg font-black text-foreground">{formatInvoiceAmount(paymentInvoiceTotal, paymentInvoice.currency, paymentInvoice.exchangeRate)}</p>
-                  </div>
-                  <div>
-                    <p className="text-[9px] font-black uppercase tracking-widest text-muted-foreground">Abonado</p>
-                    <p className="mt-0.5 text-lg font-black text-foreground">{formatInvoiceAmount(paymentInvoiceAlreadyPaid, paymentInvoice.currency, paymentInvoice.exchangeRate)}</p>
-                  </div>
-                  <div>
-                    <p className="text-[9px] font-black uppercase tracking-widest text-muted-foreground">Saldo actual</p>
-                    <p className="mt-0.5 text-lg font-black text-primary">{formatInvoiceAmount(paymentInvoiceCurrentBalance, paymentInvoice.currency, paymentInvoice.exchangeRate)}</p>
-                  </div>
-                </div>
-              </div>
-              {!paymentInvoice.registerId && !paymentInvoice.sessionId && (
-                <div className="space-y-2 rounded-xl border border-border/60 bg-muted/10 p-3">
-                  <div className="flex items-center justify-between gap-3">
-                    <p className="text-[10px] font-black uppercase tracking-widest text-muted-foreground">Caja (opcional)</p>
-                    {cashSession && <span className="text-[10px] font-black text-emerald-600">Abierta</span>}
-                  </div>
-                  {cashRegisters.length > 0 ? (
-                    <Select value={cashRegisterId || '__none__'} onValueChange={(value) => setCashRegisterId(value === '__none__' ? '' : value)} disabled={cashLoading || paymentLoading}>
-                      <SelectTrigger className="h-9 text-xs">
-                        <SelectValue placeholder="Selecciona la caja donde se recibió el pago" />
-                      </SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="__none__">No asociar a una caja</SelectItem>
-                        {cashRegisters.map((register) => (
-                          <SelectItem key={register.id} value={register.id}>{register.name} ({register.code})</SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
-                  ) : (
-                    <p className="text-[10px] font-medium text-muted-foreground">Sin caja abierta. El pago se registrará sin movimiento en Control de Caja.</p>
-                  )}
-                </div>
-              )}
-              <div className="space-y-3 rounded-2xl border border-border/60 bg-muted/10 p-3">
-                <div className="flex flex-wrap items-center justify-between gap-3">
-                  <p className="text-[10px] font-black uppercase tracking-widest text-muted-foreground">Forma de pago</p>
-                  <div className="flex flex-wrap items-center justify-end gap-x-4 gap-y-2">
-                    <label
-                      className={cn(
-                        'flex items-center gap-2 text-[10px] font-black uppercase tracking-widest',
-                        paymentPartialCreditFits ? 'cursor-pointer text-muted-foreground' : 'cursor-not-allowed text-muted-foreground/50',
-                      )}
-                      title={!paymentPartialCreditFits ? 'El saldo restante supera el crédito disponible del cliente' : undefined}
-                    >
-                      <Switch
-                        checked={paymentPartialActive}
-                        onCheckedChange={(checked) => setPartialPaymentEnabled(checked)}
-                        disabled={paymentLoading || !paymentPartialCreditFits}
-                        aria-label="Activar pago parcial"
-                      />
-                      Pago parcial
-                    </label>
-                    <label className="flex cursor-pointer items-center gap-2 text-[10px] font-black uppercase tracking-widest text-muted-foreground">
-                      <Switch
-                        checked={mixedPaymentEnabled}
-                        onCheckedChange={(checked) => {
-                          setMixedPaymentEnabled(checked);
-                          if (!checked) setPaymentLines((current) => current.slice(0, 1));
-                        }}
-                        disabled={paymentLoading}
-                        aria-label="Activar pago mixto"
-                      />
-                      Pago mixto
-                    </label>
-                  </div>
-                </div>
-                {paymentHasRemaining && !paymentPartialCreditFits && !paymentHasActiveCredit && (
-                  <p className="text-[10px] font-bold text-rose-600 dark:text-rose-400">
-                    El saldo restante supera el crédito disponible del cliente. Reduce el monto del pago para habilitar Pago parcial.
-                  </p>
-                )}
-                {paymentLines.map((line, index) => (
-                  <div key={`${index}-${line.method}`} className="rounded-xl border border-border/60 bg-background/70 p-3 space-y-2">
-                    <div className="flex items-end gap-2">
-                      <div className="flex-1 min-w-0">
-                        <p className="mb-1 text-[9px] font-black uppercase tracking-widest text-muted-foreground">Método</p>
-                        <Select value={line.method} onValueChange={(nextMethod) => handlePaymentMethodChange(index, nextMethod)}>
-                          <SelectTrigger size="sm" className="h-9 w-full rounded-lg border-input bg-background px-2 text-xs font-bold uppercase"><SelectValue /></SelectTrigger>
-                          <SelectContent>{paymentMethodOptions.filter((method) => method.value !== 'CUSTOMER_BALANCE' || paymentCustomerFavorBase > 0.01).map((method) => <SelectItem key={method.value} value={method.value}>{method.label}</SelectItem>)}</SelectContent>
-                        </Select>
-                      </div>
-                      <Button type="button" variant="ghost" size="icon" disabled={paymentLines.length === 1} onClick={() => setPaymentLines((current) => current.filter((_, itemIndex) => itemIndex !== index))} aria-label="Eliminar forma de pago" className="size-9 shrink-0 text-muted-foreground hover:text-rose-500"><Trash2 className="size-4" /></Button>
-                    </div>
-                    <div className="grid gap-2 sm:grid-cols-[minmax(0,1fr)_minmax(7rem,10rem)] sm:items-end">
-                      <CurrencySelector
-                        value={line.currency}
-                        baseCurrency={baseCurrency}
-                        exchangeRate={globalRate}
-                          label=""
-                          hideLabel
-                          rateDecimals={2}
-                          disabled={line.method === 'CUSTOMER_BALANCE' || paymentLoading}
-                        onChange={(nextCurrency) => setPaymentLines((current) => current.map((item, itemIndex) => {
-                          if (itemIndex !== index) return item;
-                          const previousRate = item.currency === baseCurrency ? 1 : Number(item.exchangeRate || globalRate);
-                          const nextRate = paymentLineRate(nextCurrency);
-                          return {
-                            ...item,
-                            amount: Number(convertBetweenCurrencies(item.amount, item.currency, nextCurrency, previousRate, nextRate).toFixed(getCurrencyDecimalPlaces())),
-                            currency: nextCurrency,
-                            exchangeRate: nextRate,
-                            bankAccountId: undefined,
-                            cardCommissionPercent: 0,
-                            cardCommissionAmount: 0,
-                            cardCommissionAccountId: undefined,
-                          };
-                        }))}
-                      />
-                      <div>
-                        <Input type="number" min="0.01" step="0.01" value={line.amount || ''} onChange={(event) => setPaymentLines((current) => current.map((item, itemIndex) => itemIndex === index ? { ...item, amount: Number(event.target.value) || 0, cardCommissionAmount: isCardPaymentMethod(item.method) ? calculateCardCommission(Number(event.target.value) || 0, Number(item.cardCommissionPercent || 0)) : item.cardCommissionAmount } : item))} autoFocus={index === 0} placeholder="Monto" className="h-9 text-xs tabular-nums" />
-                      </div>
-                    </div>
-                    {(salesAccountingRequired || salesFinanceEnabled) && isBankPaymentMethod(line.method, true) && <BankAccountSelect currency={line.currency} className="mt-2" allowUnlinked={!salesAccountingRequired && salesFinanceEnabled} required={salesAccountingRequired} endpoint="/bank-accounts/payment-options" value={line.bankAccountId} onChange={(bankAccountId) => setPaymentLines((current) => current.map((item, itemIndex) => itemIndex === index ? { ...item, bankAccountId } : item))} onAccountSelect={(account) => setPaymentLines((current) => current.map((item, itemIndex) => itemIndex === index ? { ...item, cardCommissionPercent: account?.cardCommissionPercent || 0, cardCommissionAmount: isCardPaymentMethod(item.method) ? calculateCardCommission(Number(item.amount || 0), account?.cardCommissionPercent || 0) : 0, cardCommissionAccountId: account?.cardCommissionAccountId || undefined } : item))} label={salesAccountingRequired ? 'Banco global de destino' : 'Banco destino (opcional)'} />}
-                    {isCardPaymentMethod(line.method) && !salesAccountingRequired && <label className="block max-w-40 text-[10px] font-bold text-muted-foreground">Comisión de tarjeta (%)<Input type="number" min="0" max="100" step="0.01" value={line.cardCommissionPercent || ''} onChange={(event) => setPaymentLines((current) => current.map((item, itemIndex) => itemIndex === index ? { ...item, cardCommissionPercent: Number(event.target.value) || 0, cardCommissionAmount: calculateCardCommission(Number(item.amount || 0), Number(event.target.value) || 0) } : item))} className="mt-1 h-9" /></label>}
-                    {paymentInvoice && line.currency !== paymentInvoiceCurrency && <p className="mt-1 text-[10px] font-bold text-muted-foreground">Equivalente factura: {formatInvoiceAmount(getPaymentLineDocumentAmount(line, paymentInvoiceCurrency, paymentInvoice.exchangeRate, baseCurrency, convertBetweenCurrencies), paymentInvoice.currency, paymentInvoice.exchangeRate)}</p>}
-                    {isCardPaymentMethod(line.method) && (line.bankAccountId || !salesAccountingRequired) && Number(line.cardCommissionPercent || 0) > 0 && (
-                      <div className="mt-2 flex items-center gap-3 rounded-lg border border-purple-500/20 bg-purple-500/5 px-3 py-2 text-[10px]">
-                        <span className="font-black uppercase tracking-widest text-purple-600">Comisión:</span>
-                        <span className="font-mono font-bold">{formatCommissionPercent(line.cardCommissionPercent)}</span>
-                        <span className="text-muted-foreground">|</span>
-                        <span className="font-black uppercase tracking-widest text-muted-foreground">Monto:</span>
-                        <span className="font-mono font-bold text-purple-600">{line.currency === 'USD' ? '$' : 'C$'} {formatSalesAmount(Number(line.cardCommissionAmount || calculateCardCommission(Number(line.amount || 0), Number(line.cardCommissionPercent || 0))))}</span>
-                      </div>
-                    )}
-                    {hasPaymentReferenceField(line.method) && <div className="mt-2">
-                      <Label htmlFor={`invoice-payment-reference-${index}`} required={requiresPaymentReference(line.method)} className="mb-1 text-[9px] font-black uppercase tracking-widest text-muted-foreground">Referencia</Label>
-                      <Input id={`invoice-payment-reference-${index}`} value={line.reference || ''} onChange={(event) => setPaymentLines((current) => current.map((item, itemIndex) => itemIndex === index ? { ...item, reference: event.target.value } : item))} placeholder="Transferencia, voucher, cheque..." required={requiresPaymentReference(line.method)} className="h-9 text-xs" />
-                    </div>}
-                    {line.method === 'CUSTOMER_BALANCE' && <p className="mt-2 text-[10px] font-bold text-emerald-600 dark:text-emerald-400">Disponible a favor: {formatConvertedAmount(paymentCustomerFavorBase, baseCurrency)}. Puedes aplicar solo una parte.</p>}
-                  </div>
-                ))}
-                {mixedPaymentEnabled && (
-                  <Button type="button" variant="outline" className="w-full border-dashed text-[10px] font-black uppercase tracking-widest" onClick={() => setPaymentLines((current) => [...current, paymentLine('CARD')])}>
-                    <Plus className="mr-2 size-4" /> Agregar pago mixto
-                  </Button>
-                )}
-              </div>
-              <div className="grid gap-3 sm:grid-cols-2">
-                <div>
-                  <p className="mb-1 text-[10px] font-black uppercase tracking-widest text-muted-foreground">Fecha del pago *</p>
-                  <Input type="date" value={paymentDate} onChange={(event) => setPaymentDate(event.target.value)} />
-                </div>
-                <div className="rounded-xl border border-border/50 bg-background/60 p-3">
-                  <p className="text-[9px] font-black uppercase tracking-widest text-muted-foreground">Este pago</p>
-                  <p className="mt-1 text-lg font-black text-foreground">{formatInvoiceAmount(paymentTotalInInvoiceCurrency, paymentInvoice.currency, paymentInvoice.exchangeRate)}</p>
-                  <p className="mt-1 text-[10px] font-bold text-muted-foreground">Equivalente base: {formatConvertedAmount(paymentTotalBase, baseCurrency)}</p>
-                </div>
-              </div>
-              <div className={cn('rounded-xl border p-3', paymentHasRemaining ? 'border-primary/25 bg-primary/5' : paymentChangeUnsupported ? 'border-rose-500/30 bg-rose-500/5' : paymentHasChange ? 'border-emerald-500/25 bg-emerald-500/5' : 'border-border/50 bg-muted/20')}>
-                <div className="flex items-center justify-between gap-3">
-                  <div>
-                    <p className="text-[9px] font-black uppercase tracking-widest text-muted-foreground">{paymentSettlementLabel}</p>
-                    <p className={cn('mt-1 text-xl font-black', paymentChangeUnsupported ? 'text-rose-600 dark:text-rose-400' : paymentHasChange ? 'text-emerald-600 dark:text-emerald-400' : 'text-primary')}>
-                      {formatInvoiceAmount(paymentSettlementAmount, paymentInvoice.currency, paymentInvoice.exchangeRate)}
-                    </p>
-                    <p className="mt-1 text-[10px] font-bold text-muted-foreground">Equivalente base: {formatConvertedAmount(paymentHasRemaining ? paymentRemainingBase : paymentChangeBase, baseCurrency)}</p>
-                  </div>
-                </div>
-                {paymentChangeUnsupported && (
-                  <p className="mt-2 border-t border-rose-500/15 pt-2 text-[10px] font-bold text-rose-600 dark:text-rose-400">No se puede dar vuelto de una tarjeta, transferencia o banco. Reduce esos montos o agrega suficiente efectivo para cubrir el excedente.</p>
-                )}
-                {paymentHasChange && !paymentChangeUnsupported && (
-                  <p className="mt-2 border-t border-emerald-500/15 pt-2 text-[10px] font-bold text-emerald-600 dark:text-emerald-400">El pago supera el saldo de la factura y el excedente se devolverá al cliente.</p>
-                )}
-                {paymentHasRemaining && (
-                  paymentHasActiveCredit ? (
-                    <p className="mt-2 border-t border-primary/15 pt-2 text-[10px] font-bold text-primary">El saldo restante ya pertenece al crédito activo de esta factura; el abono continuará sobre ese crédito.</p>
-                  ) : (
-                    <div className="mt-2 space-y-1 border-t border-primary/15 pt-2 text-[10px]">
-                      <div className="flex items-center justify-between gap-3">
-                        <span className="text-muted-foreground">Crédito disponible considerando deuda activa</span>
-                        <span className="font-black text-foreground">{formatConvertedAmount(paymentCreditAvailableBase, baseCurrency)}</span>
-                      </div>
-                      <div className="flex items-center justify-between gap-3">
-                        <span className="text-muted-foreground">Disponible después de este saldo</span>
-                        <span className={cn('font-black', paymentPartialCreditFits ? 'text-emerald-600' : 'text-rose-600')}>{formatConvertedAmount(paymentCreditAfterBase, baseCurrency)}</span>
-                      </div>
-                      <p className={cn('font-bold', paymentPartialCreditFits ? 'text-emerald-600' : 'text-rose-600')}>
-                        {paymentPartialCreditFits
-                          ? 'El saldo restante se enviará a crédito con la fecha indicada.'
-                          : 'El saldo restante supera el límite de crédito disponible.'}
-                      </p>
-                    </div>
-                  )
-                )}
-                {paymentCustomerFavorAppliedBase > 0.01 && <p className="mt-2 border-t border-emerald-500/15 pt-2 text-[10px] font-bold text-emerald-600 dark:text-emerald-400">Aplicado desde saldo a favor: {formatConvertedAmount(paymentCustomerFavorAppliedBase, baseCurrency)}{paymentCustomerFavorExceeded ? ' · supera el disponible' : ''}</p>}
-              </div>
-              {paymentRemainingInInvoiceCurrency > 0.01 && (
-                <CreditTermDateField
-                  issueDate={paymentInvoice.date}
-                  creditDays={paymentInvoiceTerm?.customer?.creditDays}
-                  savedDeadline={paymentInvoice.creditTermDeadline}
-                  value={paymentCreditPlanEnabled && (paymentCreditPlanCalculationMode === 'AMOUNT' || paymentCreditPlanCalculationMode === 'MANUAL')
-                    ? paymentCreditPlanEstimate?.finalDueDate || paymentDueDate
-                    : paymentDueDate}
-                  onChange={(value) => {
-                    setPaymentDueDate(value);
-                    setPaymentCreditTermOverrideConfirmed(false);
-                    if (paymentCreditPlanEnabled && paymentCreditPlanCalculationMode === 'AMOUNT') setPaymentCreditPlanCalculationMode('DEADLINE');
-                  }}
-                  overrideConfirmed={paymentCreditTermOverrideConfirmed}
-                  onOverrideConfirmedChange={setPaymentCreditTermOverrideConfirmed}
-                  label={paymentCreditPlanEnabled
-                    ? (paymentCreditPlanCalculationMode === 'AMOUNT' ? 'Vencimiento estimado' : paymentCreditPlanCalculationMode === 'MANUAL' ? 'Vencimiento final' : 'Fecha final de vencimiento *')
-                    : 'Fecha del saldo pendiente *'}
-                  minDate={new Date().toISOString().split('T')[0]}
-                  readOnly={paymentCreditPlanEnabled}
-                />
-              )}
-              {paymentHasRemaining && paymentPartialActive && !paymentHasActiveCredit && <CustomerCreditPlanEditor
-                idPrefix="invoice-partial-credit"
-                enabled={paymentCreditPlanEnabled}
-                onEnabledChange={(enabled) => {
-                  setPaymentCreditPlanEnabled(enabled);
-                  setPaymentCreditTermOverrideConfirmed(false);
-                  if (enabled && !paymentCreditFirstInstallmentDate) setPaymentCreditFirstInstallmentDate(new Date().toISOString().split('T')[0]);
-                  if (enabled) setPaymentCreditManualInstallments((rows) => rows.map((row, index) => index === 0 && !row.dueDate
-                    ? { ...row, dueDate: paymentCreditFirstInstallmentDate || new Date().toISOString().split('T')[0] }
-                    : row));
-                }}
-                calculationMode={paymentCreditPlanCalculationMode}
-                onCalculationModeChange={(mode) => {
-                  if (mode === 'DEADLINE') {
-                    const firstDate = paymentCreditFirstInstallmentDate || new Date().toISOString().split('T')[0];
-                    const requestedDate = paymentCreditPlanEstimate?.finalDueDate || paymentDueDate || firstDate;
-                    setPaymentDueDate(requestedDate >= firstDate ? requestedDate : firstDate);
-                  }
-                  if (mode === 'MANUAL') setPaymentCreditManualInstallments((rows) => rows.map((row, index) => index === 0 && !row.dueDate
-                    ? { ...row, dueDate: paymentCreditFirstInstallmentDate || new Date().toISOString().split('T')[0] }
-                    : row));
-                  setPaymentCreditPlanCalculationMode(mode);
-                  setPaymentCreditTermOverrideConfirmed(false);
-                }}
-                frequency={paymentCreditFrequency}
-                onFrequencyChange={(frequency) => { setPaymentCreditFrequency(frequency); setPaymentCreditTermOverrideConfirmed(false); }}
-                firstInstallmentDate={paymentCreditFirstInstallmentDate}
-                onFirstInstallmentDateChange={(date) => {
-                  setPaymentCreditFirstInstallmentDate(date);
-                  if (paymentCreditPlanCalculationMode === 'DEADLINE' && date && paymentDueDate < date) setPaymentDueDate(date);
-                  setPaymentCreditTermOverrideConfirmed(false);
-                }}
-                finalDueDate={paymentDueDate}
-                onFinalDueDateChange={(date) => { setPaymentDueDate(date); setPaymentCreditTermOverrideConfirmed(false); }}
-                installmentAmount={paymentCreditInstallmentAmount}
-                onInstallmentAmountChange={(amount) => { setPaymentCreditInstallmentAmount(amount); setPaymentCreditTermOverrideConfirmed(false); }}
-                estimate={paymentCreditPlanEstimate}
-                isEstimatePending={paymentCreditInstallmentAmount !== deferredPaymentCreditInstallmentAmount}
-                currency={paymentInvoice.currency || baseCurrency}
-                formatAmount={(amount) => formatInvoiceAmount(amount, paymentInvoice.currency, paymentInvoice.exchangeRate)}
-                manualInstallments={paymentCreditManualInstallments}
-                onManualInstallmentChange={(index, field, value) => {
-                  setPaymentCreditManualInstallments((rows) => rows.map((row, rowIndex) => rowIndex === index
-                    ? { ...row, [field]: field === 'interestAmount' ? '0' : value }
-                    : row));
-                  setPaymentCreditTermOverrideConfirmed(false);
-                }}
-                onAddManualInstallment={() => setPaymentCreditManualInstallments((rows) => [...rows, { dueDate: '', totalAmount: '', interestAmount: '0' }])}
-                onRemoveManualInstallment={(index) => setPaymentCreditManualInstallments((rows) => rows.filter((_, rowIndex) => rowIndex !== index))}
-                manualInterestEditable={false}
-                description="El plan distribuye el saldo pendiente entre fechas y abonos; no agrega intereses al crédito."
-              />}
-            </div>
-          )}
-          <DialogFooter className="shrink-0">
-            <Button type="button" variant="outline" onClick={closeInvoicePayment} disabled={paymentLoading}>Cancelar</Button>
-            <Button onClick={() => void handleInvoicePayment()} disabled={paymentLoading || cashLoading || paymentChangeUnsupported || paymentCustomerFavorExceeded || paymentCreditPlanInvalid || (paymentCreditPlanEnabled && paymentCreditPlanCalculationMode === 'AMOUNT' && paymentCreditInstallmentAmount !== deferredPaymentCreditInstallmentAmount) || (paymentTermOverrideRequired && !paymentCreditTermOverrideConfirmed) || (!paymentHasActiveCredit && paymentRemainingBase > paymentCreditAvailableBase + 0.01) || paymentLines.some((line) => requiresPaymentReference(line.method) && !line.reference?.trim()) || (salesAccountingRequired && paymentLines.some((line) => isBankPaymentMethod(line.method, true) && !line.bankAccountId))} className="bg-primary font-black">
-              {paymentLoading ? 'Registrando...' : 'Confirmar pago'}
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
+
+      {invoiceActionDialogs}
 
       <Dialog open={Boolean(paymentVoucher)} onOpenChange={(open) => { if (!open) setPaymentVoucher(null); }}>
         <DialogContent className="w-[calc(100%-2rem)] !max-w-lg rounded-3xl">

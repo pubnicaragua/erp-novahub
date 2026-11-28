@@ -34,7 +34,7 @@ import { SalesKpiCard } from './SalesKpiCard';
 import { KpiSummaryNotice } from '../ui/KpiSummaryNotice';
 import { fetchAllReportPages } from '../../hooks/useTenantQuery';
 import { ColumnFilterMenu, useColumnFilters } from '../ui/ColumnFilterMenu';
-import { formatDateEs, formatDateOnly } from '../../utils/dateFormat';
+import { formatCivilDateTime, formatDateEs, formatDateOnly } from '../../utils/dateFormat';
 import { hasPaymentReferenceField, isBankPaymentMethod, requiresManualPaymentAccount, requiresPaymentReference, paymentMethodLabel, isCardPaymentMethod, calculateCardCommission, formatCommissionPercent } from '../../utils/paymentMethods';
 import { getSalesAdditionalCharges } from '../../utils/salesCharges';
 import { cn } from '../ui/utils';
@@ -194,6 +194,18 @@ export function PagosRecibidosView({ data, summaryData, summaryLoading, summaryE
   const hydratedDraftKeyRef = useRef<string | null>(null);
   const [draftHydrated, setDraftHydrated] = useState(false);
 
+  const paymentCreditsQuery = useQuery({
+    queryKey: ['sales', 'payment-eligible-credits', user?.tenantId, selectedBranchId, localDoc?.customerId],
+    queryFn: ({ signal }) => paymentsService.getEligibleCredits(String(localDoc.customerId), selectedBranchId || undefined, signal),
+    enabled: Boolean(localDoc?.customerId) && canPerform('SALES_PAYMENTS', 'read'),
+    staleTime: 30_000,
+  });
+  const paymentCredits = useMemo(() => {
+    const source = paymentCreditsQuery.data ?? credits;
+    const byId = new Map((source || []).map((credit) => [credit.id, credit]));
+    return [...byId.values()];
+  }, [credits, paymentCreditsQuery.data]);
+
   const commitLocalDoc = (nextDoc: any) => {
     localDocRef.current = nextDoc;
     setLocalDoc(nextDoc);
@@ -311,13 +323,13 @@ export function PagosRecibidosView({ data, summaryData, summaryLoading, summaryE
   const linkedPaymentDocument = localDoc?.invoiceId
     ? invoices.find((invoice) => invoice.id === localDoc.invoiceId)
     : localDoc?.creditNoteId
-      ? credits.find((credit) => credit.id === localDoc.creditNoteId)
+      ? paymentCredits.find((credit) => credit.id === localDoc.creditNoteId) || (localDoc as any).creditNote
       : undefined;
   const linkedInvoiceForTerm = localDoc?.invoiceId
     ? invoices.find((invoice) => invoice.id === localDoc.invoiceId)
     : localDoc?.creditNoteId
       ? (() => {
-        const credit = credits.find((item) => item.id === localDoc.creditNoteId) as any;
+        const credit = paymentCredits.find((item) => item.id === localDoc.creditNoteId) as any || (localDoc as any).creditNote;
         return invoices.find((invoice) => invoice.id === credit?.invoiceId) || credit?.invoice;
       })()
       : undefined;
@@ -746,7 +758,7 @@ export function PagosRecibidosView({ data, summaryData, summaryLoading, summaryE
   const setPaymentDocument = (kind: 'invoice' | 'creditNote', id: string) => {
     const document = kind === 'invoice'
       ? invoices.find((invoice) => invoice.id === id)
-      : credits.find((credit) => credit.id === id);
+      : paymentCredits.find((credit) => credit.id === id);
     const currentLine = paymentLines[0] || paymentLine('CASH');
     const sourceAmount = document
       ? Number((document as any).balance ?? (document as any).total ?? 0)
@@ -832,9 +844,9 @@ export function PagosRecibidosView({ data, summaryData, summaryLoading, summaryE
   const columns: ColumnDef<PaymentReceived>[] = [
     { key: 'number', header: 'N° Pago', width: '120px', render: (val) => <span className="text-[11px] font-black font-mono text-muted-foreground/60">{val}</span> },
     { key: 'customer', header: 'Cliente', headerExtra: <ColumnFilterMenu label="Cliente" options={distinctCustomers} selected={colFilters.state.customer?.values || []} onSelect={(values) => colFilters.setValues('customer', values)} sort={colFilters.state.customer?.sort || null} onSort={(sort) => colFilters.setSort('customer', sort)} />, render: (_, row) => <span className="text-[13px] font-bold text-foreground">{row.customer?.name || 'Cliente'}</span> },
-    { key: 'date', header: 'Fecha', headerExtra: <ColumnFilterMenu label="Fecha" sort={colFilters.state.date?.sort || null} onSort={(sort) => colFilters.setSort('date', sort)} sortOptions={[{ value: 'desc', label: 'Más recientes' }, { value: 'asc', label: 'Más antiguas' }]} />, render: (val) => {
+    { key: 'date', header: 'Fecha', headerExtra: <ColumnFilterMenu label="Fecha" sort={colFilters.state.date?.sort || null} onSort={(sort) => colFilters.setSort('date', sort)} sortOptions={[{ value: 'desc', label: 'Más recientes' }, { value: 'asc', label: 'Más antiguas' }]} />, render: (val, row) => {
       if (!val) return <span className="text-xs text-muted-foreground">Sin fecha</span>;
-      return <span className="text-xs font-medium text-muted-foreground">{formatDateOnly(val)}</span>;
+      return <span className="whitespace-nowrap text-xs font-medium text-muted-foreground">{formatCivilDateTime(val, row.createdAt)}</span>;
     } },
     {
       key: 'amount', header: 'Monto', width: '150px', headerExtra: <ColumnFilterMenu label="Monto" sort={colFilters.state.amount?.sort || null} onSort={(sort) => colFilters.setSort('amount', sort)} />, render: (val, row) => (
@@ -978,7 +990,7 @@ export function PagosRecibidosView({ data, summaryData, summaryLoading, summaryE
                   }))}
                     value={localDoc.invoiceId} onChange={(val) => setPaymentDocument('invoice', val)} placeholder="Selecciona una factura" /></div>}
                 {localDoc.paymentTarget === 'CREDIT' && <div><p className="text-[10px] text-muted-foreground mb-1">Crédito pendiente</p>
-                  <Combobox options={credits.filter((credit) => credit.customerId === localDoc.customerId && ['ISSUED', 'PARTIAL', 'APPLIED'].includes(String(credit.status || '').toUpperCase()) && Number(credit.balance ?? credit.total ?? 0) > 0).map((credit) => ({
+                  <Combobox options={paymentCredits.filter((credit) => credit.customerId === localDoc.customerId && ['ACTIVE', 'ISSUED', 'PARTIAL', 'APPLIED'].includes(String(credit.status || '').toUpperCase()) && Number(credit.balance ?? credit.total ?? 0) > 0).map((credit) => ({
                     label: `${credit.number} — ${formatConvertedAmount(Number(credit.balance ?? credit.total ?? 0), credit.currency, credit.exchangeRate)} pend.`,
                     value: credit.id,
                   }))}
@@ -1224,7 +1236,7 @@ export function PagosRecibidosView({ data, summaryData, summaryLoading, summaryE
 
               <div className="grid gap-3 sm:grid-cols-2">
                 <div className="rounded-xl border border-border/50 bg-muted/10 p-3"><p className="text-[10px] font-black uppercase tracking-widest text-muted-foreground">Cliente</p><p className="mt-1 break-words text-sm font-bold">{detailPayment.customer?.name || 'Cliente'}</p></div>
-                <div className="rounded-xl border border-border/50 bg-muted/10 p-3"><p className="text-[10px] font-black uppercase tracking-widest text-muted-foreground">Fecha</p><p className="mt-1 text-sm font-bold">{formatDateOnly(detailPayment.date) || '—'}</p></div>
+                <div className="rounded-xl border border-border/50 bg-muted/10 p-3"><p className="text-[10px] font-black uppercase tracking-widest text-muted-foreground">Fecha</p><p className="mt-1 text-sm font-bold">{formatCivilDateTime(detailPayment.date, detailPayment.createdAt) || '—'}</p></div>
                 <div className="rounded-xl border border-border/50 bg-muted/10 p-3"><p className="text-[10px] font-black uppercase tracking-widest text-muted-foreground">Método</p><p className="mt-1 text-sm font-bold">{paymentMethodLabel(String(detailPayment.method || '').toUpperCase())}</p></div>
                 <div className="rounded-xl border border-border/50 bg-muted/10 p-3"><p className="text-[10px] font-black uppercase tracking-widest text-muted-foreground">Documento / destino</p><p className="mt-1 break-words text-sm font-bold text-primary">{detailPayment.invoice?.number || detailPayment.creditNote?.number || (detailPayment.balanceApplicationType === 'GENERAL_BALANCE' ? 'Abono al saldo general del cliente' : detailPayment.reference || 'Anticipo')}</p></div>
               </div>

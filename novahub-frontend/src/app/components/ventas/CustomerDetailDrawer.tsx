@@ -97,6 +97,7 @@ import { countryCodeFromLegacy, formatCustomerPhoneForDisplay } from '../../util
 import { getAuditOperationMethodLabel } from '../ui/audit-operation-method';
 import { formatAuditChangedFields, translateAuditDetailKey, translateAuditDetailValue } from '../ui/AuditHistoryModal';
 import { getCurrencyDecimalPlaces } from '../../utils/currency';
+import { formatCivilDateTime } from '../../utils/dateFormat';
 
 interface CustomerDetailDrawerProps {
   customerId: string | null;
@@ -116,6 +117,7 @@ type RelatedTransaction = {
   kind: string;
   number: string;
   date?: string;
+  createdAt?: string | null;
   status?: string;
   amount?: number;
   currency?: string;
@@ -896,7 +898,7 @@ export function CustomerDetailDrawer({
                               <div className="flex size-8 shrink-0 items-center justify-center rounded-lg bg-muted/40 text-muted-foreground"><FileText className="size-4" /></div>
                               <div className="min-w-0 flex-1"><p className="break-words text-xs font-bold text-foreground">{transaction.kind}</p><p className="whitespace-normal break-words font-mono text-[10px] leading-relaxed text-muted-foreground">{transaction.number || 'Sin número'}{transaction.description ? ` · ${transaction.description}` : ''}</p></div>
                             </div>
-                            <div className="flex min-w-0 items-start gap-2 pl-2 text-right"><div className="min-w-0"><p className="whitespace-nowrap text-[10px] font-bold text-muted-foreground">{transaction.date ? format(new Date(transaction.date), 'dd/MM/yyyy HH:mm') : '—'}</p><p className={`text-[10px] font-black text-foreground ${transaction.amount !== undefined ? 'whitespace-nowrap' : 'whitespace-normal break-words [overflow-wrap:anywhere]'}`}>{transaction.amount !== undefined ? formatConvertedAmount(transaction.amount, transaction.currency || 'NIO', transaction.exchangeRate) : getTransactionStatus(transaction.status)}</p></div><ChevronRight className={`mt-0.5 size-4 shrink-0 text-primary transition-transform ${selectedInvoiceId === transaction.id || selectedMovement?.id === transaction.id ? 'rotate-90' : ''}`} /></div>
+                            <div className="flex min-w-0 items-start gap-2 pl-2 text-right"><div className="min-w-0"><p className="whitespace-nowrap text-[10px] font-bold text-muted-foreground">{transaction.date ? formatCivilDateTime(transaction.date, transaction.createdAt) : '—'}</p><p className={`text-[10px] font-black text-foreground ${transaction.amount !== undefined ? 'whitespace-nowrap' : 'whitespace-normal break-words [overflow-wrap:anywhere]'}`}>{transaction.amount !== undefined ? formatConvertedAmount(transaction.amount, transaction.currency || 'NIO', transaction.exchangeRate) : getTransactionStatus(transaction.status)}</p></div><ChevronRight className={`mt-0.5 size-4 shrink-0 text-primary transition-transform ${selectedInvoiceId === transaction.id || selectedMovement?.id === transaction.id ? 'rotate-90' : ''}`} /></div>
                           </button>
                           {selectedInvoiceId === transaction.id && (selectedDocumentQuery.isFetching ? <div className="flex items-center gap-2 p-4 text-xs text-muted-foreground"><Loader2 className="size-4 animate-spin" /> Cargando factura…</div> : selectedDocumentQuery.isError ? <div className="flex items-center justify-between gap-3 p-4 text-xs text-destructive"><span>No se pudo cargar la factura.</span><Button type="button" variant="outline" size="sm" onClick={() => selectedDocumentQuery.refetch()}>Reintentar</Button></div> : selectedInvoice ? <InvoiceInlineDetail invoice={selectedInvoice} onClose={() => setSelectedInvoiceId(null)} formatAmount={formatConvertedAmount} tenantName={user?.tenantName || 'Empresa'} tenantLogo={themeConfig?.logo} /> : null)}
                           {selectedMovement?.id === transaction.id && (selectedDocumentQuery.isFetching ? <div className="flex items-center gap-2 p-4 text-xs text-muted-foreground"><Loader2 className="size-4 animate-spin" /> Cargando documento…</div> : selectedDocumentQuery.isError ? <div className="flex items-center justify-between gap-3 p-4 text-xs text-destructive"><span>No se pudo cargar el documento.</span><Button type="button" variant="outline" size="sm" onClick={() => selectedDocumentQuery.refetch()}>Reintentar</Button></div> : <MovementInlineDetail transaction={selectedMovementDetail!} onClose={() => setSelectedMovement(null)} formatAmount={formatConvertedAmount} tenantName={user?.tenantName || 'Empresa'} tenantLogo={themeConfig?.logo} />)}
@@ -1211,7 +1213,7 @@ function EstimateInlineDetail({ estimate, onClose, formatAmount, tenantName, ten
       </div>
 
       <div className="mt-4 grid grid-cols-2 gap-4 sm:grid-cols-4">
-        <InfoField label="Fecha" value={estimate.date ? format(new Date(estimate.date), 'dd/MM/yyyy HH:mm') : '—'} icon={Calendar} />
+        <InfoField label="Fecha" value={formatCivilDateTime(estimate.date, estimate.createdAt) || '—'} icon={Calendar} />
         <InfoField label="Válida hasta" value={estimate.expiryDate ? format(new Date(estimate.expiryDate), 'dd/MM/yyyy') : '—'} icon={Clock} />
         <InfoField label="Total" value={formatAmount(Number(estimate.total || 0), estimate.currency, estimate.exchangeRate)} icon={DollarSign} mono />
         <InfoField label="Líneas" value={String(estimate.items?.length || 0)} icon={FileText} />
@@ -1300,7 +1302,7 @@ function MovementInlineDetail({ transaction, onClose, formatAmount, tenantName, 
         <div className="flex shrink-0 items-center gap-1">{documentType && <PdfDownloadButton onDownload={handleDownloadPdf} includePageSizes includeRoll size="sm" className="h-8 px-2 text-[10px]" />}<Button type="button" variant="ghost" size="icon" title="Cerrar detalle" aria-label="Cerrar detalle" className="size-8 rounded-lg text-muted-foreground" onClick={onClose}><X className="size-4" /></Button></div>
       </div>
       <div className="mt-4 grid grid-cols-2 gap-4 sm:grid-cols-4">
-        <InfoField label="Fecha" value={transaction.date ? format(new Date(transaction.date), 'dd/MM/yyyy HH:mm') : '—'} icon={Calendar} />
+        <InfoField label="Fecha" value={formatCivilDateTime(transaction.date, transaction.createdAt) || '—'} icon={Calendar} />
         <InfoField label="Estado" value={getTransactionStatus(transaction.status)} icon={Activity} />
         <InfoField label="Total" value={formatAmount(Number(transaction.amount || document.total || 0), transaction.currency || document.currency, transaction.exchangeRate || document.exchangeRate)} icon={DollarSign} mono />
         <InfoField label="Líneas" value={String(items.length || '—')} icon={FileText} />
@@ -1354,7 +1356,7 @@ function InvoiceInlineDetail({ invoice, onClose, formatAmount, tenantName, tenan
       </div>
 
       <div className="mt-4 grid grid-cols-2 gap-4 sm:grid-cols-4">
-        <InfoField label="Fecha de emisión" value={invoice.date ? format(new Date(invoice.date), 'dd/MM/yyyy HH:mm') : '—'} icon={Calendar} />
+        <InfoField label="Fecha de emisión" value={formatCivilDateTime(invoice.date, invoice.createdAt) || '—'} icon={Calendar} />
         <InfoField label="Fecha de vencimiento" value={invoice.dueDate ? format(new Date(invoice.dueDate), 'dd/MM/yyyy') : '—'} icon={Clock} />
         <InfoField label="Total" value={formatAmount(Number(invoice.total || 0), invoice.currency, invoice.exchangeRate)} icon={DollarSign} mono />
         <InfoField label="Saldo pendiente" value={formatAmount(Number(invoice.balance || 0), invoice.currency, invoice.exchangeRate)} icon={CreditCard} mono />

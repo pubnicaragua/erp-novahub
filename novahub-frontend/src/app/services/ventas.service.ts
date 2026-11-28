@@ -147,6 +147,7 @@ export interface CustomerMovement {
   kind: string;
   number: string;
   date: string;
+  createdAt?: string | null;
   status?: string;
   amount: number;
   currency: string;
@@ -347,6 +348,8 @@ export const invoicesService = {
   /** Compatibilidad temporal: el endpoint ya no anula; crea una solicitud. */
   cancel: (id: string, reason?: string, idempotencyKey?: string) =>
     api.idempotentPost<{ request: { id: string; status: string }; invoice: Invoice; created: boolean; message: string }>(`/sales/invoices/${id}/cancel`, { reason }, idempotencyKey),
+  cancelDraft: (id: string, reason: string, idempotencyKey?: string) =>
+    api.idempotentPost<Invoice>(`/sales/invoices/${id}/cancel-draft`, { reason }, idempotencyKey),
   getCancellationRequests: (status = 'PENDING', signal?: AbortSignal) =>
     api.get<any[]>('/sales/invoices/cancellation-requests', { params: { status }, signal }),
   reviewCancellationRequest: (requestId: string, decision: 'APPROVE' | 'REJECT', reason?: string, idempotencyKey?: string) =>
@@ -393,6 +396,10 @@ export const paymentsService = {
   getIntegrationPolicy: () => api.get<{ financeEnabled: boolean; accountingEnabled: boolean; accountingRequired: boolean }>('/sales/integration-policy'),
   getAll: (filters?: ApiFilters, signal?: AbortSignal) => api.get<PaginatedResponse<PaymentReceived>>('/sales/payments', { params: filters as any, signal }),
   getSummary: (filters?: ApiFilters, signal?: AbortSignal) => api.get<PaymentKpiSummary>('/sales/payments/summary', { params: filters as any, signal }),
+  getEligibleCredits: (customerId: string, branchId?: string, signal?: AbortSignal) => api.get<CreditNote[]>('/sales/payments/eligible-credits', {
+    params: { customerId, ...(branchId ? { branchId } : {}) },
+    signal,
+  }),
   getById: (id: string, signal?: AbortSignal) => api.get<PaymentReceived>(`/sales/payments/${id}`, signal ? { signal } : undefined),
   create: (data: Partial<PaymentReceived> & { cashRegisterId?: string; cashSessionId?: string; dueDate?: string; creditTermOverrideConfirmed?: boolean }, idempotencyKey?: string) => api.idempotentPost<PaymentReceived>('/sales/payments', data, idempotencyKey),
   createMixed: (data: Partial<PaymentReceived> & { cashRegisterId?: string; cashSessionId?: string; dueDate?: string; creditTermOverrideConfirmed?: boolean; payments: Array<{ method: string; amount: number; currency?: 'NIO' | 'USD'; exchangeRate?: number; accountId?: string; bankAccountId?: string; cardCommissionPercent?: number; reference?: string; notes?: string }> }, idempotencyKey?: string) =>

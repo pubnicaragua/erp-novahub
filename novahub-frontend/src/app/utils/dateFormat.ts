@@ -136,6 +136,24 @@ export function formatDateOnly(value: string | number | Date | null | undefined,
   return new Intl.DateTimeFormat(locale, { dateStyle: 'short', timeZone: 'UTC' }).format(civilDate);
 }
 
+/** Combina la fecha civil de un documento con la hora real de registro del evento. */
+export function formatCivilDateTime(
+  civilDate: string | number | Date | null | undefined,
+  eventAt: string | number | Date | null | undefined,
+  locale = 'es-NI',
+  timeZone = 'America/Managua',
+): string {
+  const date = formatDateOnly(civilDate, locale);
+  if (!eventAt) return date;
+
+  const instant = new Date(eventAt);
+  if (Number.isNaN(instant.getTime())) return date || String(eventAt);
+
+  if (!date) return new Intl.DateTimeFormat(locale, { dateStyle: 'short', timeStyle: 'short', timeZone }).format(instant);
+  const time = new Intl.DateTimeFormat(locale, { hour: '2-digit', minute: '2-digit', hourCycle: 'h23', timeZone }).format(instant);
+  return `${date} ${time}`;
+}
+
 /** Formats an event timestamp in the tenant's display zone. */
 export function formatInstant(value: string | number | Date | null | undefined, timeZone = 'America/Managua', locale = 'es-NI'): string {
   if (value === null || value === undefined || value === '') return '';

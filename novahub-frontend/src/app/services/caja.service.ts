@@ -220,6 +220,7 @@ export interface PosInvoice {
   registerId?: string | null;
   sessionId?: string | null;
   date: string;
+  createdAt?: string;
   subtotal: number;
   taxAmount: number;
   discountAmount: number;

@@ -103,6 +103,7 @@ export function VentasPage({ activeSubModule, onSubModuleChange, isSidebarCollap
   const [activeSection, setActiveSection] = useState(activeSubModule || 'clientes');
   const [invoiceDraft, setInvoiceDraft] = useState<Partial<Invoice> | null>(null);
   const [targetInvoiceId, setTargetInvoiceId] = useState<string | null>(null);
+  const [targetReturnId, setTargetReturnId] = useState<string | null>(null);
   const [targetInvoiceDetailId, setTargetInvoiceDetailId] = useState<string | null>(null);
   const [targetOrderId, setTargetOrderId] = useState<string | null>(null);
   const [controlCajaTargetParams, setControlCajaTargetParams] = useState<{registerId?: string, section?: 'dashboard' | 'session' | 'history'} | null>(null);
@@ -374,7 +375,7 @@ export function VentasPage({ activeSubModule, onSubModuleChange, isSidebarCollap
   const creditNotesQuery = useQuery({
     queryKey: ['sales', 'credit-notes-payment-catalog', tenantKey, selectedBranchId],
     queryFn: ({ signal }) => creditNotesService.getAll({ page: 1, pageSize: 200, ...branchFilter }, signal),
-    enabled: canViewSalesSection('pagos-recibidos') && isPaymentDocumentCatalog,
+    enabled: canViewSalesSection('notas-credito') && activeSection === 'notas-credito',
     placeholderData: keepPreviousData,
   });
   const creditDocumentsQuery = useQuery({
@@ -610,26 +611,47 @@ export function VentasPage({ activeSubModule, onSubModuleChange, isSidebarCollap
     // La conversión devuelve la factura, pero la lista paginada puede seguir
     // teniendo una versión anterior en caché. Leerla por ID garantiza que el
     // detalle se abra con todas sus líneas, incluyendo productos y servicios.
-    const invoiceWithItems = await invoicesService.getById(invoice.id).catch(() => invoice);
-    setInvoiceDraft(invoiceWithItems);
+    await invoicesService.getById(invoice.id).catch(() => invoice);
     await fetchData();
-    setTargetInvoiceId(null);
-    setActiveSection('facturas');
-    onSubModuleChange?.('facturas');
+    if (canViewSalesSection('facturas')) {
+      setInvoiceDraft(null);
+      setTargetInvoiceId(invoice.id);
+      updateSearch('facturas', '');
+      updateDateRange('facturas', '', '');
+      updatePage('facturas', 1);
+      setActiveSection('facturas');
+      onSubModuleChange?.('facturas');
+    }
   };
 
   const handleConvertedQuoteToOrder = (orderId: string) => {
+    if (!canViewSalesSection('ordenes-venta')) return;
+    setOrdersStatusFilter('ALL');
+    updateSearch('ordenes-venta', '');
+    updateDateRange('ordenes-venta', '', '');
+    updatePage('ordenes-venta', 1);
     setTargetOrderId(orderId);
     setActiveSection('ordenes-venta');
     onSubModuleChange?.('ordenes-venta');
   };
 
   const handleConvertedQuoteToInvoice = (invoiceId: string) => {
+    if (!canViewSalesSection('facturas')) return;
     setInvoiceDraft(null);
     setTargetInvoiceId(null);
     setTargetInvoiceDetailId(invoiceId);
+    updateSearch('facturas', '');
+    updateDateRange('facturas', '', '');
+    updatePage('facturas', 1);
     setActiveSection('facturas');
     onSubModuleChange?.('facturas');
+  };
+
+  const handleCreatedReturn = (returnId: string) => {
+    updateSearch('devoluciones-venta', '');
+    updateDateRange('devoluciones-venta', '', '');
+    updatePage('devoluciones-venta', 1);
+    setTargetReturnId(returnId);
   };
 
   return (
@@ -710,10 +732,10 @@ export function VentasPage({ activeSubModule, onSubModuleChange, isSidebarCollap
                 <FacturasRecurrentesView data={filteredData.recurrentes} summaryData={recurringSummaryQuery.data} summaryLoading={recurringSummaryQuery.isPending || recurringSummaryQuery.isFetching} summaryError={recurringSummaryQuery.isError} loading={loading} onRefresh={fetchData} customers={filteredData.clientes} products={data.productos} productsLoading={productCatalogLoading} productsError={productCatalogError} warehouses={data.warehouses} pagination={pagination.recurrentes} onSearchChange={(value) => updateSearch('facturas-recurrentes', value)} dateFrom={recurringDates.dateFrom} dateTo={recurringDates.dateTo} onDateRangeChange={(from, to) => updateDateRange('facturas-recurrentes', from, to)} salesAlert={salesAlert || undefined} />
               )}
               {activeSection === 'pagos-recibidos' && (
-                <PagosRecibidosView data={filteredData.pagos} summaryData={paymentsSummaryQuery.data} summaryLoading={paymentsSummaryQuery.isPending || paymentsSummaryQuery.isFetching} summaryError={paymentsSummaryQuery.isError} loading={loading} onRefresh={fetchData} customers={filteredData.clientes} invoices={filteredData.facturas} credits={filteredData.notasCredito} pagination={pagination.pagos} onSearchChange={(value) => updateSearch('pagos-recibidos', value)} dateFrom={paymentsDates.dateFrom} dateTo={paymentsDates.dateTo} selectedBranchId={selectedBranchId || ''} onDateRangeChange={(from, to) => updateDateRange('pagos-recibidos', from, to)} salesAlert={salesAlert || undefined} />
+                <PagosRecibidosView data={filteredData.pagos} summaryData={paymentsSummaryQuery.data} summaryLoading={paymentsSummaryQuery.isPending || paymentsSummaryQuery.isFetching} summaryError={paymentsSummaryQuery.isError} loading={loading} onRefresh={fetchData} customers={filteredData.clientes} invoices={filteredData.facturas} pagination={pagination.pagos} onSearchChange={(value) => updateSearch('pagos-recibidos', value)} dateFrom={paymentsDates.dateFrom} dateTo={paymentsDates.dateTo} selectedBranchId={selectedBranchId || ''} onDateRangeChange={(from, to) => updateDateRange('pagos-recibidos', from, to)} salesAlert={salesAlert || undefined} />
               )}
               {activeSection === 'devoluciones-venta' && (
-                <DevolucionesView data={filteredData.devoluciones} summaryData={returnsSummaryQuery.data} summaryLoading={returnsSummaryQuery.isPending || returnsSummaryQuery.isFetching} summaryError={returnsSummaryQuery.isError} loading={loading} onRefresh={fetchData} customers={filteredData.clientes} invoices={filteredData.facturas} products={data.productos} warehouses={data.warehouses} pagination={pagination.devoluciones} onSearchChange={(value) => updateSearch('devoluciones-venta', value)} dateFrom={returnsDates.dateFrom} dateTo={returnsDates.dateTo} selectedBranchId={selectedBranchId || ''} onDateRangeChange={(from, to) => updateDateRange('devoluciones-venta', from, to)} salesAlert={salesAlert || undefined} />
+                <DevolucionesView data={filteredData.devoluciones} summaryData={returnsSummaryQuery.data} summaryLoading={returnsSummaryQuery.isPending || returnsSummaryQuery.isFetching} summaryError={returnsSummaryQuery.isError} loading={loading} onRefresh={fetchData} customers={filteredData.clientes} invoices={filteredData.facturas} products={data.productos} warehouses={data.warehouses} pagination={pagination.devoluciones} onSearchChange={(value) => updateSearch('devoluciones-venta', value)} dateFrom={returnsDates.dateFrom} dateTo={returnsDates.dateTo} selectedBranchId={selectedBranchId || ''} onDateRangeChange={(from, to) => updateDateRange('devoluciones-venta', from, to)} targetReturnId={targetReturnId} onClearTargetReturnId={() => setTargetReturnId(null)} onCreated={handleCreatedReturn} salesAlert={salesAlert || undefined} />
               )}
               {activeSection === 'notas-credito' && (
                 <NotasCreditoView data={filteredData.documentosCredito.filter((item) => item.kind !== 'CUSTOMER_LOAN')} summaryData={creditNotesSummaryQuery.data} summaryLoading={creditNotesSummaryQuery.isPending || creditNotesSummaryQuery.isFetching} summaryError={creditNotesSummaryQuery.isError} loading={loading} onRefresh={fetchData} customers={filteredData.clientes} customersError={customersCreditCapacityQuery.isError} employees={salesEmployees} products={data.productos} productsLoading={productCatalogLoading} productsError={productCatalogError} warehouses={data.warehouses} pagination={pagination.notasCredito} onSearchChange={(value) => updateSearch('notas-credito', value)} dateFrom={creditNotesDates.dateFrom} dateTo={creditNotesDates.dateTo} onDateRangeChange={(from, to) => updateDateRange('notas-credito', from, to)} salesAlert={salesAlert || undefined} />

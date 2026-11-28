@@ -1113,7 +1113,26 @@ export function ProductosView({ products, summaryProducts, summaryProductsLoaded
   const tablePreferences = useUserViewPreferences('inventory.products');
   const [layoutMode, setLayoutMode] = useState<'table' | 'cards'>('table');
   const isCompactTableViewport = useCardsOnlyBelowTableBreakpoint();
-  const effectiveLayoutMode = isCompactTableViewport ? 'cards' : layoutMode;
+  const catalogFiltersRef = useRef<HTMLDivElement>(null);
+  const [catalogAvailableWidth, setCatalogAvailableWidth] = useState<number | null>(null);
+  useEffect(() => {
+    const element = catalogFiltersRef.current;
+    if (!element) return;
+    const measure = () => {
+      const nextWidth = Math.round(element.getBoundingClientRect().width);
+      setCatalogAvailableWidth((current) => current === nextWidth ? current : nextWidth);
+    };
+    measure();
+    if (typeof ResizeObserver === 'undefined') {
+      window.addEventListener('resize', measure);
+      return () => window.removeEventListener('resize', measure);
+    }
+    const observer = new ResizeObserver(measure);
+    observer.observe(element);
+    return () => observer.disconnect();
+  }, []);
+  const isCompactCatalog = isCompactTableViewport || (catalogAvailableWidth !== null && catalogAvailableWidth < 1280);
+  const effectiveLayoutMode = isCompactCatalog ? 'cards' : layoutMode;
 
   const [visibleColumns, setVisibleColumnsState] = useState<Record<string, boolean>>(DEFAULT_VISIBLE_COLUMNS);
   useEffect(() => {
@@ -4316,7 +4335,7 @@ export function ProductosView({ products, summaryProducts, summaryProductsLoaded
       </div>
 
       {/* ─── Contenedor de Filtros (Fijo, estilo Balance de Comprobación) ─── */}
-      <div className="mb-4 space-y-4 rounded-2xl border border-border/50 bg-muted/30 p-4 shadow-sm sm:p-5" data-tour="inventory-products-filters">
+      <div ref={catalogFiltersRef} className="mb-4 space-y-4 rounded-2xl border border-border/50 bg-muted/30 p-4 shadow-sm sm:p-5" data-tour="inventory-products-filters">
         <div className="flex flex-wrap items-center justify-between gap-3">
           <div className="flex items-center gap-2 text-xs font-black uppercase tracking-[0.2em] text-muted-foreground">
             <span className="flex items-center gap-2 rounded-lg border border-border/30 bg-background/50 px-3 py-1.5 text-foreground">
@@ -4646,6 +4665,7 @@ export function ProductosView({ products, summaryProducts, summaryProductsLoaded
           const warehousesForProduct = warehouseNamesForProduct(product);
           const costPrice = getProductInventoryValuation(product).costPrice;
           const maxStock = getProductMaxStock(product);
+          const priceInfo = getPriceStatusInfo(product);
           return (
             <Card key={product.id} aria-busy={String(openingId) === String(product.id) || undefined} data-detail-opening={String(openingId) === String(product.id) ? 'true' : undefined} className={`min-w-0 overflow-hidden rounded-2xl border-border/40 p-4 shadow-sm ${selectedIds.has(String(product.id)) ? 'border-primary/50 bg-primary/[0.05]' : ''} ${highlightedProductId === product.id ? 'bg-primary/10 ring-2 ring-primary/60' : ''}`} onClick={() => openProductDetail(product)}>
               <div className="flex min-w-0 items-start gap-3">
@@ -4705,6 +4725,19 @@ export function ProductosView({ products, summaryProducts, summaryProductsLoaded
                        {canViewInventoryCost && <div><span className="text-muted-foreground">Precio costo</span><CurrencyValuationAmount amount={costPrice} sourceCurrency={(product as any).costCurrency || product.priceCurrency || baseCurrency} sourceExchangeRate={(product as any).costExchangeRate || product.priceExchangeRate} className="font-medium" /></div>}
                     </>}
                   </div>
+                  {(visibleColumns.priceStatus !== false || visibleColumns.priceUpdatedAt !== false) && <div className="mt-3 grid min-w-0 grid-cols-1 gap-2 rounded-xl border border-border/40 bg-muted/15 p-3 sm:grid-cols-2">
+                    {visibleColumns.priceStatus !== false && <div className="min-w-0">
+                      <span className="block text-[10px] font-black uppercase tracking-wide text-muted-foreground">Estado del precio</span>
+                      <div className="mt-1 flex min-w-0 flex-wrap items-center gap-x-2 gap-y-1">
+                        <Badge variant="outline" className={`max-w-full whitespace-normal break-normal text-[10px] font-bold ${priceInfo.badgeClass}`}>{priceInfo.label}</Badge>
+                        {priceInfo.days < 999 && <span className="shrink-0 whitespace-nowrap text-[10px] text-muted-foreground">{priceInfo.days === 0 ? 'Actualizado hoy' : `Hace ${priceInfo.days} días`}</span>}
+                      </div>
+                    </div>}
+                    {visibleColumns.priceUpdatedAt !== false && <div className="min-w-0">
+                      <span className="block text-[10px] font-black uppercase tracking-wide text-muted-foreground">Última actualización</span>
+                      <span className="mt-1 block whitespace-nowrap text-xs font-medium tabular-nums">{priceInfo.dateStr}</span>
+                    </div>}
+                  </div>}
                   {!isServiceView && <div className="mt-3 flex items-center gap-2 text-[10px] text-muted-foreground">
                     <span className="font-bold uppercase tracking-wider">IMEI</span>
                     <Badge variant="secondary" className="text-[9px]">{product.trackSerialNumbers ? 'Activo' : 'Inactivo'}</Badge>
@@ -4979,12 +5012,12 @@ export function ProductosView({ products, summaryProducts, summaryProductsLoaded
                     {isServiceView && visibleColumns.price !== false && <TableCell className="text-right"><CurrencyValuationAmount {...getServicePricePresentation(product)} className="font-medium" /></TableCell>}
                     {isServiceView && canViewInventoryCost && visibleColumns.cost !== false && <TableCell className="text-right text-muted-foreground"><CurrencyValuationAmount amount={Number(product.costPrice || 0)} sourceCurrency={baseCurrency} sourceExchangeRate={1} className="font-medium" /></TableCell>}
                     {!isServiceView && canViewInventoryCost && visibleColumns.cost !== false && <TableCell className="text-right text-muted-foreground"><CurrencyValuationAmount amount={getProductInventoryValuation(product).costPrice} sourceCurrency={(product as any).costCurrency || product.priceCurrency || baseCurrency} sourceExchangeRate={(product as any).costExchangeRate || product.priceExchangeRate} className="font-medium" /></TableCell>}
-                    {visibleColumns.priceUpdatedAt !== false && <TableCell className="text-xs text-muted-foreground">{priceInfo.dateStr}</TableCell>}
+                    {visibleColumns.priceUpdatedAt !== false && <TableCell className="!whitespace-nowrap !break-normal text-xs text-muted-foreground">{priceInfo.dateStr}</TableCell>}
                     {visibleColumns.priceStatus !== false && <TableCell>
-                      <Badge variant="outline" className={`text-[10px] font-bold ${priceInfo.badgeClass}`}>
-                        {priceInfo.label}
+                      <Badge variant="outline" className={`inline-flex max-w-full flex-wrap items-center gap-x-1 px-2 py-1 text-[10px] font-bold ${priceInfo.badgeClass}`}>
+                        <span className="shrink-0 !whitespace-nowrap !break-normal">{priceInfo.label}</span>
                         {priceInfo.days < 999 && (
-                          <span className="ml-1 text-[9px] opacity-80">
+                          <span className="shrink-0 !whitespace-nowrap !break-normal text-[9px] opacity-80">
                             ({priceInfo.days === 0 ? 'hoy' : `hace ${priceInfo.days}d`})
                           </span>
                         )}

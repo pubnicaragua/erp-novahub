@@ -27,7 +27,7 @@ import type { Customer } from '../../types';
 import type { PdfDownloadFormat } from '../../utils/pdfDownloadFormats';
 import { exportCustomerTransactionsPdf } from '../../utils/customerTransactionsExport';
 import { pdfStatusLabel } from '../../utils/pdfStatus';
-import { formatDateOnly } from '../../utils/dateFormat';
+import { formatCivilDateTime } from '../../utils/dateFormat';
 
 interface CustomerDetailsModalProps {
   customer: Customer | null;
@@ -273,7 +273,7 @@ export function CustomerDetailsModal({ customer, open, onOpenChange }: CustomerD
                         </div>
                         <div className="flex flex-wrap items-center gap-x-3 gap-y-1 mt-1.5">
                           <span className="text-[11px] font-bold text-muted-foreground/70 flex items-center gap-1.5 whitespace-nowrap">
-                            <Calendar className="size-3.5" /> {formatDateOnly(it.date)}
+                            <Calendar className="size-3.5" /> {formatCivilDateTime(it.date || it.startDate, it.type === 'RECURRING' ? null : it.createdAt)}
                           </span>
                           <span className="text-[10px] uppercase font-black tracking-widest text-muted-foreground/30 flex items-center gap-1 whitespace-nowrap">
                             • {pdfStatusLabel(it.status)}

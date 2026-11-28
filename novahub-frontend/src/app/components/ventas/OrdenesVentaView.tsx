@@ -29,7 +29,6 @@ import { storageService } from '../../services/storage.service';
 import { publicAccessService, publicLinkUrl } from '../../services/public-access.service';
 import { useAuth } from '../../contexts/AuthContext';
 import { useTheme } from '../../contexts/ThemeContext';
-import { useEnabledTenantFeatures } from '../../hooks/useEnabledTenantFeatures';
 import { SalesLinePriceListSelect, PriceMissingBadge } from './SalesLinePriceListSelect';
 import { SalesAccountingLegend } from './SalesAccountingLegend';
 import { getCatalogUnitPrice, formatSalesAmount, getMissingSalesPriceMessage, hasSalesProductPriceListConflict, hasSalesProductPriceListConflicts } from '../../utils/salesPriceList';
@@ -42,7 +41,7 @@ import { fetchAllReportPages } from '../../hooks/useTenantQuery';
 import { buildCustomerWhatsAppUrl, resolveCustomerPhone, WhatsAppActionButton } from './WhatsAppActionButton';
 import { PurchaseAlertsButton, type PurchaseAlertDetail } from '../compras/PurchaseAlertsButton';
 import { ColumnFilterMenu, useColumnFilters } from '../ui/ColumnFilterMenu';
-import { formatDateEs, formatDateOnly, resolveDocumentDateAtSave } from '../../utils/dateFormat';
+import { formatCivilDateTime, formatDateEs, formatDateOnly, resolveDocumentDateAtSave } from '../../utils/dateFormat';
 import { getSalesStatusColor, SALES_WORKFLOW_STATUS_COLORS } from '../../utils/salesStatus';
 import { SalesDocumentDetailSheet, getSalesLineIdentifiers, type SalesDocumentPanelData } from './SalesDocumentDetailSheet';
 import { getLegacySalesExtraCostFields, getSalesExtraChargesAmount, getSalesExtraChargesPayload, normalizeSalesExtraCharges, type SalesExtraChargeLine } from '../../utils/salesCharges';
@@ -62,15 +61,6 @@ import { flotaService, type TripCostInput } from '../../services/flota.service';
 import { initialDocumentExchangeRate } from '../../utils/currency';
 import { roundDecimal } from '../../utils/currency';
 import { cajaService } from '../../services/caja.service';
-
-const paymentMethodOptions = [
-  { label: 'Efectivo', value: 'CASH' },
-  { label: 'Tarjeta', value: 'CARD' },
-  { label: 'Transferencia', value: 'TRANSFER' },
-  { label: 'Cheque', value: 'CHECK' },
-  { label: 'Crédito', value: 'CREDIT' },
-  { label: 'Otro', value: 'OTHER' },
-];
 
 interface OrdenesVentaViewProps {
   data: SalesOrder[];
@@ -135,8 +125,6 @@ const getOrderWorkflowIssues = (order: SalesOrder | null | undefined): string[] 
 export function OrdenesVentaView({ data, summaryData, summaryLoading, summaryError, loading, onRefresh, onGenerateInvoice, targetOrderId, onClearTargetOrderId, customers = [], products = [], productsLoading = false, productsError = false, warehouses = [], employees = [], pagination, onSearchChange, dateFrom = '', dateTo = '', onDateRangeChange, selectedBranchId = '', statusFilter: controlledStatusFilter, onStatusFilterChange, salesAlert }: OrdenesVentaViewProps) {
   const { exchangeRate: globalRate, displayCurrency, baseCurrency, displayMode, formatConvertedAmount, formatExplicitAmount, toBaseAmount, formatAmount } = useCurrency();
   const { user, canPerform } = useAuth();
-  // Función específica por empresa: el superadmin la enciende solo para quien no maneja forma de pago en el pedido.
-  const hidePaymentMethod = useEnabledTenantFeatures().has('SALES_ORDER_HIDE_PAYMENT_METHOD');
   const tenantKey = user?.tenantId || user?.clientTenantId || 'anonymous';
   const { themeConfig } = useTheme();
   const salesDraftStorageKey = getSalesEditorDraftKey('sales-order', user?.tenantId, user?.id);
@@ -160,7 +148,7 @@ export function OrdenesVentaView({ data, summaryData, summaryLoading, summaryErr
   const tablePreferences = useUserViewPreferences('sales.orders');
   const defaultOrderColumnKeys = [
     'number', 'customer', 'itemCount', 'total', 'status', 'date',
-    'paymentMethod', 'invoiceNumber', 'invoicedAt', 'invoicedBy',
+    'invoiceNumber', 'invoicedAt', 'invoicedBy',
   ];
   const configuredOrderColumns = tablePreferences.preferences.visibleColumnKeys || defaultOrderColumnKeys;
   const visibleColumnKeys = configuredOrderColumns.includes('number') ? configuredOrderColumns : ['number', ...configuredOrderColumns];
@@ -453,7 +441,7 @@ export function OrdenesVentaView({ data, summaryData, summaryLoading, summaryErr
       ...(Number(order.deliveryAmount || 0) > 0 ? [{ label: order.deliveryDescription || 'Delivery', value: formatConvertedAmount(Number(order.deliveryAmount), order.currency, order.exchangeRate) }] : []),
     ],
     metadata: [
-      { label: 'Fecha', value: formatDateOnly(order.date) },
+      { label: 'Fecha', value: formatCivilDateTime(order.date, order.createdAt) },
       { label: 'Entrega estimada', value: order.expectedDelivery ? formatDateEs(order.expectedDelivery) : 'No definida' },
       ...(order.invoiceNumber ? [{ label: 'Factura relacionada', value: order.invoiceNumber }] : []),
     ],
@@ -473,7 +461,7 @@ export function OrdenesVentaView({ data, summaryData, summaryLoading, summaryErr
     if (!targetOrderId) return;
     const timer = setTimeout(() => {
       if (data.some((order) => order.id === targetOrderId)) {
-        setEditingId(targetOrderId);
+        setHighlightedAlertId(targetOrderId);
         onClearTargetOrderId?.();
       }
     }, 0);
@@ -596,13 +584,12 @@ export function OrdenesVentaView({ data, summaryData, summaryLoading, summaryErr
     baseTotal: localDoc?.baseTotal,
     warehouseId: localDoc?.warehouseId || null,
     notes: localDoc?.notes,
-    paymentMethod: localDoc?.paymentMethod || null,
     items: localDoc?.items || [],
     pricingMode,
     status,
   } as Partial<SalesOrder>);
 
-  const handleSaveOrder = async (status: OrderWorkflowStatus, options?: { sendToCash?: boolean }): Promise<boolean> => {
+  const handleSaveOrder = async (status: OrderWorkflowStatus, options?: { sendToCash?: boolean; onPersisted?: (order: SalesOrder) => Promise<void> }): Promise<boolean> => {
     if (!localDoc) return false;
     const sendToCash = options?.sendToCash === true;
     const saveStatus: OrderWorkflowStatus = sendToCash ? 'DRAFT' : status;
@@ -647,9 +634,11 @@ export function OrdenesVentaView({ data, summaryData, summaryLoading, summaryErr
     savingOrderRef.current = true;
     try {
       let savedOrderId = String(localDoc.id);
+      let persistedOrder: SalesOrder = { ...localDoc, status: saveStatus } as SalesOrder;
       if (String(localDoc.id).startsWith('local-')) {
         const created = await salesOrdersService.create({ ...buildOrderStatusPayload(saveStatus), number: undefined } as any);
         savedOrderId = String(created?.id || '');
+        persistedOrder = created as SalesOrder;
         const pendingTrip = pendingTripRef.current;
         pendingTripRef.current = null;
         if (pendingTrip && created?.id) {
@@ -660,6 +649,11 @@ export function OrdenesVentaView({ data, summaryData, summaryLoading, summaryErr
         if (!sendToCash) await onRefresh();
       } else {
         await handleUpdate(localDoc.id, buildOrderStatusPayload(saveStatus));
+        persistedOrder = { ...localDoc, status: saveStatus } as SalesOrder;
+      }
+      if (options?.onPersisted) {
+        if (!savedOrderId || savedOrderId.startsWith('local-')) throw new Error('No se pudo identificar la orden guardada.');
+        await options.onPersisted({ ...persistedOrder, id: savedOrderId, status: 'DRAFT' } as SalesOrder);
       }
       if (sendToCash) {
         try {
@@ -683,7 +677,7 @@ export function OrdenesVentaView({ data, summaryData, summaryLoading, summaryErr
       setEditingId(null);
       if (sendToCash) void onRefresh();
       toast.success(
-        sendToCash ? 'Orden aprobada, facturada y enviada a Caja' : saveStatus === 'APPROVED' ? 'Orden aprobada' : 'Orden guardada como borrador',
+        sendToCash ? 'Orden aprobada, facturada y enviada a Caja' : options?.onPersisted ? 'Orden aprobada y factura creada' : saveStatus === 'APPROVED' ? 'Orden aprobada' : 'Orden guardada como borrador',
         { id: saveToastId },
       );
       return true;
@@ -871,10 +865,10 @@ export function OrdenesVentaView({ data, summaryData, summaryLoading, summaryErr
       key: 'date',
       header: 'Fecha Compromiso',
       headerExtra: <ColumnFilterMenu label="Fecha Compromiso" sort={colFilters.state.date?.sort || null} onSort={(sort) => colFilters.setSort('date', sort)} sortOptions={[{ value: 'desc', label: 'Más recientes' }, { value: 'asc', label: 'Más antiguas' }]} />,
-      render: (val) => (
+      render: (val, row) => (
         <div className="flex items-center gap-1.5 text-[10px] font-medium text-muted-foreground">
            <Clock className="size-3" />
-           {formatDateOnly(val)}
+           {formatCivilDateTime(val, row.createdAt)}
         </div>
       )
     },
@@ -913,32 +907,11 @@ export function OrdenesVentaView({ data, summaryData, summaryLoading, summaryErr
       width: '100px',
       render: (_val, row) => <span className="text-xs font-medium text-muted-foreground">{row.items?.length || 0} art.</span>
     },
-    {
-      key: 'paymentMethod',
-      header: 'Forma de Pago',
-      width: '130px',
-      render: (val, row) => {
-        const method = String(val || row.paymentMethod || '').toUpperCase();
-        if (!method) return <span className="text-[11px] font-medium text-muted-foreground">—</span>;
-        const isCredit = method === 'CREDIT';
-        const labels: Record<string, string> = {
-          CREDIT: 'Crédito', CASH: 'Efectivo', CARD: 'Tarjeta', TRANSFER: 'Transferencia', CHECK: 'Cheque', OTHER: 'Otro',
-        };
-        return (
-          <div className="flex flex-col items-start gap-0.5">
-            <Badge className={cn('border-none px-2 py-0.5 text-[8px] font-black uppercase tracking-widest', isCredit ? 'bg-amber-500/15 text-amber-600 dark:text-amber-400' : 'bg-emerald-500/10 text-emerald-600 dark:text-emerald-400')}>
-              {isCredit ? 'A Crédito' : 'Contado'}
-            </Badge>
-            {!isCredit && <span className="text-[9px] font-bold uppercase text-muted-foreground/70">{labels[method] || method}</span>}
-          </div>
-        );
-      }
-    },
     { key: 'invoiceNumber', header: 'Factura relacionada', render: (val, row) => <span className="text-xs font-mono font-bold text-primary">{val || row.invoiceId || '—'}</span> },
-    { key: 'invoicedAt', header: 'Fecha facturación', headerExtra: <ColumnFilterMenu label="Fecha facturación" sort={colFilters.state.invoicedAt?.sort || null} onSort={(sort) => colFilters.setSort('invoicedAt', sort)} sortOptions={[{ value: 'desc', label: 'Más recientes' }, { value: 'asc', label: 'Más antiguas' }]} />, render: (val) => <span className="text-xs text-muted-foreground">{val ? formatDateOnly(val) : '—'}</span> },
+    { key: 'invoicedAt', header: 'Fecha facturación', headerExtra: <ColumnFilterMenu label="Fecha facturación" sort={colFilters.state.invoicedAt?.sort || null} onSort={(sort) => colFilters.setSort('invoicedAt', sort)} sortOptions={[{ value: 'desc', label: 'Más recientes' }, { value: 'asc', label: 'Más antiguas' }]} />, render: (val, row) => <span className="whitespace-nowrap text-xs text-muted-foreground">{val ? formatCivilDateTime(val, row.invoiceCreatedAt) : '—'}</span> },
     { key: 'invoicedBy', header: 'Facturado por', render: (_val, row) => <span className="text-xs text-muted-foreground">{row.invoicedBy?.name || '—'}</span> },
     { key: 'paymentNumber', header: 'Pago relacionado', render: (val, row) => <span className="text-xs font-mono font-bold text-emerald-500">{val || (row.invoiceId ? 'Pendiente' : '—')}</span> },
-    { key: 'paymentDate', header: 'Fecha pago', render: (val) => <span className="text-xs text-muted-foreground">{val ? formatDateOnly(val) : '—'}</span> },
+    { key: 'paymentDate', header: 'Fecha pago', render: (val, row) => <span className="whitespace-nowrap text-xs text-muted-foreground">{val ? formatCivilDateTime(val, row.paymentCreatedAt) : '—'}</span> },
     {
       key: 'paymentStatus',
       header: 'Estado pago',
@@ -965,7 +938,6 @@ export function OrdenesVentaView({ data, summaryData, summaryLoading, summaryErr
     { key: 'status', label: 'Estado de la orden' },
     { key: 'total', label: 'Monto total' },
     { key: 'itemCount', label: 'Artículos' },
-    { key: 'paymentMethod', label: 'Forma de pago' },
     { key: 'invoiceNumber', label: 'Factura relacionada' },
     { key: 'invoicedAt', label: 'Fecha facturación' },
     { key: 'invoicedBy', label: 'Facturado por' },
@@ -1012,9 +984,9 @@ export function OrdenesVentaView({ data, summaryData, summaryLoading, summaryErr
                     onClick={() => void handleSaveOrder('DRAFT')}>
                     <><Save className="mr-2 size-4" />Guardar</>
                   </Button>
-                  {canPerform('SALES_ORDERS', 'approve') && <Button data-testid="sales-order-approve" className="w-full rounded-xl bg-primary px-6 font-black uppercase text-[10px] tracking-widest text-primary-foreground shadow-xl shadow-primary/20 hover:bg-primary/90 hover:text-primary-foreground sm:w-auto"
-                    onClick={() => void handleSaveOrder('APPROVED')}>
-                    <><Check className="mr-2 size-4" />Aprobar</>
+                  {canPerform('SALES_ORDERS', 'convert') && <Button data-testid="sales-order-create-invoice" className="w-full rounded-xl bg-primary px-6 font-black uppercase text-[10px] tracking-widest text-primary-foreground shadow-xl shadow-primary/20 hover:bg-primary/90 hover:text-primary-foreground sm:w-auto"
+                    onClick={() => void handleSaveOrder('DRAFT', { onPersisted: onGenerateInvoice })}>
+                    <><Check className="mr-2 size-4" />Crear factura</>
                   </Button>}
                   {canPerform('SALES_ORDERS', 'convert') && <SalesActionTooltip label={hasOpenCash ? 'Enviar orden de venta a Caja' : 'No hay una caja abierta en esta sucursal'}><Button
                     type="button"
@@ -1038,7 +1010,7 @@ export function OrdenesVentaView({ data, summaryData, summaryLoading, summaryErr
               <p className="text-xs font-black uppercase tracking-widest text-muted-foreground">Información General</p>
               <SalesAccountingLegend flow="order" />
               <div className="grid grid-cols-1 gap-3 text-sm sm:grid-cols-2">
-                <div data-testid="sales-order-customer">
+                <div className="order-1" data-testid="sales-order-customer">
                   <p className="text-[10px] text-muted-foreground mb-1">Cliente</p>
                   <Combobox
                     options={(customers || [])
@@ -1061,7 +1033,7 @@ export function OrdenesVentaView({ data, summaryData, summaryLoading, summaryErr
                     placeholder="Seleccionar Cliente"
                   />
                 </div>
-                <SalesWarehouseSelect
+                <div className="order-5"><SalesWarehouseSelect
                   warehouses={warehouses}
                   testId="sales-order-warehouse"
                   value={localDoc?.warehouseId}
@@ -1071,8 +1043,8 @@ export function OrdenesVentaView({ data, summaryData, summaryLoading, summaryErr
                   }}
                   required={normalizeOrderStatus(localDoc?.status) === 'APPROVED'}
                   helpText="La orden y la factura usarán esta bodega de salida."
-                />
-                <div>
+                /></div>
+                <div className="order-6">
                   <p className="text-[10px] text-muted-foreground mb-1">Vendedor</p>
                   <Combobox
                     options={employees.map((employee) => ({ label: `${employee.firstName} ${employee.lastName}`, value: employee.id }))}
@@ -1081,23 +1053,23 @@ export function OrdenesVentaView({ data, summaryData, summaryLoading, summaryErr
                     placeholder="Seleccionar vendedor"
                   />
                 </div>
-                <div className="space-y-2 md:col-span-2">
+                <div className="order-7 space-y-2 md:col-span-2">
                   <p className="text-[10px] text-muted-foreground mb-1">Comisión configurada</p>
                   <div className="grid grid-cols-2 gap-2">
                     <div><Label className="text-[9px] uppercase tracking-wider text-muted-foreground">Porcentaje</Label><Input readOnly tabIndex={-1} value={!localDoc?.sellerEmployeeId ? '—' : commissionPendingSave ? 'Al guardar' : `${Number(localDoc?.commissionRate || 0).toFixed(2)}%`} className="h-8 bg-muted/20 text-xs" /></div>
-                    <div><Label className="text-[9px] uppercase tracking-wider text-muted-foreground">Monto estimado</Label><Input readOnly tabIndex={-1} value={!localDoc?.sellerEmployeeId ? '—' : commissionPendingSave ? 'Al guardar' : Number(localDoc?.commissionAmount || 0).toFixed(getCurrencyDecimalPlaces())} className="h-8 bg-muted/20 text-xs" /></div>
+                    <div><Label className="text-[9px] uppercase tracking-wider text-muted-foreground">Monto de comisión</Label><Input readOnly tabIndex={-1} value={!localDoc?.sellerEmployeeId ? '—' : commissionPendingSave ? 'Al guardar' : Number(localDoc?.commissionAmount || 0).toFixed(getCurrencyDecimalPlaces())} className="h-8 bg-muted/20 text-xs" /></div>
                   </div>
                   <p className="text-[9px] text-muted-foreground">{commissionPendingSave ? 'El porcentaje y monto se calcularán y guardarán al guardar la orden.' : 'Se aplica automáticamente al subtotal neto; no se puede editar en la venta.'}</p>
                 </div>
-                <div>
+                <div className="order-3">
                   <p className="text-[10px] text-muted-foreground mb-1">Fecha Emisión</p>
                   <Input type="date" clearable={false} defaultValue={localDoc?.date ? new Date(localDoc.date).toISOString().split('T')[0] : ''} onBlur={(e) => handleUpdate(localDoc!.id, { date: new Date(e.target.value).toISOString() })} className="h-8 text-xs" />
                 </div>
-                <div>
+                <div className="order-4">
                   <p className="text-[10px] text-muted-foreground mb-1">Entrega Esperada</p>
                   <Input type="date" clearable={false} defaultValue={localDoc?.expectedDelivery ? new Date(localDoc.expectedDelivery).toISOString().split('T')[0] : ''} onBlur={(e) => handleUpdate(localDoc!.id, { expectedDelivery: new Date(e.target.value).toISOString() })} className="h-8 text-xs" />
                 </div>
-                <div>
+                <div className="order-2">
                   <p className="text-[10px] text-muted-foreground mb-1">Moneda de la transacción</p>
                   <Select
                     value={localDoc?.currency || 'NIO'}
@@ -1127,23 +1099,6 @@ export function OrdenesVentaView({ data, summaryData, summaryLoading, summaryErr
                     Tasa de cambio configurada: <span className="font-bold">{formatNumber2(Number(localDoc?.currency === 'NIO' ? 1 : localDoc?.exchangeRate || globalRate || 1))}</span>
                   </p>
                 </div>
-                {!hidePaymentMethod && (
-                  <div>
-                    <p className="text-[10px] text-muted-foreground mb-1">Forma de pago</p>
-                    <Select
-                      value={localDoc?.paymentMethod || ''}
-                      onValueChange={(paymentMethod) => {
-                        setLocalDoc({ ...localDoc, paymentMethod } as any);
-                        void handleUpdate(localDoc!.id, { paymentMethod } as Partial<SalesOrder>);
-                      }}
-                    >
-                      <SelectTrigger className="h-8 text-xs"><SelectValue placeholder="Seleccionar forma de pago" /></SelectTrigger>
-                      <SelectContent>
-                        {paymentMethodOptions.map((method) => <SelectItem key={method.value} value={method.value}>{method.label}</SelectItem>)}
-                      </SelectContent>
-                    </Select>
-                  </div>
-                )}
               </div>
             </CardContent>
           </Card>
